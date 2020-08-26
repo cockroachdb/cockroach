@@ -1541,6 +1541,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <tr><td><a name="st_pointonsurface"></a><code>st_pointonsurface(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a point that intersects with the given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_points"></a><code>st_points(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns all coordinates in the given Geometry as a MultiPoint, including duplicates.</p>
+</span></td></tr>
 <tr><td><a name="st_polyfromtext"></a><code>st_polyfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not Polygon, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_polyfromtext"></a><code>st_polyfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not Polygon, NULL is returned.</p>
