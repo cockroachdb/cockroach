@@ -1289,15 +1289,38 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 
+	t.Run("progress on paused-requested job succeeds", func(t *testing.T) {
+		job, _ := startLeasedJob(t, defaultRecord)
+		if err := registry.PauseRequested(ctx, nil, *job.ID()); err != nil {
+			t.Fatal(err)
+		}
+		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("progress on paused job fails", func(t *testing.T) {
 		job, _ := startLeasedJob(t, defaultRecord)
 		if err := registry.PauseRequested(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
+		if err := job.Paused(ctx); err != nil {
+			t.Fatal(err)
+		}
 		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); !testutils.IsError(
-			err, `cannot update progress on pause-requested job`,
+			err, `cannot update progress on paused job`,
 		) {
 			t.Fatalf("expected progress error, but got %v", err)
+		}
+	})
+
+	t.Run("progress on canceled-requestd job succeeds", func(t *testing.T) {
+		job, _ := startLeasedJob(t, defaultRecord)
+		if err := registry.CancelRequested(ctx, nil, *job.ID()); err != nil {
+			t.Fatal(err)
+		}
+		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); err != nil {
+			t.Fatal(err)
 		}
 	})
 
@@ -1306,8 +1329,14 @@ func TestJobLifecycle(t *testing.T) {
 		if err := registry.CancelRequested(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
+		if err := job.Reverted(ctx, errors.New("fake error")); err != nil {
+			t.Fatal(err)
+		}
+		if err := job.Canceled(ctx); err != nil {
+			t.Fatal(err)
+		}
 		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); !testutils.IsError(
-			err, `cannot update progress on cancel-requested job \(id \d+\)`,
+			err, `cannot update progress on canceled job`,
 		) {
 			t.Fatalf("expected progress error, but got %v", err)
 		}

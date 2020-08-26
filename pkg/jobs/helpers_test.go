@@ -81,6 +81,18 @@ func (j *Job) Paused(ctx context.Context) error {
 	return j.paused(ctx, nil /* fn */)
 }
 
+// Reverted is a wrapper around the internal function that moves a job to the
+// reverted state.
+func (j *Job) Reverted(ctx context.Context, err error) error {
+	return j.reverted(ctx, err, nil /* fn */)
+}
+
+// Canceled is a wrapper around the internal function that moves a job to the
+// canceled state.
+func (j *Job) Canceled(ctx context.Context) error {
+	return j.canceled(ctx, nil /* fn */)
+}
+
 // Failed is a wrapper around the internal function that moves a job to the
 // failed state.
 func (j *Job) Failed(ctx context.Context, causingErr error) error {

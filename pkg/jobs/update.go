@@ -45,7 +45,10 @@ type JobMetadata struct {
 // CheckRunningOrReverting returns an InvalidStatusError if md.Status is not
 // StatusRunning or StatusReverting.
 func (md *JobMetadata) CheckRunningOrReverting() error {
-	if md.Status != StatusRunning && md.Status != StatusReverting {
+	if md.Status != StatusRunning &&
+		md.Status != StatusReverting &&
+		md.Status != StatusCancelRequested &&
+		md.Status != StatusPauseRequested {
 		return &InvalidStatusError{md.ID, md.Status, "update progress on", md.Payload.Error}
 	}
 	return nil
