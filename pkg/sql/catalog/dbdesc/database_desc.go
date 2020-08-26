@@ -31,6 +31,10 @@ var _ catalog.MutableDescriptor = (*Mutable)(nil)
 // on it.
 type Immutable struct {
 	descpb.DatabaseDescriptor
+
+	// isModified is set to true if this descriptor was created a copy of a
+	// modified Mutable.
+	isModified bool
 }
 
 // Mutable wraps a database descriptor and provides methods
@@ -108,6 +112,11 @@ func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 // GetParentID implements the Descriptor interface.
 func (desc *Immutable) GetParentID() descpb.ID {
 	return keys.RootNamespaceID
+}
+
+// IsModified implements the Descriptor interface.
+func (desc *Immutable) IsModified() bool {
+	return desc.isModified
 }
 
 // GetParentSchemaID implements the Descriptor interface.
@@ -228,12 +237,19 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutable(*protoutil.Clone(desc.DatabaseDesc()).(*descpb.DatabaseDescriptor))
+	imm := NewImmutable(*protoutil.Clone(desc.DatabaseDesc()).(*descpb.DatabaseDescriptor))
+	imm.isModified = desc.IsModified()
+	return imm
 }
 
 // IsNew implements the MutableDescriptor interface.
 func (desc *Mutable) IsNew() bool {
 	return desc.ClusterVersion == nil
+}
+
+// IsNew implements the Descriptor interface.
+func (desc *Mutable) IsModified() bool {
+	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
 }
 
 // AddDrainingName adds a draining name to the DatabaseDescriptor's slice of

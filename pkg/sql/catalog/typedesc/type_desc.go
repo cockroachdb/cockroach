@@ -70,6 +70,11 @@ type Mutable struct {
 	ClusterVersion *Immutable
 }
 
+// IsModified implements the Descriptor interface.
+func (desc *Mutable) IsModified() bool {
+	return desc.IsNew() || desc.ClusterVersion.GetVersion() != desc.GetVersion()
+}
+
 // Immutable is a custom type for wrapping TypeDescriptors
 // when used in a read only way.
 type Immutable struct {
@@ -79,6 +84,10 @@ type Immutable struct {
 	logicalReps     []string
 	physicalReps    [][]byte
 	readOnlyMembers []bool
+
+	// isModified is set to true if this descriptor is an immutable copy of a
+	// modified mutable descriptor.
+	isModified bool
 }
 
 // NewCreatedMutable returns a Mutable from the given type descriptor with the
@@ -169,6 +178,11 @@ func (desc *Immutable) GetOfflineReason() string {
 	return ""
 }
 
+// IsModified implements the Descriptor interface.
+func (desc *Immutable) IsModified() bool {
+	return desc.isModified
+}
+
 // DescriptorProto returns a Descriptor for serialization.
 func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
@@ -231,7 +245,9 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
+	imm := NewImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
+	imm.isModified = desc.IsModified()
+	return imm
 }
 
 // IsNew implements the MutableDescriptor interface.

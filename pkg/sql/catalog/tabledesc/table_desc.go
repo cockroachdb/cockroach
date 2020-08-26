@@ -56,6 +56,10 @@ type Immutable struct {
 
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
 
+	// isModified is set to true if this descriptor was created a copy of a
+	// modified Mutable.
+	isModified bool
+
 	// TODO (lucy): populate these and use them
 	// inboundFKs  []*ForeignKeyConstraint
 	// outboundFKs []*ForeignKeyConstraint
@@ -63,6 +67,11 @@ type Immutable struct {
 
 // NameResolutionResult implements the tree.NameResolutionResult interface.
 func (*Immutable) NameResolutionResult() {}
+
+// IsModified implements the Descriptor interface.
+func (desc *Immutable) IsModified() bool {
+	return desc.isModified
+}
 
 // DescriptorProto prepares desc for serialization.
 func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
@@ -100,7 +109,14 @@ func (desc *Immutable) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
+	imm := NewImmutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
+	imm.isModified = desc.IsModified()
+	return imm
+}
+
+// IsModified implements the Descriptor interface.
+func (desc *Mutable) IsModified() bool {
+	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.

@@ -43,6 +43,10 @@ type Descriptor interface {
 	GetParentID() descpb.ID
 	GetParentSchemaID() descpb.ID
 
+	// IsModified returns true if this descriptor does not represent a currently
+	// committed version.
+	IsModified() bool
+
 	// Metadata for descriptor leasing.
 	GetVersion() descpb.DescriptorVersion
 	GetModificationTime() hlc.Timestamp
