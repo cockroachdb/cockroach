@@ -48,14 +48,15 @@ import (
 type Limiter interface {
 
 	// Wait acquires n quota from the limiter. This acquisition cannot be
-	// released. Each call to wait will consume 1 read byte, 1 request, and
-	// writeBytes from the token buckets. Calls to Wait will block until the
-	// buckets contain adequate resources. If a request attempts to write more
-	// than the burst limit, it will wait until the bucket is completely full
-	// before acquiring the requested quantity and putting the limiter in debt.
+	// released. Each call to wait will consume 1 read or write request
+	// depending on isWrite, 1 read byte, and writeBytes from the token buckets.
+	// Calls to Wait will block until the buckets contain adequate resources. If
+	// a request attempts to write more than the burst limit, it will wait until
+	// the bucket is completely full before acquiring the requested quantity and
+	// putting the limiter in debt.
 	//
 	// The only errors which should be returned are due to the context.
-	Wait(ctx context.Context, writeBytes int64) error
+	Wait(ctx context.Context, isWrite bool, writeBytes int64) error
 
 	// RecordRead subtracts the bytes read by a request from the token bucket.
 	// This call may push the Limiter into debt in the ReadBytes dimensions
@@ -85,28 +86,38 @@ func (rl *limiter) init(
 		metrics:  metrics,
 	}
 	buckets := tokenBuckets{
-		requests:   makeTokenBucket(conf.Requests),
-		readBytes:  makeTokenBucket(conf.ReadBytes),
-		writeBytes: makeTokenBucket(conf.WriteBytes),
+		readRequests:  makeTokenBucket(conf.ReadRequests),
+		writeRequests: makeTokenBucket(conf.WriteRequests),
+		readBytes:     makeTokenBucket(conf.ReadBytes),
+		writeBytes:    makeTokenBucket(conf.WriteBytes),
 	}
 	options = append(options, quotapool.OnAcquisition(func(
 		ctx context.Context, poolName string, r quotapool.Request, start time.Time,
 	) {
 		req := r.(*waitRequest)
+		if req.readRequests > 0 {
+			rl.metrics.readRequestsAdmitted.Inc(req.readRequests)
+		}
+		if req.writeRequests > 0 {
+			rl.metrics.writeRequestsAdmitted.Inc(req.writeRequests)
+		}
+		// Accounted for in limiter.RecordRead.
+		// if req.readBytes > 0 {
+		// 	rl.metrics.readBytesAdmitted.Inc(req.readBytes)
+		// }
 		if req.writeBytes > 0 {
 			rl.metrics.writeBytesAdmitted.Inc(req.writeBytes)
 		}
-		rl.metrics.requestsAdmitted.Inc(1)
 	}))
 	rl.qp = quotapool.New(tenantID.String(), &buckets, options...)
 	buckets.clock = rl.qp.TimeSource()
 	buckets.lastUpdated = buckets.clock.Now()
 }
 
-func (rl *limiter) Wait(ctx context.Context, writeBytes int64) error {
+func (rl *limiter) Wait(ctx context.Context, isWrite bool, writeBytes int64) error {
 	rl.metrics.currentBlocked.Inc(1)
 	defer rl.metrics.currentBlocked.Dec(1)
-	r := newWaitRequest(writeBytes)
+	r := newWaitRequest(isWrite, writeBytes)
 	defer putWaitRequest(r)
 	if err := rl.qp.Acquire(ctx, r); err != nil {
 		return err
@@ -130,11 +141,12 @@ func (rl *limiter) updateLimits(limits LimitConfigs) {
 // tokenBuckets is the implementation of Resource which remains in the quotapool
 // for a limiter.
 type tokenBuckets struct {
-	clock       timeutil.TimeSource
-	lastUpdated time.Time
-	requests    tokenBucket
-	readBytes   tokenBucket
-	writeBytes  tokenBucket
+	clock         timeutil.TimeSource
+	lastUpdated   time.Time
+	readRequests  tokenBucket
+	writeRequests tokenBucket
+	readBytes     tokenBucket
+	writeBytes    tokenBucket
 }
 
 var _ quotapool.Resource = (*tokenBuckets)(nil)
@@ -146,7 +158,8 @@ func (rb *tokenBuckets) update() {
 	// TODO(ajwerner): Consider instituting a minimum update frequency to avoid
 	// spinning too fast on timers for tons of tiny allocations at a fast rate.
 	if since := now.Sub(rb.lastUpdated); since > 0 {
-		rb.requests.update(since)
+		rb.readRequests.update(since)
+		rb.writeRequests.update(since)
 		rb.readBytes.update(since)
 		rb.writeBytes.update(since)
 		rb.lastUpdated = now
@@ -166,14 +179,16 @@ func (rb *tokenBuckets) check(req *waitRequest) (fulfilled bool, tryAgainAfter t
 			}
 		}
 	}
-	check(&rb.requests, req.requests)
+	check(&rb.readRequests, req.readRequests)
+	check(&rb.writeRequests, req.writeRequests)
 	check(&rb.readBytes, req.readBytes)
 	check(&rb.writeBytes, req.writeBytes)
 	return fulfilled, tryAgainAfter
 }
 
 func (rb *tokenBuckets) subtract(req *waitRequest) {
-	rb.requests.tokens -= float64(req.requests)
+	rb.readRequests.tokens -= float64(req.readRequests)
+	rb.writeRequests.tokens -= float64(req.writeRequests)
 	rb.readBytes.tokens -= float64(req.readBytes)
 	rb.writeBytes.tokens -= float64(req.writeBytes)
 }
@@ -185,7 +200,8 @@ func (rb *tokenBuckets) Merge(val interface{}) (shouldNotify bool) {
 		// configuration.
 		rb.update()
 
-		rb.requests.setConf(toAdd.Requests)
+		rb.readRequests.setConf(toAdd.ReadRequests)
+		rb.writeRequests.setConf(toAdd.WriteRequests)
 		rb.readBytes.setConf(toAdd.ReadBytes)
 		rb.writeBytes.setConf(toAdd.WriteBytes)
 		return true
@@ -264,9 +280,10 @@ func (t *tokenBucket) clampTokens() {
 
 // waitRequest is used to wait for adequate resources in the tokenBuckets.
 type waitRequest struct {
-	requests   int64
-	writeBytes int64
-	readBytes  int64
+	readRequests  int64
+	writeRequests int64
+	writeBytes    int64
+	readBytes     int64
 }
 
 var waitRequestSyncPool = sync.Pool{
@@ -275,12 +292,18 @@ var waitRequestSyncPool = sync.Pool{
 
 // newWaitRequest allocates a waitRequest from the sync.Pool.
 // It should be returned with putWaitRequest.
-func newWaitRequest(writeBytes int64) *waitRequest {
+func newWaitRequest(isWrite bool, writeBytes int64) *waitRequest {
 	r := waitRequestSyncPool.Get().(*waitRequest)
 	*r = waitRequest{
-		requests:   1,
-		readBytes:  1,
-		writeBytes: writeBytes,
+		readRequests:  0,
+		writeRequests: 0,
+		readBytes:     1,
+		writeBytes:    writeBytes,
+	}
+	if isWrite {
+		r.writeRequests = 1
+	} else {
+		r.readRequests = 1
 	}
 	return r
 }

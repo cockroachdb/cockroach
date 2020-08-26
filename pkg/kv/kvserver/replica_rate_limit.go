@@ -27,7 +27,7 @@ func (r *Replica) maybeRateLimitBatch(ctx context.Context, ba *roachpb.BatchRequ
 	if !ok || tenantID == roachpb.SystemTenantID {
 		return nil
 	}
-	return r.tenantLimiter.Wait(ctx, bytesWrittenFromRequest(ba))
+	return r.tenantLimiter.Wait(ctx, ba.IsWrite(), bytesWrittenFromRequest(ba))
 }
 
 // bytesWrittenFromBatchRequest returns an approximation of the number of bytes

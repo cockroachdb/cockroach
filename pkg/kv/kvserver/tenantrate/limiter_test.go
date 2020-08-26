@@ -48,9 +48,9 @@ func TestCloser(t *testing.T) {
 	limiter := factory.GetTenant(tenant, closer)
 	ctx := context.Background()
 	// First Wait call will not block.
-	require.NoError(t, limiter.Wait(ctx, 1))
+	require.NoError(t, limiter.Wait(ctx, false, 1))
 	errCh := make(chan error, 1)
-	go func() { errCh <- limiter.Wait(ctx, 1<<30) }()
+	go func() { errCh <- limiter.Wait(ctx, false, 1<<30) }()
 	testutils.SucceedsSoon(t, func() error {
 		if timers := timeSource.Timers(); len(timers) != 1 {
 			return errors.Errorf("expected 1 timer, found %d", len(timers))
@@ -84,6 +84,7 @@ type launchState struct {
 	tenantID   roachpb.TenantID
 	ctx        context.Context
 	cancel     context.CancelFunc
+	isWrite    bool
 	writeBytes int64
 	reserveCh  chan error
 }
@@ -202,6 +203,7 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 	var cmds []struct {
 		ID         string
 		Tenant     uint64
+		IsWrite    bool
 		WriteBytes int64
 	}
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &cmds); err != nil {
@@ -213,6 +215,7 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		s.tenantID = roachpb.MakeTenantID(cmd.Tenant)
 		s.ctx, s.cancel = context.WithCancel(context.Background())
 		s.reserveCh = make(chan error, 1)
+		s.isWrite = cmd.IsWrite
 		s.writeBytes = cmd.WriteBytes
 		ts.running[s.id] = &s
 		lims := ts.tenants[s.tenantID]
@@ -221,7 +224,7 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		}
 		go func() {
 			// We'll not worry about ever releasing tenant Limiters.
-			s.reserveCh <- lims[0].Wait(s.ctx, s.writeBytes)
+			s.reserveCh <- lims[0].Wait(s.ctx, s.isWrite, s.writeBytes)
 		}()
 	}
 	return ts.FormatRunning()
@@ -337,12 +340,15 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 //  kv_tenant_rate_limit_read_bytes_admitted 0
 //  kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 0
 //  kv_tenant_rate_limit_read_bytes_admitted{tenant_id="system"} 100
-//  kv_tenant_rate_limit_requests_admitted 0
-//  kv_tenant_rate_limit_requests_admitted{tenant_id="2"} 0
-//  kv_tenant_rate_limit_requests_admitted{tenant_id="system"} 0
+//  kv_tenant_rate_limit_read_requests_admitted 0
+//  kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 0
+//  kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 0
 //  kv_tenant_rate_limit_write_bytes_admitted 50
 //  kv_tenant_rate_limit_write_bytes_admitted{tenant_id="2"} 50
 //  kv_tenant_rate_limit_write_bytes_admitted{tenant_id="system"} 0
+//  kv_tenant_rate_limit_write_requests_admitted 0
+//  kv_tenant_rate_limit_write_requests_admitted{tenant_id="2"} 0
+//  kv_tenant_rate_limit_write_requests_admitted{tenant_id="system"} 0
 //
 // Or with a regular expression:
 //
