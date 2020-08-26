@@ -12,6 +12,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,9 +26,9 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 
 	ctx := context.Background()
 	ts := func(wt int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wt} }
-	validateFn := func(_ context.Context, desc *tabledesc.Immutable) error {
-		if desc.Name != `` {
-			return errors.Newf("descriptor: %s", desc.Name)
+	validateFn := func(_ context.Context, desc catalog.Descriptor) error {
+		if desc.GetName() != `` {
+			return errors.Newf("descriptor: %s", desc.GetName())
 		}
 		return nil
 	}
@@ -67,7 +68,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.Equal(t, ts(3), m.highWater())
 
 	// validates
-	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), []*tabledesc.Immutable{
+	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), []catalog.Descriptor{
 		tabledesc.NewImmutable(descpb.TableDescriptor{ID: 0}),
 	}, validateFn))
 	require.Equal(t, ts(4), m.highWater())
@@ -107,7 +108,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.EqualError(t, <-errCh8, `context canceled`)
 
 	// does not validate, high-water does not change
-	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []*tabledesc.Immutable{
+	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []catalog.Descriptor{
 		tabledesc.NewImmutable(descpb.TableDescriptor{ID: 0, Name: `whoops!`}),
 	}, validateFn), `descriptor: whoops!`)
 	require.Equal(t, ts(7), m.highWater())
@@ -124,7 +125,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	requireChannelEmpty(t, errCh9)
 
 	// turns out ts 10 is not a tight bound. ts 9 also has an error
-	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []*tabledesc.Immutable{
+	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []catalog.Descriptor{
 		tabledesc.NewImmutable(descpb.TableDescriptor{ID: 0, Name: `oh no!`}),
 	}, validateFn), `descriptor: oh no!`)
 	require.Equal(t, ts(7), m.highWater())

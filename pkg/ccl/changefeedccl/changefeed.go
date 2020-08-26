@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -54,13 +55,17 @@ type emitEntry struct {
 // returns a closure that may be repeatedly called to advance the changefeed.
 // The returned closure is not threadsafe.
 func kvsToRows(
+	ctx context.Context,
 	codec keys.SQLCodec,
+	settings *cluster.Settings,
+	db *kv.DB,
 	leaseMgr *lease.Manager,
+	hydratedTables *hydratedtables.Cache,
 	details jobspb.ChangefeedDetails,
 	inputFn func(context.Context) (kvfeed.Event, error),
 ) func(context.Context) ([]emitEntry, error) {
 	_, withDiff := details.Opts[changefeedbase.OptDiff]
-	rfCache := newRowFetcherCache(codec, leaseMgr)
+	rfCache := newRowFetcherCache(ctx, codec, settings, leaseMgr, hydratedTables, db)
 
 	var kvs row.SpanKVFetcher
 	appendEmitEntryForKV := func(

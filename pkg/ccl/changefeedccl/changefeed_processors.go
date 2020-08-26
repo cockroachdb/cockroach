@@ -205,7 +205,8 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.kvFeedMemMon, ca.spec,
 		spans, withDiff, buf, metrics)
-	rowsFn := kvsToRows(ca.flowCtx.Codec(), leaseMgr, ca.spec.Feed, buf.Get)
+	cfg := ca.flowCtx.Cfg
+	rowsFn := kvsToRows(ctx, cfg.Codec, cfg.Settings, cfg.DB, leaseMgr, cfg.HydratedTables, ca.spec.Feed, buf.Get)
 	ca.tickFn = emitEntries(ca.flowCtx.Cfg.Settings, ca.spec.Feed,
 		kvfeedCfg.InitialHighWater, sf, ca.encoder, ca.sink, rowsFn, knobs, metrics)
 	ca.startKVFeed(ctx, kvfeedCfg)

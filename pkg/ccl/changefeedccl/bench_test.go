@@ -232,8 +232,8 @@ func createBenchmarkChangefeed(
 		NeedsInitialScan: needsInitialScan,
 	}
 
-	rowsFn := kvsToRows(s.ExecutorConfig().(sql.ExecutorConfig).Codec,
-		s.LeaseManager().(*lease.Manager), details, buf.Get)
+	cfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	rowsFn := kvsToRows(ctx, cfg.Codec, cfg.Settings, cfg.DB, cfg.LeaseManager, cfg.HydratedTables, details, buf.Get)
 	sf := span.MakeFrontier(spans...)
 	tickFn := emitEntries(s.ClusterSettings(), details, hlc.Timestamp{}, sf,
 		encoder, sink, rowsFn, TestingKnobs{}, metrics)

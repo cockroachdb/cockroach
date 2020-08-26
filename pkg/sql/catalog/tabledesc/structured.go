@@ -2545,6 +2545,12 @@ func (desc *Immutable) ContainsUserDefinedTypes() bool {
 	return len(desc.columnsWithUDTs) > 0
 }
 
+// GetColumnOrdinalsWithUserDefinedTypes returns a slice of column ordinals
+// of columns that contain user defined types.
+func (desc *Immutable) GetColumnOrdinalsWithUserDefinedTypes() []int {
+	return desc.columnsWithUDTs
+}
+
 // UserDefinedTypeColsHaveSameVersion returns whether this descriptor's columns
 // with user defined type metadata have the same versions of metadata as in the
 // other descriptor. Note that this function is only valid on two descriptors

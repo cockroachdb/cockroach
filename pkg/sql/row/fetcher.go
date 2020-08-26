@@ -511,6 +511,15 @@ func (rf *Fetcher) Init(
 	return nil
 }
 
+// GetTables returns all tables that this Fetcher was initialized with.
+func (rf *Fetcher) GetTables() []catalog.Descriptor {
+	ret := make([]catalog.Descriptor, len(rf.tables))
+	for i := range rf.tables {
+		ret[i] = rf.tables[i].desc
+	}
+	return ret
+}
+
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 func (rf *Fetcher) StartScan(
