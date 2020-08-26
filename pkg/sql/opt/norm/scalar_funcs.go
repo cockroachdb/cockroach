@@ -11,6 +11,7 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -326,4 +327,39 @@ func (c *CustomFuncs) VarsAreSame(left, right opt.ScalarExpr) bool {
 	lv := left.(*memo.VariableExpr)
 	rv := right.(*memo.VariableExpr)
 	return lv.Col == rv.Col
+}
+
+// ConvertLikeToRange returns a Range that is equivalent to the given Like expression.
+func (c *CustomFuncs) ConvertLikeToRange(item *memo.FiltersItem) opt.ScalarExpr {
+	if !item.ScalarProps().TightConstraints {
+		return nil
+	}
+	consSet := item.ScalarProps().Constraints
+	if consSet == nil || consSet.Length() != 1 {
+		return nil
+	}
+	spans := consSet.Constraint(0).Spans
+	if spans.Count() != 1 {
+		return nil
+	}
+	span := spans.Get(0)
+	like := item.Condition.(*memo.LikeExpr)
+	typ := like.Right.(*memo.ConstExpr).Typ
+	leftBound := c.f.ConstructConst(span.StartKey().Value(0), typ)
+	rightBound := c.f.ConstructConst(span.EndKey().Value(0), typ)
+	var left, right opt.ScalarExpr
+
+	if span.StartBoundary() == constraint.IncludeBoundary {
+		left = c.f.ConstructGe(like.Left, leftBound)
+	} else {
+		left = c.f.ConstructGt(like.Left, leftBound)
+	}
+
+	if span.EndBoundary() == constraint.IncludeBoundary {
+		right = c.f.ConstructLe(like.Left, rightBound)
+	} else {
+		right = c.f.ConstructLt(like.Left, rightBound)
+	}
+
+	return c.f.ConstructRange(c.f.ConstructAnd(left, right))
 }

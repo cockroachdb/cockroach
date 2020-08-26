@@ -3489,7 +3489,7 @@ project
       │    └── filters (true)
       └── filters
            ├── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
-           └── name:15 LIKE 'Upper%' [outer=(15), constraints=(/15: [/'Upper' - /'Uppes'); tight)]
+           └── (name:15 >= 'Upper') AND (name:15 < 'Uppes') [outer=(15), constraints=(/15: [/'Upper' - /'Uppes'); tight)]
 
 # It's not possible to generate an inverted join when there is an OR with a
 # non-geospatial function.

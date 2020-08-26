@@ -1027,9 +1027,14 @@ select
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1)
  └── filters
-      └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'); tight)]
-           ├── variable: v:3 [type=string]
-           └── const: 'ABC%' [type=string]
+      └── range [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'); tight)]
+           └── and [type=bool]
+                ├── ge [type=bool]
+                │    ├── variable: v:3 [type=string]
+                │    └── const: 'ABC' [type=string]
+                └── lt [type=bool]
+                     ├── variable: v:3 [type=string]
+                     └── const: 'ABD' [type=string]
 
 opt
 SELECT * FROM kuv WHERE v LIKE 'ABC_'
@@ -1087,9 +1092,14 @@ select
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1)
  └── filters
-      └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABC']; tight), fd=()-->(3)]
-           ├── variable: v:3 [type=string]
-           └── const: 'ABC' [type=string]
+      └── range [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABC']; tight), fd=()-->(3)]
+           └── and [type=bool]
+                ├── ge [type=bool]
+                │    ├── variable: v:3 [type=string]
+                │    └── const: 'ABC' [type=string]
+                └── le [type=bool]
+                     ├── variable: v:3 [type=string]
+                     └── const: 'ABC' [type=string]
 
 opt
 SELECT * FROM kuv WHERE v LIKE '%'

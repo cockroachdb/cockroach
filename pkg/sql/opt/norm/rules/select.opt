@@ -391,3 +391,23 @@ $input
     )
     (RemoveFiltersItem $filter $item)
 )
+
+# NormalizeSelectLiketoRange converts a Like operator to a Range operator.
+# It's easier to calculate stats for Range expressions than for Like
+# expressions.
+[NormalizeSelectLikeToRange, Normalize]
+(Select
+    $input:*
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (Like
+                $left:(Variable)
+                $right:(Const)
+            )
+        ) & (Succeeded $rng:(ConvertLikeToRange $item))
+        ...
+    ]
+)
+=>
+(Select $input (ReplaceFiltersItem $filters $item $rng))

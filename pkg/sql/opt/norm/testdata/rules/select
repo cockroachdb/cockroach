@@ -261,7 +261,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── (s:4 LIKE 'a%') AND (s:4 = 'aa') [outer=(4), constraints=(/4: [/'aa' - /'aa']; tight), fd=()-->(4)]
+      ├── ((s:4 = 'aa') AND (s:4 >= 'a')) AND (s:4 < 'b') [outer=(4), constraints=(/4: [/'aa' - /'aa']; tight), fd=()-->(4)]
       └── s:4 SIMILAR TO 'a_' [outer=(4), constraints=(/4: [/'a' - /'b'))]
 
 # One of the constraints is not tight, so it should not be consolidated.
@@ -1905,3 +1905,66 @@ select
  │         └── (1.00,)
  └── filters
       └── column1:1::STRING != '1.00' [outer=(1), immutable]
+
+# --------------------------------------------------
+# NormalizeSelectLikeToRange
+# --------------------------------------------------
+
+norm expect=NormalizeSelectLikeToRange
+SELECT * FROM a WHERE s LIKE 'FOREST%'
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (s:4 >= 'FOREST') AND (s:4 < 'FORESU') [outer=(4), constraints=(/4: [/'FOREST' - /'FORESU'); tight)]
+
+# Case without pattern matching selectors.
+norm expect=NormalizeSelectLikeToRange
+SELECT * FROM a WHERE s LIKE 'foo'
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3,5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (s:4 >= 'foo') AND (s:4 <= 'foo') [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# No-op case because the constraints are not tight.
+norm expect-not=NormalizeSelectLikeToRange
+SELECT * FROM a WHERE s LIKE 'foo_'
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── s:4 LIKE 'foo_' [outer=(4), constraints=(/4: [/'foo' - /'fop'))]
+
+# No-op case because the Like expression does not have a tight constraint.
+norm expect-not=NormalizeSelectLikeToRange
+SELECT * FROM a WHERE s LIKE '%FOREST'
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── s:4 LIKE '%FOREST' [outer=(4), constraints=(/4: (/NULL - ])]

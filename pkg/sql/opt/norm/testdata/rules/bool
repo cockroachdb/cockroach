@@ -360,7 +360,7 @@ select
  │    └── fd: (1)-->(2-5)
  └── filters
       ├── s:4 NOT LIKE 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
-      ├── s:4 LIKE 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      ├── (s:4 >= 'foo') AND (s:4 <= 'foo') [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
       ├── s:4 NOT ILIKE 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
       └── s:4 ILIKE 'foo' [outer=(4), constraints=(/4: (/NULL - ])]
 

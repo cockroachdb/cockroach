@@ -176,7 +176,7 @@ sort
            │         │         │         └── filters
            │         │         │              └── ps_availqty:16 > (sum:47 * 0.5) [type=bool, outer=(16,47), immutable, constraints=(/16: (/NULL - ])]
            │         │         └── filters
-           │         │              └── p_name:21 LIKE 'forest%' [type=bool, outer=(21), constraints=(/21: [/'forest' - /'foresu'); tight)]
+           │         │              └── (p_name:21 >= 'forest') AND (p_name:21 < 'foresu') [type=bool, outer=(21), constraints=(/21: [/'forest' - /'foresu'); tight)]
            │         └── filters (true)
            ├── select
            │    ├── save-table-name: q20_select_15

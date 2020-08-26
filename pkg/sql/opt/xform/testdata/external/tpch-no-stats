@@ -2178,7 +2178,7 @@ sort
            │         │         │         └── filters
            │         │         │              └── ps_availqty:16 > (sum:47 * 0.5) [outer=(16,47), immutable, constraints=(/16: (/NULL - ])]
            │         │         └── filters
-           │         │              └── p_name:21 LIKE 'forest%' [outer=(21), constraints=(/21: [/'forest' - /'foresu'); tight)]
+           │         │              └── (p_name:21 >= 'forest') AND (p_name:21 < 'foresu') [outer=(21), constraints=(/21: [/'forest' - /'foresu'); tight)]
            │         └── filters (true)
            └── filters
                 └── n_name:10 = 'CANADA' [outer=(10), constraints=(/10: [/'CANADA' - /'CANADA']; tight), fd=()-->(10)]

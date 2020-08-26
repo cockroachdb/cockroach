@@ -327,7 +327,7 @@ select
  │    └── fd: (1,2)-->(3)
  └── filters
       ├── d_id:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      └── d_name:3 LIKE 'bob' [type=bool, outer=(3), constraints=(/3: [/'bob' - /'bob']; tight), fd=()-->(3)]
+      └── (d_name:3 >= 'bob') AND (d_name:3 <= 'bob') [type=bool, outer=(3), constraints=(/3: [/'bob' - /'bob']; tight), fd=()-->(3)]
 
 # This tests selectivityFromReducedCols.
 # Since (1,2)-->(3) in order to use selectivityFromReducedCols,
