@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -830,7 +831,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	// TODO(mgartner): Add support for multiple arbiter indexes, similar to
 	// buildInputForDoNothing.
 	if arbiterIndexes.Len() > 1 {
-		panic(pgerror.Newf(pgcode.InvalidColumnReference,
+		panic(unimplemented.NewWithIssue(53170,
 			"there are multiple unique or exclusion constraints matching the ON CONFLICT specification"))
 	}
 
