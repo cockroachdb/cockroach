@@ -984,6 +984,11 @@ type connExecutor struct {
 		// executed so far.
 		numDDL int
 
+		// numRows keeps track of the number of rows that have been observed by this
+		// transaction. This is simply the summation of number of rows observed by
+		// comprising statements.
+		numRows int
+
 		// txnRewindPos is the position within stmtBuf to which we'll rewind when
 		// performing automatic retries. This is more or less the position where the
 		// current transaction started.
