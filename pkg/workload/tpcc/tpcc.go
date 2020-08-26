@@ -162,6 +162,9 @@ var tpccMeta = workload.Meta{
 			`workers`:            {RuntimeOnly: true},
 			`conns`:              {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
+			// We set runtime only to true for deprecated-fk-indexes so that it
+			// doesn't appear in the fixture name output.
+			`deprecated-fk-indexes`: {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
