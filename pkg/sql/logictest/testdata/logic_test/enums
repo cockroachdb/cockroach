@@ -107,13 +107,13 @@ true true true false true NULL NULL true true false true
 statement ok
 CREATE TYPE farewell AS ENUM ('bye', 'seeya')
 
-statement error pq: unsupported comparison operator: <greeting> = <farewell>
+statement error pq: invalid comparison between different enum types: <greeting> = <farewell>
 SELECT 'hello'::greeting = 'bye'::farewell
 
-statement error pq: unsupported comparison operator: <greeting> < <farewell>
+statement error pq: invalid comparison between different enum types: <greeting> < <farewell>
 SELECT 'hello'::greeting < 'bye'::farewell
 
-statement error pq: unsupported comparison operator: <greeting> <= <farewell>
+statement error pq: invalid comparison between different enum types: <greeting> <= <farewell>
 SELECT 'hello'::greeting <= 'bye'::farewell
 
 query T
