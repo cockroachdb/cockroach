@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
@@ -59,8 +60,10 @@ func registerTPCDSVec(r *testRegistry) {
 		67: true,
 		77: true,
 		80: true,
+	}
 
-		// These queries do not finish in 5 minutes.
+	queriesToSkip20_1 := map[int]bool{
+		// These queries do not finish in 5 minutes on 20.1 branch.
 		7:  true,
 		13: true,
 		17: true,
@@ -110,6 +113,10 @@ func registerTPCDSVec(r *testRegistry) {
 		scatterTables(t, clusterConn, tpcdsTables)
 		t.Status("waiting for full replication")
 		waitForFullReplication(t, clusterConn)
+		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// TODO(yuzefovich): it seems like if cmpconn.CompareConns hits a
 		// timeout, the query actually keeps on going and the connection
@@ -160,8 +167,13 @@ func registerTPCDSVec(r *testRegistry) {
 		// plans.
 		for _, haveStats := range []bool{false, true} {
 			for queryNum := 1; queryNum <= tpcds.NumQueries; queryNum++ {
-				if toSkip, ok := queriesToSkip[queryNum]; ok || toSkip {
+				if _, toSkip := queriesToSkip[queryNum]; toSkip {
 					continue
+				}
+				if strings.HasPrefix(versionString, "v20.1") {
+					if _, toSkip := queriesToSkip20_1[queryNum]; toSkip {
+						continue
+					}
 				}
 				query, ok := tpcds.QueriesByNumber[queryNum]
 				if !ok {
@@ -171,7 +183,6 @@ func registerTPCDSVec(r *testRegistry) {
 				// We will be opening fresh connections for every query to go
 				// around issues with cancellation.
 				conns, cleanup := openNewConnections()
-				defer cleanup()
 				start := timeutil.Now()
 				if err := cmpconn.CompareConns(
 					ctx, 3*timeout, conns, "", query, false, /* ignoreSQLErrors */
@@ -194,6 +205,7 @@ func registerTPCDSVec(r *testRegistry) {
 						noStatsRunTimes[queryNum] = runTimeInSeconds
 					}
 				}
+				cleanup()
 			}
 
 			if !haveStats {
