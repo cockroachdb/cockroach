@@ -434,6 +434,10 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return false, err
 	}
 	for role := range memberOf {
+		if role == security.AdminRole {
+			// Superusers have all role privileges.
+			return true, nil
+		}
 		err := roles.Append(tree.NewDString(role))
 		if err != nil {
 			return false, err
