@@ -2008,6 +2008,62 @@ Flags shown square brackets after the geometry type have the following meaning:
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_forcepolygoncw": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ForcePolygonOrientation(g.Geometry, geomfn.OrientationCW)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a Geometry where all Polygon objects have exterior rings in clockwise orientation and interior rings in counter-clockwise orientation. Non-Polygon objects are unchanged.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_forcepolygonccw": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ForcePolygonOrientation(g.Geometry, geomfn.OrientationCCW)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a Geometry where all Polygon objects have exterior rings in counter-clockwise orientation and interior rings in clockwise orientation. Non-Polygon objects are unchanged.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_ispolygoncw": makeBuiltin(
+		defProps(),
+		geometryOverload1UnaryPredicate(
+			func(g *geo.Geometry) (bool, error) {
+				return geomfn.HasPolygonOrientation(g, geomfn.OrientationCW)
+			},
+			infoBuilder{
+				info: "Returns whether the Polygon objects inside the Geometry all have CW orientation. Non-Polygon objects are considered clockwise.",
+			},
+		),
+	),
+	"st_ispolygonccw": makeBuiltin(
+		defProps(),
+		geometryOverload1UnaryPredicate(
+			func(g *geo.Geometry) (bool, error) {
+				return geomfn.HasPolygonOrientation(g, geomfn.OrientationCCW)
+			},
+			infoBuilder{
+				info: "Returns whether the Polygon objects inside the Geometry all have CCW orientation. Non-Polygon objects are considered counter-clockwise.",
+			},
+		),
+	),
 	"st_numgeometries": makeBuiltin(
 		defProps(),
 		geometryOverload1(
