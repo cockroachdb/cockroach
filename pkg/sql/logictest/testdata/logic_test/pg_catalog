@@ -312,6 +312,17 @@ SELECT * FROM pg_catalog.pg_views
 schemaname  viewname  viewowner  definition
 public      v1        NULL       SELECT p, a, b, c FROM constraint_db.public.t1
 
+## pg_catalog.pg_matviews
+
+statement ok
+CREATE MATERIALIZED VIEW mv1 AS SELECT 1
+
+query TTTTBBT colnames
+SELECT * FROM pg_catalog.pg_matviews
+----
+schemaname  matviewname  matviewowner  tablespace  hasindexes  ispopulated  definition
+public      mv1          NULL          NULL        false       true         SELECT 1
+
 ## pg_catalog.pg_class
 
 query OTOOOOOOO colnames
@@ -332,6 +343,8 @@ oid         relname       relnamespace  reltype  reloftype  relowner  relam     
 969972501   primary       2332901747    0        0          NULL      2631952481  0            0
 969972502   t3_a_b_idx    2332901747    0        0          NULL      2631952481  0            0
 58          v1            2332901747    0        0          NULL      0           0            0
+59          mv1           2332901747    0        0          NULL      0           0            0
+3660126519  primary       2332901747    0        0          NULL      2631952481  0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -351,6 +364,8 @@ t3            NULL      NULL       0              0              true         fa
 primary       NULL      NULL       0              0              false        false        p
 t3_a_b_idx    NULL      NULL       0              0              false        false        p
 v1            NULL      NULL       0              0              false        false        p
+mv1           NULL      NULL       0              0              true         false        p
+primary       NULL      NULL       0              0              false        false        p
 
 query TBTIIBB colnames
 SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
@@ -370,6 +385,8 @@ t3            false      r        4         1          false       true
 primary       false      i        1         0          false       false
 t3_a_b_idx    false      i        2         0          false       false
 v1            false      v        4         0          false       false
+mv1           false      m        2         0          false       true
+primary       false      i        1         0          false       false
 
 query TBBBITT colnames
 SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
@@ -389,6 +406,8 @@ t3            false        false           false           0             NULL   
 primary       false        false           false           0             NULL    NULL
 t3_a_b_idx    false        false           false           0             NULL    NULL
 v1            false        false           false           0             NULL    NULL
+mv1           false        false           false           0             NULL    NULL
+primary       false        false           false           0             NULL    NULL
 
 ## pg_catalog.pg_attribute
 
@@ -399,37 +418,40 @@ JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-attrelid    relname       attname  atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
-55          t1            p        701       0              8       1       0         -1
-55          t1            a        20        0              8       2       0         -1
-55          t1            b        20        0              8       3       0         -1
-55          t1            c        20        0              8       4       0         -1
-55          t1            d        1043      0              -1      5       0         -1
-55          t1            e        1560      0              -1      6       0         -1
-55          t1            f        1700      0              -1      7       0         -1
-55          t1            g        20        0              8       8       0         -1
-55          t1            h        1014      0              -1      9       0         -1
-55          t1            i        1015      0              -1      10      0         -1
-55          t1            j        18        0              1       11      0         -1
-450499963   primary       p        701       0              8       1       0         -1
-450499960   t1_a_key      a        20        0              8       2       0         -1
-450499961   index_key     b        20        0              8       3       0         -1
-450499961   index_key     c        20        0              8       4       0         -1
-56          t2            t1_id    20        0              8       1       0         -1
-56          t2            rowid    20        0              8       2       0         -1
-2315049508  primary       rowid    20        0              8       2       0         -1
-2315049511  t2_t1_id_idx  t1_id    20        0              8       1       0         -1
-57          t3            a        20        0              8       1       0         -1
-57          t3            b        20        0              8       2       0         -1
-57          t3            c        25        0              -1      3       0         -1
-57          t3            rowid    20        0              8       4       0         -1
-969972501   primary       rowid    20        0              8       4       0         -1
-969972502   t3_a_b_idx    a        20        0              8       1       0         -1
-969972502   t3_a_b_idx    b        20        0              8       2       0         -1
-58          v1            p        701       0              8       1       0         -1
-58          v1            a        20        0              8       2       0         -1
-58          v1            b        20        0              8       3       0         -1
-58          v1            c        20        0              8       4       0         -1
+attrelid    relname       attname   atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
+55          t1            p         701       0              8       1       0         -1
+55          t1            a         20        0              8       2       0         -1
+55          t1            b         20        0              8       3       0         -1
+55          t1            c         20        0              8       4       0         -1
+55          t1            d         1043      0              -1      5       0         -1
+55          t1            e         1560      0              -1      6       0         -1
+55          t1            f         1700      0              -1      7       0         -1
+55          t1            g         20        0              8       8       0         -1
+55          t1            h         1014      0              -1      9       0         -1
+55          t1            i         1015      0              -1      10      0         -1
+55          t1            j         18        0              1       11      0         -1
+450499963   primary       p         701       0              8       1       0         -1
+450499960   t1_a_key      a         20        0              8       2       0         -1
+450499961   index_key     b         20        0              8       3       0         -1
+450499961   index_key     c         20        0              8       4       0         -1
+56          t2            t1_id     20        0              8       1       0         -1
+56          t2            rowid     20        0              8       2       0         -1
+2315049508  primary       rowid     20        0              8       2       0         -1
+2315049511  t2_t1_id_idx  t1_id     20        0              8       1       0         -1
+57          t3            a         20        0              8       1       0         -1
+57          t3            b         20        0              8       2       0         -1
+57          t3            c         25        0              -1      3       0         -1
+57          t3            rowid     20        0              8       4       0         -1
+969972501   primary       rowid     20        0              8       4       0         -1
+969972502   t3_a_b_idx    a         20        0              8       1       0         -1
+969972502   t3_a_b_idx    b         20        0              8       2       0         -1
+58          v1            p         701       0              8       1       0         -1
+58          v1            a         20        0              8       2       0         -1
+58          v1            b         20        0              8       3       0         -1
+58          v1            c         20        0              8       4       0         -1
+59          mv1           ?column?  20        0              8       1       0         -1
+59          mv1           rowid     20        0              8       2       0         -1
+3660126519  primary       rowid     20        0              8       2       0         -1
 
 query TTIBTTBBTT colnames
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
@@ -438,37 +460,40 @@ JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname       attname  atttypmod  attbyval  attstorage  attalign  attnotnull  atthasdef  attidentity  attgenerated
-t1            p        -1         NULL      NULL        NULL      true        false
-t1            a        -1         NULL      NULL        NULL      false       false
-t1            b        -1         NULL      NULL        NULL      false       false
-t1            c        -1         NULL      NULL        NULL      false       true
-t1            d        9          NULL      NULL        NULL      false       false
-t1            e        5          NULL      NULL        NULL      false       false
-t1            f        655371     NULL      NULL        NULL      false       false
-t1            g        -1         NULL      NULL        NULL      false       false                   s
-t1            h        16         NULL      NULL        NULL      false       false
-t1            i        24         NULL      NULL        NULL      false       false
-t1            j        -1         NULL      NULL        NULL      false       false
-primary       p        -1         NULL      NULL        NULL      true        false
-t1_a_key      a        -1         NULL      NULL        NULL      false       false
-index_key     b        -1         NULL      NULL        NULL      false       false
-index_key     c        -1         NULL      NULL        NULL      false       true
-t2            t1_id    -1         NULL      NULL        NULL      false       false
-t2            rowid    -1         NULL      NULL        NULL      true        true
-primary       rowid    -1         NULL      NULL        NULL      true        true
-t2_t1_id_idx  t1_id    -1         NULL      NULL        NULL      false       false
-t3            a        -1         NULL      NULL        NULL      false       false
-t3            b        -1         NULL      NULL        NULL      false       false
-t3            c        -1         NULL      NULL        NULL      false       true
-t3            rowid    -1         NULL      NULL        NULL      true        true
-primary       rowid    -1         NULL      NULL        NULL      true        true
-t3_a_b_idx    a        -1         NULL      NULL        NULL      false       false
-t3_a_b_idx    b        -1         NULL      NULL        NULL      false       false
-v1            p        -1         NULL      NULL        NULL      true        false
-v1            a        -1         NULL      NULL        NULL      true        false
-v1            b        -1         NULL      NULL        NULL      true        false
-v1            c        -1         NULL      NULL        NULL      true        false
+relname       attname   atttypmod  attbyval  attstorage  attalign  attnotnull  atthasdef  attidentity  attgenerated
+t1            p         -1         NULL      NULL        NULL      true        false
+t1            a         -1         NULL      NULL        NULL      false       false
+t1            b         -1         NULL      NULL        NULL      false       false
+t1            c         -1         NULL      NULL        NULL      false       true
+t1            d         9          NULL      NULL        NULL      false       false
+t1            e         5          NULL      NULL        NULL      false       false
+t1            f         655371     NULL      NULL        NULL      false       false
+t1            g         -1         NULL      NULL        NULL      false       false                   s
+t1            h         16         NULL      NULL        NULL      false       false
+t1            i         24         NULL      NULL        NULL      false       false
+t1            j         -1         NULL      NULL        NULL      false       false
+primary       p         -1         NULL      NULL        NULL      true        false
+t1_a_key      a         -1         NULL      NULL        NULL      false       false
+index_key     b         -1         NULL      NULL        NULL      false       false
+index_key     c         -1         NULL      NULL        NULL      false       true
+t2            t1_id     -1         NULL      NULL        NULL      false       false
+t2            rowid     -1         NULL      NULL        NULL      true        true
+primary       rowid     -1         NULL      NULL        NULL      true        true
+t2_t1_id_idx  t1_id     -1         NULL      NULL        NULL      false       false
+t3            a         -1         NULL      NULL        NULL      false       false
+t3            b         -1         NULL      NULL        NULL      false       false
+t3            c         -1         NULL      NULL        NULL      false       true
+t3            rowid     -1         NULL      NULL        NULL      true        true
+primary       rowid     -1         NULL      NULL        NULL      true        true
+t3_a_b_idx    a         -1         NULL      NULL        NULL      false       false
+t3_a_b_idx    b         -1         NULL      NULL        NULL      false       false
+v1            p         -1         NULL      NULL        NULL      true        false
+v1            a         -1         NULL      NULL        NULL      true        false
+v1            b         -1         NULL      NULL        NULL      true        false
+v1            c         -1         NULL      NULL        NULL      true        false
+mv1           ?column?  -1         NULL      NULL        NULL      true        false
+mv1           rowid     -1         NULL      NULL        NULL      true        true
+primary       rowid     -1         NULL      NULL        NULL      true        true
 
 query TTBBITTT colnames
 SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attoptions, attfdwoptions
@@ -477,37 +502,40 @@ JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname       attname  attisdropped  attislocal  attinhcount  attacl  attoptions  attfdwoptions
-t1            p        false         true        0            NULL    NULL        NULL
-t1            a        false         true        0            NULL    NULL        NULL
-t1            b        false         true        0            NULL    NULL        NULL
-t1            c        false         true        0            NULL    NULL        NULL
-t1            d        false         true        0            NULL    NULL        NULL
-t1            e        false         true        0            NULL    NULL        NULL
-t1            f        false         true        0            NULL    NULL        NULL
-t1            g        false         true        0            NULL    NULL        NULL
-t1            h        false         true        0            NULL    NULL        NULL
-t1            i        false         true        0            NULL    NULL        NULL
-t1            j        false         true        0            NULL    NULL        NULL
-primary       p        false         true        0            NULL    NULL        NULL
-t1_a_key      a        false         true        0            NULL    NULL        NULL
-index_key     b        false         true        0            NULL    NULL        NULL
-index_key     c        false         true        0            NULL    NULL        NULL
-t2            t1_id    false         true        0            NULL    NULL        NULL
-t2            rowid    false         true        0            NULL    NULL        NULL
-primary       rowid    false         true        0            NULL    NULL        NULL
-t2_t1_id_idx  t1_id    false         true        0            NULL    NULL        NULL
-t3            a        false         true        0            NULL    NULL        NULL
-t3            b        false         true        0            NULL    NULL        NULL
-t3            c        false         true        0            NULL    NULL        NULL
-t3            rowid    false         true        0            NULL    NULL        NULL
-primary       rowid    false         true        0            NULL    NULL        NULL
-t3_a_b_idx    a        false         true        0            NULL    NULL        NULL
-t3_a_b_idx    b        false         true        0            NULL    NULL        NULL
-v1            p        false         true        0            NULL    NULL        NULL
-v1            a        false         true        0            NULL    NULL        NULL
-v1            b        false         true        0            NULL    NULL        NULL
-v1            c        false         true        0            NULL    NULL        NULL
+relname       attname   attisdropped  attislocal  attinhcount  attacl  attoptions  attfdwoptions
+t1            p         false         true        0            NULL    NULL        NULL
+t1            a         false         true        0            NULL    NULL        NULL
+t1            b         false         true        0            NULL    NULL        NULL
+t1            c         false         true        0            NULL    NULL        NULL
+t1            d         false         true        0            NULL    NULL        NULL
+t1            e         false         true        0            NULL    NULL        NULL
+t1            f         false         true        0            NULL    NULL        NULL
+t1            g         false         true        0            NULL    NULL        NULL
+t1            h         false         true        0            NULL    NULL        NULL
+t1            i         false         true        0            NULL    NULL        NULL
+t1            j         false         true        0            NULL    NULL        NULL
+primary       p         false         true        0            NULL    NULL        NULL
+t1_a_key      a         false         true        0            NULL    NULL        NULL
+index_key     b         false         true        0            NULL    NULL        NULL
+index_key     c         false         true        0            NULL    NULL        NULL
+t2            t1_id     false         true        0            NULL    NULL        NULL
+t2            rowid     false         true        0            NULL    NULL        NULL
+primary       rowid     false         true        0            NULL    NULL        NULL
+t2_t1_id_idx  t1_id     false         true        0            NULL    NULL        NULL
+t3            a         false         true        0            NULL    NULL        NULL
+t3            b         false         true        0            NULL    NULL        NULL
+t3            c         false         true        0            NULL    NULL        NULL
+t3            rowid     false         true        0            NULL    NULL        NULL
+primary       rowid     false         true        0            NULL    NULL        NULL
+t3_a_b_idx    a         false         true        0            NULL    NULL        NULL
+t3_a_b_idx    b         false         true        0            NULL    NULL        NULL
+v1            p         false         true        0            NULL    NULL        NULL
+v1            a         false         true        0            NULL    NULL        NULL
+v1            b         false         true        0            NULL    NULL        NULL
+v1            c         false         true        0            NULL    NULL        NULL
+mv1           ?column?  false         true        0            NULL    NULL        NULL
+mv1           rowid     false         true        0            NULL    NULL        NULL
+primary       rowid     false         true        0            NULL    NULL        NULL
 
 # Check relkind codes.
 statement ok
@@ -594,6 +622,7 @@ oid         relname  adrelid  adnum  adbin           adsrc
 841178406   t2       56       2      unique_rowid()  unique_rowid()
 2186255414  t3       57       3      'FOO'::STRING   'FOO'::STRING
 2186255409  t3       57       4      unique_rowid()  unique_rowid()
+581442133   mv1      59       2      unique_rowid()  unique_rowid()
 
 ## pg_catalog.pg_indexes
 
@@ -610,6 +639,7 @@ crdb_oid    schemaname  tablename  indexname     tablespace
 2315049511  public      t2         t2_t1_id_idx  NULL
 969972501   public      t3         primary       NULL
 969972502   public      t3         t3_a_b_idx    NULL
+3660126519  public      mv1        primary       NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
@@ -624,6 +654,7 @@ crdb_oid    tablename  indexname     indexdef
 2315049511  t2         t2_t1_id_idx  CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 USING btree (t1_id ASC)
 969972501   t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t3 USING btree (rowid ASC)
 969972502   t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
+3660126519  mv1        primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
 
@@ -959,10 +990,10 @@ query OORT colnames
 SELECT * FROM pg_enum
 ----
 oid         enumtypid  enumsortorder  enumlabel
-1865129000  100064     0              v1
-1865129192  100064     1              v2
-1898684366  100066     0              v3
-1898684174  100066     1              v4
+1881906619  100065     0              v1
+1881906555  100065     1              v2
+1915461985  100067     0              v3
+1915462049  100067     1              v4
 
 ## pg_catalog.pg_type
 
@@ -1047,10 +1078,10 @@ oid     typname        typnamespace  typowner  typlen  typbyval  typtype
 90003   _geography     1307062959    NULL      -1      false     b
 90004   box2d          1307062959    NULL      32      true      b
 90005   _box2d         1307062959    NULL      -1      false     b
-100064  newtype1       2332901747    NULL      -1      false     e
-100065  _newtype1      2332901747    NULL      -1      false     b
-100066  newtype2       2332901747    NULL      -1      false     e
-100067  _newtype2      2332901747    NULL      -1      false     b
+100065  newtype1       2332901747    NULL      -1      false     e
+100066  _newtype1      2332901747    NULL      -1      false     b
+100067  newtype2       2332901747    NULL      -1      false     e
+100068  _newtype2      2332901747    NULL      -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -1133,10 +1164,10 @@ oid     typname        typcategory  typispreferred  typisdefined  typdelim  typr
 90003   _geography     A            false           true          ,         0         90002    0
 90004   box2d          U            false           true          ,         0         0        90005
 90005   _box2d         A            false           true          ,         0         90004    0
-100064  newtype1       E            false           true          ,         0         0        100065
-100065  _newtype1      A            false           true          ,         0         100064   0
-100066  newtype2       E            false           true          ,         0         0        100067
-100067  _newtype2      A            false           true          ,         0         100066   0
+100065  newtype1       E            false           true          ,         0         0        100066
+100066  _newtype1      A            false           true          ,         0         100065   0
+100067  newtype2       E            false           true          ,         0         0        100068
+100068  _newtype2      A            false           true          ,         0         100067   0
 
 query OTOOOOOOO colnames
 SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze
@@ -1219,10 +1250,10 @@ oid     typname        typinput        typoutput        typreceive        typsen
 90003   _geography     array_in        array_out        array_recv        array_send        0         0          0
 90004   box2d          box2d_in        box2d_out        box2d_recv        box2d_send        0         0          0
 90005   _box2d         array_in        array_out        array_recv        array_send        0         0          0
-100064  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
-100065  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
-100066  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
-100067  _newtype2      array_in        array_out        array_recv        array_send        0         0          0
+100065  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100066  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
+100067  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100068  _newtype2      array_in        array_out        array_recv        array_send        0         0          0
 
 query OTTTBOI colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
@@ -1305,10 +1336,10 @@ oid     typname        typalign  typstorage  typnotnull  typbasetype  typtypmod
 90003   _geography     NULL      NULL        false       0            -1
 90004   box2d          NULL      NULL        false       0            -1
 90005   _box2d         NULL      NULL        false       0            -1
-100064  newtype1       NULL      NULL        false       0            -1
-100065  _newtype1      NULL      NULL        false       0            -1
-100066  newtype2       NULL      NULL        false       0            -1
-100067  _newtype2      NULL      NULL        false       0            -1
+100065  newtype1       NULL      NULL        false       0            -1
+100066  _newtype1      NULL      NULL        false       0            -1
+100067  newtype2       NULL      NULL        false       0            -1
+100068  _newtype2      NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
 SELECT oid, typname, typndims, typcollation, typdefaultbin, typdefault, typacl
@@ -1391,10 +1422,10 @@ oid     typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 90003   _geography     0         0             NULL           NULL        NULL
 90004   box2d          0         0             NULL           NULL        NULL
 90005   _box2d         0         0             NULL           NULL        NULL
-100064  newtype1       0         0             NULL           NULL        NULL
-100065  _newtype1      0         0             NULL           NULL        NULL
-100066  newtype2       0         0             NULL           NULL        NULL
-100067  _newtype2      0         0             NULL           NULL        NULL
+100065  newtype1       0         0             NULL           NULL        NULL
+100066  _newtype1      0         0             NULL           NULL        NULL
+100067  newtype2       0         0             NULL           NULL        NULL
+100068  _newtype2      0         0             NULL           NULL        NULL
 
 user testuser
 
@@ -1420,10 +1451,10 @@ oid     typname        typnamespace  typowner  typlen  typbyval  typtype
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
-WHERE oid = 100064
+WHERE oid = 100065
 ----
 oid     typname   typnamespace  typowner  typlen  typbyval  typtype
-100064  newtype1  2332901747    NULL      -1      false     e
+100065  newtype1  2332901747    NULL      -1      false     e
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -2000,8 +2031,8 @@ query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-69        20        1         1             9223372036854775807  1       1         false
-70        20        6         2             10                   5       1         false
+70        20        1         1             9223372036854775807  1       1         false
+71        20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -2044,10 +2075,11 @@ JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-1666782879  t1  12
-841178406   t2  unique_rowid()
-2186255414  t3  'FOO'::STRING
-2186255409  t3  unique_rowid()
+1666782879  t1   12
+841178406   t2   unique_rowid()
+2186255414  t3   'FOO'::STRING
+2186255409  t3   unique_rowid()
+581442133   mv1  unique_rowid()
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.
@@ -2456,7 +2488,7 @@ CREATE INDEX regression_46450_idx ON regression_46450 USING gin(json)
 query TTTTTT
 select * from pg_indexes where indexname = 'regression_46450_idx'
 ----
-1702785641  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
+357708632  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
 
 # Make sure that selecting from vtables with indexes in other dbs properly
 # hides descriptors that should be hidden.
@@ -2505,7 +2537,7 @@ statement ok
 CREATE TABLE t(x INT DEFAULT 1, y INT DEFAULT 1);
 
 query I
-SELECT adnum FROM pg_attrdef WHERE adrelid = 90
+SELECT adnum FROM pg_attrdef WHERE adrelid = 91
 ----
 1
 2
@@ -2517,7 +2549,7 @@ ALTER TABLE t ADD COLUMN y INT DEFAULT 1;
 
 # Make sure after adding and dropping the same column, the adnum for the re-added column increases.
 query I
-select adnum from pg_attrdef WHERE adrelid = 90
+select adnum from pg_attrdef WHERE adrelid = 91
 ----
 1
 3
@@ -2530,13 +2562,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-91  91  jt
+92  92  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1   NULL  NULL
-91  91    jt
+92  92    jt
 
 subtest regression_49207
 statement ok
