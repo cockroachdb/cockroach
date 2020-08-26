@@ -2632,6 +2632,26 @@ Square (left)                             Polygon             ST_Polygon        
 Square (right)                            Polygon             ST_Polygon             2     2     2     5     1
 Square overlapping left and right square  Polygon             ST_Polygon             2     2     2     5     1
 
+query TT
+SELECT
+  dsc,
+  ST_AsEWKT(ST_Points(geom))
+FROM geom_operators_test
+ORDER BY dsc
+----
+Empty GeometryCollection                  MULTIPOINT EMPTY
+Empty LineString                          MULTIPOINT EMPTY
+Empty Point                               MULTIPOINT EMPTY
+Faraway point                             MULTIPOINT (5 5)
+Line going through left and right square  MULTIPOINT (-0.5 0.5, 0.5 0.5)
+NULL                                      NULL
+Nested Geometry Collection                MULTIPOINT (0 0)
+Point middle of Left Square               MULTIPOINT (-0.5 0.5)
+Point middle of Right Square              MULTIPOINT (0.5 0.5)
+Square (left)                             MULTIPOINT (-1 0, 0 0, 0 1, -1 1, -1 0)
+Square (right)                            MULTIPOINT (0 0, 1 0, 1 1, 0 1, 0 0)
+Square overlapping left and right square  MULTIPOINT (-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)
+
 query TTTT
 SELECT
   a.dsc,
