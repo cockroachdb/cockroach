@@ -68,7 +68,7 @@ func TestExamine(t *testing.T) {
 
 	for i, test := range tests {
 		var buf bytes.Buffer
-		valid, err := doctor.Examine(test.descTable, false, &buf)
+		valid, err := doctor.Examine(test.descTable, nil, false, &buf)
 		msg := fmt.Sprintf("Test %d failed!", i+1)
 		if test.errStr != "" {
 			require.Containsf(t, err.Error(), test.errStr, msg)
