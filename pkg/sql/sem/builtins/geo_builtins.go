@@ -3858,7 +3858,7 @@ Bottom Left.`,
 		geometryOverload2(
 			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
 				if a.Geometry.SRID() != b.Geometry.SRID() {
-					return nil, geo.NewMismatchingSRIDsError(&a.Geometry, &b.Geometry)
+					return nil, geo.NewMismatchingSRIDsError(a.Geometry.SpatialObject(), b.Geometry.SpatialObject())
 				}
 				aGeomT, err := a.AsGeomT()
 				if err != nil {

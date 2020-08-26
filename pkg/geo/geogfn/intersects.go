@@ -25,7 +25,7 @@ func Intersects(a geo.Geography, b geo.Geography) (bool, error) {
 		return false, nil
 	}
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(&a, &b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 
 	aRegions, err := a.AsS2(geo.EmptyBehaviorOmit)

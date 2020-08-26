@@ -26,7 +26,7 @@ import (
 // Returns an error if any of the two Geography items are not points.
 func Azimuth(a geo.Geography, b geo.Geography) (*float64, error) {
 	if a.SRID() != b.SRID() {
-		return nil, geo.NewMismatchingSRIDsError(&a, &b)
+		return nil, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 
 	aGeomT, err := a.AsGeomT()

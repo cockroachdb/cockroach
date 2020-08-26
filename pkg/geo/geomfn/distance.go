@@ -37,7 +37,7 @@ const (
 // This returns a geo.EmptyGeometryError if either A or B is EMPTY.
 func MinDistance(a geo.Geometry, b geo.Geometry) (float64, error) {
 	if a.SRID() != b.SRID() {
-		return 0, geo.NewMismatchingSRIDsError(&a, &b)
+		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return minDistanceInternal(a, b, 0, geo.EmptyBehaviorOmit, geo.FnInclusive)
 }
@@ -46,7 +46,7 @@ func MinDistance(a geo.Geometry, b geo.Geometry) (float64, error) {
 // geometries A and B.
 func MaxDistance(a geo.Geometry, b geo.Geometry) (float64, error) {
 	if a.SRID() != b.SRID() {
-		return 0, geo.NewMismatchingSRIDsError(&a, &b)
+		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return maxDistanceInternal(a, b, math.MaxFloat64, geo.EmptyBehaviorOmit, geo.FnInclusive)
 }
@@ -58,7 +58,7 @@ func DWithin(
 	a geo.Geometry, b geo.Geometry, d float64, exclusivity geo.FnExclusivity,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(&a, &b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	if d < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")
@@ -88,7 +88,7 @@ func DFullyWithin(
 	a geo.Geometry, b geo.Geometry, d float64, exclusivity geo.FnExclusivity,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(&a, &b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	if d < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")
@@ -114,7 +114,7 @@ func DFullyWithin(
 // every pair of points comprising geometries A and B.
 func LongestLineString(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 	if a.SRID() != b.SRID() {
-		return geo.Geometry{}, geo.NewMismatchingSRIDsError(&a, &b)
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	u := newGeomMaxDistanceUpdater(math.MaxFloat64, geo.FnInclusive)
 	return distanceLineStringInternal(a, b, u, geo.EmptyBehaviorOmit)
@@ -124,7 +124,7 @@ func LongestLineString(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 // every pair of points comprising geometries A and B.
 func ShortestLineString(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 	if a.SRID() != b.SRID() {
-		return geo.Geometry{}, geo.NewMismatchingSRIDsError(&a, &b)
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	u := newGeomMinDistanceUpdater(0 /*stopAfter */, geo.FnInclusive)
 	return distanceLineStringInternal(a, b, u, geo.EmptyBehaviorOmit)

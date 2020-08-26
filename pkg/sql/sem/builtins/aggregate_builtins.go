@@ -695,7 +695,7 @@ func (agg *stUnionAgg) Add(_ context.Context, firstArg tree.Datum, otherArgs ...
 		if err != nil {
 			return err
 		}
-		return geo.NewMismatchingSRIDsError(&geomArg.Geometry, &c)
+		return geo.NewMismatchingSRIDsError(geomArg.Geometry.SpatialObject(), c.SpatialObject())
 	}
 	var err error
 	// TODO(#geo):We are allocating a slice for the result each time we
