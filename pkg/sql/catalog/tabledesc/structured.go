@@ -187,8 +187,19 @@ func MakeImmutable(tbl descpb.TableDescriptor) Immutable {
 }
 
 // NewImmutable returns a Immutable from the given TableDescriptor.
+// This function assumes that this descriptor has not been modified from the
+// version stored in the key-value store.
 func NewImmutable(tbl descpb.TableDescriptor) *Immutable {
+	return NewImmutableWithIsModified(tbl, false)
+}
+
+// NewImmutableWithIsModified returns a Immutable from the given
+// TableDescriptor and allows the caller to mark the table as having been
+// modified. This should be used when constructing a new copy of an Immutable
+// from an existing descriptor which may have been modified.
+func NewImmutableWithIsModified(tbl descpb.TableDescriptor, isModified bool) *Immutable {
 	desc := MakeImmutable(tbl)
+	desc.isModified = isModified
 	return &desc
 }
 

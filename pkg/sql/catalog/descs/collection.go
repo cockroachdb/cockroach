@@ -1106,13 +1106,12 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			}
 		}
 
-		// TODO(ajwerner): Propagate the IsModified status here.
 		// Make a copy of the underlying descriptor before hydration.
 		descBase := protoutil.Clone(t.TableDesc()).(*descpb.TableDescriptor)
 		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, getType); err != nil {
 			return nil, err
 		}
-		return tabledesc.NewImmutable(*descBase), nil
+		return tabledesc.NewImmutableWithIsModified(*descBase, t.IsModified()), nil
 	default:
 		return desc, nil
 	}
