@@ -1355,15 +1355,27 @@ func (r *restoreResumer) dropDescriptors(
 	}
 
 	b := txn.NewBatch()
+
+	// Collect the tables into mutable versions.
+	mutableTables := make([]*tabledesc.Mutable, len(details.TableDescs))
+	for i := range details.TableDescs {
+		mutableTables[i] = tabledesc.NewExistingMutable(*details.TableDescs[i])
+	}
+
+	// Remove any back references installed from existing types to tables being restored.
+	if err := r.removeExistingTypeBackReferences(ctx, txn, b, mutableTables, &details); err != nil {
+		return err
+	}
+
 	// Drop the table descriptors that were created at the start of the restore.
 	tablesToGC := make([]descpb.ID, 0, len(details.TableDescs))
-	for _, tbl := range details.TableDescs {
-		tablesToGC = append(tablesToGC, tbl.ID)
-		tableToDrop := tabledesc.NewExistingMutable(*tbl)
+	for i := range mutableTables {
+		tableToDrop := mutableTables[i]
+		tablesToGC = append(tablesToGC, tableToDrop.ID)
 		prev := tableToDrop.ImmutableCopy().(catalog.TableDescriptor)
 		tableToDrop.Version++
 		tableToDrop.State = descpb.DescriptorState_DROP
-		err := catalogkv.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tbl.ParentID, tbl.Name)
+		err := catalogkv.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tableToDrop.ParentID, tableToDrop.Name)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")
 		}
@@ -1505,6 +1517,96 @@ func (r *restoreResumer) dropDescriptors(
 
 	if err := txn.Run(ctx, b); err != nil {
 		return errors.Wrap(err, "dropping tables created at the start of restore caused by fail/cancel")
+	}
+
+	return nil
+}
+
+// removeExistingTypeBackReferences removes back references from types that
+// exist in the cluster to tables restored. It is used when rolling back from
+// a failed restore.
+func (r *restoreResumer) removeExistingTypeBackReferences(
+	ctx context.Context,
+	txn *kv.Txn,
+	b *kv.Batch,
+	restoredTables []*tabledesc.Mutable,
+	details *jobspb.RestoreDetails,
+) error {
+	// We first collect the restored types to be addressable by ID.
+	restoredTypes := make(map[descpb.ID]*typedesc.Immutable)
+	existingTypes := make(map[descpb.ID]*typedesc.Mutable)
+	for i := range details.TypeDescs {
+		typ := details.TypeDescs[i]
+		restoredTypes[typ.ID] = typedesc.NewImmutable(*typ)
+	}
+	for _, tbl := range restoredTables {
+		lookup := func(id descpb.ID) (catalog.TypeDescriptor, error) {
+			// First see if the type was restored.
+			restored, ok := restoredTypes[id]
+			if ok {
+				return restored, nil
+			}
+			// See if we have the type cached.
+			cached, ok := existingTypes[id]
+			if ok {
+				return cached, nil
+			}
+			// Finally, look it up using the transaction.
+			desc, err := catalogkv.GetDescriptorByID(
+				ctx,
+				txn,
+				keys.SystemSQLCodec,
+				id,
+				catalogkv.Mutable,
+				catalogkv.TypeDescriptorKind,
+				true, /* required */
+			)
+			if err != nil {
+				return nil, err
+			}
+			typ := desc.(*typedesc.Mutable)
+			existingTypes[typ.GetID()] = typ
+			return typ, nil
+		}
+
+		// Get all types that this descriptor references.
+		referencedTypes, err := tbl.GetAllReferencedTypeIDs(lookup)
+		if err != nil {
+			return err
+		}
+
+		// For each type that is existing, remove the backreference from tbl.
+		for _, id := range referencedTypes {
+			_, restored := restoredTypes[id]
+			if !restored {
+				desc, err := lookup(id)
+				if err != nil {
+					return err
+				}
+				existing := desc.(*typedesc.Mutable)
+				// Since we cache the lookups to existing types, we are guaranteed
+				// that the version is incremented only once in this transaction.
+				existing.MaybeIncrementVersion()
+				existing.RemoveReferencingDescriptorID(tbl.ID)
+			}
+		}
+	}
+
+	// Now write any changed existing types.
+	for _, typ := range existingTypes {
+		if typ.OriginalVersion() != typ.GetVersion() {
+			if err := catalogkv.WriteDescToBatch(
+				ctx,
+				false, /* kvTrace */
+				r.settings,
+				b,
+				keys.SystemSQLCodec,
+				typ.ID,
+				typ,
+			); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
