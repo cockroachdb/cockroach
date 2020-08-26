@@ -541,6 +541,10 @@ message InvertedJoinerSpec {
   // allow the false positives to be eliminated by evaluating the exact
   // expression on the rows output by this join.
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // Indicates that the inverted joiner should maintain the ordering of the
+  // input stream.
+  optional bool maintain_ordering = 7 [(gogoproto.nullable) = false];
 }
 
 // InvertedFiltererSpec is the specification of a processor that does filtering

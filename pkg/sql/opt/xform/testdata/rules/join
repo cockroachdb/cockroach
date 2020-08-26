@@ -3531,6 +3531,7 @@ project
  └── distinct-on
       ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
       ├── grouping columns: c.gid:1!null
+      ├── internal-ordering: +1
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-10)
@@ -3540,16 +3541,19 @@ project
       │    ├── lookup columns are key
       │    ├── immutable
       │    ├── fd: (1)-->(2-10)
+      │    ├── ordering: +1
       │    ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
       │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null
       │    │    ├── inverted-expr
       │    │    │    └── st_covers(c.geom:10, n.geom:16)
       │    │    ├── key: (1,13)
       │    │    ├── fd: (1)-->(2-10)
+      │    │    ├── ordering: +1
       │    │    ├── scan c
       │    │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
       │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2-10)
+      │    │    │    ├── fd: (1)-->(2-10)
+      │    │    │    └── ordering: +1
       │    │    └── filters (true)
       │    └── filters
       │         └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
