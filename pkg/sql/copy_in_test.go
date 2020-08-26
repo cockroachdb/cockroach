@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -404,76 +403,6 @@ func TestCopyError(t *testing.T) {
 	}
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// TestCopyOne verifies that only one COPY can run at once.
-func TestCopyOne(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 18352)
-
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	if _, err := db.Exec(`
-		CREATE DATABASE d;
-		SET DATABASE = d;
-		CREATE TABLE t (
-			i INT PRIMARY KEY
-		);
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := txn.Prepare(pq.CopyIn("t", "i")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := txn.Prepare(pq.CopyIn("t", "i")); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-// TestCopyInProgress verifies that after a COPY has started another statement
-// cannot run.
-func TestCopyInProgress(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 18352)
-
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	if _, err := db.Exec(`
-		CREATE DATABASE d;
-		SET DATABASE = d;
-		CREATE TABLE t (
-			i INT PRIMARY KEY
-		);
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := txn.Prepare(pq.CopyIn("t", "i")); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := txn.Query("SELECT 1"); err == nil {
-		t.Fatal("expected error")
 	}
 }
 
