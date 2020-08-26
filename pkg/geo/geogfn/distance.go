@@ -30,10 +30,10 @@ const SpheroidErrorFraction = 0.05
 // Distance returns the distance between geographies a and b on a sphere or spheroid.
 // Returns a geo.EmptyGeometryError if any of the Geographies are EMPTY.
 func Distance(
-	a *geo.Geography, b *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid,
+	a geo.Geography, b geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid,
 ) (float64, error) {
 	if a.SRID() != b.SRID() {
-		return 0, geo.NewMismatchingSRIDsError(a, b)
+		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 
 	aRegions, err := a.AsS2(geo.EmptyBehaviorError)

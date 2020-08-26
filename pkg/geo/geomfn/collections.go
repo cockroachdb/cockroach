@@ -19,11 +19,11 @@ import (
 
 // CollectionExtract returns a (multi-)geometry consisting only of the specified type.
 // The type can only be point, line, or polygon.
-func CollectionExtract(g *geo.Geometry, shapeType geopb.ShapeType) (*geo.Geometry, error) {
+func CollectionExtract(g geo.Geometry, shapeType geopb.ShapeType) (geo.Geometry, error) {
 	switch shapeType {
 	case geopb.ShapeType_Point, geopb.ShapeType_LineString, geopb.ShapeType_Polygon:
 	default:
-		return nil, errors.Newf("only point, linestring and polygon may be extracted (got %s)",
+		return geo.Geometry{}, errors.Newf("only point, linestring and polygon may be extracted (got %s)",
 			shapeType)
 	}
 
@@ -35,7 +35,7 @@ func CollectionExtract(g *geo.Geometry, shapeType geopb.ShapeType) (*geo.Geometr
 
 	t, err := g.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	switch t := t.(type) {
@@ -43,26 +43,26 @@ func CollectionExtract(g *geo.Geometry, shapeType geopb.ShapeType) (*geo.Geometr
 	case *geom.Point, *geom.LineString, *geom.Polygon:
 		switch shapeType {
 		case geopb.ShapeType_Point:
-			return geo.NewGeometryFromGeomT(geom.NewPointEmpty(t.Layout()).SetSRID(t.SRID()))
+			return geo.MakeGeometryFromGeomT(geom.NewPointEmpty(t.Layout()).SetSRID(t.SRID()))
 		case geopb.ShapeType_LineString:
-			return geo.NewGeometryFromGeomT(geom.NewLineString(t.Layout()).SetSRID(t.SRID()))
+			return geo.MakeGeometryFromGeomT(geom.NewLineString(t.Layout()).SetSRID(t.SRID()))
 		case geopb.ShapeType_Polygon:
-			return geo.NewGeometryFromGeomT(geom.NewPolygon(t.Layout()).SetSRID(t.SRID()))
+			return geo.MakeGeometryFromGeomT(geom.NewPolygon(t.Layout()).SetSRID(t.SRID()))
 		default:
-			return nil, errors.AssertionFailedf("unexpected shape type %v", shapeType.String())
+			return geo.Geometry{}, errors.AssertionFailedf("unexpected shape type %v", shapeType.String())
 		}
 
 	// If the input is a multitype then return an empty multi-geometry of the expected type.
 	case *geom.MultiPoint, *geom.MultiLineString, *geom.MultiPolygon:
 		switch shapeType.MultiType() {
 		case geopb.ShapeType_MultiPoint:
-			return geo.NewGeometryFromGeomT(geom.NewMultiPoint(t.Layout()).SetSRID(t.SRID()))
+			return geo.MakeGeometryFromGeomT(geom.NewMultiPoint(t.Layout()).SetSRID(t.SRID()))
 		case geopb.ShapeType_MultiLineString:
-			return geo.NewGeometryFromGeomT(geom.NewMultiLineString(t.Layout()).SetSRID(t.SRID()))
+			return geo.MakeGeometryFromGeomT(geom.NewMultiLineString(t.Layout()).SetSRID(t.SRID()))
 		case geopb.ShapeType_MultiPolygon:
-			return geo.NewGeometryFromGeomT(geom.NewMultiPolygon(t.Layout()).SetSRID(t.SRID()))
+			return geo.MakeGeometryFromGeomT(geom.NewMultiPolygon(t.Layout()).SetSRID(t.SRID()))
 		default:
-			return nil, errors.AssertionFailedf("unexpected shape type %v", shapeType.MultiType().String())
+			return geo.Geometry{}, errors.AssertionFailedf("unexpected shape type %v", shapeType.MultiType().String())
 		}
 
 	// If the input is a collection, recursively gather geometries of the right type.
@@ -88,15 +88,15 @@ func CollectionExtract(g *geo.Geometry, shapeType geopb.ShapeType) (*geo.Geometr
 		case geopb.ShapeType_Polygon:
 			multi, err = collectionExtractPolygons(iter, layout, srid)
 		default:
-			return nil, errors.AssertionFailedf("unexpected shape type %v", shapeType.String())
+			return geo.Geometry{}, errors.AssertionFailedf("unexpected shape type %v", shapeType.String())
 		}
 		if err != nil {
-			return nil, err
+			return geo.Geometry{}, err
 		}
-		return geo.NewGeometryFromGeomT(multi)
+		return geo.MakeGeometryFromGeomT(multi)
 
 	default:
-		return nil, errors.AssertionFailedf("unexpected shape type: %T", t)
+		return geo.Geometry{}, errors.AssertionFailedf("unexpected shape type: %T", t)
 	}
 }
 
@@ -158,20 +158,20 @@ func collectionExtractPolygons(
 }
 
 // CollectionHomogenize returns the simplest representation of a collection.
-func CollectionHomogenize(g *geo.Geometry) (*geo.Geometry, error) {
+func CollectionHomogenize(g geo.Geometry) (geo.Geometry, error) {
 	t, err := g.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 	srid := t.SRID()
 	t, err = collectionHomogenizeGeomT(t)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 	if srid != 0 {
 		geo.AdjustGeomTSRID(t, geopb.SRID(srid))
 	}
-	return geo.NewGeometryFromGeomT(t)
+	return geo.MakeGeometryFromGeomT(t)
 }
 
 // collectionHomogenizeGeomT homogenizes a geom.T collection.
@@ -275,39 +275,39 @@ func collectionHomogenizeGeomT(t geom.T) (geom.T, error) {
 }
 
 // Multi converts the given geometry into a new multi-geometry.
-func Multi(g *geo.Geometry) (*geo.Geometry, error) {
+func Multi(g geo.Geometry) (geo.Geometry, error) {
 	t, err := g.AsGeomT() // implicitly clones the input
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 	switch t := t.(type) {
 	case *geom.MultiPoint, *geom.MultiLineString, *geom.MultiPolygon, *geom.GeometryCollection:
-		return geo.NewGeometryFromGeomT(t)
+		return geo.MakeGeometryFromGeomT(t)
 	case *geom.Point:
 		multi := geom.NewMultiPoint(t.Layout()).SetSRID(t.SRID())
 		if !t.Empty() {
 			if err = multi.Push(t); err != nil {
-				return nil, err
+				return geo.Geometry{}, err
 			}
 		}
-		return geo.NewGeometryFromGeomT(multi)
+		return geo.MakeGeometryFromGeomT(multi)
 	case *geom.LineString:
 		multi := geom.NewMultiLineString(t.Layout()).SetSRID(t.SRID())
 		if !t.Empty() {
 			if err = multi.Push(t); err != nil {
-				return nil, err
+				return geo.Geometry{}, err
 			}
 		}
-		return geo.NewGeometryFromGeomT(multi)
+		return geo.MakeGeometryFromGeomT(multi)
 	case *geom.Polygon:
 		multi := geom.NewMultiPolygon(t.Layout()).SetSRID(t.SRID())
 		if !t.Empty() {
 			if err = multi.Push(t); err != nil {
-				return nil, err
+				return geo.Geometry{}, err
 			}
 		}
-		return geo.NewGeometryFromGeomT(multi)
+		return geo.MakeGeometryFromGeomT(multi)
 	default:
-		return nil, errors.AssertionFailedf("unknown geometry type: %T", t)
+		return geo.Geometry{}, errors.AssertionFailedf("unknown geometry type: %T", t)
 	}
 }

@@ -22,7 +22,7 @@ import (
 )
 
 // Area returns the area of a given Geography.
-func Area(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
+func Area(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
 	regions, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return 0, err
@@ -57,7 +57,7 @@ func Area(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, e
 }
 
 // Perimeter returns the perimeter of a given Geography.
-func Perimeter(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
+func Perimeter(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return 0, err
@@ -81,7 +81,7 @@ func Perimeter(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float
 }
 
 // Length returns length of a given Geography.
-func Length(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
+func Length(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, error) {
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return 0, err
@@ -105,20 +105,20 @@ func Length(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64,
 }
 
 // Project returns calculate a projected point given a source point, a distance and a azimuth.
-func Project(g *geo.Geography, distance float64, azimuth s1.Angle) (*geo.Geography, error) {
+func Project(g geo.Geography, distance float64, azimuth s1.Angle) (geo.Geography, error) {
 	geomT, err := g.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 
 	point, ok := geomT.(*geom.Point)
 	if !ok {
-		return nil, errors.Newf("ST_Project(geography) is only valid for point inputs")
+		return geo.Geography{}, errors.Newf("ST_Project(geography) is only valid for point inputs")
 	}
 
 	spheroid, err := g.Spheroid()
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 
 	// Normalize distance to be positive.
@@ -132,11 +132,11 @@ func Project(g *geo.Geography, distance float64, azimuth s1.Angle) (*geo.Geograp
 
 	// Check the distance validity.
 	if distance > (math.Pi * spheroid.Radius) {
-		return nil, errors.Newf("distance must not be greater than %f", math.Pi*spheroid.Radius)
+		return geo.Geography{}, errors.Newf("distance must not be greater than %f", math.Pi*spheroid.Radius)
 	}
 
 	if point.Empty() {
-		return nil, errors.Newf("cannot project POINT EMPTY")
+		return geo.Geography{}, errors.Newf("cannot project POINT EMPTY")
 	}
 
 	// Convert to ta geodetic point.
@@ -156,7 +156,7 @@ func Project(g *geo.Geography, distance float64, azimuth s1.Angle) (*geo.Geograp
 			geo.NormalizeLatitudeDegrees(projected.Lat.Degrees()),
 		},
 	).SetSRID(point.SRID())
-	return geo.NewGeographyFromGeomT(ret)
+	return geo.MakeGeographyFromGeomT(ret)
 }
 
 // length returns the sum of the lengtsh and perimeters in the shapes of the Geography.

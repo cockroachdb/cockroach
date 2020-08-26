@@ -172,7 +172,7 @@ func isBadGeomCovering(cu s2.CellUnion) bool {
 }
 
 // InvertedIndexKeys implements the GeometryIndex interface.
-func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g *geo.Geometry) ([]Key, error) {
+func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g geo.Geometry) ([]Key, error) {
 	// If the geometry exceeds the bounds, we index the clipped geometry in
 	// addition to the special cell, so that queries for geometries that don't
 	// exceed the bounds don't need to query the special cell (which would
@@ -193,12 +193,12 @@ func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g *geo.Geometry) 
 }
 
 // Covers implements the GeometryIndex interface.
-func (s *s2GeometryIndex) Covers(c context.Context, g *geo.Geometry) (UnionKeySpans, error) {
+func (s *s2GeometryIndex) Covers(c context.Context, g geo.Geometry) (UnionKeySpans, error) {
 	return s.Intersects(c, g)
 }
 
 // CoveredBy implements the GeometryIndex interface.
-func (s *s2GeometryIndex) CoveredBy(c context.Context, g *geo.Geometry) (RPKeyExpr, error) {
+func (s *s2GeometryIndex) CoveredBy(c context.Context, g geo.Geometry) (RPKeyExpr, error) {
 	// If the geometry exceeds the bounds, we use the clipped geometry to
 	// restrict the search within the bounds.
 	gt, clipped, err := s.convertToGeomTAndTryClip(g)
@@ -221,7 +221,7 @@ func (s *s2GeometryIndex) CoveredBy(c context.Context, g *geo.Geometry) (RPKeyEx
 }
 
 // Intersects implements the GeometryIndex interface.
-func (s *s2GeometryIndex) Intersects(c context.Context, g *geo.Geometry) (UnionKeySpans, error) {
+func (s *s2GeometryIndex) Intersects(c context.Context, g geo.Geometry) (UnionKeySpans, error) {
 	// If the geometry exceeds the bounds, we use the clipped geometry to
 	// restrict the search within the bounds.
 	gt, clipped, err := s.convertToGeomTAndTryClip(g)
@@ -242,7 +242,7 @@ func (s *s2GeometryIndex) Intersects(c context.Context, g *geo.Geometry) (UnionK
 }
 
 func (s *s2GeometryIndex) DWithin(
-	c context.Context, g *geo.Geometry, distance float64,
+	c context.Context, g geo.Geometry, distance float64,
 ) (UnionKeySpans, error) {
 	// TODO(sumeer): are the default params the correct thing to use here?
 	g, err := geomfn.Buffer(g, geomfn.MakeDefaultBufferParams(), distance)
@@ -253,7 +253,7 @@ func (s *s2GeometryIndex) DWithin(
 }
 
 func (s *s2GeometryIndex) DFullyWithin(
-	c context.Context, g *geo.Geometry, distance float64,
+	c context.Context, g geo.Geometry, distance float64,
 ) (UnionKeySpans, error) {
 	// TODO(sumeer): are the default params the correct thing to use here?
 	g, err := geomfn.Buffer(g, geomfn.MakeDefaultBufferParams(), distance)
@@ -264,7 +264,7 @@ func (s *s2GeometryIndex) DFullyWithin(
 }
 
 // Converts to geom.T and clips to the rectangle bounds of the index.
-func (s *s2GeometryIndex) convertToGeomTAndTryClip(g *geo.Geometry) (geom.T, bool, error) {
+func (s *s2GeometryIndex) convertToGeomTAndTryClip(g geo.Geometry) (geom.T, bool, error) {
 	gt, err := g.AsGeomT()
 	if err != nil {
 		return nil, false, err
@@ -285,9 +285,6 @@ func (s *s2GeometryIndex) convertToGeomTAndTryClip(g *geo.Geometry) (geom.T, boo
 			g, err = geo.ParseGeometryFromEWKBUnsafe(clippedEWKB)
 			if err != nil {
 				return nil, false, err
-			}
-			if g == nil {
-				return nil, false, errors.Errorf("internal error: clippedWKB cannot be parsed")
 			}
 			gt, err = g.AsGeomT()
 			if err != nil {
@@ -449,7 +446,7 @@ func (s *s2GeometryIndex) s2RegionsFromPlanarGeomT(geomRepr geom.T) []s2.Region 
 	return regions
 }
 
-func (s *s2GeometryIndex) TestingInnerCovering(g *geo.Geometry) s2.CellUnion {
+func (s *s2GeometryIndex) TestingInnerCovering(g geo.Geometry) s2.CellUnion {
 	gt, _, err := s.convertToGeomTAndTryClip(g)
 	if err != nil || gt == nil {
 		return nil

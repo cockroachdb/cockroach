@@ -300,7 +300,7 @@ func DecodeTableKey(
 		}
 		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: r}), rkey, err
 	case types.GeographyFamily:
-		g := a.NewDGeography(tree.DGeography{Geography: geo.NewGeographyUnsafe(geopb.SpatialObject{})})
+		g := a.NewDGeography(tree.DGeography{Geography: geo.MakeGeographyUnsafe(geopb.SpatialObject{})})
 		if dir == encoding.Ascending {
 			rkey, err = encoding.DecodeGeoAscending(key, g.Geography.SpatialObjectRef())
 		} else {
@@ -308,7 +308,7 @@ func DecodeTableKey(
 		}
 		return g, rkey, err
 	case types.GeometryFamily:
-		g := a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometryUnsafe(geopb.SpatialObject{})})
+		g := a.NewDGeometry(tree.DGeometry{Geometry: geo.MakeGeometryUnsafe(geopb.SpatialObject{})})
 		if dir == encoding.Ascending {
 			rkey, err = encoding.DecodeGeoAscending(key, g.Geometry.SpatialObjectRef())
 		} else {
@@ -583,14 +583,14 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		}
 		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: data}), b, nil
 	case types.GeographyFamily:
-		g := a.NewDGeography(tree.DGeography{Geography: geo.NewGeographyUnsafe(geopb.SpatialObject{})})
+		g := a.NewDGeography(tree.DGeography{Geography: geo.MakeGeographyUnsafe(geopb.SpatialObject{})})
 		b, err := encoding.DecodeUntaggedGeoValue(buf, g.Geography.SpatialObjectRef())
 		if err != nil {
 			return nil, b, err
 		}
 		return g, b, nil
 	case types.GeometryFamily:
-		g := a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometryUnsafe(geopb.SpatialObject{})})
+		g := a.NewDGeometry(tree.DGeometry{Geometry: geo.MakeGeometryUnsafe(geopb.SpatialObject{})})
 		b, err := encoding.DecodeUntaggedGeoValue(buf, g.Geometry.SpatialObjectRef())
 		if err != nil {
 			return nil, b, err
@@ -897,13 +897,13 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDGeography(tree.DGeography{Geography: geo.NewGeographyUnsafe(v)}), nil
+		return a.NewDGeography(tree.DGeography{Geography: geo.MakeGeographyUnsafe(v)}), nil
 	case types.GeometryFamily:
 		v, err := value.GetGeo()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometryUnsafe(v)}), nil
+		return a.NewDGeometry(tree.DGeometry{Geometry: geo.MakeGeometryUnsafe(v)}), nil
 	case types.TimeFamily:
 		v, err := value.GetInt()
 		if err != nil {

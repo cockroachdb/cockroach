@@ -20,12 +20,12 @@ import (
 // Intersects returns whether geography A intersects geography B.
 // This calculation is done on the sphere.
 // Precision of intersect measurements is up to 1cm.
-func Intersects(a *geo.Geography, b *geo.Geography) (bool, error) {
+func Intersects(a geo.Geography, b geo.Geography) (bool, error) {
 	if !a.BoundingRect().Intersects(b.BoundingRect()) {
 		return false, nil
 	}
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(a, b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 
 	aRegions, err := a.AsS2(geo.EmptyBehaviorOmit)

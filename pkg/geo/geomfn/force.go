@@ -18,16 +18,16 @@ import (
 
 // ForceLayout forces a geometry into the given layout.
 // If dimensions are added, 0 coordinates are padded to them.
-func ForceLayout(g *geo.Geometry, layout geom.Layout) (*geo.Geometry, error) {
+func ForceLayout(g geo.Geometry, layout geom.Layout) (geo.Geometry, error) {
 	geomT, err := g.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 	retGeomT, err := forceLayout(geomT, layout)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
-	return geo.NewGeometryFromGeomT(retGeomT)
+	return geo.MakeGeometryFromGeomT(retGeomT)
 }
 
 // forceLayout forces a geom.T into the given layout.

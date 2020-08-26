@@ -2721,11 +2721,11 @@ func (d *DInterval) Size() uintptr {
 
 // DGeography is the Geometry Datum.
 type DGeography struct {
-	*geo.Geography
+	geo.Geography
 }
 
 // NewDGeography returns a new Geography Datum.
-func NewDGeography(g *geo.Geography) *DGeography {
+func NewDGeography(g geo.Geography) *DGeography {
 	return &DGeography{Geography: g}
 }
 
@@ -2829,11 +2829,11 @@ func (d *DGeography) Size() uintptr {
 
 // DGeometry is the Geometry Datum.
 type DGeometry struct {
-	*geo.Geometry
+	geo.Geometry
 }
 
 // NewDGeometry returns a new Geometry Datum.
-func NewDGeometry(g *geo.Geometry) *DGeometry {
+func NewDGeometry(g geo.Geometry) *DGeometry {
 	return &DGeometry{Geometry: g}
 }
 

@@ -191,15 +191,15 @@ func hasPrefixIgnoreCase(str string, prefix string) bool {
 
 // ParseGeometryPointFromGeoHash converts a GeoHash to a Geometry Point
 // using a Lng/Lat Point representation of the GeoHash.
-func ParseGeometryPointFromGeoHash(g string, precision int) (*Geometry, error) {
+func ParseGeometryPointFromGeoHash(g string, precision int) (Geometry, error) {
 	box, err := parseGeoHash(g, precision)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
 	point := box.Center()
-	geom, gErr := NewGeometryFromPointCoords(point.Lon, point.Lat)
+	geom, gErr := MakeGeometryFromPointCoords(point.Lon, point.Lat)
 	if gErr != nil {
-		return nil, gErr
+		return Geometry{}, gErr
 	}
 	return geom, nil
 }

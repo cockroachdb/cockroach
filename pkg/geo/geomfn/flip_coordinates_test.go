@@ -78,12 +78,12 @@ func TestFlipCoordinates(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 			got, err := FlipCoordinates(geometry)
 			require.NoError(t, err)
 
-			want, err := geo.NewGeometryFromGeomT(tc.expected)
+			want, err := geo.MakeGeometryFromGeomT(tc.expected)
 			require.NoError(t, err)
 
 			require.Equal(t, want, got)
@@ -119,7 +119,7 @@ func TestCollectionFlipCoordinates(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 
 			geometry, err = FlipCoordinates(geometry)

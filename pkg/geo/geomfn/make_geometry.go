@@ -18,15 +18,15 @@ import (
 
 // MakePolygon creates a Polygon geometry from linestring and optional inner linestrings.
 // Returns errors if geometries are not linestrings.
-func MakePolygon(outer *geo.Geometry, interior ...*geo.Geometry) (*geo.Geometry, error) {
+func MakePolygon(outer geo.Geometry, interior ...geo.Geometry) (geo.Geometry, error) {
 	layout := geom.XY
 	outerGeomT, err := outer.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 	outerRing, ok := outerGeomT.(*geom.LineString)
 	if !ok {
-		return nil, errors.Newf("argument must be LINESTRING geometries")
+		return geo.Geometry{}, errors.Newf("argument must be LINESTRING geometries")
 	}
 	srid := outerRing.SRID()
 	coords := make([][]geom.Coord, len(interior)+1)
@@ -34,21 +34,21 @@ func MakePolygon(outer *geo.Geometry, interior ...*geo.Geometry) (*geo.Geometry,
 	for i, g := range interior {
 		interiorRingGeomT, err := g.AsGeomT()
 		if err != nil {
-			return nil, err
+			return geo.Geometry{}, err
 		}
 		interiorRing, ok := interiorRingGeomT.(*geom.LineString)
 		if !ok {
-			return nil, errors.Newf("argument must be LINESTRING geometries")
+			return geo.Geometry{}, errors.Newf("argument must be LINESTRING geometries")
 		}
 		if interiorRing.SRID() != srid {
-			return nil, errors.Newf("mixed SRIDs are not allowed")
+			return geo.Geometry{}, errors.Newf("mixed SRIDs are not allowed")
 		}
 		coords[i+1] = interiorRing.Coords()
 	}
 
 	polygon, err := geom.NewPolygon(layout).SetSRID(srid).SetCoords(coords)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
-	return geo.NewGeometryFromGeomT(polygon)
+	return geo.MakeGeometryFromGeomT(polygon)
 }

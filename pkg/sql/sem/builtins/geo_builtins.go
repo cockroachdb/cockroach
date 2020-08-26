@@ -303,16 +303,16 @@ calculated, the result is transformed back into a Geography with SRID 4326.`
 // Geography by transforming it to a relevant Geometry SRID and applying the closure,
 // before retransforming it back into a geopb.DefaultGeographySRID geometry.
 func performGeographyOperationUsingBestGeomProjection(
-	g *geo.Geography, f func(*geo.Geometry) (*geo.Geometry, error),
-) (*geo.Geography, error) {
+	g geo.Geography, f func(geo.Geometry) (geo.Geometry, error),
+) (geo.Geography, error) {
 	proj, err := geogfn.BestGeomProjection(g.BoundingRect())
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 
 	inLatLonGeom, err := g.AsGeometry()
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 
 	inProjectedGeom, err := geotransform.Transform(
@@ -322,12 +322,12 @@ func performGeographyOperationUsingBestGeomProjection(
 		g.SRID(),
 	)
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 
 	outProjectedGeom, err := f(inProjectedGeom)
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 
 	outGeom, err := geotransform.Transform(
@@ -337,7 +337,7 @@ func performGeographyOperationUsingBestGeomProjection(
 		geopb.DefaultGeographySRID,
 	)
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 	return outGeom.AsGeography()
 }
@@ -576,7 +576,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				outer := args[0].(*tree.DGeometry)
 				interiorArr := tree.MustBeDArray(args[1])
-				interior := make([]*geo.Geometry, len(interiorArr.Array))
+				interior := make([]geo.Geometry, len(interiorArr.Array))
 				for i, v := range interiorArr.Array {
 					g, ok := v.(*tree.DGeometry)
 					if !ok {
@@ -768,7 +768,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				x := float64(*args[0].(*tree.DFloat))
 				y := float64(*args[1].(*tree.DFloat))
-				g, err := geo.NewGeometryFromPointCoords(x, y)
+				g, err := geo.MakeGeometryFromPointCoords(x, y)
 				if err != nil {
 					return nil, err
 				}
@@ -835,7 +835,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT(geopb.DefaultGeometrySRID))
+				ret, err := geo.MakeGeometryFromGeomT(bbox.ToGeomT(geopb.DefaultGeometrySRID))
 				if err != nil {
 					return nil, err
 				}
@@ -858,7 +858,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT(geopb.DefaultGeometrySRID))
+				ret, err := geo.MakeGeometryFromGeomT(bbox.ToGeomT(geopb.DefaultGeometrySRID))
 				if err != nil {
 					return nil, err
 				}
@@ -1616,7 +1616,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 						return tree.DNull, nil
 					}
 					coord := t.Coord(0)
-					retG, err := geo.NewGeometryFromGeomT(
+					retG, err := geo.MakeGeometryFromGeomT(
 						geom.NewPointFlat(geom.XY, []float64{coord.X(), coord.Y()}).SetSRID(t.SRID()),
 					)
 					if err != nil {
@@ -1706,7 +1706,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 						return tree.DNull, nil
 					}
 					coord := t.Coord(t.NumCoords() - 1)
-					retG, err := geo.NewGeometryFromGeomT(
+					retG, err := geo.MakeGeometryFromGeomT(
 						geom.NewPointFlat(geom.XY, []float64{coord.X(), coord.Y()}).SetSRID(t.SRID()),
 					)
 					if err != nil {
@@ -1792,7 +1792,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 						ring := t.LinearRing(0)
 						lineString = geom.NewLineStringFlat(t.Layout(), ring.FlatCoords())
 					}
-					ret, err := geo.NewGeometryFromGeomT(lineString.SetSRID(t.SRID()))
+					ret, err := geo.MakeGeometryFromGeomT(lineString.SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1827,7 +1827,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					}
 					ring := t.LinearRing(n)
 					lineString := geom.NewLineStringFlat(t.Layout(), ring.FlatCoords()).SetSRID(t.SRID())
-					ret, err := geo.NewGeometryFromGeomT(lineString)
+					ret, err := geo.MakeGeometryFromGeomT(lineString)
 					if err != nil {
 						return nil, err
 					}
@@ -1861,7 +1861,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumCoords() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeomT(geom.NewPointFlat(t.Layout(), t.Coord(n)).SetSRID(t.SRID()))
+					g, err := geo.MakeGeometryFromGeomT(geom.NewPointFlat(t.Layout(), t.Coord(n)).SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1900,7 +1900,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumPoints() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeomT(t.Point(n).SetSRID(t.SRID()))
+					g, err := geo.MakeGeometryFromGeomT(t.Point(n).SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1909,7 +1909,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumLineStrings() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeomT(t.LineString(n).SetSRID(t.SRID()))
+					g, err := geo.MakeGeometryFromGeomT(t.LineString(n).SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1918,7 +1918,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumPolygons() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeomT(t.Polygon(n).SetSRID(t.SRID()))
+					g, err := geo.MakeGeometryFromGeomT(t.Polygon(n).SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1927,7 +1927,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumGeoms() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeomT(t.Geom(n))
+					g, err := geo.MakeGeometryFromGeomT(t.Geom(n))
 					if err != nil {
 						return nil, err
 					}
@@ -3724,7 +3724,7 @@ The calculations are done on a sphere.`,
 
 				ret, err := performGeographyOperationUsingBestGeomProjection(
 					g.Geography,
-					func(g *geo.Geometry) (*geo.Geometry, error) {
+					func(g geo.Geometry) (geo.Geometry, error) {
 						return geomfn.Buffer(g, geomfn.MakeDefaultBufferParams(), float64(distance))
 					},
 				)
@@ -3751,7 +3751,7 @@ The calculations are done on a sphere.`,
 
 				ret, err := performGeographyOperationUsingBestGeomProjection(
 					g.Geography,
-					func(g *geo.Geometry) (*geo.Geometry, error) {
+					func(g geo.Geometry) (geo.Geometry, error) {
 						return geomfn.Buffer(
 							g,
 							geomfn.MakeDefaultBufferParams().WithQuadrantSegments(int(quadSegs)),
@@ -3786,7 +3786,7 @@ The calculations are done on a sphere.`,
 
 				ret, err := performGeographyOperationUsingBestGeomProjection(
 					g.Geography,
-					func(g *geo.Geometry) (*geo.Geometry, error) {
+					func(g geo.Geometry) (geo.Geometry, error) {
 						return geomfn.Buffer(
 							g,
 							params,
@@ -3858,7 +3858,7 @@ Bottom Left.`,
 		geometryOverload2(
 			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
 				if a.Geometry.SRID() != b.Geometry.SRID() {
-					return nil, geo.NewMismatchingSRIDsError(a, b)
+					return nil, geo.NewMismatchingSRIDsError(a.Geometry.SpatialObject(), b.Geometry.SpatialObject())
 				}
 				aGeomT, err := a.AsGeomT()
 				if err != nil {
@@ -3973,7 +3973,7 @@ Bottom Left.`,
 					return g, nil
 				}
 				bbox := g.CartesianBoundingBox().Buffer(delta, delta)
-				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT(g.SRID()))
+				ret, err := geo.MakeGeometryFromGeomT(bbox.ToGeomT(g.SRID()))
 				if err != nil {
 					return nil, err
 				}
@@ -3999,7 +3999,7 @@ Bottom Left.`,
 					return g, nil
 				}
 				bbox := g.CartesianBoundingBox().Buffer(deltaX, deltaY)
-				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT(g.SRID()))
+				ret, err := geo.MakeGeometryFromGeomT(bbox.ToGeomT(g.SRID()))
 				if err != nil {
 					return nil, err
 				}
@@ -4344,7 +4344,7 @@ func geometryOverload1(
 // geometryOverload1UnaryPredicate hides the boilerplate for builtins
 // operating on one geometry wrapping a unary predicate.
 func geometryOverload1UnaryPredicate(
-	f func(*geo.Geometry) (bool, error), ib infoBuilder,
+	f func(geo.Geometry) (bool, error), ib infoBuilder,
 ) tree.Overload {
 	return geometryOverload1(
 		func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
@@ -4386,7 +4386,7 @@ func geometryOverload2(
 // geometryOverload2BinaryPredicate hides the boilerplate for builtins
 // operating on two geometries and the overlap wraps a binary predicate.
 func geometryOverload2BinaryPredicate(
-	f func(*geo.Geometry, *geo.Geometry) (bool, error), ib infoBuilder,
+	f func(geo.Geometry, geo.Geometry) (bool, error), ib infoBuilder,
 ) tree.Overload {
 	return geometryOverload2(
 		func(_ *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
@@ -4493,7 +4493,7 @@ func geographyOverload2(
 // geographyOverload2 hides the boilerplate for builtins operating on two geographys
 // and the overlap wraps a binary predicate.
 func geographyOverload2BinaryPredicate(
-	f func(*geo.Geography, *geo.Geography) (bool, error), ib infoBuilder,
+	f func(geo.Geography, geo.Geography) (bool, error), ib infoBuilder,
 ) tree.Overload {
 	return geographyOverload2(
 		func(_ *tree.EvalContext, a *tree.DGeography, b *tree.DGeography) (tree.Datum, error) {

@@ -49,13 +49,13 @@ func TestReverse(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 
 			got, err := Reverse(geometry)
 			require.NoError(t, err)
 
-			want, err := geo.NewGeometryFromGeomT(tc.expected)
+			want, err := geo.MakeGeometryFromGeomT(tc.expected)
 			require.NoError(t, err)
 
 			require.Equal(t, want, got)
@@ -83,7 +83,7 @@ func TestReverse(t *testing.T) {
 
 	for i, tc := range collectionTestCases {
 		t.Run(fmt.Sprintf("collection-%d", i), func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 
 			geometry, err = Reverse(geometry)
@@ -110,13 +110,13 @@ func TestReverse(t *testing.T) {
 
 	for i, input := range noChangeTestCases {
 		t.Run(fmt.Sprintf("no-change-%d", i), func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(input)
+			geometry, err := geo.MakeGeometryFromGeomT(input)
 			require.NoError(t, err)
 
 			got, err := Reverse(geometry)
 			require.NoError(t, err)
 
-			want, err := geo.NewGeometryFromGeomT(input)
+			want, err := geo.MakeGeometryFromGeomT(input)
 			require.NoError(t, err)
 
 			require.Equal(t, want, got)

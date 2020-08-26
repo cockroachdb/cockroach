@@ -24,30 +24,30 @@ import (
 // that given maximum segment length.
 // This works by dividing each segment by a power of 2 to find the
 // smallest power less than or equal to the segmentMaxLength.
-func Segmentize(geography *geo.Geography, segmentMaxLength float64) (*geo.Geography, error) {
+func Segmentize(geography geo.Geography, segmentMaxLength float64) (geo.Geography, error) {
 	geometry, err := geography.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 	switch geometry := geometry.(type) {
 	case *geom.Point, *geom.MultiPoint:
 		return geography, nil
 	default:
 		if segmentMaxLength <= 0 {
-			return nil, errors.Newf("maximum segment length must be positive")
+			return geo.Geography{}, errors.Newf("maximum segment length must be positive")
 		}
 		spheroid, err := geography.Spheroid()
 		if err != nil {
-			return nil, err
+			return geo.Geography{}, err
 		}
 		// Convert segmentMaxLength to Angle with respect to earth sphere as
 		// further calculation is done considering segmentMaxLength as Angle.
 		segmentMaxAngle := segmentMaxLength / spheroid.SphereRadius
 		segGeometry, err := geosegmentize.SegmentizeGeom(geometry, segmentMaxAngle, segmentizeCoords)
 		if err != nil {
-			return nil, err
+			return geo.Geography{}, err
 		}
-		return geo.NewGeographyFromGeomT(segGeometry)
+		return geo.MakeGeographyFromGeomT(segGeometry)
 	}
 }
 

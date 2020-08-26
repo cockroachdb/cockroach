@@ -112,10 +112,10 @@ func ParseBufferParams(s string, distance float64) (BufferParams, float64, error
 }
 
 // Buffer buffers a given Geometry by the supplied parameters.
-func Buffer(g *geo.Geometry, params BufferParams, distance float64) (*geo.Geometry, error) {
+func Buffer(g geo.Geometry, params BufferParams, distance float64) (geo.Geometry, error) {
 	bufferedGeom, err := geos.Buffer(g.EWKB(), params.p, distance)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 	return geo.ParseGeometryFromEWKB(bufferedGeom)
 }
