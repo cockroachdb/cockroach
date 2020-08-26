@@ -56,6 +56,10 @@ type Immutable struct {
 
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
 
+	// isUncommittedVersion is set to true if this descriptor was created from
+	// a copy of a Mutable with an uncommitted version.
+	isUncommittedVersion bool
+
 	// TODO (lucy): populate these and use them
 	// inboundFKs  []*ForeignKeyConstraint
 	// outboundFKs []*ForeignKeyConstraint
@@ -63,6 +67,11 @@ type Immutable struct {
 
 // NameResolutionResult implements the tree.NameResolutionResult interface.
 func (*Immutable) NameResolutionResult() {}
+
+// IsUncommittedVersion implements the Descriptor interface.
+func (desc *Immutable) IsUncommittedVersion() bool {
+	return desc.isUncommittedVersion
+}
 
 // DescriptorProto prepares desc for serialization.
 func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
@@ -100,7 +109,14 @@ func (desc *Immutable) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
+	imm := NewImmutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
+	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+	return imm
+}
+
+// IsUncommittedVersion implements the Descriptor interface.
+func (desc *Mutable) IsUncommittedVersion() bool {
+	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
