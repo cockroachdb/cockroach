@@ -424,6 +424,9 @@ func showConstraintClause(
 		}
 		f.WriteString(expr)
 		f.WriteString(")")
+		if e.Validity != descpb.ConstraintValidity_Validated {
+			f.WriteString(" NOT VALID")
+		}
 	}
 	f.WriteString("\n)")
 	return nil
