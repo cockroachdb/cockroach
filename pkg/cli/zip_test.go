@@ -121,7 +121,7 @@ func TestZip(t *testing.T) {
 	})
 	defer c.cleanup()
 
-	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=0 " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=1s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,8 +283,6 @@ func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 51538)
-
 	// We want a low timeout so that the test doesn't take forever;
 	// however low timeouts make race runs flaky with false positives.
 	skip.UnderShort(t)
@@ -308,9 +306,7 @@ func TestPartialZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	// NB: we spend a second profiling here to make sure it actually tries the
-	// down nodes (and fails only there, succeeding on the available node).
-	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=1s " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=0s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +320,7 @@ func TestPartialZip(t *testing.T) {
 		})
 
 	// Now do it again and exclude the down node explicitly.
-	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --exclude-nodes=2 --cpu-profile-duration=1s")
+	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --exclude-nodes=2 --cpu-profile-duration=0")
 	if err != nil {
 		t.Fatal(err)
 	}
