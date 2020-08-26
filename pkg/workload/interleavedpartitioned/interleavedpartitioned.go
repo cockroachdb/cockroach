@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -824,8 +823,8 @@ var childTypes = []*types.T{
 
 func (w *interleavedPartitioned) childInitialRowBatchFunc(
 	rngFactor int64, nPerBatch int,
-) func(int, coldata.Batch, *bufalloc.ByteAllocator) {
-	return func(sessionRowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+) func(int, coldata.Batch) {
+	return func(sessionRowIdx int, cb coldata.Batch) {
 		sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
 		sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)
 		nowString := timeutil.Now().UTC().Format(time.RFC3339)
@@ -860,9 +859,7 @@ var deviceTypes = []*types.T{
 	types.Bytes,
 }
 
-func (w *interleavedPartitioned) deviceInitialRowBatch(
-	sessionRowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
-) {
+func (w *interleavedPartitioned) deviceInitialRowBatch(sessionRowIdx int, cb coldata.Batch) {
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
 	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
 	sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)
@@ -900,9 +897,7 @@ var queryTypes = []*types.T{
 	types.Bytes,
 }
 
-func (w *interleavedPartitioned) queryInitialRowBatch(
-	sessionRowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
-) {
+func (w *interleavedPartitioned) queryInitialRowBatch(sessionRowIdx int, cb coldata.Batch) {
 	rng := rand.New(rand.NewSource(int64(sessionRowIdx) * 64))
 	sessionRNG := rand.New(rand.NewSource(int64(sessionRowIdx)))
 	sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)

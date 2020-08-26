@@ -86,6 +86,21 @@ type tpcc struct {
 		values [][]int
 	}
 	localsPool *sync.Pool
+
+	// scratch is a utility struct that contains scratch buffers used to
+	// populate columns of BYTES type. We can reuse these buffers between
+	// different rows of the same table because coldata.Bytes.Set performs a
+	// deep copy; however, we cannot share the buffers between different tables
+	// since the fixtures import might be running concurrently.
+	scratch struct {
+		item      []byte
+		warehouse []byte
+		stock     []byte
+		district  []byte
+		customer  []byte
+		history   []byte
+		orderLine []byte
+	}
 }
 
 type waitSetter struct {
@@ -204,6 +219,15 @@ var tpccMeta = workload.Meta{
 		// Hardcode this since it doesn't seem like anyone will want to change
 		// it and it's really noisy in the generated fixture paths.
 		g.nowString = []byte(`2006-01-02 15:04:05`)
+		// Initialize the scratch space (it's not clear whether there is a
+		// better place to do this).
+		g.scratch.item = make([]byte, maxBytesLength)
+		g.scratch.warehouse = make([]byte, maxBytesLength)
+		g.scratch.stock = make([]byte, maxBytesLength)
+		g.scratch.district = make([]byte, maxBytesLength)
+		g.scratch.customer = make([]byte, maxBytesLength)
+		g.scratch.history = make([]byte, maxBytesLength)
+		g.scratch.orderLine = make([]byte, maxBytesLength)
 		return g
 	},
 }

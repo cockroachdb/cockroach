@@ -71,6 +71,17 @@ type tpch struct {
 
 	textPool   textPool
 	localsPool *sync.Pool
+	// scratch is a utility struct that contains scratch buffers used to
+	// populate columns of BYTES type. We can reuse these buffers between
+	// different rows of the same table because coldata.Bytes.Set performs a
+	// deep copy; however, we cannot share the buffers between different tables
+	// since the fixtures import might be running concurrently.
+	scratch struct {
+		supplier []byte
+		part     []byte
+		customer []byte
+		orders   []byte
+	}
 }
 
 func init() {
@@ -113,6 +124,14 @@ var tpchMeta = workload.Meta{
 		g.flags.BoolVar(&g.verbose, `verbose`, false,
 			`Prints out the queries being run as well as histograms`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
+		// Initialize the scratch space (it's not clear whether there is a
+		// better place to do this).
+		// Initialize the scratch space (it's not clear whether there is a
+		// better place to do this).
+		g.scratch.supplier = make([]byte, maxBytesLength)
+		g.scratch.part = make([]byte, maxBytesLength)
+		g.scratch.customer = make([]byte, maxBytesLength)
+		g.scratch.orders = make([]byte, maxBytesLength)
 		return g
 	},
 }

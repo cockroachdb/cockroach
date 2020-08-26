@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -137,7 +136,7 @@ func (b *bank) Tables() []workload.Table {
 		Schema: bankSchema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: numBatches,
-			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+			FillBatch: func(batchIdx int, cb coldata.Batch) {
 				rng := rand.NewSource(b.seed + uint64(batchIdx))
 
 				rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
@@ -150,13 +149,14 @@ func (b *bank) Tables() []workload.Table {
 				payloadCol := cb.ColVec(2).Bytes()
 				// coldata.Bytes only allows appends so we have to reset it
 				payloadCol.Reset()
+				payload := make([]byte, b.payloadBytes)
+				const initialPrefix = `initial-`
+				// coldata.Bytes.Set performs a deep copy and we're not
+				// modifying the prefix ourselves, so we can simply copy the
+				// initial prefix only once.
+				copy(payload[:len(initialPrefix)], initialPrefix)
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
-					var payload []byte
-					*a, payload = a.Alloc(b.payloadBytes, 0 /* extraCap */)
-					const initialPrefix = `initial-`
-					copy(payload[:len(initialPrefix)], []byte(initialPrefix))
 					randStringLetters(rng, payload[len(initialPrefix):])
-
 					rowOffset := rowIdx - rowBegin
 					idCol[rowOffset] = int64(rowIdx)
 					balanceCol[rowOffset] = 0

@@ -31,7 +31,6 @@ func TestDepAllowlist(t *testing.T) {
 			`github.com/cockroachdb/cockroach/pkg/sql/oidext`,
 			`github.com/cockroachdb/cockroach/pkg/sql/types`,
 			`github.com/cockroachdb/cockroach/pkg/util/arith`,
-			`github.com/cockroachdb/cockroach/pkg/util/bufalloc`,
 			`github.com/cockroachdb/cockroach/pkg/util/duration`,
 			`github.com/cockroachdb/cockroach/pkg/util/encoding/csv`,
 			`github.com/cockroachdb/cockroach/pkg/util/envutil`,

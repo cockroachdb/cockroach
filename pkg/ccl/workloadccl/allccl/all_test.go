@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -191,14 +190,11 @@ func TestConsistentSchema(t *testing.T) {
 	}
 }
 
-func hashTableInitialData(
-	h hash.Hash, data workload.BatchedTuples, a *bufalloc.ByteAllocator,
-) error {
+func hashTableInitialData(h hash.Hash, data workload.BatchedTuples) error {
 	var scratch [8]byte
 	b := coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
 	for batchIdx := 0; batchIdx < data.NumBatches; batchIdx++ {
-		*a = (*a)[:0]
-		data.FillBatch(batchIdx, b, a)
+		data.FillBatch(batchIdx, b)
 		for _, col := range b.ColVecs() {
 			switch t := col.Type(); col.CanonicalTypeFamily() {
 			case types.BoolFamily:
@@ -274,7 +270,6 @@ func TestDeterministicInitialData(t *testing.T) {
 		`ycsb`:       0x1244ea1c29ef67f6,
 	}
 
-	var a bufalloc.ByteAllocator
 	for _, meta := range workload.Registered() {
 		fingerprintGolden, ok := fingerprintGoldens[meta.Name]
 		if !ok {
@@ -292,7 +287,7 @@ func TestDeterministicInitialData(t *testing.T) {
 			h := fnv.New64()
 			tables := meta.New().Tables()
 			for _, table := range tables {
-				require.NoError(t, hashTableInitialData(h, table.InitialRows, &a))
+				require.NoError(t, hashTableInitialData(h, table.InitialRows))
 			}
 			require.Equal(t, fingerprintGolden, h.Sum64())
 		})

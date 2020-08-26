@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
@@ -54,11 +53,9 @@ func benchmarkInitialData(b *testing.B, gen workload.Generator) {
 		// Share the Batch and ByteAllocator across tables but not across benchmark
 		// iterations.
 		cb := coldata.NewMemBatch(nil /* types */, coldata.StandardColumnFactory)
-		var a bufalloc.ByteAllocator
 		for _, table := range tables {
 			for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; rowIdx++ {
-				a = a[:0]
-				table.InitialRows.FillBatch(rowIdx, cb, &a)
+				table.InitialRows.FillBatch(rowIdx, cb)
 				for _, col := range cb.ColVecs() {
 					bytes += columnByteSize(col)
 				}

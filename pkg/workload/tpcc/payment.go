@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
@@ -82,15 +81,16 @@ type payment struct {
 	updateWithPayment workload.StmtHandle
 	insertHistory     workload.StmtHandle
 
-	a bufalloc.ByteAllocator
+	scratch []byte
 }
 
 var _ tpccTx = &payment{}
 
 func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPool) (tpccTx, error) {
 	p := &payment{
-		config: config,
-		mcp:    mcp,
+		config:  config,
+		mcp:     mcp,
+		scratch: make([]byte, maxCLastLength),
 	}
 
 	// Update warehouse with payment
@@ -180,7 +180,7 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 	// 2.5.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
 	if rng.Intn(100) < 60 {
-		d.cLast = string(p.config.randCLast(rng, &p.a))
+		d.cLast = string(p.config.randCLast(rng, p.scratch))
 		atomic.AddUint64(&p.config.auditor.paymentsByLastName, 1)
 	} else {
 		d.cID = p.config.randCustomerID(rng)

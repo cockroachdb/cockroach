@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
@@ -64,7 +63,7 @@ type orderStatus struct {
 	selectOrder      workload.StmtHandle
 	selectItems      workload.StmtHandle
 
-	a bufalloc.ByteAllocator
+	scratch []byte
 }
 
 var _ tpccTx = &orderStatus{}
@@ -73,8 +72,9 @@ func createOrderStatus(
 	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
 ) (tpccTx, error) {
 	o := &orderStatus{
-		config: config,
-		mcp:    mcp,
+		config:  config,
+		mcp:     mcp,
+		scratch: make([]byte, maxCLastLength),
 	}
 
 	// Select by customer id.
@@ -127,7 +127,7 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 	// 2.6.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
 	if rng.Intn(100) < 60 {
-		d.cLast = string(o.config.randCLast(rng, &o.a))
+		d.cLast = string(o.config.randCLast(rng, o.scratch))
 		atomic.AddUint64(&o.config.auditor.orderStatusByLastName, 1)
 	} else {
 		d.cID = o.config.randCustomerID(rng)

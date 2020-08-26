@@ -11,7 +11,6 @@
 package tpcc
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"golang.org/x/exp/rand"
 )
@@ -44,7 +43,7 @@ type numbersOffset int
 
 func randStringFromAlphabet(
 	rng *rand.Rand,
-	a *bufalloc.ByteAllocator,
+	scratch []byte,
 	minLen, maxLen int,
 	pr workloadimpl.PrecomputedRand,
 	prOffset *int,
@@ -57,8 +56,7 @@ func randStringFromAlphabet(
 		return nil
 	}
 
-	var b []byte
-	*a, b = a.Alloc(size, 0 /* extraCap */)
+	b := scratch[:size]
 	*prOffset = pr.FillBytes(*prOffset, b)
 	return b
 }
@@ -70,9 +68,9 @@ func randStringFromAlphabet(
 // For speed, this is done using precomputed random data, which is explicitly
 // allowed by the spec for initial data only. See 4.3.2.1.
 func randAStringInitialDataOnly(
-	rng *tpccRand, ao *aCharsOffset, a *bufalloc.ByteAllocator, min, max int,
+	rng *tpccRand, ao *aCharsOffset, scratch []byte, min, max int,
 ) []byte {
-	return randStringFromAlphabet(rng.Rand, a, min, max, rng.aChars, (*int)(ao))
+	return randStringFromAlphabet(rng.Rand, scratch, min, max, rng.aChars, (*int)(ao))
 }
 
 // randNStringInitialDataOnly generates a random numeric string of length
@@ -81,9 +79,9 @@ func randAStringInitialDataOnly(
 // For speed, this is done using precomputed random data, which is explicitly
 // allowed by the spec for initial data only. See 4.3.2.1.
 func randNStringInitialDataOnly(
-	rng *tpccRand, no *numbersOffset, a *bufalloc.ByteAllocator, min, max int,
+	rng *tpccRand, no *numbersOffset, scratch []byte, min, max int,
 ) []byte {
-	return randStringFromAlphabet(rng.Rand, a, min, max, rng.numbers, (*int)(no))
+	return randStringFromAlphabet(rng.Rand, scratch, min, max, rng.numbers, (*int)(no))
 }
 
 // randStateInitialDataOnly produces a random US state. (spec just says 2
@@ -91,8 +89,8 @@ func randNStringInitialDataOnly(
 //
 // For speed, this is done using precomputed random data, which is explicitly
 // allowed by the spec for initial data only. See 4.3.2.1.
-func randStateInitialDataOnly(rng *tpccRand, lo *lettersOffset, a *bufalloc.ByteAllocator) []byte {
-	return randStringFromAlphabet(rng.Rand, a, 2, 2, rng.letters, (*int)(lo))
+func randStateInitialDataOnly(rng *tpccRand, lo *lettersOffset, scratch []byte) []byte {
+	return randStringFromAlphabet(rng.Rand, scratch, 2, 2, rng.letters, (*int)(lo))
 }
 
 // randOriginalStringInitialDataOnly generates a random a-string[26..50] with
@@ -101,20 +99,17 @@ func randStateInitialDataOnly(rng *tpccRand, lo *lettersOffset, a *bufalloc.Byte
 //
 // For speed, this is done using precomputed random data, which is explicitly
 // allowed by the spec for initial data only. See 4.3.2.1.
-func randOriginalStringInitialDataOnly(
-	rng *tpccRand, ao *aCharsOffset, a *bufalloc.ByteAllocator,
-) []byte {
+func randOriginalStringInitialDataOnly(rng *tpccRand, ao *aCharsOffset, scratch []byte) []byte {
 	if rng.Rand.Intn(9) == 0 {
 		l := int(randInt(rng.Rand, 26, 50))
 		off := int(randInt(rng.Rand, 0, l-8))
-		var buf []byte
-		*a, buf = a.Alloc(l, 0 /* extraCap */)
-		copy(buf[:off], randAStringInitialDataOnly(rng, ao, a, off, off))
+		buf := scratch[:l]
+		_ = randAStringInitialDataOnly(rng, ao, buf[:off:off], off, off)
 		copy(buf[off:off+8], originalString)
-		copy(buf[off+8:], randAStringInitialDataOnly(rng, ao, a, l-off-8, l-off-8))
+		_ = randAStringInitialDataOnly(rng, ao, buf[off+8:], l-off-8, l-off-8)
 		return buf
 	}
-	return randAStringInitialDataOnly(rng, ao, a, 26, 50)
+	return randAStringInitialDataOnly(rng, ao, scratch, 26, 50)
 }
 
 // randZip produces a random "zip code" - a 4-digit number plus the constant
@@ -122,10 +117,9 @@ func randOriginalStringInitialDataOnly(
 //
 // For speed, this is done using precomputed random data, which is explicitly
 // allowed by the spec for initial data only. See 4.3.2.1.
-func randZipInitialDataOnly(rng *tpccRand, no *numbersOffset, a *bufalloc.ByteAllocator) []byte {
-	var buf []byte
-	*a, buf = a.Alloc(9, 0 /* extraCap */)
-	copy(buf[:4], randNStringInitialDataOnly(rng, no, a, 4, 4))
+func randZipInitialDataOnly(rng *tpccRand, no *numbersOffset, scratch []byte) []byte {
+	buf := scratch[:9]
+	_ = randNStringInitialDataOnly(rng, no, buf[:4:4], 4, 4)
 	copy(buf[4:], `11111`)
 	return buf
 }
@@ -142,16 +136,15 @@ func randInt(rng *rand.Rand, min, max int) int64 {
 	return int64(rng.Intn(max-min+1) + min)
 }
 
+const maxCLastLength = 3 * 5 // 3 entries from cLastTokens * max len of an entry
+
 // randCLastSyllables returns a customer last name string generated according to
 // the table in 4.3.2.3. Given a number between 0 and 999, each of the three
 // syllables is determined by the corresponding digit in the three digit
 // representation of the number. For example, the number 371 generates the name
 // PRICALLYOUGHT, and the number 40 generates the name BARPRESBAR.
-func randCLastSyllables(n int, a *bufalloc.ByteAllocator) []byte {
-	const scratchLen = 3 * 5 // 3 entries from cLastTokens * max len of an entry
-	var buf []byte
-	*a, buf = a.Alloc(scratchLen, 0 /* extraCap */)
-	buf = buf[:0]
+func randCLastSyllables(n int, scratch []byte) []byte {
+	buf := scratch[:0]
 	buf = append(buf, cLastTokens[n/100]...)
 	n = n % 100
 	buf = append(buf, cLastTokens[n/10]...)
@@ -161,8 +154,8 @@ func randCLastSyllables(n int, a *bufalloc.ByteAllocator) []byte {
 }
 
 // See 4.3.2.3.
-func (w *tpcc) randCLast(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
-	return randCLastSyllables(((rng.Intn(256)|rng.Intn(1000))+w.cLoad)%1000, a)
+func (w *tpcc) randCLast(rng *rand.Rand, scratch []byte) []byte {
+	return randCLastSyllables(((rng.Intn(256)|rng.Intn(1000))+w.cLoad)%1000, scratch)
 }
 
 // Return a non-uniform random customer ID. See 2.1.6.

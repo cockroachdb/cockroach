@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -166,12 +165,11 @@ type BatchedTuples struct {
 	// FillBatch is a function to deterministically compute a columnar-batch of
 	// tuples given its index.
 	//
-	// To save allocations, the Vecs in the passed Batch are reused when possible,
-	// so the results of this call are invalidated the next time the same Batch is
-	// passed to FillBatch. Ditto the ByteAllocator, which can be reset in between
-	// calls. If a caller needs the Batch and its contents to be long lived,
-	// simply pass a new Batch to each call and don't reset the ByteAllocator.
-	FillBatch func(int, coldata.Batch, *bufalloc.ByteAllocator)
+	// To save allocations, the Vecs in the passed Batch are reused when
+	// possible, so the results of this call are invalidated the next time the
+	// same Batch is passed to FillBatch. If a caller needs the Batch and its
+	// contents to be long lived, simply pass a new Batch to each call.
+	FillBatch func(int, coldata.Batch)
 }
 
 // Tuples is like TypedTuples except that it tries to guess the type of each
@@ -199,7 +197,7 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 		NumBatches: count,
 	}
 	if fn != nil {
-		t.FillBatch = func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
+		t.FillBatch = func(batchIdx int, cb coldata.Batch) {
 			row := fn(batchIdx)
 
 			typesOnce.Do(func() {
@@ -253,8 +251,7 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 // instead.
 func (b BatchedTuples) BatchRows(batchIdx int) [][]interface{} {
 	cb := coldata.NewMemBatchWithCapacity(nil, 0, coldata.StandardColumnFactory)
-	var a bufalloc.ByteAllocator
-	b.FillBatch(batchIdx, cb, &a)
+	b.FillBatch(batchIdx, cb)
 	return ColBatchToRows(cb)
 }
 

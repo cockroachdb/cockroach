@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -80,13 +79,12 @@ func BenchmarkWriteCSVRows(b *testing.B) {
 	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
 		cb := coldata.NewMemBatch(nil /* types */, coldata.StandardColumnFactory)
-		var a bufalloc.ByteAllocator
-		table.InitialRows.FillBatch(0, cb, &a)
+		table.InitialRows.FillBatch(0, cb)
 		batches = append(batches, cb)
 	}
 	table := workload.Table{
 		InitialRows: workload.BatchedTuples{
-			FillBatch: func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
+			FillBatch: func(batchIdx int, cb coldata.Batch) {
 				*cb.(*coldata.MemBatch) = *batches[batchIdx].(*coldata.MemBatch)
 			},
 		},
@@ -130,14 +128,13 @@ func BenchmarkCSVRowsReader(b *testing.B) {
 	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
 		cb := coldata.NewMemBatch(nil /* types */, coldata.StandardColumnFactory)
-		var a bufalloc.ByteAllocator
-		table.InitialRows.FillBatch(0, cb, &a)
+		table.InitialRows.FillBatch(0, cb)
 		batches = append(batches, cb)
 	}
 	table := workload.Table{
 		InitialRows: workload.BatchedTuples{
 			NumBatches: len(batches),
-			FillBatch: func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
+			FillBatch: func(batchIdx int, cb coldata.Batch) {
 				*cb.(*coldata.MemBatch) = *batches[batchIdx].(*coldata.MemBatch)
 			},
 		},

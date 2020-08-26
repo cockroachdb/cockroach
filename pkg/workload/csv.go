@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -40,7 +39,6 @@ func WriteCSVRows(
 	ctx context.Context, w io.Writer, table Table, rowStart, rowEnd int, sizeBytesLimit int64,
 ) (rowBatchIdx int, err error) {
 	cb := coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
-	var a bufalloc.ByteAllocator
 
 	bytesWrittenW := &bytesWrittenWriter{w: w}
 	csvW := csv.NewWriter(bytesWrittenW)
@@ -55,8 +53,7 @@ func WriteCSVRows(
 			return 0, ctx.Err()
 		default:
 		}
-		a = a[:0]
-		table.InitialRows.FillBatch(rowBatchIdx, cb, &a)
+		table.InitialRows.FillBatch(rowBatchIdx, cb)
 		if numCols := cb.Width(); cap(rowStrings) < numCols {
 			rowStrings = make([]string, numCols)
 		} else {
@@ -84,7 +81,6 @@ type csvRowsReader struct {
 
 	batchIdx int
 	cb       coldata.Batch
-	a        bufalloc.ByteAllocator
 
 	stringsBuf []string
 }
@@ -102,8 +98,7 @@ func (r *csvRowsReader) Read(p []byte) (n int, err error) {
 		if r.batchIdx == r.batchEnd {
 			return 0, io.EOF
 		}
-		r.a = r.a[:0]
-		r.t.InitialRows.FillBatch(r.batchIdx, r.cb, &r.a)
+		r.t.InitialRows.FillBatch(r.batchIdx, r.cb)
 		r.batchIdx++
 		if numCols := r.cb.Width(); cap(r.stringsBuf) < numCols {
 			r.stringsBuf = make([]string, numCols)

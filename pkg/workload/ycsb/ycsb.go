@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -319,7 +318,7 @@ func (g *ycsb) Tables() []workload.Table {
 		const batchSize = 1000
 		usertable.InitialRows = workload.BatchedTuples{
 			NumBatches: (g.insertCount + batchSize - 1) / batchSize,
-			FillBatch: func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
+			FillBatch: func(batchIdx int, cb coldata.Batch) {
 				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
 				if rowEnd > g.insertCount {
 					rowEnd = g.insertCount
