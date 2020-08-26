@@ -32,4 +32,6 @@ var activeRecordBlockList20_1 = blocklist{}
 
 var activeRecordIgnoreList20_2 = blocklist{}
 
-var activeRecordIgnoreList20_1 = blocklist{}
+var activeRecordIgnoreList20_1 = blocklist{
+	"FixturesTest#test_create_fixtures": "flaky - FK constraint violated sometimes when loading all fixture data",
+}
