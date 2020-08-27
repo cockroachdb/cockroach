@@ -17,16 +17,20 @@
 =>
 (GenerateLimitedScans $scanPrivate $limit $ordering)
 
-# PushLimitIntoConstrainedScan constructs a new Scan operator that adds a hard
-# row limit to an existing Scan operator that already has a constraint
-# associated with it (added by the ConstrainScans rule). The Scan operator
-# always applies the limit after any constraint.
-[PushLimitIntoConstrainedScan, Explore]
+# PushLimitIntoFilteredScan constructs a new Scan operator that adds a hard row
+# limit to an existing Scan operator that already has a constraint or scans a
+# partial index. The scan operator always applies the limit after any
+# constraint.
+#
+# Note that PushLimitIntoFilteredScan does not push limits into inverted index
+# scans. Inverted index scans are not guaranteed to produce a specific number of
+# result rows because they contain multiple entries for a single row indexed.
+# Therefore, they cannot be considered for limited scans.
+[PushLimitIntoFilteredScan, Explore]
 (Limit
     (Scan $scanPrivate:*)
     (Const $limit:* & (IsPositiveInt $limit))
-    $ordering:* &
-        (CanLimitConstrainedScan $scanPrivate $ordering)
+    $ordering:* & (CanLimitFilteredScan $scanPrivate $ordering)
 )
 =>
 (Scan (LimitScanPrivate $scanPrivate $limit $ordering))

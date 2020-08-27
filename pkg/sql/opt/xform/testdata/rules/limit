@@ -57,6 +57,15 @@ CREATE TABLE index_tab
 ----
 
 exec-ddl
+CREATE TABLE partial_index_tab
+(
+    a INT,
+    b INT,
+    INDEX (a) WHERE b > 0
+)
+----
+
+exec-ddl
 ALTER TABLE index_tab INJECT STATISTICS '[
   {
     "columns": ["val"],
@@ -98,7 +107,7 @@ ALTER TABLE index_tab INJECT STATISTICS '[
 ----
 
 # ---------------------------------------------------
-# GenerateLimitedScans / PushLimitIntoConstrainedScan
+# GenerateLimitedScans / PushLimitIntoFilteredScan
 # ---------------------------------------------------
 
 opt
@@ -151,6 +160,47 @@ limit
  │         ├── limit: 10
  │         └── ordering: +4
  └── 1
+
+# Limit an unconstrained partial index scan.
+opt
+SELECT a FROM partial_index_tab where b > 0 LIMIT 1
+----
+project
+ ├── columns: a:1
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── index-join partial_index_tab
+      ├── columns: a:1 b:2!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      └── scan partial_index_tab@secondary,partial
+           ├── columns: a:1 rowid:3!null
+           ├── limit: 1
+           ├── key: ()
+           └── fd: ()-->(1,3)
+
+# Limit a constrained partial index scan.
+opt
+SELECT a FROM partial_index_tab where b > 0 and a > 10 LIMIT 1
+----
+project
+ ├── columns: a:1!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── index-join partial_index_tab
+      ├── columns: a:1!null b:2!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      └── scan partial_index_tab@secondary,partial
+           ├── columns: a:1!null rowid:3!null
+           ├── constraint: /1/3: [/11 - ]
+           ├── limit: 1
+           ├── key: ()
+           └── fd: ()-->(1,3)
 
 # Don't push when scan doesn't satisfy limit's ordering.
 opt
@@ -220,7 +270,7 @@ scan a
  ├── key: ()
  └── fd: ()-->(1-5)
 
-# PushLimitIntoConstrainedScan propagates row-level locking information.
+# PushLimitIntoFilteredScan propagates row-level locking information.
 opt
 SELECT s FROM a WHERE s='foo' LIMIT 1 FOR UPDATE
 ----
