@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -49,10 +51,6 @@ type setClusterSettingNode struct {
 func (p *planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
-	if err := p.RequireAdminRole(ctx, "SET CLUSTER SETTING"); err != nil {
-		return nil, err
-	}
-
 	if !p.execCfg.TenantTestingKnobs.CanSetClusterSettings() && !p.execCfg.Codec.ForSystemTenant() {
 		// Setting cluster settings is disabled for phase 2 tenants if a test does
 		// not explicitly allow for setting in-memory cluster settings.
@@ -64,6 +62,22 @@ func (p *planner) SetClusterSetting(
 	v, ok := settings.Lookup(name, settings.LookupForLocalAccess)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+	}
+
+	if settings.AdminOnly(name) {
+		if err := p.RequireAdminRole(ctx, fmt.Sprintf("set '%s'", name)); err != nil {
+			return nil, err
+		}
+	} else {
+		hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
+		if err != nil {
+			return nil, err
+		}
+		if !hasModify {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the %s privilege are allowed to set '%s'",
+				roleoption.MODIFYCLUSTERSETTING, name)
+		}
 	}
 
 	setting, ok := v.(settings.WritableSetting)

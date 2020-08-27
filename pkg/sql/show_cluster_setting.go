@@ -23,6 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -98,16 +101,27 @@ func (p *planner) showStateMachineSetting(
 func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
-
-	if err := p.RequireAdminRole(ctx, "SHOW CLUSTER SETTING"); err != nil {
-		return nil, err
-	}
-
 	name := strings.ToLower(n.Name)
 	st := p.ExecCfg().Settings
 	val, ok := settings.Lookup(name, settings.LookupForLocalAccess)
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
+	}
+
+	if settings.AdminOnly(name) {
+		if err := p.RequireAdminRole(ctx, fmt.Sprintf("show '%s'", name)); err != nil {
+			return nil, err
+		}
+	} else {
+		hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
+		if err != nil {
+			return nil, err
+		}
+		if !hasModify {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the %s privilege are allowed to show '%s'",
+				roleoption.MODIFYCLUSTERSETTING, name)
+		}
 	}
 
 	var dType *types.T
