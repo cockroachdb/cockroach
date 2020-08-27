@@ -988,13 +988,13 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
-				return forEachSchemaName(ctx, p, db, func(sc string, userDefined bool) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
 					return addRow(
 						tree.NewDString(db.GetName()), // catalog_name
-						tree.NewDString(sc),           // schema_name
+						tree.NewDString(sc.Name),      // schema_name
 						tree.DNull,                    // default_character_set_name
 						tree.DNull,                    // sql_path
-						yesOrNoDatum(userDefined),     // crdb_is_user_defined
+						yesOrNoDatum(sc.Kind == catalog.SchemaUserDefined), // crdb_is_user_defined
 					)
 				})
 			})
@@ -1016,10 +1016,17 @@ CREATE TABLE information_schema.schema_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
-				return forEachSchemaName(ctx, p, db, func(scName string, _ bool) error {
-					privs := db.Privileges.Show(privilege.Schema)
+				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
+					var privs []descpb.UserPrivilegeString
+					if sc.Kind == catalog.SchemaUserDefined {
+						// User defined schemas have their own privileges.
+						privs = sc.Desc.GetPrivileges().Show(privilege.Schema)
+					} else {
+						// Other schemas inherit from the parent database.
+						privs = db.Privileges.Show(privilege.Schema)
+					}
 					dbNameStr := tree.NewDString(db.GetName())
-					scNameStr := tree.NewDString(scName)
+					scNameStr := tree.NewDString(sc.Name)
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
 					for _, u := range privs {
@@ -1491,38 +1498,70 @@ CREATE TABLE information_schema.views (
 	},
 }
 
-// forEachSchemaName iterates over the physical and virtual schemas.
-func forEachSchemaName(
-	ctx context.Context,
-	p *planner,
-	db *dbdesc.Immutable,
-	fn func(scName string, userDefined bool) error,
+// forEachSchema iterates over the physical and virtual schemas.
+func forEachSchema(
+	ctx context.Context, p *planner, db *dbdesc.Immutable, fn func(sc catalog.ResolvedSchema) error,
 ) error {
-	userDefinedSchemas := make(map[string]struct{})
 	schemaNames, err := getSchemaNames(ctx, p, db)
 	if err != nil {
 		return err
 	}
-	for _, name := range schemaNames {
-		if !strings.HasPrefix(name, sessiondata.PgTempSchemaName) && name != tree.PublicSchema {
-			userDefinedSchemas[name] = struct{}{}
+
+	vtableEntries := p.getVirtualTabler().getEntries()
+	schemas := make([]catalog.ResolvedSchema, 0, len(schemaNames)+len(vtableEntries))
+	var userDefinedSchemaIDs []descpb.ID
+	for id, name := range schemaNames {
+		switch {
+		case strings.HasPrefix(name, sessiondata.PgTempSchemaName):
+			schemas = append(schemas, catalog.ResolvedSchema{
+				Name: name,
+				ID:   id,
+				Kind: catalog.SchemaTemporary,
+			})
+		case name == tree.PublicSchema:
+			schemas = append(schemas, catalog.ResolvedSchema{
+				Name: name,
+				ID:   id,
+				Kind: catalog.SchemaPublic,
+			})
+		default:
+			// The default case is a user defined schema. Collect the ID to get the
+			// descriptor later.
+			userDefinedSchemaIDs = append(userDefinedSchemaIDs, id)
 		}
 	}
-	vtableEntries := p.getVirtualTabler().getEntries()
-	scNames := make([]string, 0, len(schemaNames)+len(vtableEntries))
-	for _, name := range schemaNames {
-		scNames = append(scNames, name)
+
+	userDefinedSchemas, err := catalogkv.GetSchemaDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, userDefinedSchemaIDs)
+	if err != nil {
+		return err
 	}
+	for i := range userDefinedSchemas {
+		desc := userDefinedSchemas[i]
+		schemas = append(schemas, catalog.ResolvedSchema{
+			Name: desc.GetName(),
+			ID:   desc.GetID(),
+			Kind: catalog.SchemaUserDefined,
+			Desc: desc,
+		})
+	}
+
 	for _, schema := range vtableEntries {
-		scNames = append(scNames, schema.desc.GetName())
+		schemas = append(schemas, catalog.ResolvedSchema{
+			Name: schema.desc.Name,
+			Kind: catalog.SchemaVirtual,
+		})
 	}
-	sort.Strings(scNames)
-	for _, sc := range scNames {
-		_, userDefined := userDefinedSchemas[sc]
-		if err := fn(sc, userDefined); err != nil {
+
+	sort.Slice(schemas, func(i int, j int) bool {
+		return schemas[i].Name < schemas[j].Name
+	})
+
+	for _, sc := range schemas {
+		if err := fn(sc); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 

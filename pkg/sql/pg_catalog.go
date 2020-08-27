@@ -647,6 +647,17 @@ CREATE TABLE pg_catalog.pg_available_extensions (
 	},
 }
 
+func getOwnerOID(desc catalog.Descriptor) tree.Datum {
+	owner := getOwnerOfDesc(desc)
+	h := makeOidHasher()
+	return h.UserOid(owner)
+}
+
+func getOwnerName(desc catalog.Descriptor) tree.Datum {
+	owner := getOwnerOfDesc(desc)
+	return tree.NewDName(owner)
+}
+
 var (
 	relKindTable            = tree.NewDString("r")
 	relKindIndex            = tree.NewDString("i")
@@ -715,7 +726,7 @@ CREATE TABLE pg_catalog.pg_class (
 			namespaceOid,                   // relnamespace
 			oidZero,                        // reltype (PG creates a composite type in pg_type for each table)
 			oidZero,                        // reloftype (PG creates a composite type in pg_type for each table)
-			tree.DNull,                     // relowner
+			getOwnerOID(table),             // relowner
 			relAm,                          // relam
 			oidZero,                        // relfilenode
 			oidZero,                        // reltablespace
@@ -761,7 +772,7 @@ CREATE TABLE pg_catalog.pg_class (
 				namespaceOid,                        // relnamespace
 				oidZero,                             // reltype
 				oidZero,                             // reloftype
-				tree.DNull,                          // relowner
+				getOwnerOID(table),                  // relowner
 				indexType,                           // relam
 				oidZero,                             // relfilenode
 				oidZero,                             // reltablespace
@@ -1919,9 +1930,8 @@ CREATE TABLE pg_catalog.pg_matviews (
 				return addRow(
 					tree.NewDName(scName),         // schemaname
 					tree.NewDName(desc.GetName()), // matviewname
-					// TODO (rohany): Include the owner here once #53495 lands.
-					tree.DNull, // matviewowner
-					tree.DNull, // tablespace
+					getOwnerName(desc),            // matviewowner
+					tree.DNull,                    // tablespace
 					tree.MakeDBool(len(desc.TableDesc().Indexes) > 0), // hasindexes
 					tree.DBoolTrue,                       // ispopulated,
 					tree.NewDString(desc.GetViewQuery()), // definition
@@ -1944,12 +1954,16 @@ CREATE TABLE pg_catalog.pg_namespace (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
-				return forEachSchemaName(ctx, p, db, func(s string, _ bool) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
+					ownerDatum := tree.DNull
+					if sc.Kind == catalog.SchemaUserDefined {
+						ownerDatum = getOwnerOID(sc.Desc)
+					}
 					return addRow(
-						h.NamespaceOid(db.GetID(), s), // oid
-						tree.NewDString(s),            // nspname
-						tree.DNull,                    // nspowner
-						tree.DNull,                    // nspacl
+						h.NamespaceOid(db.GetID(), sc.Name), // oid
+						tree.NewDString(sc.Name),            // nspname
+						ownerDatum,                          // nspowner
+						tree.DNull,                          // nspacl
 					)
 				})
 			})
@@ -2594,7 +2608,7 @@ CREATE TABLE pg_catalog.pg_tables (
 				return addRow(
 					tree.NewDName(scName),          // schemaname
 					tree.NewDName(table.GetName()), // tablename
-					tree.DNull,                     // tableowner
+					getOwnerName(table),            // tableowner
 					tree.DNull,                     // tablespace
 					tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // hasindexes
 					tree.DBoolFalse, // hasrules
@@ -2701,7 +2715,7 @@ var (
 )
 
 func addPGTypeRow(
-	h oidHasher, nspOid tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+	h oidHasher, nspOid tree.Datum, owner tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
 ) error {
 	cat := typCategory(typ)
 	typType := typTypeBase
@@ -2743,7 +2757,7 @@ func addPGTypeRow(
 		tree.NewDOid(tree.DInt(typ.Oid())), // oid
 		tree.NewDName(typname),             // typname
 		nspOid,                             // typnamespace
-		tree.DNull,                         // typowner
+		owner,                              // typowner
 		typLen(typ),                        // typlen
 		typByVal(typ),                      // typbyval (is it fixedlen or not)
 		typType,                            // typtype
@@ -2823,7 +2837,7 @@ CREATE TABLE pg_catalog.pg_type (
 
 				// Generate rows for all predefined types.
 				for _, typ := range types.OidToType {
-					if err := addPGTypeRow(h, nspOid, typ, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, addRow); err != nil {
 						return err
 					}
 				}
@@ -2839,7 +2853,7 @@ CREATE TABLE pg_catalog.pg_type (
 					if err != nil {
 						return err
 					}
-					return addPGTypeRow(h, nspOid, typ, addRow)
+					return addPGTypeRow(h, nspOid, getOwnerOID(typDesc), typ, addRow)
 				})
 			})
 	},
@@ -2857,7 +2871,7 @@ CREATE TABLE pg_catalog.pg_type (
 				// Check if it is a predefined type.
 				typ, ok := types.OidToType[ooid]
 				if ok {
-					if err := addPGTypeRow(h, nspOid, typ, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, addRow); err != nil {
 						return false, err
 					}
 					return true, nil
@@ -2884,7 +2898,7 @@ CREATE TABLE pg_catalog.pg_type (
 				if err != nil {
 					return false, err
 				}
-				if err := addPGTypeRow(h, nspOid, typ, addRow); err != nil {
+				if err := addPGTypeRow(h, nspOid, getOwnerOID(typDesc), typ, addRow); err != nil {
 					return false, err
 				}
 
@@ -3096,7 +3110,7 @@ https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 CREATE TABLE pg_catalog.pg_views (
 	schemaname NAME,
 	viewname NAME,
-	viewowner STRING,
+	viewowner NAME,
 	definition STRING
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -3118,7 +3132,7 @@ CREATE TABLE pg_catalog.pg_views (
 				return addRow(
 					tree.NewDName(scName),                // schemaname
 					tree.NewDName(desc.GetName()),        // viewname
-					tree.DNull,                           // viewowner
+					getOwnerName(desc),                   // viewowner
 					tree.NewDString(desc.GetViewQuery()), // definition
 				)
 			})

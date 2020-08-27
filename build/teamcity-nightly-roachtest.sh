@@ -59,7 +59,9 @@ function upload_stats {
       # a `.` folder in ${stats_dir}, which we don't want.
       (cd "${artifacts}" && \
         while IFS= read -r f; do
-          gsutil cp "${f}" "gs://${bucket}/artifacts/${stats_dir}/${f}"
+          if [[ -n "${f}" ]]; then
+            gsutil cp "${f}" "gs://${bucket}/artifacts/${stats_dir}/${f}"
+          fi
         done <<< "$(find . -name stats.json | sed 's/^\.\///')")
   fi
 }

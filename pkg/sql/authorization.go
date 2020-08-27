@@ -138,11 +138,9 @@ func (p *planner) CheckPrivilege(
 	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
 }
 
-// IsOwner returns if the role has ownership on the descriptor.
-func IsOwner(desc catalog.Descriptor, role string) bool {
+func getOwnerOfDesc(desc catalog.Descriptor) string {
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := desc.GetPrivileges().Owner
-
 	if owner == "" {
 		// If the descriptor is ownerless and the descriptor is part of the system db,
 		// node is the owner.
@@ -154,8 +152,12 @@ func IsOwner(desc catalog.Descriptor, role string) bool {
 			owner = security.AdminRole
 		}
 	}
+	return owner
+}
 
-	return role == owner
+// IsOwner returns if the role has ownership on the descriptor.
+func IsOwner(desc catalog.Descriptor, role string) bool {
+	return role == getOwnerOfDesc(desc)
 }
 
 // HasOwnership returns if the role or any role the role is a member of
