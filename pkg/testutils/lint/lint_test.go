@@ -982,6 +982,7 @@ func TestLint(t *testing.T) {
 			":!*.pb.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
+			":!util/encoding/encoding.go",
 		)
 		if err != nil {
 			t.Fatal(err)
