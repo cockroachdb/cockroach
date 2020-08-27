@@ -194,3 +194,4 @@ requesting table details for system.users... writing: debug/schema/system/users.
 requesting table details for system.web_sessions... writing: debug/schema/system/web_sessions.json
 requesting table details for system.zones... writing: debug/schema/system/zones.json
 writing: debug/pprof-summary.sh
+writing: debug/hot-ranges.sh
