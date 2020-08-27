@@ -320,9 +320,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:              depublicizeSystemComments,
 	},
 	{
-		// Introduced in v20.1.
+		// Introduced in v20.1. Baked into v20.2.
 		name:   "add CREATEROLE privilege to admin/root",
-		workFn: addCreateRoleToAdminAndRoot,
+		workFn: nil,
 	},
 	{
 		// Introduced in v20.2.
@@ -1053,27 +1053,6 @@ func createRoleOptionsTable(ctx context.Context, r runner) error {
 	}
 
 	return nil
-}
-
-func addCreateRoleToAdminAndRoot(ctx context.Context, r runner) error {
-	// Upsert the admin/root roles with CreateRole privilege into the table.
-	// We intentionally override any existing entry.
-	const upsertCreateRoleStmt = `
-          UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'CREATEROLE', NULL)
-          `
-	err := r.execAsRootWithRetry(ctx,
-		"add role options table and upsert admin with CREATEROLE",
-		upsertCreateRoleStmt,
-		security.AdminRole)
-
-	if err != nil {
-		return err
-	}
-
-	return r.execAsRootWithRetry(ctx,
-		"add role options table and upsert admin with CREATEROLE",
-		upsertCreateRoleStmt,
-		security.RootUser)
 }
 
 func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {

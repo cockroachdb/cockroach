@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -296,59 +295,58 @@ func doCreateBackupSchedules(
 	}
 
 	ex := p.ExecCfg().InternalExecutor
-	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		unpauseOnSuccessID := jobs.InvalidScheduleID
 
-		// If needed, create incremental.
-		if incRecurrence != nil {
-			backupNode.AppendToLatest = true
-			inc, err := makeBackupSchedule(
-				env, p.User(), scheduleLabel,
-				incRecurrence, details, unpauseOnSuccessID, backupNode)
+	unpauseOnSuccessID := jobs.InvalidScheduleID
 
-			if err != nil {
-				return err
-			}
-			// Incremental is paused until FULL completes.
-			inc.Pause()
-			inc.SetScheduleStatus("Waiting for initial backup to complete")
-
-			if err := inc.Create(ctx, ex, txn); err != nil {
-				return err
-			}
-			if err := emitSchedule(inc, tree.AsString(backupNode), resultsCh); err != nil {
-				return err
-			}
-			unpauseOnSuccessID = inc.ScheduleID()
-		}
-
-		// Create FULL backup schedule.
-		backupNode.AppendToLatest = false
-		fullBackupStmt := tree.AsString(backupNode)
-		full, err := makeBackupSchedule(
+	// If needed, create incremental.
+	if incRecurrence != nil {
+		backupNode.AppendToLatest = true
+		inc, err := makeBackupSchedule(
 			env, p.User(), scheduleLabel,
-			fullRecurrence, details, unpauseOnSuccessID, backupNode)
+			incRecurrence, details, unpauseOnSuccessID, backupNode)
+
 		if err != nil {
 			return err
 		}
+		// Incremental is paused until FULL completes.
+		inc.Pause()
+		inc.SetScheduleStatus("Waiting for initial backup to complete")
 
-		if firstRun != nil {
-			full.SetNextRun(*firstRun)
-		} else if eval.isEnterpriseUser && fullRecurrencePicked {
-			// The enterprise user did not indicate preference when to run full backups,
-			// and we picked the schedule ourselves.
-			// Run full backup immediately so that we do not wind up waiting for a long
-			// time before the first full backup runs.  Without full backup, we can't
-			// execute incremental.
-			full.SetNextRun(env.Now())
-		}
-
-		// Create the schedule (we need its ID to create incremental below).
-		if err := full.Create(ctx, ex, txn); err != nil {
+		if err := inc.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
 			return err
 		}
-		return emitSchedule(full, fullBackupStmt, resultsCh)
-	})
+		if err := emitSchedule(inc, tree.AsString(backupNode), resultsCh); err != nil {
+			return err
+		}
+		unpauseOnSuccessID = inc.ScheduleID()
+	}
+
+	// Create FULL backup schedule.
+	backupNode.AppendToLatest = false
+	fullBackupStmt := tree.AsString(backupNode)
+	full, err := makeBackupSchedule(
+		env, p.User(), scheduleLabel,
+		fullRecurrence, details, unpauseOnSuccessID, backupNode)
+	if err != nil {
+		return err
+	}
+
+	if firstRun != nil {
+		full.SetNextRun(*firstRun)
+	} else if eval.isEnterpriseUser && fullRecurrencePicked {
+		// The enterprise user did not indicate preference when to run full backups,
+		// and we picked the schedule ourselves.
+		// Run full backup immediately so that we do not wind up waiting for a long
+		// time before the first full backup runs.  Without full backup, we can't
+		// execute incremental.
+		full.SetNextRun(env.Now())
+	}
+
+	// Create the schedule (we need its ID to create incremental below).
+	if err := full.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
+		return err
+	}
+	return emitSchedule(full, fullBackupStmt, resultsCh)
 }
 
 // checkForExistingBackupsInCollection checks that there are no existing backups

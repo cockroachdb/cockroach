@@ -746,4 +746,3 @@ SELECT * FROM crdb_internal.jobs
 # Cleanup
 statement ok
 SET disallow_full_table_scans = false
-

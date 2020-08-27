@@ -110,18 +110,12 @@ func changefeedPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		hasAdmin, err := p.HasAdminRole(ctx)
+		ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
 		if err != nil {
 			return err
 		}
-		if !hasAdmin {
-			ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create changefeed")
-			}
+		if !ok {
+			return pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create changefeed")
 		}
 
 		sinkURI, err := sinkURIFn()

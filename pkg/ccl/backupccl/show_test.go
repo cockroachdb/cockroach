@@ -38,14 +38,36 @@ func TestShowBackup(t *testing.T) {
 	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
+	sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+SET experimental_enable_user_defined_schemas = true;
+
+CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
+USE data; CREATE SCHEMA sc;
+CREATE TABLE data.sc.t1 (a INT);
+`)
 
 	const full, inc, inc2 = LocalFoo + "/full", LocalFoo + "/inc", LocalFoo + "/inc2"
 
 	beforeTS := sqlDB.QueryStr(t, `SELECT now()::timestamp::string`)[0][0]
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
 
-	res := sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
-	require.Equal(t, [][]string{{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"}}, res)
+	res := sqlDB.QueryStr(t, `
+SELECT
+  database_name, parent_schema_name, object_name, object_type,
+  start_time::string, end_time::string, rows, is_full_cluster
+FROM
+	[SHOW BACKUP $1]
+ORDER BY object_type, object_name`, full)
+	expectedObjects := [][]string{
+		{"NULL", "NULL", "data", "database", "NULL", beforeTS, "NULL", "false"},
+		{"data", "NULL", "sc", "schema", "NULL", beforeTS, "NULL", "false"},
+		{"data", "public", "bank", "table", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
+		{"data", "sc", "t1", "table", "NULL", beforeTS, strconv.Itoa(0), "false"},
+		{"data", "public", "_welcome", "type", "NULL", beforeTS, "NULL", "false"},
+		{"data", "public", "welcome", "type", "NULL", beforeTS, "NULL", "false"},
+	}
+	require.Equal(t, expectedObjects, res)
 
 	// Mess with half the rows.
 	affectedRows, err := sqlDB.Exec(t,
@@ -61,14 +83,26 @@ func TestShowBackup(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2`, incTS), inc, full)
 
 	// Check the appended base backup.
-	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
+	res = sqlDB.QueryStr(t, `SELECT object_name, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
 	require.Equal(t, [][]string{
+		// Full.
+		{"data", "NULL", beforeTS, "NULL", "false"},
 		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
+		{"welcome", "NULL", beforeTS, "NULL", "false"},
+		{"_welcome", "NULL", beforeTS, "NULL", "false"},
+		{"sc", "NULL", beforeTS, "NULL", "false"},
+		{"t1", "NULL", beforeTS, "0", "false"},
+		// Incremental.
+		{"data", beforeTS, incTS, "NULL", "false"},
 		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2)), "false"},
+		{"welcome", beforeTS, incTS, "NULL", "false"},
+		{"_welcome", beforeTS, incTS, "NULL", "false"},
+		{"sc", beforeTS, incTS, "NULL", "false"},
+		{"t1", beforeTS, incTS, "0", "false"},
 	}, res)
 
 	// Check the separate inc backup.
-	res = sqlDB.QueryStr(t, `SELECT start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, inc)
+	res = sqlDB.QueryStr(t, `SELECT start_time::string, end_time::string, rows FROM [SHOW BACKUP $1] WHERE object_name='bank'`, inc)
 	require.Equal(t, [][]string{
 		{beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
 	}, res)
@@ -85,19 +119,23 @@ func TestShowBackup(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2, $3`, inc2TS), inc2, full, inc)
 
 	// Check the appended base backup.
-	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, full)
+	res = sqlDB.QueryStr(t, `SELECT object_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1] WHERE object_type='table'`, full)
 	require.Equal(t, [][]string{
 		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts)},
+		{"t1", "NULL", beforeTS, "0"},
 		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
+		{"t1", beforeTS, incTS, "0"},
 		{"bank", incTS, inc2TS, "0"},
+		{"t1", incTS, inc2TS, "0"},
 		{"auth", incTS, inc2TS, "0"},
 		{"users", incTS, inc2TS, "3"},
 	}, res)
 
 	// Check the separate inc backup.
-	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1]`, inc2)
+	res = sqlDB.QueryStr(t, `SELECT object_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1] WHERE object_type='table'`, inc2)
 	require.Equal(t, [][]string{
 		{"bank", incTS, inc2TS, "0"},
+		{"t1", incTS, inc2TS, "0"},
 		{"auth", incTS, inc2TS, "0"},
 		{"users", incTS, inc2TS, "3"},
 	}, res)
@@ -115,15 +153,15 @@ func TestShowBackup(t *testing.T) {
 	details2Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, details2Desc, details2Desc.PrimaryIndex.ID))
 
 	sqlDBRestore.CheckQueryResults(t, fmt.Sprintf(`SHOW BACKUP RANGES '%s'`, details), [][]string{
-		{"/Table/56/1", "/Table/56/2", string(details1Key), string(details1Key.PrefixEnd())},
-		{"/Table/57/1", "/Table/57/2", string(details2Key), string(details2Key.PrefixEnd())},
+		{"/Table/60/1", "/Table/60/2", string(details1Key), string(details1Key.PrefixEnd())},
+		{"/Table/61/1", "/Table/61/2", string(details2Key), string(details2Key.PrefixEnd())},
 	})
 
 	var showFiles = fmt.Sprintf(`SELECT start_pretty, end_pretty, size_bytes, rows
 		FROM [SHOW BACKUP FILES '%s']`, details)
 	sqlDBRestore.CheckQueryResults(t, showFiles, [][]string{
-		{"/Table/56/1/1", "/Table/56/1/42", "369", "41"},
-		{"/Table/56/1/42", "/Table/56/2", "531", "59"},
+		{"/Table/60/1/1", "/Table/60/1/42", "369", "41"},
+		{"/Table/60/1/42", "/Table/60/2", "531", "59"},
 	})
 	sstMatcher := regexp.MustCompile(`\d+\.sst`)
 	pathRows := sqlDB.QueryStr(t, `SELECT path FROM [SHOW BACKUP FILES $1]`, details)
@@ -168,14 +206,15 @@ func TestShowBackup(t *testing.T) {
 		expectedCreateView := `CREATE VIEW viewa (a) AS SELECT a FROM data.public.tablea`
 		expectedCreateSeq := `CREATE SEQUENCE seqa MINVALUE 1 MAXVALUE 20 INCREMENT 2 START 1`
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP SCHEMAS '%s'`, viewTableSeq))
+		showBackupRows = sqlDBRestore.QueryStr(t,
+			fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS '%s'] WHERE object_type='table'`, viewTableSeq))
 		expected = []string{
 			expectedCreateTable,
 			expectedCreateView,
 			expectedCreateSeq,
 		}
 		for i, row := range showBackupRows {
-			createStmt := row[7]
+			createStmt := row[0]
 			if !eqWhitespace(createStmt, expected[i]) {
 				t.Fatalf("mismatched create statement: %s, want %s", createStmt, expected[i])
 			}
@@ -207,13 +246,13 @@ func TestShowBackup(t *testing.T) {
 				FAMILY "primary" (a, b)
 			)`
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP SCHEMAS '%s'`, includedFK))
-		createStmtSameDB := showBackupRows[1][7]
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS '%s'] WHERE object_type='table'`, includedFK))
+		createStmtSameDB := showBackupRows[1][0]
 		if !eqWhitespace(createStmtSameDB, wantSameDB) {
 			t.Fatalf("mismatched create statement: %s, want %s", createStmtSameDB, wantSameDB)
 		}
 
-		createStmtDiffDB := showBackupRows[2][7]
+		createStmtDiffDB := showBackupRows[2][0]
 		if !eqWhitespace(createStmtDiffDB, wantDiffDB) {
 			t.Fatalf("mismatched create statement: %s, want %s", createStmtDiffDB, wantDiffDB)
 		}
@@ -232,8 +271,8 @@ func TestShowBackup(t *testing.T) {
 				FAMILY "primary" (a, b)
 			)`
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP SCHEMAS '%s'`, missingFK))
-		createStmt := showBackupRows[0][7]
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS '%s'] WHERE object_type='table'`, missingFK))
+		createStmt := showBackupRows[0][0]
 		if !eqWhitespace(createStmt, want) {
 			t.Fatalf("mismatched create statement: %s, want %s", createStmt, want)
 		}
@@ -243,8 +282,8 @@ func TestShowBackup(t *testing.T) {
 		fullCluster := LocalFoo + "/full_cluster"
 		sqlDB.Exec(t, `BACKUP TO $1;`, fullCluster)
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, fullCluster))
-		isFullCluster := showBackupRows[0][6]
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT is_full_cluster FROM [SHOW BACKUP '%s']`, fullCluster))
+		isFullCluster := showBackupRows[0][0]
 		if !eqWhitespace(isFullCluster, "true") {
 			t.Fatal("expected show backup to indicate that backup was full cluster")
 		}
@@ -252,8 +291,8 @@ func TestShowBackup(t *testing.T) {
 		fullClusterInc := LocalFoo + "/full_cluster_inc"
 		sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2;`, fullClusterInc, fullCluster)
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, fullCluster))
-		isFullCluster = showBackupRows[0][6]
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT is_full_cluster FROM [SHOW BACKUP '%s']`, fullCluster))
+		isFullCluster = showBackupRows[0][0]
 		if !eqWhitespace(isFullCluster, "true") {
 			t.Fatal("expected show backup to indicate that backup was full cluster")
 		}
@@ -275,12 +314,18 @@ func TestShowBackup(t *testing.T) {
 		sqlDB.Exec(t, `GRANT UPDATE on data.top_secret TO agent_bond`)
 		sqlDB.Exec(t, `BACKUP data.top_secret TO $1;`, showPrivs)
 
-		want := `GRANT ALL ON top_secret TO admin; GRANT SELECT, UPDATE ON top_secret TO agent_bond; GRANT INSERT ON top_secret TO agents; GRANT ALL ON top_secret TO m; GRANT ALL ON top_secret TO root; `
+		want := []string{
+			`GRANT ALL ON data TO admin; GRANT ALL ON data TO root; `,
+			`GRANT ALL ON top_secret TO admin; GRANT SELECT, UPDATE ON top_secret TO agent_bond; ` +
+				`GRANT INSERT ON top_secret TO agents; GRANT ALL ON top_secret TO m; GRANT ALL ON top_secret TO root; `,
+		}
 
-		showBackupRows := sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s' WITH privileges`, showPrivs))
-		privs := showBackupRows[0][7]
-		if !eqWhitespace(privs, want) {
-			t.Fatalf("mismatched privileges: %s, want %s", privs, want)
+		showBackupRows := sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT privileges FROM [SHOW BACKUP '%s' WITH privileges]`, showPrivs))
+		for i, row := range showBackupRows {
+			privs := row[0]
+			if !eqWhitespace(privs, want[i]) {
+				t.Fatalf("mismatched privileges: '%s', want '%s'", privs, want[i])
+			}
 		}
 	}
 }
@@ -321,9 +366,9 @@ func TestShowBackups(t *testing.T) {
 	require.Equal(t, 3, len(rows))
 
 	// check that we can show the inc layers in the individual full backups.
-	b1 := sqlDBRestore.QueryStr(t, `SHOW BACKUP $1 IN $2`, rows[0][0], full)
+	b1 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[0][0], full)
 	require.Equal(t, 4, len(b1))
-	b2 := sqlDBRestore.QueryStr(t, `SHOW BACKUP $1 IN $2`, rows[1][0], full)
+	b2 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
 	require.Equal(t, 3, len(b2))
 }
 
@@ -339,7 +384,6 @@ func TestShowBackupTenants(t *testing.T) {
 	// NB: tenant certs for 10, 11, 20 are embedded. See:
 	_ = security.EmbeddedTenantIDs()
 
-	// Setup a few tenants, each with a different table.
 	conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), TenantInfo: []byte("ten")})
 	defer conn10.Close()
 	tenant10 := sqlutils.MakeSQLRunner(conn10)
@@ -348,19 +392,19 @@ func TestShowBackupTenants(t *testing.T) {
 
 	systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME '%s'`, beforeTS))
 
-	res := systemDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP 'nodelocal://1/t10']`)
+	res := systemDB.QueryStr(t, `SELECT object_name, object_type, start_time::string, end_time::string, rows FROM [SHOW BACKUP 'nodelocal://1/t10']`)
 	require.Equal(t, [][]string{
-		{"10", "NULL", beforeTS, "NULL"},
+		{"10", "TENANT", "NULL", beforeTS, "NULL"},
 	}, res)
 
-	res = systemDB.QueryStr(t, `SELECT table_name, privileges FROM [SHOW BACKUP 'nodelocal://1/t10' WITH privileges]`)
+	res = systemDB.QueryStr(t, `SELECT object_name, object_type, privileges FROM [SHOW BACKUP 'nodelocal://1/t10' WITH privileges]`)
 	require.Equal(t, [][]string{
-		{"10", "NULL"},
+		{"10", "TENANT", "NULL"},
 	}, res)
 
-	res = systemDB.QueryStr(t, `SELECT table_name, create_statement FROM [SHOW BACKUP SCHEMAS 'nodelocal://1/t10']`)
+	res = systemDB.QueryStr(t, `SELECT object_name, object_type, create_statement FROM [SHOW BACKUP SCHEMAS 'nodelocal://1/t10']`)
 	require.Equal(t, [][]string{
-		{"10", "NULL"},
+		{"10", "TENANT", "NULL"},
 	}, res)
 
 	res = systemDB.QueryStr(t, `SELECT start_pretty, end_pretty FROM [SHOW BACKUP RANGES 'nodelocal://1/t10']`)
