@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -300,20 +299,24 @@ func DecodeTableKey(
 		}
 		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: r}), rkey, err
 	case types.GeographyFamily:
-		g := a.NewDGeography(tree.DGeography{Geography: geo.MakeGeographyUnsafe(geopb.SpatialObject{})})
+		g := a.NewDGeographyEmpty()
+		so := g.Geography.SpatialObjectRef()
 		if dir == encoding.Ascending {
-			rkey, err = encoding.DecodeGeoAscending(key, g.Geography.SpatialObjectRef())
+			rkey, err = encoding.DecodeGeoAscending(key, so)
 		} else {
-			rkey, err = encoding.DecodeGeoDescending(key, g.Geography.SpatialObjectRef())
+			rkey, err = encoding.DecodeGeoDescending(key, so)
 		}
+		a.DoneInitNewDGeo(so)
 		return g, rkey, err
 	case types.GeometryFamily:
-		g := a.NewDGeometry(tree.DGeometry{Geometry: geo.MakeGeometryUnsafe(geopb.SpatialObject{})})
+		g := a.NewDGeometryEmpty()
+		so := g.Geometry.SpatialObjectRef()
 		if dir == encoding.Ascending {
-			rkey, err = encoding.DecodeGeoAscending(key, g.Geometry.SpatialObjectRef())
+			rkey, err = encoding.DecodeGeoAscending(key, so)
 		} else {
-			rkey, err = encoding.DecodeGeoDescending(key, g.Geometry.SpatialObjectRef())
+			rkey, err = encoding.DecodeGeoDescending(key, so)
 		}
+		a.DoneInitNewDGeo(so)
 		return g, rkey, err
 	case types.DateFamily:
 		var t int64
@@ -583,15 +586,19 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		}
 		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: data}), b, nil
 	case types.GeographyFamily:
-		g := a.NewDGeography(tree.DGeography{Geography: geo.MakeGeographyUnsafe(geopb.SpatialObject{})})
-		b, err := encoding.DecodeUntaggedGeoValue(buf, g.Geography.SpatialObjectRef())
+		g := a.NewDGeographyEmpty()
+		so := g.Geography.SpatialObjectRef()
+		b, err := encoding.DecodeUntaggedGeoValue(buf, so)
+		a.DoneInitNewDGeo(so)
 		if err != nil {
 			return nil, b, err
 		}
 		return g, b, nil
 	case types.GeometryFamily:
-		g := a.NewDGeometry(tree.DGeometry{Geometry: geo.MakeGeometryUnsafe(geopb.SpatialObject{})})
-		b, err := encoding.DecodeUntaggedGeoValue(buf, g.Geometry.SpatialObjectRef())
+		g := a.NewDGeometryEmpty()
+		so := g.Geometry.SpatialObjectRef()
+		b, err := encoding.DecodeUntaggedGeoValue(buf, so)
+		a.DoneInitNewDGeo(so)
 		if err != nil {
 			return nil, b, err
 		}
