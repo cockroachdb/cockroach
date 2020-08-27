@@ -1216,17 +1216,26 @@ func (node *CreateTable) HoistConstraints() {
 type CreateSchema struct {
 	IfNotExists bool
 	Schema      string
+	AuthRole    string
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateSchema) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE SCHEMA ")
+	ctx.WriteString("CREATE SCHEMA")
 
 	if node.IfNotExists {
-		ctx.WriteString("IF NOT EXISTS ")
+		ctx.WriteString(" IF NOT EXISTS")
 	}
 
-	ctx.WriteString(node.Schema)
+	if node.Schema != "" {
+		ctx.WriteString(" ")
+		ctx.WriteString(node.Schema)
+	}
+
+	if node.AuthRole != "" {
+		ctx.WriteString(" AUTHORIZATION ")
+		ctx.WriteString(node.AuthRole)
+	}
 }
 
 // CreateSequence represents a CREATE SEQUENCE statement.
