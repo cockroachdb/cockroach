@@ -326,3 +326,24 @@ query TT
 SELECT 1::OID::TEXT, quote_literal(1::OID)
 ----
 1  '1'
+
+# Allow INT-OID comparison. Regression test for #53143.
+statement ok
+SELECT
+  c.oid,
+  a.attnum,
+  a.attname,
+  c.relname,
+  n.nspname,
+  a.attnotnull
+  OR (t.typtype = 'd' AND t.typnotnull),
+  pg_catalog.pg_get_expr(d.adbin, d.adrelid) LIKE '%nextval(%'
+FROM
+  pg_catalog.pg_class AS c
+  JOIN pg_catalog.pg_namespace AS n ON (c.relnamespace = n.oid)
+  JOIN pg_catalog.pg_attribute AS a ON (c.oid = a.attrelid)
+  JOIN pg_catalog.pg_type AS t ON (a.atttypid = t.oid)
+  LEFT JOIN pg_catalog.pg_attrdef AS d ON
+      (d.adrelid = a.attrelid AND d.adnum = a.attnum)
+  JOIN (SELECT 1 AS oid, 1 AS attnum) AS vals ON
+      (c.oid = vals.oid AND a.attnum = vals.attnum);

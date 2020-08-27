@@ -148,3 +148,61 @@ func dimensionFromGeomT(geomRepr geom.T) (int, error) {
 		return 0, errors.AssertionFailedf("unknown geometry type: %T", geomRepr)
 	}
 }
+
+// Points returns the points of all coordinates in a geometry as a multipoint.
+func Points(g geo.Geometry) (geo.Geometry, error) {
+	t, err := g.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	layout := t.Layout()
+	if gc, ok := t.(*geom.GeometryCollection); ok && gc.Empty() {
+		layout = geom.XY
+	}
+	points := geom.NewMultiPoint(layout).SetSRID(t.SRID())
+	iter := geo.NewGeomTIterator(t, geo.EmptyBehaviorOmit)
+	for {
+		geomRepr, hasNext, err := iter.Next()
+		if err != nil {
+			return geo.Geometry{}, err
+		} else if !hasNext {
+			break
+		} else if geomRepr.Empty() {
+			continue
+		}
+		switch geomRepr := geomRepr.(type) {
+		case *geom.Point:
+			if err = pushCoord(points, geomRepr.Coords()); err != nil {
+				return geo.Geometry{}, err
+			}
+		case *geom.LineString:
+			for i := 0; i < geomRepr.NumCoords(); i++ {
+				if err = pushCoord(points, geomRepr.Coord(i)); err != nil {
+					return geo.Geometry{}, err
+				}
+			}
+		case *geom.Polygon:
+			for i := 0; i < geomRepr.NumLinearRings(); i++ {
+				linearRing := geomRepr.LinearRing(i)
+				for j := 0; j < linearRing.NumCoords(); j++ {
+					if err = pushCoord(points, linearRing.Coord(j)); err != nil {
+						return geo.Geometry{}, err
+					}
+				}
+			}
+		default:
+			return geo.Geometry{}, errors.AssertionFailedf("unexpected type: %T", geomRepr)
+		}
+	}
+	return geo.MakeGeometryFromGeomT(points)
+}
+
+// pushCoord is a helper function for PointsFromGeomT that appends
+// a coordinate to a multipoint as a point.
+func pushCoord(points *geom.MultiPoint, coord geom.Coord) error {
+	point, err := geom.NewPoint(points.Layout()).SetCoords(coord)
+	if err != nil {
+		return err
+	}
+	return points.Push(point)
+}
