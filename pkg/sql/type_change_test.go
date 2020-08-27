@@ -49,7 +49,6 @@ func TestDrainingNamesAreCleanedOnTypeChangeFailure(t *testing.T) {
 
 	// Create a type.
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.t AS ENUM()
 `); err != nil {
@@ -93,7 +92,6 @@ func TestTypeSchemaChangeHandlesDeletedDescriptor(t *testing.T) {
 
 	// Create a type.
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.t AS ENUM();
 `); err != nil {
@@ -147,7 +145,6 @@ func TestTypeSchemaChangeRetriesTransparently(t *testing.T) {
 
 	// Create a type.
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.t AS ENUM();
 `); err != nil {

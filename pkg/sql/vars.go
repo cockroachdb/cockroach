@@ -449,25 +449,6 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_enable_enums`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_enums`),
-		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parseBoolVar(`experimental_enable_enums`, s)
-			if err != nil {
-				return err
-			}
-			m.SetEnumsEnabled(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData.EnumsEnabled)
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(enumsEnabledClusterMode.Get(sv))
-		},
-	},
-
-	// CockroachDB extension.
 	`experimental_enable_user_defined_schemas`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_user_defined_schemas`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

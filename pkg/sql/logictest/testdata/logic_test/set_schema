@@ -276,9 +276,6 @@ ALTER TABLE t5 SET SCHEMA s1
 user root
 
 statement ok
-SET experimental_enable_enums = true
-
-statement ok
 CREATE TYPE typ AS ENUM ('hello')
 
 # Ensure setting the type to the same schema is valid.
@@ -443,9 +440,6 @@ GRANT CREATE ON DATABASE test TO testuser
 # The user must have create privilege on the target schema to set the schema.
 
 user testuser
-
-statement ok
-SET experimental_enable_enums = true
 
 statement ok
 CREATE TYPE typ5 AS ENUM ()

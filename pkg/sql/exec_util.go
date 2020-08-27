@@ -183,12 +183,6 @@ var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
-var enumsEnabledClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.experimental_enums.enabled",
-	"default value for experimental_enable_enums; allows for creation and use of ENUM types",
-	false,
-)
-
 var userDefinedSchemasClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_user_defined_schemas.enabled",
 	"default value for experimental_enable_user_defined_schemas; allows for creation of user defined schemas",
@@ -2060,10 +2054,6 @@ func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
 
 func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
-}
-
-func (m *sessionDataMutator) SetEnumsEnabled(val bool) {
-	m.data.EnumsEnabled = val
 }
 
 func (m *sessionDataMutator) SetUserDefinedSchemasEnabled(val bool) {

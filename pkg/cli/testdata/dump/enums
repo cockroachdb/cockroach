@@ -1,5 +1,4 @@
 sql
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.t AS ENUM ('dump', 'cli');
 CREATE TABLE d.tt (
@@ -16,7 +15,6 @@ INSERT 2
 dump d
 ----
 ----
-SET experimental_enable_enums = true;
 CREATE TYPE public.t AS ENUM ('dump', 'cli');
 
 CREATE TABLE public.tt (

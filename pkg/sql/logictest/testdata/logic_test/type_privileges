@@ -1,8 +1,5 @@
 # LogicTest: !3node-tenant(50049)
 
-statement ok
-SET experimental_enable_enums=true;
-
 # Types created in the public schema have usage provided to public.
 user root
 

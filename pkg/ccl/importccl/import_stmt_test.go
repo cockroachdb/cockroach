@@ -1121,10 +1121,7 @@ func TestImportUserDefinedTypes(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	// Set up some initial state for the tests.
-	sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
-CREATE TYPE greeting AS ENUM ('hello', 'hi');
-`)
+	sqlDB.Exec(t, `CREATE TYPE greeting AS ENUM ('hello', 'hi')`)
 
 	// Create some AVRO encoded data.
 	var avroData string

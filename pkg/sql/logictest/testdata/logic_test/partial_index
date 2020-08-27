@@ -1,9 +1,6 @@
 #### Partial Indexes
 
 statement ok
-SET experimental_enable_enums = true;
-
-statement ok
 CREATE TABLE t1 (a INT, INDEX (a) WHERE a = 0)
 
 statement ok

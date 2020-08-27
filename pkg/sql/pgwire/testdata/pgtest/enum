@@ -21,16 +21,6 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-send crdb_only
-Query {"String": "SET experimental_enable_enums=true;"}
-----
-
-until crdb_only
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"SET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
 send
 Query {"String": "CREATE TYPE te AS ENUM ('hi', 'hello')"}
 ----
