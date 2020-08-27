@@ -1,5 +1,5 @@
 - Feature Name: Partial Indexes
-- Status: in-progress
+- Status: completed
 - Start Date: 2020-05-07
 - Authors: mgartner
 - RFC PR: [#48557](https://github.com/cockroachdb/cockroach/pull/48557)
@@ -400,29 +400,29 @@ disjunction on only one column, which a constraint _can_ represent.
 Below is a list of the steps (PRs) to implement partial indexes, roughly
 ordered.
 
-- [ ] Add partial index predicate to internal index data structures, add parser
+- [X] Add partial index predicate to internal index data structures, add parser
   support for `WHERE <predicate>`, add a cluster flag for gating this
   defaulted to "off"
-- [ ] Add simple equality implication check to optimizer when generating index
+- [X] Add simple equality implication check to optimizer when generating index
   scans, in GenerateIndexScans.
-- [ ] Same, for GenerateConstrainedScans.
-- [ ] Add support for updating partial indexes on inserts.
-- [ ] Add support for updating partial indexes on deletes.
-- [ ] Add support for updating partial indexes on updates and upserts.
-- [ ] Add support for backfilling partial indexes.
-- [ ] Update the statistics builder to account for the selectivity of the partial index
+- [X] Same, for GenerateConstrainedScans.
+- [X] Add support for updating partial indexes on inserts.
+- [X] Add support for updating partial indexes on deletes.
+- [X] Add support for updating partial indexes on updates and upserts.
+- [X] Add support for backfilling partial indexes.
+- [X] Update the statistics builder to account for the selectivity of the partial index
   predicate.
-- [ ] Add more advanced implication logic for filter and predicate expressions.
+- [X] Add more advanced implication logic for filter and predicate expressions.
 - [ ] Add support in other index exploration rules:
   - [ ] GenerateInvertedIndexScans
   - [ ] GenerateZigZagJoin
   - [ ] GenerateInvertedIndexZigZagJoin
-- [ ] Add support for partitioned partial indexes
+- [X] Add support for partitioned partial indexes
 - [ ] Add support for using partial indexes in Lookup Joins
 - [ ] Consider using partial indexes for auto-generated indexes used for foreign
   keys.
-- [ ] [Stretch goal] Add support for `ON CONFLICT WHERE [index_predicate] DO
-  ...` for identifying conflict behavior for uniquer partial indexes.
+- [X] Add support for `ON CONFLICT WHERE [index_predicate] DO ...` for identifying
+  conflict behavior for unique partial indexes.
   - More info in the [Postgres
     docs](https://www.postgresql.org/docs/9.5/sql-insert.html#SQL-ON-CONFLICT)
     and [this blog
