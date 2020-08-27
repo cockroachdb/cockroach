@@ -463,26 +463,26 @@ hash join  ·                   ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
-·                       distribution         local                 ·                       ·
-·                       vectorized           true                  ·                       ·
-project                 ·                    ·                     (a, b, n, sq)           ·
- │                      estimated row count  990 (missing stats)   ·                       ·
- └── hash join (inner)  ·                    ·                     (column8, a, b, n, sq)  ·
-      │                 estimated row count  990 (missing stats)   ·                       ·
-      │                 equality             (column8) = (sq)      ·                       ·
-      ├── render        ·                    ·                     (column8, a, b)         ·
-      │    │            estimated row count  1000 (missing stats)  ·                       ·
-      │    │            render 0             a + b                 ·                       ·
-      │    │            render 1             a                     ·                       ·
-      │    │            render 2             b                     ·                       ·
-      │    └── scan     ·                    ·                     (a, b)                  ·
-      │                 estimated row count  1000 (missing stats)  ·                       ·
-      │                 table                pairs@primary         ·                       ·
-      │                 spans                FULL SCAN             ·                       ·
-      └── scan          ·                    ·                     (n, sq)                 ·
-·                       estimated row count  1000 (missing stats)  ·                       ·
-·                       table                square@primary        ·                       ·
-·                       spans                FULL SCAN             ·                       ·
+·                       distribution         local                 ·                        ·
+·                       vectorized           true                  ·                        ·
+project                 ·                    ·                     (a, b, n, sq)            ·
+ │                      estimated row count  990 (missing stats)   ·                        ·
+ └── hash join (inner)  ·                    ·                     (column10, a, b, n, sq)  ·
+      │                 estimated row count  990 (missing stats)   ·                        ·
+      │                 equality             (column10) = (sq)     ·                        ·
+      ├── render        ·                    ·                     (column10, a, b)         ·
+      │    │            estimated row count  1000 (missing stats)  ·                        ·
+      │    │            render 0             a + b                 ·                        ·
+      │    │            render 1             a                     ·                        ·
+      │    │            render 2             b                     ·                        ·
+      │    └── scan     ·                    ·                     (a, b)                   ·
+      │                 estimated row count  1000 (missing stats)  ·                        ·
+      │                 table                pairs@primary         ·                        ·
+      │                 spans                FULL SCAN             ·                        ·
+      └── scan          ·                    ·                     (n, sq)                  ·
+·                       estimated row count  1000 (missing stats)  ·                        ·
+·                       table                square@primary        ·                        ·
+·                       spans                FULL SCAN             ·                        ·
 
 # Query similar to the one above, but the filter refers to a rendered
 # expression and can't "break through".
@@ -518,53 +518,53 @@ project                            ·                    ·                     
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
-·                            distribution         local                 ·                       ·
-·                            vectorized           true                  ·                       ·
-project                      ·                    ·                     (a, b, n, sq)           ·
- │                           estimated row count  1000 (missing stats)  ·                       ·
- └── hash join (full outer)  ·                    ·                     (column8, a, b, n, sq)  ·
-      │                      estimated row count  1000 (missing stats)  ·                       ·
-      │                      equality             (column8) = (sq)      ·                       ·
-      ├── render             ·                    ·                     (column8, a, b)         ·
-      │    │                 estimated row count  1000 (missing stats)  ·                       ·
-      │    │                 render 0             a + b                 ·                       ·
-      │    │                 render 1             a                     ·                       ·
-      │    │                 render 2             b                     ·                       ·
-      │    └── scan          ·                    ·                     (a, b)                  ·
-      │                      estimated row count  1000 (missing stats)  ·                       ·
-      │                      table                pairs@primary         ·                       ·
-      │                      spans                FULL SCAN             ·                       ·
-      └── scan               ·                    ·                     (n, sq)                 ·
-·                            estimated row count  1000 (missing stats)  ·                       ·
-·                            table                square@primary        ·                       ·
-·                            spans                FULL SCAN             ·                       ·
+·                            distribution         local                 ·                        ·
+·                            vectorized           true                  ·                        ·
+project                      ·                    ·                     (a, b, n, sq)            ·
+ │                           estimated row count  1000 (missing stats)  ·                        ·
+ └── hash join (full outer)  ·                    ·                     (column10, a, b, n, sq)  ·
+      │                      estimated row count  1000 (missing stats)  ·                        ·
+      │                      equality             (column10) = (sq)     ·                        ·
+      ├── render             ·                    ·                     (column10, a, b)         ·
+      │    │                 estimated row count  1000 (missing stats)  ·                        ·
+      │    │                 render 0             a + b                 ·                        ·
+      │    │                 render 1             a                     ·                        ·
+      │    │                 render 2             b                     ·                        ·
+      │    └── scan          ·                    ·                     (a, b)                   ·
+      │                      estimated row count  1000 (missing stats)  ·                        ·
+      │                      table                pairs@primary         ·                        ·
+      │                      spans                FULL SCAN             ·                        ·
+      └── scan               ·                    ·                     (n, sq)                  ·
+·                            estimated row count  1000 (missing stats)  ·                        ·
+·                            table                square@primary        ·                        ·
+·                            spans                FULL SCAN             ·                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
-·                                 distribution         local                 ·                       ·
-·                                 vectorized           true                  ·                       ·
-project                           ·                    ·                     (a, b, n, sq)           ·
- │                                estimated row count  333 (missing stats)   ·                       ·
- └── filter                       ·                    ·                     (column8, a, b, n, sq)  ·
-      │                           estimated row count  333 (missing stats)   ·                       ·
-      │                           filter               (b % 2) != (sq % 2)   ·                       ·
-      └── hash join (full outer)  ·                    ·                     (column8, a, b, n, sq)  ·
-           │                      estimated row count  1000 (missing stats)  ·                       ·
-           │                      equality             (column8) = (sq)      ·                       ·
-           ├── render             ·                    ·                     (column8, a, b)         ·
-           │    │                 estimated row count  1000 (missing stats)  ·                       ·
-           │    │                 render 0             a + b                 ·                       ·
-           │    │                 render 1             a                     ·                       ·
-           │    │                 render 2             b                     ·                       ·
-           │    └── scan          ·                    ·                     (a, b)                  ·
-           │                      estimated row count  1000 (missing stats)  ·                       ·
-           │                      table                pairs@primary         ·                       ·
-           │                      spans                FULL SCAN             ·                       ·
-           └── scan               ·                    ·                     (n, sq)                 ·
-·                                 estimated row count  1000 (missing stats)  ·                       ·
-·                                 table                square@primary        ·                       ·
-·                                 spans                FULL SCAN             ·                       ·
+·                                 distribution         local                 ·                        ·
+·                                 vectorized           true                  ·                        ·
+project                           ·                    ·                     (a, b, n, sq)            ·
+ │                                estimated row count  333 (missing stats)   ·                        ·
+ └── filter                       ·                    ·                     (column10, a, b, n, sq)  ·
+      │                           estimated row count  333 (missing stats)   ·                        ·
+      │                           filter               (b % 2) != (sq % 2)   ·                        ·
+      └── hash join (full outer)  ·                    ·                     (column10, a, b, n, sq)  ·
+           │                      estimated row count  1000 (missing stats)  ·                        ·
+           │                      equality             (column10) = (sq)     ·                        ·
+           ├── render             ·                    ·                     (column10, a, b)         ·
+           │    │                 estimated row count  1000 (missing stats)  ·                        ·
+           │    │                 render 0             a + b                 ·                        ·
+           │    │                 render 1             a                     ·                        ·
+           │    │                 render 2             b                     ·                        ·
+           │    └── scan          ·                    ·                     (a, b)                   ·
+           │                      estimated row count  1000 (missing stats)  ·                        ·
+           │                      table                pairs@primary         ·                        ·
+           │                      spans                FULL SCAN             ·                        ·
+           └── scan               ·                    ·                     (n, sq)                  ·
+·                                 estimated row count  1000 (missing stats)  ·                        ·
+·                                 table                square@primary        ·                        ·
+·                                 spans                FULL SCAN             ·                        ·
 
 # Filter propagation through outer joins.
 

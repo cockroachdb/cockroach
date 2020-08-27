@@ -27,17 +27,23 @@ import (
 // column ID that is counting down from math.MaxUint32. This is done so that
 // each system column ID won't conflict with existing column ID's and also
 // will be stable across all changes to the table.
-// * MVCC Timestamp: contains a representation of the row's HLC timestamp.
+// * crdb_internal_mvcc_timestamp: contains a representation of the row's
+//   HLC timestamp.
+// * tableoid: A Postgres system column that contains the ID of the table
+//   that a particular row came from.
 
-// MVCCTimestampColumnName is the name of the MVCC timestamp system column.
-const MVCCTimestampColumnName = "crdb_internal_mvcc_timestamp"
-
-// MVCCTimestampColumnType is the type of the MVCC timestamp system column.
-var MVCCTimestampColumnType = types.Decimal
+// AllSystemColumnDescs contains all registered system columns.
+var AllSystemColumnDescs = []descpb.ColumnDescriptor{
+	MVCCTimestampColumnDesc,
+	TableOIDColumnDesc,
+}
 
 // MVCCTimestampColumnID is the ColumnID of the MVCC timesatmp column. Future
 // system columns will have ID's that decrement from this value.
 const MVCCTimestampColumnID = math.MaxUint32
+
+// TableOIDColumnID is the ID of the tableoid system column.
+const TableOIDColumnID = MVCCTimestampColumnID - 1
 
 // MVCCTimestampColumnDesc is a column descriptor for the MVCC system column.
 var MVCCTimestampColumnDesc = descpb.ColumnDescriptor{
@@ -49,87 +55,56 @@ var MVCCTimestampColumnDesc = descpb.ColumnDescriptor{
 	ID:               MVCCTimestampColumnID,
 }
 
+// MVCCTimestampColumnName is the name of the MVCC timestamp system column.
+const MVCCTimestampColumnName = "crdb_internal_mvcc_timestamp"
+
+// MVCCTimestampColumnType is the type of the MVCC timestamp system column.
+var MVCCTimestampColumnType = types.Decimal
+
+// TableOIDColumnDesc is a column descriptor for the tableoid column.
+var TableOIDColumnDesc = descpb.ColumnDescriptor{
+	Name:             "tableoid",
+	Type:             types.Oid,
+	Hidden:           true,
+	Nullable:         true,
+	SystemColumnKind: descpb.SystemColumnKind_TABLEOID,
+	ID:               TableOIDColumnID,
+}
+
 // IsColIDSystemColumn returns whether a column ID refers to a system column.
 func IsColIDSystemColumn(colID descpb.ColumnID) bool {
-	switch colID {
-	case MVCCTimestampColumnID:
-		return true
-	default:
-		return false
-	}
+	return GetSystemColumnKindFromColumnID(colID) != descpb.SystemColumnKind_NONE
 }
 
 // GetSystemColumnDescriptorFromID returns a column descriptor corresponding
 // to the system column referred to by the input column ID.
 func GetSystemColumnDescriptorFromID(colID descpb.ColumnID) (*descpb.ColumnDescriptor, error) {
-	switch colID {
-	case MVCCTimestampColumnID:
-		return &MVCCTimestampColumnDesc, nil
-	default:
-		return nil, errors.AssertionFailedf("unsupported system column ID %d", colID)
+	for i := range AllSystemColumnDescs {
+		if AllSystemColumnDescs[i].ID == colID {
+			return &AllSystemColumnDescs[i], nil
+		}
 	}
+	return nil, errors.AssertionFailedf("unsupported system column ID %d", colID)
 }
 
 // GetSystemColumnKindFromColumnID returns the kind of system column that colID
 // refers to.
 func GetSystemColumnKindFromColumnID(colID descpb.ColumnID) descpb.SystemColumnKind {
-	switch colID {
-	case MVCCTimestampColumnID:
-		return descpb.SystemColumnKind_MVCCTIMESTAMP
-	default:
-		return descpb.SystemColumnKind_NONE
+	for i := range AllSystemColumnDescs {
+		if AllSystemColumnDescs[i].ID == colID {
+			return AllSystemColumnDescs[i].SystemColumnKind
+		}
 	}
-}
-
-// GetSystemColumnIDByKind returns the column ID of the desired system column.
-func GetSystemColumnIDByKind(kind descpb.SystemColumnKind) (descpb.ColumnID, error) {
-	switch kind {
-	case descpb.SystemColumnKind_MVCCTIMESTAMP:
-		return MVCCTimestampColumnID, nil
-	default:
-		return 0, errors.Newf("invalid system column kind %s", kind.String())
-	}
-}
-
-// GetSystemColumnTypeForKind returns the types.T of the input system column.
-func GetSystemColumnTypeForKind(kind descpb.SystemColumnKind) *types.T {
-	switch kind {
-	case descpb.SystemColumnKind_MVCCTIMESTAMP:
-		return MVCCTimestampColumnType
-	default:
-		return nil
-	}
+	return descpb.SystemColumnKind_NONE
 }
 
 // IsSystemColumnName returns whether or not a name is a reserved system
 // column name.
 func IsSystemColumnName(name string) bool {
-	switch name {
-	case MVCCTimestampColumnName:
-		return true
-	default:
-		return false
-	}
-}
-
-// GetSystemColumnTypesAndDescriptors is a utility method to construct a set of
-// types and column descriptors from an input list of system column kinds.
-func GetSystemColumnTypesAndDescriptors(
-	kinds []descpb.SystemColumnKind,
-) ([]*types.T, []descpb.ColumnDescriptor, error) {
-	resTypes := make([]*types.T, len(kinds))
-	resDescs := make([]descpb.ColumnDescriptor, len(kinds))
-	for i, k := range kinds {
-		resTypes[i] = GetSystemColumnTypeForKind(k)
-		colID, err := GetSystemColumnIDByKind(k)
-		if err != nil {
-			return nil, nil, err
+	for i := range AllSystemColumnDescs {
+		if AllSystemColumnDescs[i].Name == name {
+			return true
 		}
-		colDesc, err := GetSystemColumnDescriptorFromID(colID)
-		if err != nil {
-			return nil, nil, err
-		}
-		resDescs[i] = *colDesc
 	}
-	return resTypes, resDescs, nil
+	return false
 }

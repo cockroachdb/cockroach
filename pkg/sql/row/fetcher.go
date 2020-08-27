@@ -41,9 +41,9 @@ import (
 // this to avoid using log.V in the hot path.
 const DebugRowFetch = false
 
-// noTimestampColumn is a sentinel value to denote that the MVCC timestamp
-// column is not part of the output.
-const noTimestampColumn = -1
+// noOutputColumn is a sentinel value to denote that a system column is not
+// part of the output.
+const noOutputColumn = -1
 
 type kvBatchFetcher interface {
 	// nextBatch returns the next batch of rows. Returns false in the first
@@ -114,6 +114,10 @@ type tableInfo struct {
 	rowLastModified hlc.Timestamp
 	// timestampOutputIdx controls at what row ordinal to write the timestamp.
 	timestampOutputIdx int
+
+	// Fields for outputting the tableoid system column.
+	tableOid     tree.Datum
+	oidOutputIdx int
 
 	// rowIsDeleted is true when the row has been deleted. This is only
 	// meaningful when kv deletion tombstones are returned by the kvBatchFetcher,
@@ -333,7 +337,8 @@ func (rf *Fetcher) Init(
 			indexColIdx:        oldTable.indexColIdx[:0],
 			keyVals:            oldTable.keyVals[:0],
 			extraVals:          oldTable.extraVals[:0],
-			timestampOutputIdx: noTimestampColumn,
+			timestampOutputIdx: noOutputColumn,
+			oidOutputIdx:       noOutputColumn,
 		}
 
 		var err error
@@ -373,11 +378,15 @@ func (rf *Fetcher) Init(
 			if tableArgs.ValNeededForCol.Contains(idx) {
 				// The idx-th column is required.
 				table.neededCols.Add(int(col))
-				// If this column is the timestamp column, set up the output index.
-				sysColKind := colinfo.GetSystemColumnKindFromColumnID(col)
-				if sysColKind == descpb.SystemColumnKind_MVCCTIMESTAMP {
+
+				// Set up any system column metadata, if this column is a system column.
+				switch colinfo.GetSystemColumnKindFromColumnID(col) {
+				case descpb.SystemColumnKind_MVCCTIMESTAMP:
 					table.timestampOutputIdx = idx
 					rf.mvccDecodeStrategy = MVCCDecodingRequired
+				case descpb.SystemColumnKind_TABLEOID:
+					table.oidOutputIdx = idx
+					table.tableOid = tree.NewDOid(tree.DInt(tableArgs.Desc.GetID()))
 				}
 			}
 		}
@@ -1485,13 +1494,16 @@ func (rf *Fetcher) checkKeyOrdering(ctx context.Context) error {
 func (rf *Fetcher) finalizeRow() error {
 	table := rf.rowReadyTable
 
-	// If the MVCC timestamp system column was requested, write it to the row.
-	if table.timestampOutputIdx != noTimestampColumn {
+	// Fill in any system columns if requested.
+	if table.timestampOutputIdx != noOutputColumn {
 		// TODO (rohany): Datums are immutable, so we can't store a DDecimal on the
 		//  fetcher and change its contents with each row. If that assumption gets
 		//  lifted, then we can avoid an allocation of a new decimal datum here.
 		dec := rf.alloc.NewDDecimal(tree.DDecimal{Decimal: tree.TimestampToDecimal(rf.RowLastModified())})
 		table.row[table.timestampOutputIdx] = rowenc.EncDatum{Datum: dec}
+	}
+	if table.oidOutputIdx != noOutputColumn {
+		table.row[table.oidOutputIdx] = rowenc.EncDatum{Datum: table.tableOid}
 	}
 
 	// Fill in any missing values with NULLs

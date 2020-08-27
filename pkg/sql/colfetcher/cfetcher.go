@@ -107,6 +107,9 @@ type cTableInfo struct {
 	// timestampOutputIdx controls at what row ordinal to write the timestamp.
 	timestampOutputIdx int
 
+	// Fields for outputting the tableoid system column.
+	oidOutputIdx int
+
 	keyValTypes []*types.T
 	extraTypes  []*types.T
 
@@ -157,9 +160,9 @@ func (m colIdxMap) get(c descpb.ColumnID) (int, bool) {
 	return 0, false
 }
 
-// noTimestampColumn is a sentinel value to denote that the MVCC timestamp
-// column is not part of the output.
-const noTimestampColumn = -1
+// noOutputColumn is a sentinel value to denote that a system column is not
+// part of the output.
+const noOutputColumn = -1
 
 // cFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
@@ -253,6 +256,8 @@ type cFetcher struct {
 		// or nil if the timestamp column was not requested. It is pulled out from
 		// colvecs to avoid having to cast the vec to decimal on every write.
 		timestampCol []apd.Decimal
+		// tableoidCol is the same as timestampCol but for the tableoid system column.
+		tableoidCol []int64
 	}
 
 	typs      []*types.T
@@ -268,17 +273,19 @@ type cFetcher struct {
 
 const cFetcherBatchMinCapacity = 1
 
-func (rf *cFetcher) resetBatch(timestampOutputIdx int) {
+func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 	var reallocated bool
 	rf.machine.batch, reallocated = rf.allocator.ResetMaybeReallocate(
 		rf.typs, rf.machine.batch, cFetcherBatchMinCapacity,
 	)
 	if reallocated {
 		rf.machine.colvecs = rf.machine.batch.ColVecs()
-		// If the fetcher is requested to produce a timestamp column, pull out the
-		// column as a decimal and save it.
-		if timestampOutputIdx != noTimestampColumn {
+		// Pull out any requested system column output vecs.
+		if timestampOutputIdx != noOutputColumn {
 			rf.machine.timestampCol = rf.machine.colvecs[timestampOutputIdx].Decimal()
+		}
+		if tableOidOutputIdx != noOutputColumn {
+			rf.machine.tableoidCol = rf.machine.colvecs[tableOidOutputIdx].Int64()
 		}
 	}
 }
@@ -326,7 +333,8 @@ func (rf *cFetcher) Init(
 		index:              tableArgs.Index,
 		isSecondaryIndex:   tableArgs.IsSecondaryIndex,
 		cols:               colDescriptors,
-		timestampOutputIdx: noTimestampColumn,
+		timestampOutputIdx: noOutputColumn,
+		oidOutputIdx:       noOutputColumn,
 	}
 
 	rf.typs = make([]*types.T, len(colDescriptors))
@@ -345,17 +353,19 @@ func (rf *cFetcher) Init(
 			// The idx-th column is required.
 			neededCols.Add(int(col))
 			table.neededColsList = append(table.neededColsList, int(col))
-			// If this column is the timestamp column, set up the output index.
-			sysColKind := colinfo.GetSystemColumnKindFromColumnID(col)
-			if sysColKind == descpb.SystemColumnKind_MVCCTIMESTAMP {
+			// Set up extra metadata for system columns, if this is a system column.
+			switch colinfo.GetSystemColumnKindFromColumnID(col) {
+			case descpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
 				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
+			case descpb.SystemColumnKind_TABLEOID:
+				table.oidOutputIdx = idx
 			}
 		}
 	}
 	sort.Ints(table.neededColsList)
 
-	rf.resetBatch(table.timestampOutputIdx)
+	rf.resetBatch(table.timestampOutputIdx, table.oidOutputIdx)
 	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.ID))
 
 	var indexColumnIDs []descpb.ColumnID
@@ -372,8 +382,11 @@ func (rf *cFetcher) Init(
 	// However, we don't want to include them in neededValueColsByIdx, because
 	// the handling of system columns is separate from the standard value
 	// decoding process.
-	if table.timestampOutputIdx != noTimestampColumn {
+	if table.timestampOutputIdx != noOutputColumn {
 		table.neededValueColsByIdx.Remove(table.timestampOutputIdx)
+	}
+	if table.oidOutputIdx != noOutputColumn {
+		table.neededValueColsByIdx.Remove(table.oidOutputIdx)
 	}
 
 	neededIndexCols := 0
@@ -704,7 +717,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
-			rf.resetBatch(rf.table.timestampOutputIdx)
+			rf.resetBatch(rf.table.timestampOutputIdx, rf.table.oidOutputIdx)
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
@@ -924,10 +937,14 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 		case stateFinalizeRow:
-			// Populate the row with the buffered MVCC information.
-			if rf.table.timestampOutputIdx != noTimestampColumn {
+			// Populate any system columns in the output.
+			if rf.table.timestampOutputIdx != noOutputColumn {
 				rf.machine.timestampCol[rf.machine.rowIdx] = tree.TimestampToDecimal(rf.table.rowLastModified)
 			}
+			if rf.table.oidOutputIdx != noOutputColumn {
+				rf.machine.tableoidCol[rf.machine.rowIdx] = int64(rf.table.desc.GetID())
+			}
+
 			// We're finished with a row. Bump the row index, fill the row in with
 			// nulls if necessary, emit the batch if necessary, and move to the next
 			// state.

@@ -131,3 +131,5 @@
       change is backwards compatible because the invertedJoiner already
       maintained ordering by default (mixed versions will prevent
       parallelization).
+- Version: 35 (MinAcceptedVersion: 35)
+    - Changed how system columns are represented in DistSQL Flows.
