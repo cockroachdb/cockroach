@@ -98,8 +98,8 @@ message TransactionStatistics {
   // retries in the reporting period.
   optional int64 max_retries = 2 [(gogoproto.nullable) = false];
 
-  // NumRows collects the total number of rows returned or observed across all
-  // statements.
+  // NumRows collects the total number of rows returned, observed or affected
+  // across all statements.
   optional NumericStat num_rows = 3 [(gogoproto.nullable) = false];
 
   // ServiceLat is the time to service the transaction, from the time a
