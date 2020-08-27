@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1669,6 +1670,63 @@ func TestStatusAPITransactions(t *testing.T) {
 		if _, found := respAppNames[appName]; !found {
 			t.Fatalf("app: %s did not appear in the response\n", appName)
 		}
+	}
+}
+
+func TestStatusAPITransactionStatementIDsTruncation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+	testingApp := "testing"
+
+	thirdServerSQL.Exec(t, `CREATE DATABASE db; CREATE TABLE db.t();`)
+	thirdServerSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, testingApp))
+
+	maxStmtIDsLen := int(sql.TxnStatsNumStmtIDsToRecord.Get(
+		&firstServerProto.ExecutorConfig().(sql.ExecutorConfig).Settings.SV))
+
+	// Construct 2 transaction queries that include an absurd number of statements.
+	// These two queries have the same first 1000 statements, but should still have
+	// different fingerprints, as fingerprints take into account all statementIDs
+	// (unlike the statementIDs stored on the proto response, which are capped).
+	testQuery1 := "BEGIN;"
+	for i := 0; i < maxStmtIDsLen+1; i++ {
+		testQuery1 += "SELECT * FROM db.t;"
+	}
+	testQuery2 := testQuery1 + "SELECT * FROM db.t; COMMIT;"
+	testQuery1 += "COMMIT;"
+
+	thirdServerSQL.Exec(t, testQuery1)
+	thirdServerSQL.Exec(t, testQuery2)
+
+	// Hit query endpoint.
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	txnsFound := 0
+	for _, respTransaction := range resp.Transactions {
+		appName := respTransaction.StatsData.App
+		if appName != testingApp {
+			// Only testQuery1 and testQuery2 are relevant to this test.
+			continue
+		}
+
+		txnsFound++
+		if len(respTransaction.StatsData.StatementIDs) != maxStmtIDsLen {
+			t.Fatalf("unexpected length of StatementIDs. expected:%d, got:%d",
+				maxStmtIDsLen, len(respTransaction.StatsData.StatementIDs))
+		}
+	}
+	if txnsFound != 2 {
+		t.Fatalf("transactions were not disambiguated as expected. expected %d txns, got: %d",
+			2, txnsFound)
 	}
 }
 
