@@ -98,16 +98,15 @@ func (p *planner) showStateMachineSetting(
 func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
-
-	if err := p.RequireAdminRole(ctx, "SHOW CLUSTER SETTING"); err != nil {
-		return nil, err
-	}
-
 	name := strings.ToLower(n.Name)
 	st := p.ExecCfg().Settings
 	val, ok := settings.Lookup(name, settings.LookupForLocalAccess)
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
+	}
+
+	if err := checkPrivilegesForSetting(ctx, p, name, "show"); err != nil {
+		return nil, err
 	}
 
 	var dType *types.T
