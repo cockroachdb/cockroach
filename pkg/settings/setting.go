@@ -12,6 +12,7 @@ package settings
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -337,4 +338,11 @@ func TestingIsReportable(s Setting) bool {
 		return e.isReportable()
 	}
 	return true
+}
+
+// AdminOnly returns whether the setting can only be viewed and modified by
+// superusers. Otherwise, users with the MODIFYCLUSTERSETTING role privilege can
+// do so.
+func AdminOnly(name string) bool {
+	return !strings.HasPrefix(name, "sql.defaults.")
 }

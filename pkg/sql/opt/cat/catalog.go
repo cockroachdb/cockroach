@@ -16,6 +16,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -134,6 +135,15 @@ type Catalog interface {
 	// RequireAdminRole checks that the current user has admin privileges. If not,
 	// returns an error.
 	RequireAdminRole(ctx context.Context, action string) error
+
+	// HasRoleOption converts the roleoption to its SQL column name and checks if
+	// the user belongs to a role where the option has value true. Requires a
+	// valid transaction to be open.
+	//
+	// This check should be done on the version of the privilege that is stored in
+	// the role options table. Example: CREATEROLE instead of NOCREATEROLE.
+	// NOLOGIN instead of LOGIN.
+	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 
 	// FullyQualifiedName retrieves the fully qualified name of a data source.
 	// Note that:
