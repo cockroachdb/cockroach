@@ -253,6 +253,8 @@ parser.add_option("--hide-unambiguous-shas", action="store_true", dest="hide_sha
                   help="omit commit SHAs from the release notes and per-contributor sections")
 parser.add_option("--hide-per-contributor-section", action="store_true", dest="hide_per_contributor", default=False,
                   help="omit the per-contributor section")
+parser.add_option("--hide-crdb-folk", dest="hide_crdb_folk", action="store_true", default=False,
+                  help="don't show crdb folk in the per-contributor section")
 parser.add_option("--hide-downloads-section", action="store_true", dest="hide_downloads", default=False,
                   help="omit the email sign-up and downloads section")
 parser.add_option("--hide-header", action="store_true", dest="hide_header", default=False,
@@ -273,6 +275,7 @@ hideshas = options.hide_shas
 hidepercontributor = options.hide_per_contributor
 hidedownloads = options.hide_downloads
 hideheader = options.hide_header
+hidecrdbfolk = options.hide_crdb_folk
 
 repo = Repo('.')
 heads = repo.heads
@@ -956,6 +959,8 @@ if not hidepercontributor:
 
     for group in allgroups:
         al, items = per_group_history[group]
+        if hidecrdbfolk and all(map(lambda x: x in crdb_folk, al)):
+            continue
         items.sort(key=lambda x: x[sortkey], reverse=not revsort)
         print("- %s:" % ', '.join(a.name for a in sorted(al)))
         for item in items:
