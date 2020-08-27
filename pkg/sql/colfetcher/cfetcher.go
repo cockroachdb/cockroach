@@ -535,6 +535,8 @@ func (rf *cFetcher) StartScan(
 		firstBatchLimit++
 	}
 
+	// Note that we pass a nil memMonitor here, because the cfetcher does its own
+	// memory accounting.
 	f, err := row.NewKVFetcher(
 		txn,
 		spans,
@@ -543,6 +545,7 @@ func (rf *cFetcher) StartScan(
 		firstBatchLimit,
 		rf.lockStrength,
 		rf.lockWaitPolicy,
+		nil, /* memMonitor */
 	)
 	if err != nil {
 		return err

@@ -137,6 +137,7 @@ func newTableReader(
 		spec.Reverse,
 		neededColumns,
 		spec.IsCheck,
+		flowCtx.EvalCtx.Mon,
 		&tr.alloc,
 		spec.Visibility,
 		spec.LockingStrength,
@@ -168,7 +169,7 @@ func newTableReader(
 
 func (tr *tableReader) generateTrailingMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	trailingMeta := tr.generateMeta(ctx)
-	tr.InternalClose()
+	tr.close()
 	return trailingMeta
 }
 
@@ -256,10 +257,17 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 	return nil, tr.DrainHelper()
 }
 
+func (tr *tableReader) close() {
+	if tr.InternalClose() {
+		if tr.fetcher != nil {
+			tr.fetcher.Close(tr.Ctx)
+		}
+	}
+}
+
 // ConsumerClosed is part of the RowSource interface.
 func (tr *tableReader) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	tr.InternalClose()
+	tr.close()
 }
 
 var _ execinfrapb.DistSQLSpanStats = &TableReaderStats{}

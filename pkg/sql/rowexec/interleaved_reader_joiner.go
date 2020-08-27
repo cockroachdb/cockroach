@@ -267,9 +267,15 @@ func (irj *interleavedReaderJoiner) nextRow() (
 	return newState, unmatchedAncestor, nil
 }
 
+func (irj *interleavedReaderJoiner) close() {
+	if irj.InternalClose() {
+		irj.fetcher.Close(irj.Ctx)
+	}
+}
+
 func (irj *interleavedReaderJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	irj.InternalClose()
+	irj.close()
 }
 
 var _ execinfra.Processor = &interleavedReaderJoiner{}
@@ -447,12 +453,14 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	}
 
 	return irj.fetcher.Init(
+		flowCtx.EvalCtx.Context,
 		flowCtx.Codec(),
 		reverseScan,
 		lockStrength,
 		lockWaitPolicy,
 		true, /* isCheck */
 		alloc,
+		irj.MemMonitor,
 		args...,
 	)
 }
@@ -461,7 +469,7 @@ func (irj *interleavedReaderJoiner) generateTrailingMeta(
 	ctx context.Context,
 ) []execinfrapb.ProducerMetadata {
 	trailingMeta := irj.generateMeta(ctx)
-	irj.InternalClose()
+	irj.close()
 	return trailingMeta
 }
 

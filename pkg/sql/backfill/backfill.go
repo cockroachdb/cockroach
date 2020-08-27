@@ -122,12 +122,15 @@ func (cb *ColumnBackfiller) init(
 		ValNeededForCol: valNeededForCol,
 	}
 	return cb.fetcher.Init(
+		evalCtx.Context,
 		evalCtx.Codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&cb.alloc,
+		// TODO(bulkio): plumb a memory monitor into here, and make sure to call cb.fetcher.Close().
+		nil, /* memMonitor */
 		tableArgs,
 	)
 }
@@ -558,12 +561,15 @@ func (ib *IndexBackfiller) init(
 		ValNeededForCol: valNeededForCol,
 	}
 	return ib.fetcher.Init(
+		evalCtx.Context,
 		evalCtx.Codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&ib.alloc,
+		// TODO(bulkio): plumb a memory monitor into here, and make sure to call cb.fetcher.Close().
+		nil, /* memMonitor */
 		tableArgs,
 	)
 }

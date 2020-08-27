@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -245,6 +247,9 @@ type Fetcher struct {
 
 	// Buffered allocation of decoded datums.
 	alloc *rowenc.DatumAlloc
+
+	// Memory monitor for the bytes fetched by this fetcher.
+	mon *mon.BytesMonitor
 }
 
 // Reset resets this Fetcher, preserving the memory capacity that was used
@@ -257,16 +262,28 @@ func (rf *Fetcher) Reset() {
 	}
 }
 
+// Close releases resources held by this fetcher.
+func (rf *Fetcher) Close(ctx context.Context) {
+	if rf.kvFetcher != nil {
+		rf.kvFetcher.Close(ctx)
+	}
+	if rf.mon != nil {
+		rf.mon.Stop(ctx)
+	}
+}
+
 // Init sets up a Fetcher for a given table and index. If we are using a
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *Fetcher) Init(
+	ctx context.Context,
 	codec keys.SQLCodec,
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	isCheck bool,
 	alloc *rowenc.DatumAlloc,
+	memMonitor *mon.BytesMonitor,
 	tables ...FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
@@ -279,6 +296,10 @@ func (rf *Fetcher) Init(
 	rf.lockWaitPolicy = lockWaitPolicy
 	rf.alloc = alloc
 	rf.isCheck = isCheck
+
+	if memMonitor != nil {
+		rf.mon = execinfra.NewMonitor(ctx, memMonitor, "fetcher-mem")
+	}
 
 	// We must always decode the index key if we need to distinguish between
 	// rows from more than one table.
@@ -504,6 +525,7 @@ func (rf *Fetcher) StartScan(
 		rf.firstBatchLimit(limitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,
+		rf.mon,
 	)
 	if err != nil {
 		return err
@@ -584,6 +606,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.firstBatchLimit(limitHint),
 		rf.lockStrength,
 		rf.lockWaitPolicy,
+		rf.mon,
 	)
 	if err != nil {
 		return err
@@ -610,7 +633,10 @@ func (rf *Fetcher) firstBatchLimit(limitHint int64) int64 {
 // used multiple times.
 func (rf *Fetcher) StartScanFrom(ctx context.Context, f kvBatchFetcher) error {
 	rf.indexKey = nil
-	rf.kvFetcher = newKVFetcher(f)
+	if rf.kvFetcher != nil {
+		rf.kvFetcher.Close(ctx)
+	}
+	rf.kvFetcher = newKVFetcher(f, rf.mon)
 	// Retrieve the first key.
 	_, err := rf.NextKey(ctx)
 	return err
