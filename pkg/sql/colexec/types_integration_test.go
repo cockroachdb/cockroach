@@ -64,9 +64,9 @@ func TestSQLTypesIntegration(t *testing.T) {
 		for _, numRows := range []int{
 			// A few interesting sizes.
 			1,
-			coldata.BatchSize() - 1,
-			coldata.BatchSize(),
-			coldata.BatchSize() + 1,
+			coldata.BatchSize - 1,
+			coldata.BatchSize,
+			coldata.BatchSize + 1,
 		} {
 			rows := make(rowenc.EncDatumRows, numRows)
 			for i := 0; i < numRows; i++ {

@@ -183,17 +183,17 @@ func (f *vectorizedFlow) Setup(
 	}
 	helper := &vectorizedFlowCreatorHelper{f: f.FlowBase}
 
-	testingBatchSize := int64(0)
-	if f.FlowCtx.Cfg.Settings != nil {
-		testingBatchSize = VectorizeTestingBatchSize.Get(&f.FlowCtx.Cfg.Settings.SV)
-	}
-	if testingBatchSize != 0 {
-		if err := coldata.SetBatchSizeForTests(int(testingBatchSize)); err != nil {
-			return ctx, err
-		}
-	} else {
-		coldata.ResetBatchSizeForTests()
-	}
+	//testingBatchSize := int64(0)
+	//if f.FlowCtx.Cfg.Settings != nil {
+	//	testingBatchSize = VectorizeTestingBatchSize.Get(&f.FlowCtx.Cfg.Settings.SV)
+	//}
+	//if testingBatchSize != 0 {
+	//	if err := coldata.SetBatchSizeForTests(int(testingBatchSize)); err != nil {
+	//		return ctx, err
+	//	}
+	//} else {
+	//	coldata.ResetBatchSizeForTests()
+	//}
 
 	// Create a name for this flow's temporary directory. Note that this directory
 	// is lazily created when necessary and cleaned up in Cleanup(). The directory

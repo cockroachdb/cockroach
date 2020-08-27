@@ -66,7 +66,7 @@ func TestDiskQueue(t *testing.T) {
 					batches := make([]coldata.Batch, 0, numBatches)
 					op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 						NumBatches: cap(batches),
-						BatchSize:  1 + rng.Intn(coldata.BatchSize()),
+						BatchSize:  1 + rng.Intn(coldata.BatchSize),
 						Nulls:      true,
 						BatchAccumulator: func(b coldata.Batch, typs []*types.T) {
 							batches = append(batches, coldatatestutils.CopyBatch(b, typs, testColumnFactory))
@@ -191,7 +191,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 	if err != nil {
 		b.Fatalf("could not pase -datasize: %s", err)
 	}
-	numBatches := int(dataSize / (8 * int64(coldata.BatchSize())))
+	numBatches := int(dataSize / (8 * int64(coldata.BatchSize)))
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
@@ -200,7 +200,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 
 	rng, _ := randutil.NewPseudoRand()
 	typs := []*types.T{types.Int}
-	batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0, 0)
+	batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize, 0, 0)
 	op := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {

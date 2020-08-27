@@ -190,12 +190,12 @@ func BenchmarkCastOp(b *testing.B) {
 						typs := []*types.T{typePair[0]}
 						batch := coldatatestutils.RandomBatchWithSel(
 							testAllocator, rng, typs,
-							coldata.BatchSize(), nullProbability, selectivity,
+							coldata.BatchSize, nullProbability, selectivity,
 						)
 						source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 						op, err := createTestCastOperator(ctx, flowCtx, source, typePair[0], typePair[1])
 						require.NoError(b, err)
-						b.SetBytes(int64(8 * coldata.BatchSize()))
+						b.SetBytes(int64(8 * coldata.BatchSize))
 						b.ResetTimer()
 						op.Init()
 						for i := 0; i < b.N; i++ {

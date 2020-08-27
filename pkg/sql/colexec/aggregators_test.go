@@ -825,9 +825,9 @@ func TestAggregatorRandom(t *testing.T) {
 	// This test aggregates random inputs, keeping track of the expected results
 	// to make sure the aggregations are correct.
 	rng, _ := randutil.NewPseudoRand()
-	for _, groupSize := range []int{1, 2, coldata.BatchSize() / 4, coldata.BatchSize() / 2} {
+	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		if groupSize == 0 {
-			// We might be varying coldata.BatchSize() so that when it is divided by
+			// We might be varying coldata.BatchSize so that when it is divided by
 			// 4, groupSize is 0. We want to skip such configuration.
 			continue
 		}
@@ -835,7 +835,7 @@ func TestAggregatorRandom(t *testing.T) {
 			for _, hasNulls := range []bool{true, false} {
 				for _, agg := range aggTypes {
 					log.Infof(context.Background(), "%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls)
-					nTuples := coldata.BatchSize() * numInputBatches
+					nTuples := coldata.BatchSize * numInputBatches
 					typs := []*types.T{types.Int, types.Float}
 					cols := []coldata.Vec{
 						testAllocator.NewMemColumn(typs[0], nTuples),
@@ -962,7 +962,7 @@ func benchmarkAggregateFunction(
 	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
 	const bytesFixedLength = 8
 	typs := append([]*types.T{types.Int}, aggInputTypes...)
-	nTuples := numInputBatches * coldata.BatchSize()
+	nTuples := numInputBatches * coldata.BatchSize
 	cols := make([]coldata.Vec, len(typs))
 	for i := range typs {
 		cols[i] = testAllocator.NewMemColumn(typs[i], nTuples)
@@ -1076,10 +1076,10 @@ func benchmarkAggregateFunction(
 func BenchmarkAggregator(b *testing.B) {
 	aggFn := execinfrapb.AggregatorSpec_MIN
 	numBatches := []int{4, 64, 1024}
-	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()}
+	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize / 2, coldata.BatchSize}
 	if testing.Short() {
 		numBatches = []int{64}
-		groupSizes = []int{1, coldata.BatchSize()}
+		groupSizes = []int{1, coldata.BatchSize}
 	}
 	for _, agg := range aggTypes {
 		for _, numInputBatches := range numBatches {
@@ -1121,7 +1121,7 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 			default:
 				aggInputTypes = []*types.T{types.Int}
 			}
-			for _, groupSize := range []int{1, coldata.BatchSize()} {
+			for _, groupSize := range []int{1, coldata.BatchSize} {
 				benchmarkAggregateFunction(
 					b, agg, aggFn, aggInputTypes, groupSize, nullProbability, numInputBatches,
 				)
@@ -1172,7 +1172,7 @@ func BenchmarkDistinctAggregation(b *testing.B) {
 		} else {
 			aggSpec.OrderedGroupCols = aggSpec.GroupCols
 		}
-		for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()} {
+		for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize / 2, coldata.BatchSize} {
 			for _, distinctProbability := range []float64{0.01, 0.1, 1.0} {
 				distinctModulo := int(1.0 / distinctProbability)
 				if (groupSize == 1 && distinctProbability != 1.0) || float64(groupSize)/float64(distinctModulo) < 0.1 {
@@ -1191,7 +1191,7 @@ func BenchmarkDistinctAggregation(b *testing.B) {
 						b.Run(fmt.Sprintf("%s/%s/groupSize=%d/distinctProb=%.2f/nulls=%t",
 							agg.name, aggFn, groupSize, distinctProbability, hasNulls),
 							func(b *testing.B) {
-								nTuples := numInputBatches * coldata.BatchSize()
+								nTuples := numInputBatches * coldata.BatchSize
 								cols := []coldata.Vec{
 									testAllocator.NewMemColumn(typs[0], nTuples),
 									testAllocator.NewMemColumn(typs[1], nTuples),
@@ -1280,9 +1280,9 @@ func TestHashAggregator(t *testing.T) {
 			input: tuples{
 				{0, 3},
 				{0, 4},
-				{coldata.BatchSize(), 6},
+				{coldata.BatchSize, 6},
 				{0, 5},
-				{coldata.BatchSize(), 7},
+				{coldata.BatchSize, 7},
 			},
 			typs:      []*types.T{types.Int, types.Int},
 			groupCols: []uint32{0},

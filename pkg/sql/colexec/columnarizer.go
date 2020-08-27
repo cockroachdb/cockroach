@@ -25,7 +25,7 @@ import (
 )
 
 // Columnarizer turns an execinfra.RowSource input into an Operator output, by
-// reading the input in chunks of size coldata.BatchSize() and converting each
+// reading the input in chunks of size coldata.BatchSize and converting each
 // chunk into a coldata.Batch column by column.
 type Columnarizer struct {
 	execinfra.ProcessorBase

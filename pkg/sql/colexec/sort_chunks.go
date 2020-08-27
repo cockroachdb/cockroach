@@ -87,7 +87,7 @@ func (c *sortChunksOp) Init() {
 	// TODO(yuzefovich): switch to calling this method on allocator. This will
 	// require plumbing unlimited allocator to work correctly in tests with
 	// memory limit of 1.
-	c.windowedBatch = coldata.NewMemBatchNoCols(c.input.inputTypes, coldata.BatchSize())
+	c.windowedBatch = coldata.NewMemBatchNoCols(c.input.inputTypes, coldata.BatchSize)
 }
 
 func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
@@ -115,7 +115,7 @@ func (c *sortChunksOp) ExportBuffered(colexecbase.Operator) coldata.Batch {
 	// whether we have exported them all.
 	if c.input.bufferedTuples.Length() > 0 {
 		if c.exportedFromBuffer < c.input.bufferedTuples.Length() {
-			newExportedFromBuffer := c.exportedFromBuffer + coldata.BatchSize()
+			newExportedFromBuffer := c.exportedFromBuffer + coldata.BatchSize
 			if newExportedFromBuffer > c.input.bufferedTuples.Length() {
 				newExportedFromBuffer = c.input.bufferedTuples.Length()
 			}
@@ -232,7 +232,7 @@ type chunker struct {
 	chunksStartIdx int
 
 	// bufferedTuples is a buffer to store tuples when a chunk is bigger than
-	// coldata.BatchSize() or when the chunk is the last in the last read batch
+	// coldata.BatchSize or when the chunk is the last in the last read batch
 	// (we don't know yet where the end of such chunk is).
 	bufferedTuples *appendOnlyBufferedBatch
 
@@ -279,7 +279,7 @@ func newChunker(
 func (s *chunker) init() {
 	s.input.Init()
 	s.bufferedTuples = newAppendOnlyBufferedBatch(s.allocator, s.inputTypes, nil /* colsToStore */)
-	s.partitionCol = make([]bool, coldata.BatchSize())
+	s.partitionCol = make([]bool, coldata.BatchSize)
 	s.chunks = make([]int, 0, 16)
 }
 

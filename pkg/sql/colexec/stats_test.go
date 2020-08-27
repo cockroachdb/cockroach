@@ -32,7 +32,7 @@ func TestNumBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	nBatches := 10
-	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
+	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize))
 	vsc := NewVectorizedStatsCollector(
 		noop, 0 /* id */, execinfrapb.ProcessorIDTagKey, true, /* ioTime */
 		timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
@@ -84,7 +84,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		timeSource := timeutil.NewTestTimeSource()
 		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)
 		leftSource := &timeAdvancingOperator{
-			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
+			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize)),
 			timeSource:   timeSource,
 		}
 		leftInput := NewVectorizedStatsCollector(
@@ -93,7 +93,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			nil, /* inputStatsCollectors */
 		)
 		rightSource := &timeAdvancingOperator{
-			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
+			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize)),
 			timeSource:   timeSource,
 		}
 		rightInput := NewVectorizedStatsCollector(
@@ -124,7 +124,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		)
 
 		// The inputs are identical, so the merge joiner should output
-		// nBatches x coldata.BatchSize() tuples.
+		// nBatches x coldata.BatchSize tuples.
 		mjStatsCollector.Init()
 		batchCount, tupleCount := 0, 0
 		for {
@@ -137,7 +137,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		}
 		mjStatsCollector.finalizeStats()
 
-		require.Equal(t, nBatches*coldata.BatchSize(), int(mjStatsCollector.NumTuples))
+		require.Equal(t, nBatches*coldata.BatchSize, int(mjStatsCollector.NumTuples))
 		// Two inputs are advancing the time source for a total of 2 * nBatches
 		// advances, but these do not count towards merge joiner execution time.
 		// Merge joiner advances the time on its every non-empty batch totaling

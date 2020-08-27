@@ -89,7 +89,7 @@ type hashTableProbeBuffer struct {
 
 	///////////////////////////////////////////////////////////////
 	// Slices below are allocated dynamically but are limited by //
-	// coldata.BatchSize() in size.                              //
+	// coldata.BatchSize in size.                              //
 	///////////////////////////////////////////////////////////////
 
 	// headID stores the first build table keyID that matched with the probe batch
@@ -216,10 +216,10 @@ func newHashTable(
 	}
 	// This number was chosen after running benchmarks of all users of the hash
 	// table (hash joiner, hash aggregator, unordered distinct). The reasoning
-	// for why using coldata.BatchSize() as the initial number of buckets makes
+	// for why using coldata.BatchSize as the initial number of buckets makes
 	// sense:
 	// - on one hand, we make several other allocations that have to be at
-	// least coldata.BatchSize() in size, so we don't win much in the case of
+	// least coldata.BatchSize in size, so we don't win much in the case of
 	// the input with small number of tuples;
 	// - on the other hand, if we start out with a larger number, we won't be
 	// using the vast of majority of the buckets on the input with small number
@@ -228,7 +228,7 @@ func newHashTable(
 	// TODO(yuzefovich): the comment above is no longer true because all
 	// limited slices in hashTableProbeBuffer are now allocated dynamically, so
 	// we might need to re-tune this number.
-	initialNumHashBuckets := uint64(coldata.BatchSize())
+	initialNumHashBuckets := uint64(coldata.BatchSize)
 	// Note that we don't perform memory accounting of the internal memory here
 	// and delay it till buildFromBufferedTuples in order to appease *-disk
 	// logic test configs (our disk-spilling infrastructure doesn't know how to
@@ -282,14 +282,14 @@ func (ht *hashTable) shouldResize(numTuples int) bool {
 const sizeOfUint64 = int64(unsafe.Sizeof(uint64(0)))
 
 // accountForLimitedSlices checks whether we have already accounted for the
-// memory used by the slices that are limited by coldata.BatchSize() in size
+// memory used by the slices that are limited by coldata.BatchSize in size
 // and adjusts the allocator accordingly if we haven't.
 func (p *hashTableProbeBuffer) accountForLimitedSlices(allocator *colmem.Allocator) {
 	if p.limitedSlicesAreAccountedFor {
 		return
 	}
 	const sizeOfBool = int64(unsafe.Sizeof(true))
-	internalMemMaxUsed := sizeOfUint64*int64(5*coldata.BatchSize()) + sizeOfBool*int64(2*coldata.BatchSize())
+	internalMemMaxUsed := sizeOfUint64*int64(5*coldata.BatchSize) + sizeOfBool*int64(2*coldata.BatchSize)
 	allocator.AdjustMemoryUsage(internalMemMaxUsed)
 	p.limitedSlicesAreAccountedFor = true
 }
@@ -502,11 +502,11 @@ func (ht *hashTable) computeBuckets(
 	initHash(buckets, nKeys, defaultInitHashValue)
 
 	// Check if we received more tuples than the current allocation size and
-	// increase it if so (limiting it by coldata.BatchSize()).
-	if nKeys > ht.datumAlloc.AllocSize && ht.datumAlloc.AllocSize < coldata.BatchSize() {
+	// increase it if so (limiting it by coldata.BatchSize).
+	if nKeys > ht.datumAlloc.AllocSize && ht.datumAlloc.AllocSize < coldata.BatchSize {
 		ht.datumAlloc.AllocSize = nKeys
-		if ht.datumAlloc.AllocSize > coldata.BatchSize() {
-			ht.datumAlloc.AllocSize = coldata.BatchSize()
+		if ht.datumAlloc.AllocSize > coldata.BatchSize {
+			ht.datumAlloc.AllocSize = coldata.BatchSize
 		}
 	}
 

@@ -160,25 +160,25 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	col := batch.ColVec(0).Int64()
-	for i := 0; i < coldata.BatchSize(); i++ {
-		if float64(i) < float64(coldata.BatchSize())*selectivity {
+	for i := 0; i < coldata.BatchSize; i++ {
+		if float64(i) < float64(coldata.BatchSize)*selectivity {
 			col[i] = -1
 		} else {
 			col[i] = 1
 		}
 	}
 	if hasNulls {
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			if rand.Float64() < nullProbability {
 				batch.ColVec(0).Nulls().SetNull(i)
 			}
 		}
 	}
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			sel[i] = i
 		}
 	}
@@ -194,7 +194,7 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 	}
 	plusOp.Init()
 
-	b.SetBytes(int64(8 * coldata.BatchSize()))
+	b.SetBytes(int64(8 * coldata.BatchSize))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		plusOp.Next(ctx)
@@ -218,15 +218,15 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
-	for i := 0; i < coldata.BatchSize(); i++ {
-		if float64(i) < float64(coldata.BatchSize())*selectivity {
+	for i := 0; i < coldata.BatchSize; i++ {
+		if float64(i) < float64(coldata.BatchSize)*selectivity {
 			col1[i], col2[i] = -1, 1
 		} else {
 			col1[i], col2[i] = 1, -1
 		}
 	}
 	if hasNulls {
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			if rand.Float64() < nullProbability {
 				batch.ColVec(0).Nulls().SetNull(i)
 			}
@@ -235,11 +235,11 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 			}
 		}
 	}
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			sel[i] = i
 		}
 	}
@@ -255,7 +255,7 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	}
 	plusOp.Init()
 
-	b.SetBytes(int64(8 * coldata.BatchSize() * 2))
+	b.SetBytes(int64(8 * coldata.BatchSize * 2))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		plusOp.Next(ctx)

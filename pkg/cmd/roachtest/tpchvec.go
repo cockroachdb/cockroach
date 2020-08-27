@@ -749,7 +749,7 @@ func registerTPCHVec(r *testRegistry) {
 			// In order to use this test for benchmarking, include the queries
 			// that modify the cluster settings for all configs to benchmark
 			// like in the example below. The example benchmarks three values
-			// of coldata.BatchSize() variable against each other.
+			// of coldata.BatchSize variable against each other.
 			var clusterSetups [][]string
 			var setupNames []string
 			for _, batchSize := range []int{512, 1024, 1536} {

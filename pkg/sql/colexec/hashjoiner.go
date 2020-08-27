@@ -77,7 +77,7 @@ type hashJoinerSourceSpec struct {
 
 // hashJoiner performs a hash join on the input tables equality columns.
 // It requires that the output for every input batch in the probe phase fits
-// within coldata.BatchSize(), otherwise the behavior is undefined. A join is
+// within coldata.BatchSize, otherwise the behavior is undefined. A join is
 // performed and there is no guarantee on the ordering of the output columns.
 // The hash table will be built on the right side source, and the left side
 // source will be used for probing.
@@ -148,7 +148,7 @@ type hashJoinerSourceSpec struct {
 // 3. Now, head stores the keyID of the first match in the build table for every
 //    probe table key. ht.same is used to select all build key matches for each
 //    probe key, which are added to the resulting batch. Output batching is done
-//    to ensure that each batch is at most coldata.BatchSize().
+//    to ensure that each batch is at most coldata.BatchSize.
 //
 // In the case that an outer join on the probe table side is performed, every
 // single probe row is kept even if its groupID is 0. If a groupID of 0 is
@@ -343,7 +343,7 @@ func (hj *hashJoiner) build(ctx context.Context) {
 // OUTER joins.
 func (hj *hashJoiner) emitUnmatched() {
 	nResults := 0
-	for nResults < coldata.BatchSize() && hj.emittingUnmatchedState.rowIdx < hj.ht.vals.Length() {
+	for nResults < coldata.BatchSize && hj.emittingUnmatchedState.rowIdx < hj.ht.vals.Length() {
 		if !hj.probeState.buildRowMatched[hj.emittingUnmatchedState.rowIdx] {
 			hj.probeState.buildIdx[nResults] = hj.emittingUnmatchedState.rowIdx
 			nResults++
@@ -581,7 +581,7 @@ func (hj *hashJoiner) ExportBuffered(input colexecbase.Operator) coldata.Batch {
 		if hj.exportBufferedState.rightExported == hj.ht.vals.Length() {
 			return coldata.ZeroBatch
 		}
-		newRightExported := hj.exportBufferedState.rightExported + coldata.BatchSize()
+		newRightExported := hj.exportBufferedState.rightExported + coldata.BatchSize
 		if newRightExported > hj.ht.vals.Length() {
 			newRightExported = hj.ht.vals.Length()
 		}
@@ -626,10 +626,10 @@ func (hj *hashJoiner) reset(ctx context.Context) {
 	}
 	hj.state = hjBuilding
 	hj.ht.reset(ctx)
-	copy(hj.probeState.buildIdx[:coldata.BatchSize()], zeroIntColumn)
-	copy(hj.probeState.probeIdx[:coldata.BatchSize()], zeroIntColumn)
+	copy(hj.probeState.buildIdx[:coldata.BatchSize], zeroIntColumn)
+	copy(hj.probeState.probeIdx[:coldata.BatchSize], zeroIntColumn)
 	if hj.spec.left.outer {
-		copy(hj.probeState.probeRowUnmatched[:coldata.BatchSize()], zeroBoolColumn)
+		copy(hj.probeState.probeRowUnmatched[:coldata.BatchSize], zeroBoolColumn)
 	}
 	// hj.probeState.buildRowMatched is reset after building the hash table is
 	// complete in build() method.
@@ -729,10 +729,10 @@ func NewHashJoiner(
 		spec:                     spec,
 		outputTypes:              outputTypes,
 	}
-	hj.probeState.buildIdx = make([]int, coldata.BatchSize())
-	hj.probeState.probeIdx = make([]int, coldata.BatchSize())
+	hj.probeState.buildIdx = make([]int, coldata.BatchSize)
+	hj.probeState.probeIdx = make([]int, coldata.BatchSize)
 	if spec.left.outer {
-		hj.probeState.probeRowUnmatched = make([]bool, coldata.BatchSize())
+		hj.probeState.probeRowUnmatched = make([]bool, coldata.BatchSize)
 	}
 	return hj
 }

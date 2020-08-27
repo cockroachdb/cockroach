@@ -136,7 +136,7 @@ type relativeRankSizesState struct {
 	*spillingQueue
 
 	// runningSizes is a batch consisting of a single int64 vector that stores
-	// sizes while we're computing them. Once all coldata.BatchSize() slots are
+	// sizes while we're computing them. Once all coldata.BatchSize slots are
 	// filled, it will be flushed to the spillingQueue.
 	runningSizes coldata.Batch
 	// dequeuedSizes is a batch of already computed sizes that is dequeued
@@ -181,7 +181,7 @@ func (r *percentRankNoPartitionOp) Init() {
 		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
 		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
-	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
+	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize)
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
@@ -201,14 +201,14 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			// partitions. These sizes are stored in r.partitionsState.runningSizes
 			// batch (that consists of a single vector) and r.partitionsState.idx
 			// points at the next slot in that vector to write to. Once it
-			// reaches coldata.BatchSize(), the batch is "flushed" to the
+			// reaches coldata.BatchSize, the batch is "flushed" to the
 			// corresponding spillingQueue. The "running" value of the current
 			// partition size is stored in r.numTuplesInPartition.
 			// 3. (if we have CUME_DIST function) we need to compute the sizes
 			// of peer groups. These sizes are stored in r.peerGroupsState.runningSizes
 			// batch (that consists of a single vector) and r.peerGroupsState.idx
 			// points at the next slot in that vector to write to. Once it
-			// reaches coldata.BatchSize(), the batch is "flushed" to the
+			// reaches coldata.BatchSize, the batch is "flushed" to the
 			// corresponding spillingQueue. The "running" value of the current
 			// peer group size is stored in r.numPeers.
 			// For example, if we have the following setup:
@@ -381,7 +381,7 @@ func (r *percentRankWithPartitionOp) Init() {
 		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
 		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
-	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
+	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize)
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
@@ -401,14 +401,14 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			// partitions. These sizes are stored in r.partitionsState.runningSizes
 			// batch (that consists of a single vector) and r.partitionsState.idx
 			// points at the next slot in that vector to write to. Once it
-			// reaches coldata.BatchSize(), the batch is "flushed" to the
+			// reaches coldata.BatchSize, the batch is "flushed" to the
 			// corresponding spillingQueue. The "running" value of the current
 			// partition size is stored in r.numTuplesInPartition.
 			// 3. (if we have CUME_DIST function) we need to compute the sizes
 			// of peer groups. These sizes are stored in r.peerGroupsState.runningSizes
 			// batch (that consists of a single vector) and r.peerGroupsState.idx
 			// points at the next slot in that vector to write to. Once it
-			// reaches coldata.BatchSize(), the batch is "flushed" to the
+			// reaches coldata.BatchSize, the batch is "flushed" to the
 			// corresponding spillingQueue. The "running" value of the current
 			// peer group size is stored in r.numPeers.
 			// For example, if we have the following setup:
@@ -432,7 +432,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					// TODO(yuzefovich): do not instantiate a new batch here once
 					// spillingQueues actually copy the batches when those are kept
 					// in-memory.
-					r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+					r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 				}
 				runningPartitionsSizesCol := r.partitionsState.runningSizes.ColVec(0).Int64()
 				runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
@@ -494,16 +494,16 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							// TODO(yuzefovich): do not instantiate a new batch here once
 							// spillingQueues actually copy the batches when those are kept
 							// in-memory.
-							r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+							r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 							runningPartitionsSizesCol = r.partitionsState.runningSizes.ColVec(0).Int64()
 						}
 						if r.numTuplesInPartition > 0 {
 							runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
 							r.numTuplesInPartition = 0
 							r.partitionsState.idx++
-							if r.partitionsState.idx == coldata.BatchSize() {
+							if r.partitionsState.idx == coldata.BatchSize {
 								// We need to flush the vector of partitions sizes.
-								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
+								r.partitionsState.runningSizes.SetLength(coldata.BatchSize)
 								if err := r.partitionsState.enqueue(ctx, r.partitionsState.runningSizes); err != nil {
 									colexecerror.InternalError(err)
 								}
@@ -524,16 +524,16 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							// TODO(yuzefovich): do not instantiate a new batch here once
 							// spillingQueues actually copy the batches when those are kept
 							// in-memory.
-							r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+							r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 							runningPartitionsSizesCol = r.partitionsState.runningSizes.ColVec(0).Int64()
 						}
 						if r.numTuplesInPartition > 0 {
 							runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
 							r.numTuplesInPartition = 0
 							r.partitionsState.idx++
-							if r.partitionsState.idx == coldata.BatchSize() {
+							if r.partitionsState.idx == coldata.BatchSize {
 								// We need to flush the vector of partitions sizes.
-								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
+								r.partitionsState.runningSizes.SetLength(coldata.BatchSize)
 								if err := r.partitionsState.enqueue(ctx, r.partitionsState.runningSizes); err != nil {
 									colexecerror.InternalError(err)
 								}
@@ -690,7 +690,7 @@ func (r *cumeDistNoPartitionOp) Init() {
 		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
 		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
-	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
+	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize)
 }
 
 func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
@@ -705,14 +705,14 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			// partitions. These sizes are stored in r.partitionsState.runningSizes
 			// batch (that consists of a single vector) and r.partitionsState.idx
 			// points at the next slot in that vector to write to. Once it
-			// reaches coldata.BatchSize(), the batch is "flushed" to the
+			// reaches coldata.BatchSize, the batch is "flushed" to the
 			// corresponding spillingQueue. The "running" value of the current
 			// partition size is stored in r.numTuplesInPartition.
 			// 3. (if we have CUME_DIST function) we need to compute the sizes
 			// of peer groups. These sizes are stored in r.peerGroupsState.runningSizes
 			// batch (that consists of a single vector) and r.peerGroupsState.idx
 			// points at the next slot in that vector to write to. Once it
-			// reaches coldata.BatchSize(), the batch is "flushed" to the
+			// reaches coldata.BatchSize, the batch is "flushed" to the
 			// corresponding spillingQueue. The "running" value of the current
 			// peer group size is stored in r.numPeers.
 			// For example, if we have the following setup:
@@ -736,7 +736,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 					// TODO(yuzefovich): do not instantiate a new batch here once
 					// spillingQueues actually copy the batches when those are kept
 					// in-memory.
-					r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+					r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 				}
 				runningPeerGroupsSizesCol := r.peerGroupsState.runningSizes.ColVec(0).Int64()
 				runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
@@ -800,16 +800,16 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 							// TODO(yuzefovich): do not instantiate a new batch here once
 							// spillingQueues actually copy the batches when those are kept
 							// in-memory.
-							r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+							r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 							runningPeerGroupsSizesCol = r.peerGroupsState.runningSizes.ColVec(0).Int64()
 						}
 						if r.numPeers > 0 {
 							runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
 							r.numPeers = 0
 							r.peerGroupsState.idx++
-							if r.peerGroupsState.idx == coldata.BatchSize() {
+							if r.peerGroupsState.idx == coldata.BatchSize {
 								// We need to flush the vector of peer group sizes.
-								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
+								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize)
 								if err := r.peerGroupsState.enqueue(ctx, r.peerGroupsState.runningSizes); err != nil {
 									colexecerror.InternalError(err)
 								}
@@ -830,16 +830,16 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 							// TODO(yuzefovich): do not instantiate a new batch here once
 							// spillingQueues actually copy the batches when those are kept
 							// in-memory.
-							r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+							r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 							runningPeerGroupsSizesCol = r.peerGroupsState.runningSizes.ColVec(0).Int64()
 						}
 						if r.numPeers > 0 {
 							runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
 							r.numPeers = 0
 							r.peerGroupsState.idx++
-							if r.peerGroupsState.idx == coldata.BatchSize() {
+							if r.peerGroupsState.idx == coldata.BatchSize {
 								// We need to flush the vector of peer group sizes.
-								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
+								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize)
 								if err := r.peerGroupsState.enqueue(ctx, r.peerGroupsState.runningSizes); err != nil {
 									colexecerror.InternalError(err)
 								}
@@ -993,7 +993,7 @@ func (r *cumeDistWithPartitionOp) Init() {
 		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
 		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
-	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
+	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize)
 }
 
 func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
@@ -1008,14 +1008,14 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			// partitions. These sizes are stored in r.partitionsState.runningSizes
 			// batch (that consists of a single vector) and r.partitionsState.idx
 			// points at the next slot in that vector to write to. Once it
-			// reaches coldata.BatchSize(), the batch is "flushed" to the
+			// reaches coldata.BatchSize, the batch is "flushed" to the
 			// corresponding spillingQueue. The "running" value of the current
 			// partition size is stored in r.numTuplesInPartition.
 			// 3. (if we have CUME_DIST function) we need to compute the sizes
 			// of peer groups. These sizes are stored in r.peerGroupsState.runningSizes
 			// batch (that consists of a single vector) and r.peerGroupsState.idx
 			// points at the next slot in that vector to write to. Once it
-			// reaches coldata.BatchSize(), the batch is "flushed" to the
+			// reaches coldata.BatchSize, the batch is "flushed" to the
 			// corresponding spillingQueue. The "running" value of the current
 			// peer group size is stored in r.numPeers.
 			// For example, if we have the following setup:
@@ -1039,7 +1039,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					// TODO(yuzefovich): do not instantiate a new batch here once
 					// spillingQueues actually copy the batches when those are kept
 					// in-memory.
-					r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+					r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 				}
 				runningPartitionsSizesCol := r.partitionsState.runningSizes.ColVec(0).Int64()
 				runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
@@ -1057,7 +1057,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					// TODO(yuzefovich): do not instantiate a new batch here once
 					// spillingQueues actually copy the batches when those are kept
 					// in-memory.
-					r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+					r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 				}
 				runningPeerGroupsSizesCol := r.peerGroupsState.runningSizes.ColVec(0).Int64()
 				runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
@@ -1119,16 +1119,16 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							// TODO(yuzefovich): do not instantiate a new batch here once
 							// spillingQueues actually copy the batches when those are kept
 							// in-memory.
-							r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+							r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 							runningPartitionsSizesCol = r.partitionsState.runningSizes.ColVec(0).Int64()
 						}
 						if r.numTuplesInPartition > 0 {
 							runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
 							r.numTuplesInPartition = 0
 							r.partitionsState.idx++
-							if r.partitionsState.idx == coldata.BatchSize() {
+							if r.partitionsState.idx == coldata.BatchSize {
 								// We need to flush the vector of partitions sizes.
-								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
+								r.partitionsState.runningSizes.SetLength(coldata.BatchSize)
 								if err := r.partitionsState.enqueue(ctx, r.partitionsState.runningSizes); err != nil {
 									colexecerror.InternalError(err)
 								}
@@ -1149,16 +1149,16 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							// TODO(yuzefovich): do not instantiate a new batch here once
 							// spillingQueues actually copy the batches when those are kept
 							// in-memory.
-							r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+							r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 							runningPartitionsSizesCol = r.partitionsState.runningSizes.ColVec(0).Int64()
 						}
 						if r.numTuplesInPartition > 0 {
 							runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
 							r.numTuplesInPartition = 0
 							r.partitionsState.idx++
-							if r.partitionsState.idx == coldata.BatchSize() {
+							if r.partitionsState.idx == coldata.BatchSize {
 								// We need to flush the vector of partitions sizes.
-								r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
+								r.partitionsState.runningSizes.SetLength(coldata.BatchSize)
 								if err := r.partitionsState.enqueue(ctx, r.partitionsState.runningSizes); err != nil {
 									colexecerror.InternalError(err)
 								}
@@ -1187,16 +1187,16 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							// TODO(yuzefovich): do not instantiate a new batch here once
 							// spillingQueues actually copy the batches when those are kept
 							// in-memory.
-							r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+							r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 							runningPeerGroupsSizesCol = r.peerGroupsState.runningSizes.ColVec(0).Int64()
 						}
 						if r.numPeers > 0 {
 							runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
 							r.numPeers = 0
 							r.peerGroupsState.idx++
-							if r.peerGroupsState.idx == coldata.BatchSize() {
+							if r.peerGroupsState.idx == coldata.BatchSize {
 								// We need to flush the vector of peer group sizes.
-								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
+								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize)
 								if err := r.peerGroupsState.enqueue(ctx, r.peerGroupsState.runningSizes); err != nil {
 									colexecerror.InternalError(err)
 								}
@@ -1217,16 +1217,16 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 							// TODO(yuzefovich): do not instantiate a new batch here once
 							// spillingQueues actually copy the batches when those are kept
 							// in-memory.
-							r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
+							r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize)
 							runningPeerGroupsSizesCol = r.peerGroupsState.runningSizes.ColVec(0).Int64()
 						}
 						if r.numPeers > 0 {
 							runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
 							r.numPeers = 0
 							r.peerGroupsState.idx++
-							if r.peerGroupsState.idx == coldata.BatchSize() {
+							if r.peerGroupsState.idx == coldata.BatchSize {
 								// We need to flush the vector of peer group sizes.
-								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
+								r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize)
 								if err := r.peerGroupsState.enqueue(ctx, r.peerGroupsState.runningSizes); err != nil {
 									colexecerror.InternalError(err)
 								}

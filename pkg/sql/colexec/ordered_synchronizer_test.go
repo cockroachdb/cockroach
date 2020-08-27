@@ -157,8 +157,8 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	numInputs := 3
 	inputLen := 1024
 	batchSize := 16
-	if batchSize > coldata.BatchSize() {
-		batchSize = coldata.BatchSize()
+	if batchSize > coldata.BatchSize {
+		batchSize = coldata.BatchSize
 	}
 	typs := []*types.T{types.Int}
 
@@ -204,9 +204,9 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	batches := make([]coldata.Batch, numInputs)
 	for i := range batches {
 		batches[i] = testAllocator.NewMemBatchWithMaxCapacity(typs)
-		batches[i].SetLength(coldata.BatchSize())
+		batches[i].SetLength(coldata.BatchSize)
 	}
-	for i := int64(0); i < int64(coldata.BatchSize())*numInputs; i++ {
+	for i := int64(0); i < int64(coldata.BatchSize)*numInputs; i++ {
 		batch := batches[i%numInputs]
 		batch.ColVec(0).Int64()[i/numInputs] = i
 	}
@@ -221,7 +221,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	require.NoError(b, err)
 	op.Init()
 
-	b.SetBytes(8 * int64(coldata.BatchSize()) * numInputs)
+	b.SetBytes(8 * int64(coldata.BatchSize) * numInputs)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		op.Next(ctx)

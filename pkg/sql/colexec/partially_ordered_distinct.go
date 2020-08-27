@@ -117,7 +117,7 @@ func newChunkerOperator(
 	return &chunkerOperator{
 		input:         input,
 		inputTypes:    inputTypes,
-		windowedBatch: allocator.NewMemBatchNoCols(inputTypes, coldata.BatchSize()),
+		windowedBatch: allocator.NewMemBatchNoCols(inputTypes, coldata.BatchSize),
 	}
 }
 
@@ -193,8 +193,8 @@ func (c *chunkerOperator) Next(ctx context.Context) coldata.Batch {
 		// When newChunksCol is nil, then all tuples that are returned via
 		// getValues are equal on the ordered columns, so we simply emit the next
 		// "window" of those tuples.
-		if outputTupleEndIdx-c.outputTupleStartIdx > coldata.BatchSize() {
-			outputTupleEndIdx = c.outputTupleStartIdx + coldata.BatchSize()
+		if outputTupleEndIdx-c.outputTupleStartIdx > coldata.BatchSize {
+			outputTupleEndIdx = c.outputTupleStartIdx + coldata.BatchSize
 		}
 	} else {
 		// newChunksCol is non-nil, so there are multiple chunks within the

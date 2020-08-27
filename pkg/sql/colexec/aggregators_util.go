@@ -127,7 +127,7 @@ type aggregatorHelperBase struct {
 
 func newAggregatorHelperBase(spec *execinfrapb.AggregatorSpec) *aggregatorHelperBase {
 	b := &aggregatorHelperBase{spec: spec}
-	b.origSel = make([]int, coldata.BatchSize())
+	b.origSel = make([]int, coldata.BatchSize)
 	return b
 }
 
@@ -295,7 +295,7 @@ func newDistinctAggregatorHelperBase(
 	}
 	b.aggColsConverter = newVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
 	b.scratch.converted = []tree.Datum{nil}
-	b.scratch.sel = make([]int, coldata.BatchSize())
+	b.scratch.sel = make([]int, coldata.BatchSize)
 	return b
 }
 
@@ -506,7 +506,7 @@ var _ colexecbase.Operator = &singleBatchOperator{}
 
 func newSingleBatchOperator(allocator *colmem.Allocator, typs []*types.T) *singleBatchOperator {
 	return &singleBatchOperator{
-		batch: allocator.NewMemBatchNoCols(typs, coldata.BatchSize()),
+		batch: allocator.NewMemBatchNoCols(typs, coldata.BatchSize),
 	}
 }
 

@@ -102,10 +102,10 @@ func (a *Allocator) NewMemBatchWithFixedCapacity(typs []*types.T, capacity int) 
 }
 
 // NewMemBatchWithMaxCapacity is a convenience shortcut of
-// NewMemBatchWithFixedCapacity with capacity=coldata.BatchSize() and should
+// NewMemBatchWithFixedCapacity with capacity=coldata.BatchSize and should
 // only be used in tests (this is enforced by a linter).
 func (a *Allocator) NewMemBatchWithMaxCapacity(typs []*types.T) coldata.Batch {
-	return a.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize())
+	return a.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize)
 }
 
 // NewMemBatchNoCols creates a "skeleton" of new in-memory coldata.Batch. It
@@ -123,32 +123,32 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 // state (meaning it is ready to be used) and to have the capacity of at least
 // minCapacity. The method will grow the allocated capacity of the batch
 // exponentially (possibly incurring a reallocation), until the batch reaches
-// coldata.BatchSize().
+// coldata.BatchSize.
 // NOTE: if the reallocation occurs, then the memory under the old batch is
 // released, so it is expected that the caller will lose the references to the
 // old batch.
 // Note: the method assumes that minCapacity is at least 1 and will "truncate"
-// minCapacity if it is larger than coldata.BatchSize().
+// minCapacity if it is larger than coldata.BatchSize.
 func (a *Allocator) ResetMaybeReallocate(
 	typs []*types.T, oldBatch coldata.Batch, minCapacity int,
 ) (newBatch coldata.Batch, reallocated bool) {
 	if minCapacity < 1 {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid minCapacity %d", minCapacity))
 	}
-	if minCapacity > coldata.BatchSize() {
-		minCapacity = coldata.BatchSize()
+	if minCapacity > coldata.BatchSize {
+		minCapacity = coldata.BatchSize
 	}
 	reallocated = true
 	if oldBatch == nil {
 		newBatch = a.NewMemBatchWithFixedCapacity(typs, minCapacity)
-	} else if oldBatch.Capacity() < coldata.BatchSize() {
+	} else if oldBatch.Capacity() < coldata.BatchSize {
 		a.ReleaseBatch(oldBatch)
 		newCapacity := oldBatch.Capacity() * 2
 		if newCapacity < minCapacity {
 			newCapacity = minCapacity
 		}
-		if newCapacity > coldata.BatchSize() {
-			newCapacity = coldata.BatchSize()
+		if newCapacity > coldata.BatchSize {
+			newCapacity = coldata.BatchSize
 		}
 		newBatch = a.NewMemBatchWithFixedCapacity(typs, newCapacity)
 	} else {
@@ -326,8 +326,8 @@ const (
 )
 
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
-// coldata.BatchSize() length.
-var SizeOfBatchSizeSelVector = coldata.BatchSize() * sizeOfInt
+// coldata.BatchSize length.
+var SizeOfBatchSizeSelVector = coldata.BatchSize * sizeOfInt
 
 // EstimateBatchSizeBytes returns an estimated amount of bytes needed to
 // store a batch in memory that has column types vecTypes.

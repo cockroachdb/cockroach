@@ -106,7 +106,7 @@ func BenchmarkMaterializer(b *testing.B) {
 
 	rng, _ := randutil.NewPseudoRand()
 	nBatches := 10
-	nRows := nBatches * coldata.BatchSize()
+	nRows := nBatches * coldata.BatchSize
 	for _, typ := range []*types.T{types.Int, types.Float, types.Bytes} {
 		typs := []*types.T{typ}
 		nCols := len(typs)
@@ -122,16 +122,16 @@ func BenchmarkMaterializer(b *testing.B) {
 						coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
 							Rand:             rng,
 							Vec:              colVec,
-							N:                coldata.BatchSize(),
+							N:                coldata.BatchSize,
 							NullProbability:  nullProb,
 							BytesFixedLength: 8,
 						})
 					}
-					batch.SetLength(coldata.BatchSize())
+					batch.SetLength(coldata.BatchSize)
 					if useSelectionVector {
 						batch.SetSelection(true)
 						sel := batch.Selection()
-						for i := 0; i < coldata.BatchSize(); i++ {
+						for i := 0; i < coldata.BatchSize; i++ {
 							sel[i] = i
 						}
 					}

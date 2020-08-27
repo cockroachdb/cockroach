@@ -97,8 +97,8 @@ func NewCaseOp(
 		thenIdxs:  thenIdxs,
 		outputIdx: outputIdx,
 		typ:       typ,
-		origSel:   make([]int, coldata.BatchSize()),
-		prevSel:   make([]int, coldata.BatchSize()),
+		origSel:   make([]int, coldata.BatchSize),
+		prevSel:   make([]int, coldata.BatchSize),
 	}
 }
 

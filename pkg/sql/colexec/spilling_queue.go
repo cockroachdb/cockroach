@@ -83,7 +83,7 @@ func newSpillingQueue(
 	if memoryLimit < 0 {
 		memoryLimit = 0
 	}
-	itemsLen := memoryLimit / int64(colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
+	itemsLen := memoryLimit / int64(colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize))
 	if itemsLen == 0 {
 		// Make items at least of length 1. Even though batches will spill to disk
 		// directly (this can only happen with a very low memory limit), it's nice
@@ -98,7 +98,7 @@ func newSpillingQueue(
 		items:              make([]coldata.Batch, itemsLen),
 		diskQueueCfg:       cfg,
 		fdSemaphore:        fdSemaphore,
-		dequeueScratch:     unlimitedAllocator.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize()),
+		dequeueScratch:     unlimitedAllocator.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize),
 		diskAcc:            diskAcc,
 	}
 }

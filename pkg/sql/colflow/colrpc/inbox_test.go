@@ -202,7 +202,7 @@ func TestInboxShutdown(t *testing.T) {
 		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
 		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
 		typs               = []*types.T{types.Int}
-		batch              = coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
+		batch              = coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize, 0 /* length */, rng.Float64())
 	)
 
 	// drainMetaScenario specifies when DrainMeta should be called in the Next

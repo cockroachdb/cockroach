@@ -37,7 +37,7 @@ import (
 func OrderedDistinctColsToOperators(
 	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
 ) (colexecbase.Operator, []bool, error) {
-	distinctCol := make([]bool, coldata.BatchSize())
+	distinctCol := make([]bool, coldata.BatchSize)
 	// zero the boolean column on every iteration.
 	input = fnOp{
 		OneInputNode: NewOneInputNode(input),

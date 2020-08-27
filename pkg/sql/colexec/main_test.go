@@ -12,15 +12,12 @@ package colexec
 
 import (
 	"context"
-	"flag"
-	"fmt"
 	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -67,17 +64,17 @@ func TestMain(m *testing.M) {
 		testDiskAcc = &diskAcc
 		defer testDiskAcc.Close(ctx)
 
-		flag.Parse()
-		if f := flag.Lookup("test.bench"); f == nil || f.Value.String() == "" {
-			// If we're running benchmarks, don't set a random batch size.
-			// Pick a random batch size in [minBatchSize, coldata.MaxBatchSize]
-			// range. The randomization can be disabled using COCKROACH_RANDOMIZE_BATCH_SIZE=false.
-			randomBatchSize := generateBatchSize()
-			fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
-			if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
-				colexecerror.InternalError(err)
-			}
-		}
+		//flag.Parse()
+		//if f := flag.Lookup("test.bench"); f == nil || f.Value.String() == "" {
+		//	// If we're running benchmarks, don't set a random batch size.
+		//	// Pick a random batch size in [minBatchSize, coldata.MaxBatchSize]
+		//	// range. The randomization can be disabled using COCKROACH_RANDOMIZE_BATCH_SIZE=false.
+		//	randomBatchSize := generateBatchSize()
+		//	fmt.Printf("coldata.BatchSize is set to %d\n", randomBatchSize)
+		//	if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
+		//		colexecerror.InternalError(err)
+		//	}
+		//}
 		return m.Run()
 	}())
 }
@@ -101,10 +98,10 @@ func generateBatchSize() int {
 			minBatchSize,
 			minBatchSize + 1,
 			minBatchSize + 2,
-			coldata.BatchSize(),
+			coldata.BatchSize,
 			minBatchSize + rng.Intn(coldata.MaxBatchSize-minBatchSize),
 		}
 		return sizesToChooseFrom[rng.Intn(len(sizesToChooseFrom))]
 	}
-	return coldata.BatchSize()
+	return coldata.BatchSize
 }

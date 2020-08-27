@@ -151,7 +151,7 @@ func TestSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewPseudoRand()
-	nTups := coldata.BatchSize()*2 + 1
+	nTups := coldata.BatchSize*2 + 1
 	maxCols := 3
 	// TODO(yuzefovich): randomize types as well.
 	typs := make([]*types.T, maxCols)
@@ -285,24 +285,24 @@ func BenchmarkSort(b *testing.B) {
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
 			for _, topK := range []bool{false, true} {
-				name := fmt.Sprintf("rows=%d/cols=%d/topK=%t", nBatches*coldata.BatchSize(), nCols, topK)
+				name := fmt.Sprintf("rows=%d/cols=%d/topK=%t", nBatches*coldata.BatchSize, nCols, topK)
 				b.Run(name, func(b *testing.B) {
-					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
+					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize (rows /
 					// batch) * nCols (number of columns / row).
-					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+					b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
 					typs := make([]*types.T, nCols)
 					for i := range typs {
 						typs[i] = types.Int
 					}
 					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-					batch.SetLength(coldata.BatchSize())
+					batch.SetLength(coldata.BatchSize)
 					ordCols := make([]execinfrapb.Ordering_Column, nCols)
 					for i := range ordCols {
 						ordCols[i].ColIdx = uint32(i)
 						ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
 
 						col := batch.ColVec(i).Int64()
-						for j := 0; j < coldata.BatchSize(); j++ {
+						for j := 0; j < coldata.BatchSize; j++ {
 							col[j] = rng.Int63() % int64((i*1024)+1)
 						}
 					}
@@ -335,19 +335,19 @@ func BenchmarkAllSpooler(b *testing.B) {
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
-			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*coldata.BatchSize(), nCols), func(b *testing.B) {
-				// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
+			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*coldata.BatchSize, nCols), func(b *testing.B) {
+				// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 				// batch) * nCols (number of columns / row).
-				b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+				b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
 				typs := make([]*types.T, nCols)
 				for i := range typs {
 					typs[i] = types.Int
 				}
 				batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-				batch.SetLength(coldata.BatchSize())
+				batch.SetLength(coldata.BatchSize)
 				for i := 0; i < nCols; i++ {
 					col := batch.ColVec(i).Int64()
-					for j := 0; j < coldata.BatchSize(); j++ {
+					for j := 0; j < coldata.BatchSize; j++ {
 						col[j] = rng.Int63() % int64((i*1024)+1)
 					}
 				}

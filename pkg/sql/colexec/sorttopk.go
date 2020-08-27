@@ -106,7 +106,7 @@ func (t *topKSorter) Init() {
 	// TODO(yuzefovich): switch to calling this method on allocator. This will
 	// require plumbing unlimited allocator to work correctly in tests with
 	// memory limit of 1.
-	t.windowedBatch = coldata.NewMemBatchNoCols(t.inputTypes, coldata.BatchSize())
+	t.windowedBatch = coldata.NewMemBatchNoCols(t.inputTypes, coldata.BatchSize)
 }
 
 func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
@@ -213,8 +213,8 @@ func (t *topKSorter) emit() coldata.Batch {
 		// We're done.
 		return coldata.ZeroBatch
 	}
-	if toEmit > coldata.BatchSize() {
-		toEmit = coldata.BatchSize()
+	if toEmit > coldata.BatchSize {
+		toEmit = coldata.BatchSize
 	}
 	t.output, _ = t.allocator.ResetMaybeReallocate(t.inputTypes, t.output, toEmit)
 	for i := range t.inputTypes {
@@ -268,7 +268,7 @@ func (t *topKSorter) ExportBuffered(colexecbase.Operator) coldata.Batch {
 	topKLen := t.topK.Length()
 	// First, we check whether we have exported all tuples from the topK vector.
 	if t.exportedFromTopK < topKLen {
-		newExportedFromTopK := t.exportedFromTopK + coldata.BatchSize()
+		newExportedFromTopK := t.exportedFromTopK + coldata.BatchSize
 		if newExportedFromTopK > topKLen {
 			newExportedFromTopK = topKLen
 		}

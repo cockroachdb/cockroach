@@ -242,7 +242,7 @@ func BenchmarkDistinct(b *testing.B) {
 						typs[i] = types.Int
 					}
 					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-					batch.SetLength(coldata.BatchSize())
+					batch.SetLength(coldata.BatchSize)
 					distinctCols := []uint32{0, 1, 2, 3}[:nCols]
 					// We have the following equation:
 					//   newTupleProbability = 1 - (1 - newValueProbability) ^ nCols,
@@ -252,7 +252,7 @@ func BenchmarkDistinct(b *testing.B) {
 					for i := range distinctCols {
 						col := batch.ColVec(i).Int64()
 						col[0] = 0
-						for j := 1; j < coldata.BatchSize(); j++ {
+						for j := 1; j < coldata.BatchSize; j++ {
 							col[j] = col[j-1]
 							if rng.Float64() < newValueProbability {
 								col[j]++
@@ -270,10 +270,10 @@ func BenchmarkDistinct(b *testing.B) {
 						b.Run(
 							fmt.Sprintf("%s/hasNulls=%v/newTupleProbability=%.3f/rows=%d/cols=%d/ordCols=%d",
 								distinctNames[distinctIdx], hasNulls, newTupleProbability,
-								nBatches*coldata.BatchSize(), nCols, numOrderedCols,
+								nBatches*coldata.BatchSize, nCols, numOrderedCols,
 							),
 							func(b *testing.B) {
-								b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+								b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
 									// Note that the source will be ordered on all nCols so that the

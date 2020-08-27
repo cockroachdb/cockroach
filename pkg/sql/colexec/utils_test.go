@@ -487,14 +487,14 @@ func runTestsWithFn(
 	test func(t *testing.T, inputs []colexecbase.Operator),
 ) {
 	// Run tests over batchSizes of 1, (sometimes) a batch size that is small but
-	// greater than 1, and a full coldata.BatchSize().
+	// greater than 1, and a full coldata.BatchSize.
 	batchSizes := make([]int, 0, 3)
 	batchSizes = append(batchSizes, 1)
-	smallButGreaterThanOne := int(math.Trunc(.002 * float64(coldata.BatchSize())))
+	smallButGreaterThanOne := int(math.Trunc(.002 * float64(coldata.BatchSize)))
 	if smallButGreaterThanOne > 1 {
 		batchSizes = append(batchSizes, smallButGreaterThanOne)
 	}
-	batchSizes = append(batchSizes, coldata.BatchSize())
+	batchSizes = append(batchSizes, coldata.BatchSize)
 
 	for _, batchSize := range batchSizes {
 		for _, useSel := range []bool{false, true} {
@@ -699,7 +699,7 @@ func (s *opTestInput) Init() {
 	}
 	s.batch = testAllocator.NewMemBatchWithMaxCapacity(s.typs)
 
-	s.selection = make([]int, coldata.BatchSize())
+	s.selection = make([]int, coldata.BatchSize)
 	for i := range s.selection {
 		s.selection[i] = i
 	}
@@ -752,7 +752,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		// than the max batch size, so the test will panic if this part of the slice
 		// is accidentally accessed.
 		for i := range s.selection[batchSize:] {
-			s.selection[batchSize+i] = coldata.BatchSize() + 1
+			s.selection[batchSize+i] = coldata.BatchSize + 1
 		}
 
 		s.batch.SetSelection(true)
@@ -1294,8 +1294,8 @@ func TestRepeatableBatchSource(t *testing.T) {
 	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batchLen := 10
-	if coldata.BatchSize() < batchLen {
-		batchLen = coldata.BatchSize()
+	if coldata.BatchSize < batchLen {
+		batchLen = coldata.BatchSize
 	}
 	batch.SetLength(batchLen)
 	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
@@ -1320,8 +1320,8 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	rng, _ := randutil.NewPseudoRand()
 	batchSize := 10
-	if batchSize > coldata.BatchSize() {
-		batchSize = coldata.BatchSize()
+	if batchSize > coldata.BatchSize {
+		batchSize = coldata.BatchSize
 	}
 	sel := coldatatestutils.RandomSel(rng, batchSize, 0 /* probOfOmitting */)
 	batchLen := len(sel)
@@ -1408,7 +1408,7 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	// explicitly set below. ResetInternalBatch cannot be used here because we're
 	// operating on Windows into the vectors.
 	c.batch.SetSelection(false)
-	lastIdx := c.curIdx + coldata.BatchSize()
+	lastIdx := c.curIdx + coldata.BatchSize
 	if lastIdx > c.len {
 		lastIdx = c.len
 	}

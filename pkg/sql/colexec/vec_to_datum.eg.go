@@ -116,9 +116,9 @@ func (c *vecToDatumConverter) convertVecs(vecs []coldata.Vec, inputLen int, sel 
 	requiredLength := inputLen
 	if sel != nil {
 		// When sel is non-nil, it might be something like sel = [1023], so we
-		// need to allocate up to the full coldata.BatchSize(), regardless of
+		// need to allocate up to the full coldata.BatchSize, regardless of
 		// the length of the batch.
-		requiredLength = coldata.BatchSize()
+		requiredLength = coldata.BatchSize
 	}
 	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < requiredLength {
 		for _, vecIdx := range c.vecIdxsToConvert {

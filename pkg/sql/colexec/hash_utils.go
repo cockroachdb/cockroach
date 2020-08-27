@@ -115,11 +115,11 @@ type tupleHashDistributor struct {
 func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDistributor {
 	selections := make([][]int, numOutputs)
 	for i := range selections {
-		selections[i] = make([]int, 0, coldata.BatchSize())
+		selections[i] = make([]int, 0, coldata.BatchSize)
 	}
 	return &tupleHashDistributor{
 		initHashValue: initHashValue,
-		buckets:       make([]uint64, coldata.BatchSize()),
+		buckets:       make([]uint64, coldata.BatchSize),
 		selections:    selections,
 	}
 }
@@ -172,6 +172,6 @@ func (d *tupleHashDistributor) resetNumOutputs(numOutputs int) {
 	}
 	d.selections = d.selections[:cap(d.selections)]
 	for len(d.selections) < numOutputs {
-		d.selections = append(d.selections, make([]int, 0, coldata.BatchSize()))
+		d.selections = append(d.selections, make([]int, 0, coldata.BatchSize))
 	}
 }

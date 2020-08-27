@@ -37,7 +37,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	typs := []*types.T{types.Int}
 	// There will be at least two batches of rows so that we can see whether the
 	// internal batch is reset.
-	nRows := coldata.BatchSize() * 2
+	nRows := coldata.BatchSize * 2
 	nCols := len(typs)
 	rows := rowenc.MakeIntRows(nRows, nCols)
 	input := execinfra.NewRepeatableRowSource(typs, rows)

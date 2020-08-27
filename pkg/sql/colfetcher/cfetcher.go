@@ -500,7 +500,7 @@ func (rf *cFetcher) Init(
 	rf.table = table
 	// Change the allocation size to be the same as the capacity of the batch
 	// we allocated above.
-	rf.table.da.AllocSize = coldata.BatchSize()
+	rf.table.da.AllocSize = coldata.BatchSize
 
 	return nil
 }
@@ -655,7 +655,7 @@ func (rf *cFetcher) nextAdapter() {
 }
 
 // nextBatch processes keys until we complete one batch of rows,
-// coldata.BatchSize() in length, which are returned in columnar format as a
+// coldata.BatchSize in length, which are returned in columnar format as a
 // coldata.Batch. The batch contains one Vec per table column, regardless of
 // the index used; columns that are not needed (as per neededCols) are empty.
 // The Batch should not be modified and is only valid until the next call.

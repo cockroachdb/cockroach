@@ -269,8 +269,8 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 				p.state = sortDone
 				continue
 			}
-			if toEmit > coldata.BatchSize() {
-				toEmit = coldata.BatchSize()
+			if toEmit > coldata.BatchSize {
+				toEmit = coldata.BatchSize
 			}
 			p.output, _ = p.allocator.ResetMaybeReallocate(p.inputTypes, p.output, toEmit)
 			newEmitted := p.emitted + toEmit
@@ -427,7 +427,7 @@ func (p *sortOp) ExportBuffered(colexecbase.Operator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}
-	newExported := p.exported + coldata.BatchSize()
+	newExported := p.exported + coldata.BatchSize
 	if newExported > p.input.getNumTuples() {
 		newExported = p.input.getNumTuples()
 	}

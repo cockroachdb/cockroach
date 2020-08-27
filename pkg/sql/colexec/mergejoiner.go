@@ -527,7 +527,7 @@ func (o *mergeJoinBase) reset(ctx context.Context) {
 
 func (o *mergeJoinBase) InternalMemoryUsage() int {
 	const sizeOfGroup = int(unsafe.Sizeof(group{}))
-	return 8 * coldata.BatchSize() * sizeOfGroup // o.groups
+	return 8 * coldata.BatchSize * sizeOfGroup // o.groups
 }
 
 func (o *mergeJoinBase) Init() {
@@ -555,7 +555,7 @@ func (o *mergeJoinBase) Init() {
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
 
-	o.groups = makeGroupsBuffer(coldata.BatchSize())
+	o.groups = makeGroupsBuffer(coldata.BatchSize)
 	o.resetBuilderCrossProductState()
 }
 

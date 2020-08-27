@@ -91,7 +91,7 @@ func newPartitionerToOperator(
 	return &partitionerToOperator{
 		partitioner:  partitioner,
 		partitionIdx: partitionIdx,
-		batch:        allocator.NewMemBatchWithFixedCapacity(types, coldata.BatchSize()),
+		batch:        allocator.NewMemBatchWithFixedCapacity(types, coldata.BatchSize),
 	}
 }
 

@@ -80,8 +80,8 @@ func getDiskQueueCfgAndMemoryTestCases(
 // a batch with single int64 column where each element is its ordinal and an
 // accompanying selection vector that selects every index in tuples.
 func getDataAndFullSelection() (tuples, []*types.T, []int) {
-	data := make(tuples, coldata.BatchSize())
-	fullSelection := make([]int, coldata.BatchSize())
+	data := make(tuples, coldata.BatchSize)
+	fullSelection := make([]int, coldata.BatchSize)
 	for i := range data {
 		data[i] = tuple{i}
 		fullSelection[i] = i
@@ -108,14 +108,14 @@ func TestRouterOutputAddBatch(t *testing.T) {
 		name      string
 	}{
 		{
-			inputBatchSize:   coldata.BatchSize(),
-			outputBatchSize:  coldata.BatchSize(),
+			inputBatchSize:   coldata.BatchSize,
+			outputBatchSize:  coldata.BatchSize,
 			blockedThreshold: getDefaultRouterOutputBlockedThreshold(),
 			selection:        fullSelection,
 			name:             "OneBatch",
 		},
 		{
-			inputBatchSize:   coldata.BatchSize(),
+			inputBatchSize:   coldata.BatchSize,
 			outputBatchSize:  4,
 			blockedThreshold: getDefaultRouterOutputBlockedThreshold(),
 			selection:        fullSelection,
@@ -123,14 +123,14 @@ func TestRouterOutputAddBatch(t *testing.T) {
 		},
 		{
 			inputBatchSize:   4,
-			outputBatchSize:  coldata.BatchSize(),
+			outputBatchSize:  coldata.BatchSize,
 			blockedThreshold: getDefaultRouterOutputBlockedThreshold(),
 			selection:        fullSelection,
 			name:             "MultipleInputBatchesLTOutputSize",
 		},
 		{
-			inputBatchSize:   coldata.BatchSize(),
-			outputBatchSize:  coldata.BatchSize(),
+			inputBatchSize:   coldata.BatchSize,
+			outputBatchSize:  coldata.BatchSize,
 			blockedThreshold: getDefaultRouterOutputBlockedThreshold(),
 			selection:        fullSelection[:len(fullSelection)/4],
 			name:             "QuarterSelection",
@@ -272,7 +272,7 @@ func TestRouterOutputNext(t *testing.T) {
 						unblockedEventsChan: unblockedEventsChan,
 					},
 				)
-				in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
+				in := newOpTestInput(coldata.BatchSize, data, nil /* typs */)
 				in.Init()
 				wg.Add(1)
 				go func() {
@@ -431,7 +431,7 @@ func TestRouterOutputRandom(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	var (
-		maxValues        = coldata.BatchSize() * 4
+		maxValues        = coldata.BatchSize * 4
 		blockedThreshold = 1 + rng.Intn(maxValues-1)
 	)
 
@@ -615,12 +615,12 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	// We have precomputed expectedNumVals only for the default batch size, so we
 	// will override it if a different value is set.
 	const expectedBatchSize = 1024
-	batchSize := coldata.BatchSize()
-	if batchSize != expectedBatchSize {
-		require.NoError(t, coldata.SetBatchSizeForTests(expectedBatchSize))
-		defer func(batchSize int) { require.NoError(t, coldata.SetBatchSizeForTests(batchSize)) }(batchSize)
-		batchSize = expectedBatchSize
-	}
+	batchSize := coldata.BatchSize
+	//if batchSize != expectedBatchSize {
+	//	require.NoError(t, coldata.SetBatchSizeForTests(expectedBatchSize))
+	//	defer func(batchSize int) { require.NoError(t, coldata.SetBatchSizeForTests(batchSize)) }(batchSize)
+	//	batchSize = expectedBatchSize
+	//}
 	data := make(tuples, batchSize)
 	valsYetToSee := make(map[int64]struct{})
 	for i := range data {
@@ -702,7 +702,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	typs := []*types.T{types.Int}
 	// Never-ending input of 0s.
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 	in := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 
 	unbufferedCh := make(chan struct{})
@@ -787,7 +787,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	sel := coldatatestutils.RandomSel(rng, coldata.BatchSize(), rng.Float64())
+	sel := coldatatestutils.RandomSel(rng, coldata.BatchSize, rng.Float64())
 
 	data, typs, _ := getDataAndFullSelection()
 
@@ -851,7 +851,7 @@ func TestHashRouterRandom(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	var (
-		maxValues        = coldata.BatchSize() * 4
+		maxValues        = coldata.BatchSize * 4
 		maxOutputs       = 128
 		blockedThreshold = 1 + rng.Intn(maxValues-1)
 		numOutputs       = 1 + rng.Intn(maxOutputs-1)
@@ -1197,7 +1197,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	// numbers.
 	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, true /* inMem */)
@@ -1218,7 +1218,7 @@ func BenchmarkHashRouter(b *testing.B) {
 					defer diskAcc.Close(ctx)
 				}
 				r, outputs := NewHashRouter(allocators, input, typs, []uint32{0}, 64<<20, queueCfg, &colexecbase.TestingSemaphore{}, diskAccounts, nil /* toDrain */, nil /* toClose */)
-				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
+				b.SetBytes(8 * int64(coldata.BatchSize) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.
 				var expectedDistribution []int
@@ -1252,8 +1252,8 @@ func BenchmarkHashRouter(b *testing.B) {
 					for i := range actualDistribution {
 						sum += actualDistribution[i]
 					}
-					if sum != numInputBatches*coldata.BatchSize() {
-						b.Fatalf("unexpected sum %d, expected %d", sum, numInputBatches*coldata.BatchSize())
+					if sum != numInputBatches*coldata.BatchSize {
+						b.Fatalf("unexpected sum %d, expected %d", sum, numInputBatches*coldata.BatchSize)
 					}
 					if expectedDistribution == nil {
 						expectedDistribution = make([]int, len(actualDistribution))

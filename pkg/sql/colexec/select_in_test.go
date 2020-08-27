@@ -103,8 +103,8 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	col1 := batch.ColVec(0).Int64()
 
-	for i := 0; i < coldata.BatchSize(); i++ {
-		if float64(i) < float64(coldata.BatchSize())*selectivity {
+	for i := 0; i < coldata.BatchSize; i++ {
+		if float64(i) < float64(coldata.BatchSize)*selectivity {
 			col1[i] = int64(i % 10)
 		} else {
 			col1[i] = -1
@@ -112,19 +112,19 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	}
 
 	if hasNulls {
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			if rand.Float64() < nullProbability {
 				batch.ColVec(0).Nulls().SetNull(i)
 			}
 		}
 	}
 
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			sel[i] = i
 		}
 	}
@@ -138,7 +138,7 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	}
 	inOp.Init()
 
-	b.SetBytes(int64(8 * coldata.BatchSize()))
+	b.SetBytes(int64(8 * coldata.BatchSize))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		inOp.Next(ctx)

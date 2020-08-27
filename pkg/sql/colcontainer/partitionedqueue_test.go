@@ -97,7 +97,7 @@ func TestPartitionedDiskQueue(t *testing.T) {
 		batch = testAllocator.NewMemBatchWithMaxCapacity(typs)
 		sem   = &colexecbase.TestingSemaphore{}
 	)
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -152,7 +152,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// numRepartitions is in [1, 5].
 		numRepartitions = 1 + rng.Intn(5)
 	)
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()

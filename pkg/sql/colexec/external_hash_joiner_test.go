@@ -137,7 +137,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	sourceTypes := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
 	// We don't need to set the data since zero values in the columns work.
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 	nBatches := 2
 	leftSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 	rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
@@ -176,7 +176,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	hj.Init()
 	// We have a full cross-product, so we should get the number of tuples
 	// squared in the output.
-	expectedTuplesCount := nBatches * nBatches * coldata.BatchSize() * coldata.BatchSize()
+	expectedTuplesCount := nBatches * nBatches * coldata.BatchSize * coldata.BatchSize
 	actualTuplesCount := 0
 	for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
 		actualTuplesCount += b.Length()
@@ -208,11 +208,11 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			col[i] = int64(i)
 		}
 	}
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 
 	var (
 		memAccounts []*mon.BoundAccount
@@ -257,9 +257,9 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 					tc.init()
 					spec := createSpecForHashJoiner(tc)
 					b.Run(name, func(b *testing.B) {
-						// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
+						// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 						// batch) * nCols (number of columns / row) * 2 (number of sources).
-						b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
+						b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols * 2))
 						b.ResetTimer()
 						for i := 0; i < b.N; i++ {
 							leftSource.reset(nBatches)

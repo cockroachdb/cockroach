@@ -413,7 +413,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 
 	rng, seed := randutil.NewPseudoRand()
 	nRuns := 5
-	nRows := 8 * coldata.BatchSize()
+	nRows := 8 * coldata.BatchSize
 	maxCols := 5
 	maxNum := 10
 	intTyps := make([]*types.T, maxCols)
@@ -487,7 +487,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 
 	rng, seed := randutil.NewPseudoRand()
 	nRuns := 5
-	nRows := 5 * coldata.BatchSize() / 4
+	nRows := 5 * coldata.BatchSize / 4
 	maxCols := 3
 	maxNum := 10
 	intTyps := make([]*types.T, maxCols)
@@ -1027,7 +1027,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	rng, seed := randutil.NewPseudoRand()
-	nRows := 2 * coldata.BatchSize()
+	nRows := 2 * coldata.BatchSize
 	maxCols := 4
 	maxNum := 10
 	typs := make([]*types.T, maxCols)

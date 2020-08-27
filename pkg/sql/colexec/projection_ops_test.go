@@ -312,7 +312,7 @@ func benchmarkProjOp(
 		coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
 			Rand:            rng,
 			Vec:             colVec,
-			N:               coldata.BatchSize(),
+			N:               coldata.BatchSize,
 			NullProbability: nullProb,
 			// We will limit the range of integers so that we won't get "out of
 			// range" errors.
@@ -321,11 +321,11 @@ func benchmarkProjOp(
 			ZeroProhibited: true,
 		})
 	}
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			sel[i] = i
 		}
 	}
@@ -335,7 +335,7 @@ func benchmarkProjOp(
 	op.Init()
 
 	b.Run(name, func(b *testing.B) {
-		b.SetBytes(int64(len(inputTypes) * 8 * coldata.BatchSize()))
+		b.SetBytes(int64(len(inputTypes) * 8 * coldata.BatchSize))
 		for i := 0; i < b.N; i++ {
 			op.Next(ctx)
 		}

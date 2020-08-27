@@ -144,7 +144,7 @@ func newAndProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
+		origSel:          make([]int, coldata.BatchSize),
 	}
 }
 
@@ -582,7 +582,7 @@ func newAndRightNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
+		origSel:          make([]int, coldata.BatchSize),
 	}
 }
 
@@ -987,7 +987,7 @@ func newAndLeftNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
+		origSel:          make([]int, coldata.BatchSize),
 	}
 }
 
@@ -1373,7 +1373,7 @@ func newOrProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
+		origSel:          make([]int, coldata.BatchSize),
 	}
 }
 
@@ -1812,7 +1812,7 @@ func newOrRightNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
+		origSel:          make([]int, coldata.BatchSize),
 	}
 }
 
@@ -2218,7 +2218,7 @@ func newOrLeftNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
+		origSel:          make([]int, coldata.BatchSize),
 	}
 }
 

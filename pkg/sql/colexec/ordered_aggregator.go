@@ -170,14 +170,14 @@ func (a *orderedAggregator) Init() {
 	a.input.Init()
 	// Twice the batchSize is allocated to avoid having to check for overflow
 	// when outputting.
-	a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, 2*coldata.BatchSize())
+	a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, 2*coldata.BatchSize)
 	a.bucket.init(a.scratch.Batch, a.bucket.fns, a.aggHelper.makeSeenMaps(), a.groupCol)
 	// Note that we use a batch with fixed capacity because aggregate functions
 	// hold onto the vectors passed in into their Init method, so we cannot
 	// simply reallocate the output batch.
 	// TODO(yuzefovich): consider changing aggregateFunc interface to allow for
 	// updating the output vector.
-	a.unsafeBatch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, coldata.BatchSize())
+	a.unsafeBatch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, coldata.BatchSize)
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
@@ -189,10 +189,10 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		a.scratch.ResetInternalBatch()
 		a.scratch.shouldResetInternalBatch = false
 	}
-	if a.scratch.resumeIdx >= coldata.BatchSize() {
+	if a.scratch.resumeIdx >= coldata.BatchSize {
 		// Copy the second part of the output batch into the first and resume from
 		// there.
-		newResumeIdx := a.scratch.resumeIdx - coldata.BatchSize()
+		newResumeIdx := a.scratch.resumeIdx - coldata.BatchSize
 		a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
 			for i := 0; i < len(a.outputTypes); i++ {
 				vec := a.scratch.ColVec(i)
@@ -206,12 +206,12 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 					coldata.SliceArgs{
 						Src:         vec,
 						DestIdx:     0,
-						SrcStartIdx: coldata.BatchSize(),
+						SrcStartIdx: coldata.BatchSize,
 						SrcEndIdx:   a.scratch.resumeIdx + 1,
 					},
 				)
 				// Now we need to restore the desired length for the Vec.
-				vec.SetLength(2 * coldata.BatchSize())
+				vec.SetLength(2 * coldata.BatchSize)
 				a.bucket.fns[i].SetOutputIndex(newResumeIdx)
 				// There might have been some NULLs set in the part that we
 				// have just copied over, so we need to unset the NULLs.
@@ -221,7 +221,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		a.scratch.resumeIdx = newResumeIdx
 	}
 
-	for a.scratch.resumeIdx < coldata.BatchSize() {
+	for a.scratch.resumeIdx < coldata.BatchSize {
 		batch := a.input.Next(ctx)
 		batchLength := batch.Length()
 		a.seenNonEmptyBatch = a.seenNonEmptyBatch || batchLength > 0
@@ -266,8 +266,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	}
 
 	batchToReturn := a.scratch.Batch
-	if a.scratch.resumeIdx > coldata.BatchSize() {
-		a.scratch.SetLength(coldata.BatchSize())
+	if a.scratch.resumeIdx > coldata.BatchSize {
+		a.scratch.SetLength(coldata.BatchSize)
 		a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
 			for i := 0; i < len(a.outputTypes); i++ {
 				a.unsafeBatch.ColVec(i).Copy(

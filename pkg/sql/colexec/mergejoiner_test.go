@@ -1650,7 +1650,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	nTuples := coldata.BatchSize() * 4
+	nTuples := coldata.BatchSize * 4
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	typs := []*types.T{types.Int}
@@ -1718,7 +1718,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 // output as the hash joiner. The test aims at stressing randomly the building
 // of cross product (from the buffered groups) in the merge joiner and does it
 // by creating input sources such that they contain very big groups (each group
-// is about coldata.BatchSize() in size) which will force the merge joiner to
+// is about coldata.BatchSize in size) which will force the merge joiner to
 // mostly build from the buffered groups. Join of such input sources results in
 // an output quadratic in size, so the test is skipped unless coldata.BatchSize
 // is set to relatively small number, but it is ok since we randomize this
@@ -1726,13 +1726,13 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 func TestMergeJoinCrossProduct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	if coldata.BatchSize() > 200 {
+	if coldata.BatchSize > 200 {
 		skip.IgnoreLintf(t, "this test is too slow with relatively big batch size")
 	}
 	ctx := context.Background()
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
-	nTuples := 2*coldata.BatchSize() + 1
+	nTuples := 2*coldata.BatchSize + 1
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	rng, _ := randutil.NewPseudoRand()
@@ -1747,10 +1747,10 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	groupsRight := colsRight[0].Int64()
 	leftGroupIdx, rightGroupIdx := 0, 0
 	for i := range groupsLeft {
-		if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
+		if rng.Float64() < 1.0/float64(coldata.BatchSize) {
 			leftGroupIdx++
 		}
-		if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
+		if rng.Float64() < 1.0/float64(coldata.BatchSize) {
 			rightGroupIdx++
 		}
 		groupsLeft[i] = int64(leftGroupIdx)
@@ -1825,7 +1825,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 	for _, numInputBatches := range []int{1, 2, 16} {
 		t.Run(fmt.Sprintf("numInputBatches=%d", numInputBatches),
 			func(t *testing.T) {
-				nTuples := coldata.BatchSize() * numInputBatches
+				nTuples := coldata.BatchSize * numInputBatches
 				typs := []*types.T{types.Int}
 				cols := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
 				groups := cols[0].Int64()
@@ -1879,16 +1879,16 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 	ctx := context.Background()
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	for _, groupSize := range []int{coldata.BatchSize() / 8, coldata.BatchSize() / 4, coldata.BatchSize() / 2} {
+	for _, groupSize := range []int{coldata.BatchSize / 8, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		if groupSize == 0 {
-			// We might be varying coldata.BatchSize() so that when it is divided by
+			// We might be varying coldata.BatchSize so that when it is divided by
 			// 4, groupSize is 0. We want to skip such configuration.
 			continue
 		}
 		for _, numInputBatches := range []int{1, 2, 16} {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 				func(t *testing.T) {
-					nTuples := coldata.BatchSize() * numInputBatches
+					nTuples := coldata.BatchSize * numInputBatches
 					// There will be nTuples/groupSize "full" groups - i.e. groups of
 					// groupSize. Each of these "full" groups will produce groupSize^2
 					// tuples. The last group might be not full and will consist of
@@ -2032,7 +2032,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 			for _, skipValues := range []bool{false, true} {
 				for _, randomIncrement := range []int64{0, 1} {
 					log.Infof(ctx, "numInputBatches=%d/maxRunLength=%d/skipValues=%t/randomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement)
-					nTuples := coldata.BatchSize() * numInputBatches
+					nTuples := coldata.BatchSize * numInputBatches
 					typs := []*types.T{types.Int}
 					lCols, rCols, exp := newBatchesOfRandIntRows(nTuples, maxRunLength, skipValues, randomIncrement)
 					leftSource := newChunkingBatchSource(typs, lCols, nTuples)
@@ -2080,12 +2080,12 @@ func TestMergeJoinerRandomized(t *testing.T) {
 func newBatchOfIntRows(nCols int, batch coldata.Batch) coldata.Batch {
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			col[i] = int64(i)
 		}
 	}
 
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		vec := batch.ColVec(colIdx)
@@ -2097,12 +2097,12 @@ func newBatchOfIntRows(nCols int, batch coldata.Batch) coldata.Batch {
 func newBatchOfRepeatedIntRows(nCols int, batch coldata.Batch, numRepeats int) coldata.Batch {
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			col[i] = int64((i + 1) / numRepeats)
 		}
 	}
 
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		vec := batch.ColVec(colIdx)
@@ -2128,10 +2128,10 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 	// 1:1 join.
 	for _, nBatches := range []int{1, 4, 16, 1024} {
-		b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize()), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
+		b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
+			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
+			b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				leftSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), sourceTypes, nBatches)
@@ -2159,10 +2159,10 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 	// Groups on left side.
 	for _, nBatches := range []int{1, 4, 16, 1024} {
-		b.Run(fmt.Sprintf("oneSideRepeat-rows=%d", nBatches*coldata.BatchSize()), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
+		b.Run(fmt.Sprintf("oneSideRepeat-rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
+			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
+			b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, nBatches), sourceTypes, nBatches)
@@ -2191,11 +2191,11 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	// Groups on both sides.
 	for _, nBatches := range []int{1, 4, 16, 32} {
 		numRepeats := nBatches
-		b.Run(fmt.Sprintf("bothSidesRepeat-rows=%d", nBatches*coldata.BatchSize()), func(b *testing.B) {
+		b.Run(fmt.Sprintf("bothSidesRepeat-rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
 
-			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
+			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
+			b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), sourceTypes, nBatches)

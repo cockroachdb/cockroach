@@ -57,10 +57,10 @@ type routerOutput interface {
 // getDefaultRouterOutputBlockedThreshold returns the number of unread values
 // buffered by the routerOutputOp after which the output is considered blocked.
 // It is a function rather than a variable so that in tests we could modify
-// coldata.BatchSize() (if it were a variable, then its value would be
+// coldata.BatchSize (if it were a variable, then its value would be
 // evaluated before we set the desired batch size).
 func getDefaultRouterOutputBlockedThreshold() int {
-	return coldata.BatchSize() * 2
+	return coldata.BatchSize * 2
 }
 
 type routerOutputOpState int
@@ -412,7 +412,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 
 	for toAppend := len(selection); toAppend > 0; {
 		if o.mu.pendingBatch == nil {
-			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithFixedCapacity(o.types, coldata.BatchSize())
+			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithFixedCapacity(o.types, coldata.BatchSize)
 		}
 		available := o.mu.pendingBatch.Capacity() - o.mu.pendingBatch.Length()
 		numAppended := toAppend

@@ -234,14 +234,14 @@ func benchmarkLogicalProjOp(
 	batch := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{types.Bool, types.Bool})
 	col1 := batch.ColVec(0).Bool()
 	col2 := batch.ColVec(0).Bool()
-	for i := 0; i < coldata.BatchSize(); i++ {
+	for i := 0; i < coldata.BatchSize; i++ {
 		col1[i] = rng.Float64() < 0.5
 		col2[i] = rng.Float64() < 0.5
 	}
 	if hasNulls {
 		nulls1 := batch.ColVec(0).Nulls()
 		nulls2 := batch.ColVec(0).Nulls()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			if rng.Float64() < nullProbability {
 				nulls1.SetNull(i)
 			}
@@ -250,11 +250,11 @@ func benchmarkLogicalProjOp(
 			}
 		}
 	}
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			sel[i] = i
 		}
 	}
@@ -267,7 +267,7 @@ func benchmarkLogicalProjOp(
 	require.NoError(b, err)
 	logicalProjOp.Init()
 
-	b.SetBytes(int64(8 * coldata.BatchSize()))
+	b.SetBytes(int64(8 * coldata.BatchSize))
 	for i := 0; i < b.N; i++ {
 		logicalProjOp.Next(ctx)
 	}

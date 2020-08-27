@@ -36,7 +36,7 @@ func randomBatch(allocator *colmem.Allocator) ([]*types.T, coldata.Batch) {
 		typs[i] = rowenc.RandType(rng)
 	}
 
-	capacity := rng.Intn(coldata.BatchSize()) + 1
+	capacity := rng.Intn(coldata.BatchSize) + 1
 	length := rng.Intn(capacity)
 	b := coldatatestutils.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
 	return typs, b
@@ -130,15 +130,15 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	// converting on one iteration of the benchmark for the corresponding type in
 	// typs.
 	numBytes := []int64{
-		int64(coldata.BatchSize()),
-		fixedLen * int64(coldata.BatchSize()),
+		int64(coldata.BatchSize),
+		fixedLen * int64(coldata.BatchSize),
 		0, // The number of bytes for decimals will be set below.
-		8 * int64(coldata.BatchSize()),
-		3 * 8 * int64(coldata.BatchSize()),
+		8 * int64(coldata.BatchSize),
+		3 * 8 * int64(coldata.BatchSize),
 	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := coldatatestutils.RandomBatch(testAllocator, rng, []*types.T{typ}, coldata.BatchSize(), 0 /* length */, 0 /* nullProbability */)
+		batch := coldatatestutils.RandomBatch(testAllocator, rng, []*types.T{typ}, coldata.BatchSize, 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}
@@ -193,7 +193,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 					if len(data) != 1 {
 						b.Fatal("expected arrow batch of length 1")
 					}
-					if data[0].Len() != coldata.BatchSize() {
+					if data[0].Len() != coldata.BatchSize {
 						b.Fatal("unexpected number of elements")
 					}
 				}
@@ -216,7 +216,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 					if result.Width() != 1 {
 						b.Fatal("expected one column")
 					}
-					if result.Length() != coldata.BatchSize() {
+					if result.Length() != coldata.BatchSize {
 						b.Fatal("unexpected number of elements")
 					}
 				}

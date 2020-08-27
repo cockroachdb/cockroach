@@ -119,7 +119,7 @@ func new_OP_TITLEProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
+		origSel:          make([]int, coldata.BatchSize),
 	}
 }
 

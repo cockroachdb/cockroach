@@ -148,10 +148,10 @@ func (op *hashAggregator) Init() {
 	// simply reallocate the output batch.
 	// TODO(yuzefovich): consider changing aggregateFunc interface to allow for
 	// updating the output vector.
-	op.output = op.allocator.NewMemBatchWithFixedCapacity(op.outputTypes, coldata.BatchSize())
-	op.scratch.eqChains = make([][]int, coldata.BatchSize())
-	op.scratch.intSlice = make([]int, coldata.BatchSize())
-	op.scratch.anotherIntSlice = make([]int, coldata.BatchSize())
+	op.output = op.allocator.NewMemBatchWithFixedCapacity(op.outputTypes, coldata.BatchSize)
+	op.scratch.eqChains = make([][]int, coldata.BatchSize)
+	op.scratch.intSlice = make([]int, coldata.BatchSize)
+	op.scratch.anotherIntSlice = make([]int, coldata.BatchSize)
 	// The hash table only needs to store the grouping columns to be able to
 	// perform the equality check.
 	colsToStore := make([]int, len(op.spec.GroupCols))
@@ -225,7 +225,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 //   {-3}, {-3}, {-2}, {-1}, {-4}, {-1}, {-1}, {-4}.
 // (Note that negative values are chosen in order to visually distinguish them
 // from the IDs that we'll be working with below.)
-// We will use coldata.BatchSize() == 4 and let's assume that we will use a
+// We will use coldata.BatchSize == 4 and let's assume that we will use a
 // simple hash function h(i) = i % 2 with two buckets in the hash table.
 //
 // I. we get a batch [-3, -3, -2, -1].

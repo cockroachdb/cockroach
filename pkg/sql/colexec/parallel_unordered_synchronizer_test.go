@@ -53,7 +53,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	for i := range inputs {
 		source := colexecbase.NewRepeatableBatchSource(
 			testAllocator,
-			coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64()),
+			coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize, 0 /* length */, rng.Float64()),
 			typs,
 		)
 		source.ResetBatchesToReturn(numBatches)
@@ -198,13 +198,13 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	inputs := make([]SynchronizerInput, numInputs)
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-		batch.SetLength(coldata.BatchSize())
+		batch.SetLength(coldata.BatchSize)
 		inputs[i].Op = colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	b.SetBytes(8 * int64(coldata.BatchSize()))
+	b.SetBytes(8 * int64(coldata.BatchSize))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Next(ctx)

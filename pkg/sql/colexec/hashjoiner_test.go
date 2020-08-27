@@ -380,22 +380,22 @@ func init() {
 
 			leftTuples: tuples{
 				{0},
-				{coldata.BatchSize()},
-				{coldata.BatchSize()},
-				{coldata.BatchSize()},
+				{coldata.BatchSize},
+				{coldata.BatchSize},
+				{coldata.BatchSize},
 				{0},
-				{coldata.BatchSize() * 2},
+				{coldata.BatchSize * 2},
 				{1},
 				{1},
-				{coldata.BatchSize() + 1},
+				{coldata.BatchSize + 1},
 			},
 			rightTuples: tuples{
-				{coldata.BatchSize()},
-				{coldata.BatchSize() * 2},
-				{coldata.BatchSize() * 3},
+				{coldata.BatchSize},
+				{coldata.BatchSize * 2},
+				{coldata.BatchSize * 3},
 				{0},
 				{1},
-				{coldata.BatchSize() + 1},
+				{coldata.BatchSize + 1},
 			},
 
 			leftEqCols:   []uint32{0},
@@ -408,15 +408,15 @@ func init() {
 			rightEqColsAreKey: false,
 
 			expected: tuples{
-				{coldata.BatchSize(), coldata.BatchSize()},
-				{coldata.BatchSize(), coldata.BatchSize()},
-				{coldata.BatchSize(), coldata.BatchSize()},
-				{coldata.BatchSize() * 2, coldata.BatchSize() * 2},
+				{coldata.BatchSize, coldata.BatchSize},
+				{coldata.BatchSize, coldata.BatchSize},
+				{coldata.BatchSize, coldata.BatchSize},
+				{coldata.BatchSize * 2, coldata.BatchSize * 2},
 				{0, 0},
 				{0, 0},
 				{1, 1},
 				{1, 1},
-				{coldata.BatchSize() + 1, coldata.BatchSize() + 1},
+				{coldata.BatchSize + 1, coldata.BatchSize + 1},
 			},
 		},
 		{
@@ -501,14 +501,14 @@ func init() {
 			// hash to the same bucket.
 			leftTuples: tuples{
 				{0},
-				{coldata.BatchSize()},
-				{coldata.BatchSize() * 2},
-				{coldata.BatchSize() * 3},
+				{coldata.BatchSize},
+				{coldata.BatchSize * 2},
+				{coldata.BatchSize * 3},
 			},
 			rightTuples: tuples{
 				{0},
-				{coldata.BatchSize()},
-				{coldata.BatchSize() * 3},
+				{coldata.BatchSize},
+				{coldata.BatchSize * 3},
 			},
 
 			leftEqCols:   []uint32{0},
@@ -521,8 +521,8 @@ func init() {
 
 			expected: tuples{
 				{0},
-				{coldata.BatchSize()},
-				{coldata.BatchSize() * 3},
+				{coldata.BatchSize},
+				{coldata.BatchSize * 3},
 			},
 		},
 		{
@@ -607,17 +607,17 @@ func init() {
 			// Test multiple column with values that hash to the same bucket.
 			leftTuples: tuples{
 				{10, 0, 0},
-				{20, 0, coldata.BatchSize()},
-				{40, coldata.BatchSize(), 0},
-				{50, coldata.BatchSize(), coldata.BatchSize()},
-				{60, coldata.BatchSize() * 2, 0},
-				{70, coldata.BatchSize() * 2, coldata.BatchSize()},
+				{20, 0, coldata.BatchSize},
+				{40, coldata.BatchSize, 0},
+				{50, coldata.BatchSize, coldata.BatchSize},
+				{60, coldata.BatchSize * 2, 0},
+				{70, coldata.BatchSize * 2, coldata.BatchSize},
 			},
 			rightTuples: tuples{
-				{0, coldata.BatchSize()},
-				{coldata.BatchSize() * 2, coldata.BatchSize()},
+				{0, coldata.BatchSize},
+				{coldata.BatchSize * 2, coldata.BatchSize},
 				{0, 0},
-				{0, coldata.BatchSize() * 2},
+				{0, coldata.BatchSize * 2},
 			},
 
 			leftEqCols:   []uint32{1, 2},
@@ -629,8 +629,8 @@ func init() {
 			rightEqColsAreKey: true,
 
 			expected: tuples{
-				{20, 0, coldata.BatchSize()},
-				{70, coldata.BatchSize() * 2, coldata.BatchSize()},
+				{20, 0, coldata.BatchSize},
+				{70, coldata.BatchSize * 2, coldata.BatchSize},
 				{10, 0, 0},
 			},
 		},
@@ -1028,12 +1028,12 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < coldata.BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			col[i] = int64(i)
 		}
 	}
 
-	batch.SetLength(coldata.BatchSize())
+	batch.SetLength(coldata.BatchSize)
 
 	for _, hasNulls := range []bool{false, true} {
 		b.Run(fmt.Sprintf("nulls=%v", hasNulls), func(b *testing.B) {
@@ -1055,10 +1055,10 @@ func BenchmarkHashJoiner(b *testing.B) {
 					for _, rightDistinct := range []bool{true, false} {
 						b.Run(fmt.Sprintf("distinct=%v", rightDistinct), func(b *testing.B) {
 							for _, nBatches := range []int{1 << 1, 1 << 8, 1 << 12} {
-								b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize()), func(b *testing.B) {
-									// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
+								b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
+									// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 									// batch) * nCols (number of columns / row) * 2 (number of sources).
-									b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
+									b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols * 2))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
 										leftSource := colexecbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)

@@ -138,7 +138,7 @@ func TestExternalSortRandomized(t *testing.T) {
 		},
 	}
 	rng, _ := randutil.NewPseudoRand()
-	nTups := coldata.BatchSize()*4 + 1
+	nTups := coldata.BatchSize*4 + 1
 	maxCols := 2
 	// TODO(yuzefovich): randomize types as well.
 	typs := make([]*types.T, maxCols)
@@ -161,7 +161,7 @@ func TestExternalSortRandomized(t *testing.T) {
 	//    memory limit.
 	// memoryToSort is the total amount of memory that will be sorted in this
 	// test.
-	memoryToSort := (nTups / coldata.BatchSize()) * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize())
+	memoryToSort := (nTups / coldata.BatchSize) * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize)
 	// partitionSize will be the memory limit passed in to tests with a memory
 	// limit. With a maximum number of partitions of 2 this will result in
 	// repartitioning twice. To make this a total amount of memory, we also need
@@ -252,23 +252,23 @@ func BenchmarkExternalSort(b *testing.B) {
 		for _, nCols := range []int{1, 2, 4} {
 			for _, spillForced := range []bool{false, true} {
 				flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-				name := fmt.Sprintf("rows=%d/cols=%d/spilled=%t", nBatches*coldata.BatchSize(), nCols, spillForced)
+				name := fmt.Sprintf("rows=%d/cols=%d/spilled=%t", nBatches*coldata.BatchSize, nCols, spillForced)
 				b.Run(name, func(b *testing.B) {
-					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
+					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize (rows /
 					// batch) * nCols (number of columns / row).
-					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+					b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
 					typs := make([]*types.T, nCols)
 					for i := range typs {
 						typs[i] = types.Int
 					}
 					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-					batch.SetLength(coldata.BatchSize())
+					batch.SetLength(coldata.BatchSize)
 					ordCols := make([]execinfrapb.Ordering_Column, nCols)
 					for i := range ordCols {
 						ordCols[i].ColIdx = uint32(i)
 						ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
 						col := batch.ColVec(i).Int64()
-						for j := 0; j < coldata.BatchSize(); j++ {
+						for j := 0; j < coldata.BatchSize; j++ {
 							col[j] = rng.Int63() % int64((i*1024)+1)
 						}
 					}

@@ -389,7 +389,7 @@ func (b *Bytes) ProportionalSize(n int64) uintptr {
 	return FlatBytesOverhead + uintptr(len(b.data[:b.offsets[n]])) + uintptr(n)*sizeOfInt32
 }
 
-var zeroInt32Slice = make([]int32, BytesInitialAllocationFactor*BatchSize())
+var zeroInt32Slice = make([]int32, BytesInitialAllocationFactor*BatchSize)
 
 // Reset resets the underlying Bytes for reuse. Note that this zeroes out the
 // underlying bytes but doesn't change the length (see #42054 for the

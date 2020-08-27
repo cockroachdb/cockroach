@@ -18,7 +18,6 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -74,12 +73,12 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	if rng == nil {
 		rng, _ = randutil.NewPseudoRand()
 	}
-	if rng.Float64() < 0.5 {
-		randomBatchSize := 1 + rng.Intn(3)
-		if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
-			return err
-		}
-	}
+	//if rng.Float64() < 0.5 {
+	//	randomBatchSize := 1 + rng.Intn(3)
+	//	if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
+	//		return err
+	//	}
+	//}
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()

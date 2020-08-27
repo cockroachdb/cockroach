@@ -278,7 +278,7 @@ type RandomDataOpArgs struct {
 	// MaxSchemaLength is the maximum length of the operator's schema, which will
 	// be at least one type.
 	MaxSchemaLength int
-	// BatchSize() is the size of batches returned.
+	// BatchSize is the size of batches returned.
 	BatchSize int
 	// NumBatches is the number of batches returned before the final, zero batch.
 	NumBatches int
@@ -314,7 +314,7 @@ func NewRandomDataOp(
 ) *RandomDataOp {
 	var (
 		maxSchemaLength = defaultMaxSchemaLength
-		batchSize       = coldata.BatchSize()
+		batchSize       = coldata.BatchSize
 		numBatches      = defaultNumBatches
 	)
 	if args.MaxSchemaLength > 0 {

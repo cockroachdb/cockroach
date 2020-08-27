@@ -718,7 +718,7 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 				// reallocating a new scratchDecompressedReadBytes every time we perform
 				// a read from the file and constrains the downside to allocating a new
 				// null bitmap every couple of batches.
-				nulls := coldata.NewNulls(coldata.BatchSize())
+				nulls := coldata.NewNulls(coldata.BatchSize)
 				vecs[i].SetNulls(&nulls)
 			}
 		}

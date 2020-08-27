@@ -49,7 +49,7 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 	require.Equal(t, expected.Width(), actual.Width())
 	for colIdx := 0; colIdx < expected.Width(); colIdx++ {
 		// Verify equality of ColVecs (this includes nulls). Since the coldata.Vec
-		// backing array is always of coldata.BatchSize() due to the scratch batch
+		// backing array is always of coldata.BatchSize due to the scratch batch
 		// that the converter keeps around, the coldata.Vec needs to be sliced to
 		// the first length elements to match on length, otherwise the check will
 		// fail.
