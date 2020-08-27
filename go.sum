@@ -142,6 +142,8 @@ github.com/cockroachdb/crlfmt v0.0.0-20200116191136-a78e1c207bc0/go.mod h1:uY/PY
 github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:zn76sxSg3SzpJ0PPJaLDCu+Bu0Lg3sKTORVIj19EIF8=
 github.com/cockroachdb/datadriven v1.0.0 h1:uhZrAfEayBecH2w2tZmhe20HJ7hDvrrA4x2Bg9YdZKM=
 github.com/cockroachdb/datadriven v1.0.0/go.mod h1:5Ib8Meh+jk1RlHIXej6Pzevx/NLlNvQB9pmSBZErGA4=
+github.com/cockroachdb/datadriven v1.0.1-0.20200826112548-92602d883b11 h1:KQqSlwJmTr7NmxtVOl6nPNSZQEk8XuLoLyNDYcmniBo=
+github.com/cockroachdb/datadriven v1.0.1-0.20200826112548-92602d883b11/go.mod h1:5Ib8Meh+jk1RlHIXej6Pzevx/NLlNvQB9pmSBZErGA4=
 github.com/cockroachdb/errors v1.2.4 h1:Lap807SXTH5tri2TivECb/4abUkMZC9zRoLarvcKDqs=
 github.com/cockroachdb/errors v1.2.4/go.mod h1:rQD95gz6FARkaKkQXUksEje/d9a6wBJoCr5oaCLELYA=
 github.com/cockroachdb/errors v1.6.1/go.mod h1:tm6FTP5G81vwJ5lC0SizQo374JNCOPrHyXGitRJoDqM=

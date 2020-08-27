@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -120,6 +121,63 @@ func TestDimension(t *testing.T) {
 			ret, err := Dimension(g)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, ret)
+		})
+	}
+}
+
+func TestPoints(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected string
+	}{
+		{"POINT EMPTY", "MULTIPOINT EMPTY"},
+		{"POINT (1 2)", "MULTIPOINT (1 2)"},
+		{"MULTIPOINT EMPTY", "MULTIPOINT EMPTY"},
+		{"MULTIPOINT (1 2, 3 4)", "MULTIPOINT (1 2, 3 4)"},
+		{"LINESTRING EMPTY", "MULTIPOINT EMPTY"},
+		{"LINESTRING (1 2, 3 4)", "MULTIPOINT (1 2, 3 4)"},
+		{"MULTILINESTRING EMPTY", "MULTIPOINT EMPTY"},
+		{"MULTILINESTRING ((1 2, 3 4), (5 6, 7 8))", "MULTIPOINT (1 2, 3 4, 5 6, 7 8)"},
+		{"POLYGON EMPTY", "MULTIPOINT EMPTY"},
+		{"POLYGON ((1 2, 3 4, 5 6, 1 2))", "MULTIPOINT (1 2, 3 4, 5 6, 1 2)"},
+		{"MULTIPOLYGON EMPTY", "MULTIPOINT EMPTY"},
+		{"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), ((7 8, 9 0, 1 2, 7 8)))", "MULTIPOINT (1 2, 3 4, 5 6, 1 2, 7 8, 9 0, 1 2, 7 8)"},
+		{"GEOMETRYCOLLECTION EMPTY", "MULTIPOINT EMPTY"},
+		{"GEOMETRYCOLLECTION (GEOMETRYCOLLECTION EMPTY)", "MULTIPOINT EMPTY"},
+		{
+			`GEOMETRYCOLLECTION (
+				LINESTRING(1 1, 2 2),
+				POINT(1 1),
+				GEOMETRYCOLLECTION(
+					MULTIPOINT(2 2, 3 3),
+					GEOMETRYCOLLECTION EMPTY,
+					POINT(1 1),
+					MULTIPOLYGON(((1 2, 2 3, 3 4, 1 2))),
+					LINESTRING(3 3, 4 4),
+					GEOMETRYCOLLECTION(
+						POINT(4 4),
+						MULTIPOLYGON (EMPTY, ((1 2, 3 4, 5 6, 1 2), (2 3, 3 4, 4 5, 2 3)), EMPTY),
+						POINT(5 5)
+					)
+				),
+				MULTIPOINT EMPTY
+			)`,
+			"MULTIPOINT (1 1, 2 2, 1 1, 2 2, 3 3, 1 1, 1 2, 2 3, 3 4, 1 2, 3 3, 4 4, 4 4, 1 2, 3 4, 5 6, 1 2, 2 3, 3 4, 4 5, 2 3, 5 5)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			srid := geopb.SRID(4000)
+			g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.wkt), srid, true)
+			require.NoError(t, err)
+
+			result, err := Points(g)
+			require.NoError(t, err)
+			wkt, err := geo.SpatialObjectToWKT(result.SpatialObject(), 0)
+			require.NoError(t, err)
+			require.EqualValues(t, tc.expected, wkt)
+			require.EqualValues(t, srid, result.SRID())
 		})
 	}
 }

@@ -684,6 +684,8 @@ func (d *DInt) Compare(ctx *EvalContext, other Datum) int {
 		v = *t
 	case *DFloat, *DDecimal:
 		return -t.Compare(ctx, d)
+	case *DOid:
+		v = t.DInt
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -4235,14 +4237,20 @@ func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := UnwrapDatum(ctx, other).(*DOid)
-	if !ok {
+	var v DInt
+	switch t := UnwrapDatum(ctx, other).(type) {
+	case *DOid:
+		v = t.DInt
+	case *DInt:
+		v = *t
+	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if d.DInt < v.DInt {
+
+	if d.DInt < v {
 		return -1
 	}
-	if d.DInt > v.DInt {
+	if d.DInt > v {
 		return 1
 	}
 	return 0

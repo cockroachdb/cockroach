@@ -1213,6 +1213,30 @@ Square (left)                             GEOMETRYCOLLECTION EMPTY
 Square (right)                            POLYGON ((0 0, 0 0.5, 0.5 0.5, 0.5 0, 0 0))
 Square overlapping left and right square  POLYGON ((0 0, 0 0.5, 0.5 0.5, 0.5 0, 0 0))
 
+# CW/CCW predicates.
+query TBBTT
+SELECT
+  dsc,
+  ST_IsPolygonCW(geom),
+  ST_IsPolygonCCW(geom),
+  ST_AsText(ST_ForcePolygonCW(geom)),
+  ST_AsText(ST_ForcePolygonCCW(geom))
+FROM geom_operators_test
+ORDER BY dsc
+----
+Empty GeometryCollection                  true   true  GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY
+Empty LineString                          true   true  LINESTRING EMPTY                                       LINESTRING EMPTY
+Empty Point                               true   true  POINT EMPTY                                            POINT EMPTY
+Faraway point                             true   true  POINT (5 5)                                            POINT (5 5)
+Line going through left and right square  true   true  LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                      NULL   NULL  NULL                                                   NULL
+Nested Geometry Collection                true   true  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+Point middle of Left Square               true   true  POINT (-0.5 0.5)                                       POINT (-0.5 0.5)
+Point middle of Right Square              true   true  POINT (0.5 0.5)                                        POINT (0.5 0.5)
+Square (left)                             false  true  POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))                 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+Square (right)                            false  true  POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                    POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+Square overlapping left and right square  false  true  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))           POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+
 # Functions which take in strings as input as well.
 query TT
 SELECT
@@ -2631,6 +2655,26 @@ Point middle of Right Square              Point               ST_Point          
 Square (left)                             Polygon             ST_Polygon             2     2     2     5     1
 Square (right)                            Polygon             ST_Polygon             2     2     2     5     1
 Square overlapping left and right square  Polygon             ST_Polygon             2     2     2     5     1
+
+query TT
+SELECT
+  dsc,
+  ST_AsEWKT(ST_Points(geom))
+FROM geom_operators_test
+ORDER BY dsc
+----
+Empty GeometryCollection                  MULTIPOINT EMPTY
+Empty LineString                          MULTIPOINT EMPTY
+Empty Point                               MULTIPOINT EMPTY
+Faraway point                             MULTIPOINT (5 5)
+Line going through left and right square  MULTIPOINT (-0.5 0.5, 0.5 0.5)
+NULL                                      NULL
+Nested Geometry Collection                MULTIPOINT (0 0)
+Point middle of Left Square               MULTIPOINT (-0.5 0.5)
+Point middle of Right Square              MULTIPOINT (0.5 0.5)
+Square (left)                             MULTIPOINT (-1 0, 0 0, 0 1, -1 1, -1 0)
+Square (right)                            MULTIPOINT (0 0, 1 0, 1 1, 0 1, 0 0)
+Square overlapping left and right square  MULTIPOINT (-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)
 
 query TTTT
 SELECT
