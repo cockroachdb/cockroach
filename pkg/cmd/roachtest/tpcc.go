@@ -414,7 +414,7 @@ func registerTPCC(r *testRegistry) {
 		LoadWarehouses: 5000,
 		EstimatedMax:   3000,
 
-		MinVersion: "v19.1.0",
+		MinVersion: "v20.1.0",
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:      9,
@@ -425,7 +425,7 @@ func registerTPCC(r *testRegistry) {
 		LoadWarehouses: 2000,
 		EstimatedMax:   900,
 
-		MinVersion: "v19.1.0",
+		MinVersion: "v20.1.0",
 	})
 }
 
