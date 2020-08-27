@@ -1589,7 +1589,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 		defProps(),
 		geometryOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				dim, err := geomfn.Dimension(g.Geometry)
+				dim, err := geomfn.Dimension(&g.Geometry)
 				if err != nil {
 					return nil, err
 				}
@@ -2449,7 +2449,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		defProps(),
 		geometryOverload2(
 			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
-				ret, err := geomfn.MinDistance(a.Geometry, b.Geometry)
+				ret, err := geomfn.MinDistance(&a.Geometry, &b.Geometry)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
 						return tree.DNull, nil
@@ -2574,7 +2574,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		defProps(),
 		geometryOverload2(
 			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
-				ret, err := geomfn.MaxDistance(a.Geometry, b.Geometry)
+				ret, err := geomfn.MaxDistance(&a.Geometry, &b.Geometry)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
 						return tree.DNull, nil
@@ -2595,7 +2595,7 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 		defProps(),
 		geometryOverload2(
 			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
-				longestLineString, err := geomfn.LongestLineString(a.Geometry, b.Geometry)
+				longestLineString, err := geomfn.LongestLineString(&a.Geometry, &b.Geometry)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
 						return tree.DNull, nil
@@ -2620,7 +2620,7 @@ Note if geometries are the same, it will return the LineString with the maximum 
 		defProps(),
 		geometryOverload2(
 			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
-				shortestLineString, err := geomfn.ShortestLineString(a.Geometry, b.Geometry)
+				shortestLineString, err := geomfn.ShortestLineString(&a.Geometry, &b.Geometry)
 				if err != nil {
 					if geo.IsEmptyGeometryError(err) {
 						return tree.DNull, nil
@@ -2735,7 +2735,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				a := args[0].(*tree.DGeometry)
 				b := args[1].(*tree.DGeometry)
 				dist := args[2].(*tree.DFloat)
-				ret, err := geomfn.DFullyWithin(a.Geometry, b.Geometry, float64(*dist), geo.FnInclusive)
+				ret, err := geomfn.DFullyWithin(&a.Geometry, &b.Geometry, float64(*dist), geo.FnInclusive)
 				if err != nil {
 					return nil, err
 				}
@@ -4285,7 +4285,7 @@ Bottom Left.`,
 				a := args[0].(*tree.DGeometry)
 				b := args[1].(*tree.DGeometry)
 				dist := args[2].(*tree.DFloat)
-				ret, err := geomfn.DFullyWithin(a.Geometry, b.Geometry, float64(*dist), geo.FnExclusive)
+				ret, err := geomfn.DFullyWithin(&a.Geometry, &b.Geometry, float64(*dist), geo.FnExclusive)
 				if err != nil {
 					return nil, err
 				}
@@ -4886,7 +4886,7 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 				a := args[0].(*tree.DGeometry)
 				b := args[1].(*tree.DGeometry)
 				dist := args[2].(*tree.DFloat)
-				ret, err := geomfn.DWithin(a.Geometry, b.Geometry, float64(*dist), exclusivity)
+				ret, err := geomfn.DWithin(&a.Geometry, &b.Geometry, float64(*dist), exclusivity)
 				if err != nil {
 					return nil, err
 				}

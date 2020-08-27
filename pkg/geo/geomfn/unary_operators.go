@@ -114,7 +114,7 @@ func Area(g geo.Geometry) (float64, error) {
 }
 
 // Dimension returns the topological dimension of a given Geometry.
-func Dimension(g geo.Geometry) (int, error) {
+func Dimension(g *geo.Geometry) (int, error) {
 	t, err := g.AsGeomT()
 	if err != nil {
 		return 0, err
