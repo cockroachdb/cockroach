@@ -11,6 +11,7 @@
 package rowenc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -51,10 +52,15 @@ type DatumAlloc struct {
 	doidAlloc         []tree.DOid
 	scratch           []byte
 	env               tree.CollationEnvironment
+
+	// Allocations for geopb.SpatialObject.EWKB
+	ewkbAlloc               []byte
+	lastEWKBBeyondAllocSize bool
 }
 
 const defaultDatumAllocSize = 16 // Arbitrary, could be tuned.
 const datumAllocMultiplier = 4   // Arbitrary, could be tuned.
+const defaultEWKBAlloc = 4096    // Arbitrary, could be tuned.
 
 // NewDatums allocates Datums of the specified size.
 func (a *DatumAlloc) NewDatums(num int) tree.Datums {
@@ -229,6 +235,44 @@ func (a *DatumAlloc) NewDGeography(v tree.DGeography) *tree.DGeography {
 	return r
 }
 
+// NewDGeographyEmpty allocates a new empty DGeography for unmarshalling.
+// After unmarshalling, DoneInitNewDGeo must be called to return unused
+// pre-allocated space to the DatumAlloc.
+func (a *DatumAlloc) NewDGeographyEmpty() *tree.DGeography {
+	if a.AllocSize == 0 {
+		a.AllocSize = defaultDatumAllocSize
+	}
+	buf := &a.dgeographyAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DGeography, a.AllocSize)
+	}
+	r := &(*buf)[0]
+	*buf = (*buf)[1:]
+	so := r.SpatialObjectRef()
+	if a.ewkbAlloc == nil && !a.lastEWKBBeyondAllocSize {
+		so.EWKB = make([]byte, 0, defaultEWKBAlloc)
+	} else {
+		so.EWKB = a.ewkbAlloc[:0]
+		a.ewkbAlloc = nil
+	}
+	return r
+}
+
+// DoneInitNewDGeo is called after unmarshalling a SpatialObject allocated via
+// NewDGeographyEmpty/NewDGeometryEmpty, to return space to the DatumAlloc.
+func (a *DatumAlloc) DoneInitNewDGeo(so *geopb.SpatialObject) {
+	// Don't allocate next time if the allocation was wasted.
+	// This is just a crude heuristic to avoid wasting allocations
+	// if the EWKBs are very large.
+	a.lastEWKBBeyondAllocSize = len(so.EWKB) > defaultEWKBAlloc
+	c := cap(so.EWKB)
+	l := len(so.EWKB)
+	if (c - l) > l {
+		a.ewkbAlloc = so.EWKB[l:c]
+		so.EWKB = so.EWKB[:l:l]
+	}
+}
+
 // NewDGeometry allocates a DGeometry.
 func (a *DatumAlloc) NewDGeometry(v tree.DGeometry) *tree.DGeometry {
 	if a.AllocSize == 0 {
@@ -241,6 +285,29 @@ func (a *DatumAlloc) NewDGeometry(v tree.DGeometry) *tree.DGeometry {
 	r := &(*buf)[0]
 	*r = v
 	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDGeometryEmpty allocates a new empty DGeometry for unmarshalling. After
+// unmarshalling, DoneInitNewDGeo must be called to return unused
+// pre-allocated space to the DatumAlloc.
+func (a *DatumAlloc) NewDGeometryEmpty() *tree.DGeometry {
+	if a.AllocSize == 0 {
+		a.AllocSize = defaultDatumAllocSize
+	}
+	buf := &a.dgeometryAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DGeometry, a.AllocSize)
+	}
+	r := &(*buf)[0]
+	*buf = (*buf)[1:]
+	so := r.SpatialObjectRef()
+	if a.ewkbAlloc == nil && !a.lastEWKBBeyondAllocSize {
+		so.EWKB = make([]byte, 0, defaultEWKBAlloc)
+	} else {
+		so.EWKB = a.ewkbAlloc[:0]
+		a.ewkbAlloc = nil
+	}
 	return r
 }
 
