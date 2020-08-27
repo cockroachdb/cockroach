@@ -126,3 +126,8 @@
 - Version: 33 (MinAcceptedVersion: 30)
     - Added an aggregator for ST_Union. The change is backwards compatible
       (mixed versions will prevent parallelization).
+- Version: 34 (MinAcceptedVersion: 30)
+    - Added a boolean field to InvertedJoinerSpec to maintain ordering. The
+      change is backwards compatible because the invertedJoiner already
+      maintained ordering by default (mixed versions will prevent
+      parallelization).

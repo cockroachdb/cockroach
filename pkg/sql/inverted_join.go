@@ -35,6 +35,8 @@ type invertedJoinNode struct {
 	// onExpr is any ON condition to be used in conjunction with the inverted
 	// expression.
 	onExpr tree.TypedExpr
+
+	reqOrdering ReqOrdering
 }
 
 func (ij *invertedJoinNode) startExec(params runParams) error {
