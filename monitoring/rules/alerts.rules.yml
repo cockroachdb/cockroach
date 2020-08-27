@@ -1,14 +1,6 @@
 groups:
 - name: rules/alerts.rules
   rules:
-  # Alert for any instance that is unreachable for >5 minutes.
-  - alert: InstanceDown
-    expr: up{job="cockroachdb"} == 0
-    for: 5m
-    annotations:
-      description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
-        down for more than 5 minutes.'
-      summary: Instance {{ $labels.instance }} down
   # Alert for any instance that is unreachable for >15 minutes.
   - alert: InstanceDead
     expr: up{job="cockroachdb"} == 0
@@ -21,8 +13,6 @@ groups:
   - alert: InstanceNotReady
     expr: kube_statefulset_status_replicas_ready{statefulset="cockroachdb"} != kube_statefulset_status_replicas{statefulset="cockroachdb"}
     for: 45m
-    labels:
-      priority: P4
     annotations:
       description: 'there has been an unready replica for cluster {{ $labels.cluster }}
         for more than 15 minutes.'
@@ -30,16 +20,14 @@ groups:
   # Alert on instance restarts.
   - alert: InstanceRestart
     expr: resets(sys_uptime{job="cockroachdb"}[24h]) > 1
-    labels:
-      priority: P4
     annotations:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
         {{ $value }} time(s) in 24h'
       summary: Instance {{ $labels.instance }} restarted
   # Alert on flapping instances (frequent restarts).
   - alert: InstancesFlapping
-    # Aggregated. We commit to not updating so fast this is triggered except in emergency.
-    # Update automation sleeps 3m between pod updates!
+    # Aggregated.
+    # This alert assumes that rolling restarts or rolling upgrades leave at least 3 minutes between each node being updated or restarted.
     expr: sum by (cluster)(resets(sys_uptime{job="cockroachdb"}[5m])) > 2
     annotations:
       description: 'instances in cluster {{ $labels.cluster }} restarted
@@ -53,17 +41,6 @@ groups:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
         {{ $value }} time(s) in 10m'
       summary: Instance {{ $labels.instance }} flapping
-  # Alert on mismatching "up" (from prometheus) vs "liveness" (from cockroach). We do this at the node level.
-  # This compares per-instance "liveness_livenodes" against the per-cluster count(up == 1).
-  - alert: LivenessMismatch
-    expr: (liveness_livenodes{job="cockroachdb"}) != ignoring(instance) group_left()
-      (count by(cluster, job) (up{job="cockroachdb"} == 1))
-    for: 5m
-    labels:
-      severity: testing
-    annotations:
-      description: Prometheus and {{ $labels.instance }} disagree on liveness
-      summary: Liveness mismatch for {{ $labels.instance }}
   # Alert on version mismatch.
   # This alert is intentionally loose (4 hours) to allow for rolling upgrades.
   # This may need to be adjusted for large clusters.
@@ -71,8 +48,6 @@ groups:
     expr: count by(cluster) (count_values by(tag, cluster) ("version", build_timestamp{job="cockroachdb"}))
       > 1
     for: 4h
-    labels:
-      priority: P4
     annotations:
       description: Cluster {{ $labels.cluster }} running {{ $value }} different versions
       summary: Binary version mismatch on {{ $labels.cluster }}
@@ -86,13 +61,6 @@ groups:
     expr: cluster:capacity_available:ratio{job="cockroachdb"} < 0.2
     annotations:
       summary: Cluster {{ $labels.cluster }} at {{ $value }} available disk fraction
-  # Zero SQL qps.
-  - alert: ZeroSQLQps
-    expr: sql_conns{job="cockroachdb"} > 0 and rate(sql_query_count{job="cockroachdb"}[5m])
-      == 0
-    for: 10m
-    annotations:
-      summary: Instance {{ $labels.instance }} has SQL connections but no queries
   # Unavailable ranges.
   - alert: UnavailableRanges
     expr: (sum by(instance, cluster) (ranges_unavailable{job="cockroachdb"})) > 0
@@ -103,26 +71,20 @@ groups:
   - alert: ClockOffsetNearMax
     expr: clock_offset_meannanos{job="cockroachdb"} > 300 * 1000 * 1000
     for: 5m
-    labels:
-      priority: P4
     annotations:
-      summary: Clock on {{ $labels.instance }} as measured by cockroach is offset by {{ $value }} nanoseconds from the cluster mean
-  # Leader-not-leaseholder ranges.
-  - alert: NoLeaseRanges
-    expr: (sum by(instance, cluster) (replicas_leaders_not_leaseholders{job="cockroachdb"}))
-      > 0
-    for: 10m
+      summary: Clock on {{ $labels.instance }} as measured by cockroach is offset by {{ $value }} nanoseconds from the cluster mean  # Certificate expiration. Alerts are per node.
+  - alert: CACertificateExpiresSoon
+    expr: (security_certificate_expiration_ca{job="cockroachdb"} > 0) and (security_certificate_expiration_ca{job="cockroachdb"}
+      - time()) < 86400 * 366
     labels:
-      severity: testing
+      frequency: daily
     annotations:
-      summary: Instance {{ $labels.instance }} has {{ $value }} ranges without leases
-  # Certificate expiration. Alerts are per node.
+      summary: CA certificate for {{ $labels.instance }} expires in less than a year
   - alert: ClientCACertificateExpiresSoon
     expr: (security_certificate_expiration_client_ca{job="cockroachdb"} > 0) and (security_certificate_expiration_client_ca{job="cockroachdb"}
       - time()) < 86400 * 366
     labels:
       frequency: daily
-      priority: P4
     annotations:
       summary: Client CA certificate for {{ $labels.instance }} expires in less than a year
   - alert: UICACertificateExpiresSoon
@@ -130,7 +92,6 @@ groups:
       - time()) < 86400 * 366
     labels:
       frequency: daily
-      priority: P4
     annotations:
       summary: UI CA certificate for {{ $labels.instance }} expires in less than a year
   - alert: NodeCertificateExpiresSoon
@@ -138,7 +99,6 @@ groups:
       - time()) < 86400 * 183
     labels:
       frequency: daily
-      priority: P4
     annotations:
       summary: Node certificate for {{ $labels.instance }} expires in less than six months
   - alert: NodeClientCertificateExpiresSoon
@@ -146,7 +106,6 @@ groups:
       - time()) < 86400 * 183
     labels:
       frequency: daily
-      priority: P4
     annotations:
       summary: Client certificate for {{ $labels.instance }} expires in less than six months
   - alert: UICertificateExpiresSoon
@@ -154,7 +113,6 @@ groups:
       - time()) < 86400 * 20
     labels:
       frequency: daily
-      priority: P4
     annotations:
       summary: UI certificate for {{ $labels.instance }} expires in less than 20 days
   # Slow Latch/Lease/Raft requests.
