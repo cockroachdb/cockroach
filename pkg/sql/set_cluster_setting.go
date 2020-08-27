@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -44,15 +45,17 @@ type setClusterSettingNode struct {
 	value tree.TypedExpr
 }
 
+// nonAdminsCanModify returns whether non-admin users with MODIFYCLUSTERSETTING
+// privileges can modify the specified setting.
+func nonAdminsCanModify(name string) bool {
+	return strings.HasPrefix(name, "sql.defaults.")
+}
+
 // SetClusterSetting sets session variables.
 // Privileges: super user.
 func (p *planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
-	if err := p.RequireAdminRole(ctx, "SET CLUSTER SETTING"); err != nil {
-		return nil, err
-	}
-
 	if !p.execCfg.TenantTestingKnobs.CanSetClusterSettings() && !p.execCfg.Codec.ForSystemTenant() {
 		// Setting cluster settings is disabled for phase 2 tenants if a test does
 		// not explicitly allow for setting in-memory cluster settings.
@@ -64,6 +67,26 @@ func (p *planner) SetClusterSetting(
 	v, ok := settings.Lookup(name, settings.LookupForLocalAccess)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+	}
+
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !hasAdmin {
+		if nonAdminsCanModify(name) {
+			hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
+			if err != nil {
+				return nil, err
+			}
+			if !hasModify {
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+					"only users with the MODIFYCLUSTERSETTING privilege are allowed to set '%s'", name)
+			}
+		} else {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to set '%s'", name)
+		}
 	}
 
 	setting, ok := v.(settings.WritableSetting)

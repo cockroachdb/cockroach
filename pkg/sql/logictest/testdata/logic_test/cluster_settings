@@ -21,3 +21,46 @@ SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '1b'
 
 statement ok
 SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '64MB'
+
+# Test permissions for modifying cluster settings.
+
+user testuser
+
+statement error pq: only users with the MODIFYCLUSTERSETTING privilege are allowed to set 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+statement error pq: only users with the admin role are allowed to set 'cloudstorage.gs.default.key'
+SET CLUSTER SETTING cloudstorage.gs.default.key = 'foo'
+
+user root
+
+statement ok
+ALTER USER testuser MODIFYCLUSTERSETTING
+
+user testuser
+
+statement ok
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+statement error pq: only users with the admin role are allowed to set 'cloudstorage.gs.default.key'
+SET CLUSTER SETTING cloudstorage.gs.default.key = 'foo'
+
+user root
+
+statement ok
+ALTER USER testuser NOMODIFYCLUSTERSETTING
+
+user testuser
+
+statement error pq: only users with the MODIFYCLUSTERSETTING privilege are allowed to set 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
+statement ok
+SET CLUSTER SETTING cloudstorage.gs.default.key = 'foo'
