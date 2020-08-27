@@ -130,7 +130,7 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 	// Now on to the tables.
 	for _, desc := range descs {
 		if tbDesc := desc.Table(hlc.Timestamp{}); tbDesc != nil {
-			if tbDesc.Dropped() {
+			if tbDesc.Dropped() || tbDesc.Temporary {
 				continue
 			}
 			parentDesc, ok := r.descByID[tbDesc.ParentID]
