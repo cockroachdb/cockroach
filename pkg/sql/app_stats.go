@@ -106,6 +106,14 @@ var stmtStatsEnable = settings.RegisterPublicBoolSetting(
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
 )
 
+// TxnStatsNumStmtIDsToRecord limits the number of statementIDs stored for in
+// transactions statistics for a single transaction. This defaults to 1000, and
+// currently is non-configurable (hidden setting).
+var TxnStatsNumStmtIDsToRecord = settings.RegisterPositiveIntSetting(
+	"sql.metrics.transaction_details.max_statement_ids",
+	"max number of statement IDs to store for transaction statistics",
+	1000)
+
 // txnStatsEnable determines whether to collect per-application transaction
 // statistics.
 var txnStatsEnable = settings.RegisterPublicBoolSetting(
