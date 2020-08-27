@@ -105,7 +105,7 @@ SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 6
 sql.plan.reorder-joins.set-limit-6
 
 feature-usage
-SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 20 
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 20
 ----
 sql.plan.reorder-joins.set-limit-more
 
