@@ -1,6 +1,5 @@
 statement ok
 SET experimental_enable_user_defined_schemas = true;
-SET experimental_enable_enums = true;
 SET experimental_enable_temp_tables = true;
 
 statement ok
@@ -280,8 +279,7 @@ statement error pq: user testuser does not have CREATE privilege on schema privs
 CREATE TABLE privs.denied (x INT)
 
 statement error pq: user testuser does not have CREATE privilege on schema privs
-SET experimental_enable_enums = true;
-CREATE TYPE privs.denied AS ENUM ('denied');
+CREATE TYPE privs.denied AS ENUM ('denied')
 
 user root
 
@@ -295,8 +293,7 @@ statement ok
 CREATE TABLE privs.tbl (x INT)
 
 statement ok
-SET experimental_enable_enums = true;
-CREATE TYPE privs.typ AS ENUM ('allowed');
+CREATE TYPE privs.typ AS ENUM ('allowed')
 
 # Now revoke the permissions.
 user root
@@ -310,8 +307,7 @@ statement error pq: user testuser does not have CREATE privilege on schema privs
 CREATE TABLE privs.denied (x INT)
 
 statement error pq: user testuser does not have CREATE privilege on schema privs
-SET experimental_enable_enums = true;
-CREATE TYPE privs.denied AS ENUM ('denied');
+CREATE TYPE privs.denied AS ENUM ('denied')
 
 # The testuser shouldn't be able to alter or drop the schema.
 statement error pq: must be owner of schema "privs"

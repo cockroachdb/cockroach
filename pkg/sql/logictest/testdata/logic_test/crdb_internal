@@ -626,7 +626,6 @@ user root
 
 # Test the crdb_internal.create_type_statements table.
 statement ok
-SET experimental_enable_enums=true;
 CREATE TYPE enum1 AS ENUM ('hello', 'hi');
 CREATE TYPE enum2 AS ENUM ()
 

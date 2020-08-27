@@ -1,8 +1,5 @@
 # LogicTest: local
 
-statement ok
-SET experimental_enable_enums=true;
-
 # Note that we use EXPLAIN (opt) in these tests because the standard explain
 # prints spans after they have been converted into keys. Once converted into
 # keys, enum datums are not human readable. EXPLAIN (OPT) prints these enums

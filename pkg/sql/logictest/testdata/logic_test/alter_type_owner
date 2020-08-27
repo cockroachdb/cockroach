@@ -1,7 +1,4 @@
 statement ok
-SET experimental_enable_enums = true
-
-statement ok
 CREATE TYPE typ AS ENUM ()
 
 # Ensure user must exist for set owner.
@@ -107,9 +104,6 @@ user testuser
 
 statement ok
 SET experimental_enable_user_defined_schemas = true
-
-statement ok
-SET experimental_enable_enums = true
 
 statement ok
 CREATE SCHEMA s2

@@ -47,7 +47,6 @@ enable_interleaved_joins                       on
 enable_seqscan                                 on
 enable_zigzag_join                             on
 experimental_distsql_planning                  off
-experimental_enable_enums                      off
 experimental_enable_hash_sharded_indexes       off
 experimental_enable_temp_tables                off
 experimental_enable_user_defined_schemas       off
