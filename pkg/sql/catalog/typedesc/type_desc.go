@@ -70,6 +70,11 @@ type Mutable struct {
 	ClusterVersion *Immutable
 }
 
+// IsUncommittedVersion implements the Descriptor interface.
+func (desc *Mutable) IsUncommittedVersion() bool {
+	return desc.IsNew() || desc.ClusterVersion.GetVersion() != desc.GetVersion()
+}
+
 // Immutable is a custom type for wrapping TypeDescriptors
 // when used in a read only way.
 type Immutable struct {
@@ -79,6 +84,10 @@ type Immutable struct {
 	logicalReps     []string
 	physicalReps    [][]byte
 	readOnlyMembers []bool
+
+	// isUncommittedVersion is set to true if this descriptor was created from
+	// a copy of a Mutable with an uncommitted version.
+	isUncommittedVersion bool
 }
 
 // NewCreatedMutable returns a Mutable from the given type descriptor with the
@@ -169,6 +178,11 @@ func (desc *Immutable) GetOfflineReason() string {
 	return ""
 }
 
+// IsUncommittedVersion implements the Descriptor interface.
+func (desc *Immutable) IsUncommittedVersion() bool {
+	return desc.isUncommittedVersion
+}
+
 // DescriptorProto returns a Descriptor for serialization.
 func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
@@ -231,7 +245,9 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
+	imm := NewImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
+	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+	return imm
 }
 
 // IsNew implements the MutableDescriptor interface.
@@ -513,9 +529,7 @@ func HydrateTypesInTableDescriptor(
 			if err != nil {
 				return err
 			}
-			// TODO (rohany): This should be a noop if the hydrated type
-			//  information present in the descriptor has the same version as
-			//  the resolved type descriptor we found here.
+			// Note that this will no-op if the type is already hydrated.
 			if err := typDesc.HydrateTypeInfoWithName(ctx, col.Type, &name, res); err != nil {
 				return err
 			}
@@ -541,9 +555,15 @@ func HydrateTypesInTableDescriptor(
 // HydrateTypeInfoWithName fills in user defined type metadata for
 // a type and also sets the name in the metadata to the passed in name.
 // This is used when hydrating a type with a known qualified name.
+//
+// Note that if the passed type is already hydrated, regardless of the version
+// with which it has been hydrated, this is a no-op.
 func (desc *Immutable) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
+	if typ.IsHydrated() {
+		return nil
+	}
 	typ.TypeMeta.Name = &types.UserDefinedTypeName{
 		Catalog:        name.Catalog(),
 		ExplicitSchema: name.ExplicitSchema,

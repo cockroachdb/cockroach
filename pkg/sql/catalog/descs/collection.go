@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -141,6 +142,7 @@ func MakeCollection(
 	dbCache *database.Cache,
 	dbCacheSubscriber DatabaseCacheSubscriber,
 	sessionData *sessiondata.SessionData,
+	hydratedTables *hydratedtables.Cache,
 ) Collection {
 	// For testing.
 	databaseLeasingUnsupported := false
@@ -154,14 +156,26 @@ func MakeCollection(
 		dbCacheSubscriber:          dbCacheSubscriber,
 		databaseLeasingUnsupported: databaseLeasingUnsupported,
 		sessionData:                sessionData,
+		hydratedTables:             hydratedTables,
 	}
 }
 
 // NewCollection constructs a new *Collection.
 func NewCollection(
-	ctx context.Context, settings *cluster.Settings, leaseMgr *lease.Manager,
+	ctx context.Context,
+	settings *cluster.Settings,
+	leaseMgr *lease.Manager,
+	hydratedTables *hydratedtables.Cache,
 ) *Collection {
-	tc := MakeCollection(ctx, leaseMgr, settings, nil, nil, nil)
+	tc := MakeCollection(
+		ctx,
+		leaseMgr,
+		settings,
+		nil, /* dbCache */
+		nil, /* dbCache */
+		nil, /* sessionData */
+		hydratedTables,
+	)
 	return &tc
 }
 
@@ -236,6 +250,10 @@ type Collection struct {
 	// true in mixed-version 20.1/20.2 clusters, but it remains constant for the
 	// duration of each use of the Collection.
 	databaseLeasingUnsupported bool
+
+	// hydratedTables is node-level cache of table descriptors which utlize
+	// user-defined types.
+	hydratedTables *hydratedtables.Cache
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
@@ -1057,12 +1075,9 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			return desc, nil
 		}
 
-		// TODO (rohany, ajwerner): Here we would look into the cached set of
-		//  hydrated table descriptors and potentially return without having to
-		//  make a copy. However, we could avoid hitting the cache if any of the
-		//  user defined types have been modified in this transaction.
-
-		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
+		getType := typedesc.TypeLookupFunc(func(
+			ctx context.Context, id descpb.ID,
+		) (tree.TypeName, catalog.TypeDescriptor, error) {
 			desc, err := tc.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
 			if err != nil {
 				return tree.TypeName{}, nil, err
@@ -1078,14 +1093,29 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			}
 			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.Name)
 			return name, desc, nil
+		})
+
+		// Utilize the cache of hydrated tables if we have one.
+		if tc.hydratedTables != nil {
+			hydrated, err := tc.hydratedTables.GetHydratedTableDescriptor(ctx, t, getType)
+			if err != nil {
+				return nil, err
+			}
+			if hydrated != nil {
+				return hydrated, nil
+			}
+			// The cache decided not to give back a hydrated descriptor, likely
+			// because either we've modified the table or one of the types or because
+			// this transaction has a stale view of one of the relevant descriptors.
+			// Proceed to hydrating a fresh copy.
 		}
 
 		// Make a copy of the underlying descriptor before hydration.
 		descBase := protoutil.Clone(t.TableDesc()).(*descpb.TableDescriptor)
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, typedesc.TypeLookupFunc(getType)); err != nil {
+		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, getType); err != nil {
 			return nil, err
 		}
-		return tabledesc.NewImmutable(*descBase), nil
+		return tabledesc.NewImmutableWithIsUncommittedVersion(*descBase, t.IsUncommittedVersion()), nil
 	default:
 		return desc, nil
 	}

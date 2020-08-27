@@ -2478,6 +2478,12 @@ func (t *T) stringTypeSQL() string {
 	return typName
 }
 
+// IsHydrated returns true if this is a user-defined type and the TypeMeta
+// is hydrated.
+func (t *T) IsHydrated() bool {
+	return t.UserDefined() && t.TypeMeta != (UserDefinedTypeMetadata{})
+}
+
 var typNameLiterals map[string]*T
 
 func init() {

@@ -53,6 +53,10 @@ type txnState struct {
 
 		// txnStart records the time that txn started.
 		txnStart time.Time
+
+		// stmtCount keeps track of the number of statements that the transaction
+		// has executed.
+		stmtCount int
 	}
 
 	// connCtx is the connection's context. This is the parent of Ctx.
@@ -198,6 +202,7 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
 	ts.mu.Lock()
+	ts.mu.stmtCount = 0
 	if txn == nil {
 		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero)
 		ts.mu.txn.SetDebugName(opName)

@@ -102,7 +102,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	schema := schemadesc.NewMutableCreatedSchemaDescriptor(descpb.SchemaDescriptor{
+	schema := schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
 		ParentID:   n.newParent.ID,
 		Name:       n.db.Name,
 		ID:         id,

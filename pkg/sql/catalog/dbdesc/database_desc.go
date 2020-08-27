@@ -31,6 +31,10 @@ var _ catalog.MutableDescriptor = (*Mutable)(nil)
 // on it.
 type Immutable struct {
 	descpb.DatabaseDescriptor
+
+	// isUncommittedVersion is set to true if this descriptor was created from
+	// a copy of a Mutable with an uncommitted version.
+	isUncommittedVersion bool
 }
 
 // Mutable wraps a database descriptor and provides methods
@@ -108,6 +112,11 @@ func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 // GetParentID implements the Descriptor interface.
 func (desc *Immutable) GetParentID() descpb.ID {
 	return keys.RootNamespaceID
+}
+
+// IsUncommittedVersion implements the Descriptor interface.
+func (desc *Immutable) IsUncommittedVersion() bool {
+	return desc.isUncommittedVersion
 }
 
 // GetParentSchemaID implements the Descriptor interface.
@@ -228,12 +237,19 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutable(*protoutil.Clone(desc.DatabaseDesc()).(*descpb.DatabaseDescriptor))
+	imm := NewImmutable(*protoutil.Clone(desc.DatabaseDesc()).(*descpb.DatabaseDescriptor))
+	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+	return imm
 }
 
 // IsNew implements the MutableDescriptor interface.
 func (desc *Mutable) IsNew() bool {
 	return desc.ClusterVersion == nil
+}
+
+// IsUncommittedVersion implements the Descriptor interface.
+func (desc *Mutable) IsUncommittedVersion() bool {
+	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
 }
 
 // AddDrainingName adds a draining name to the DatabaseDescriptor's slice of
