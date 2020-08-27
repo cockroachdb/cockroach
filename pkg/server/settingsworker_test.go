@@ -12,9 +12,7 @@ package server_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
@@ -258,41 +256,6 @@ func TestSettingsSetAndShow(t *testing.T) {
 	)
 
 	db.ExpectErr(t, `invalid integer value '7' for enum setting`, fmt.Sprintf(setQ, enumKey, "7"))
-
-	db.Exec(t, `CREATE USER testuser`)
-	pgURL, cleanupFunc := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User("testuser"))
-	defer cleanupFunc()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer testuser.Close()
-
-	if _, err := testuser.Exec(`SET CLUSTER SETTING foo = 'bar'`); !testutils.IsError(err,
-		`only users with the admin role are allowed to SET CLUSTER SETTING`,
-	) {
-		t.Fatal(err)
-	}
-	if _, err := testuser.Exec(`SHOW CLUSTER SETTING foo`); !testutils.IsError(err,
-		`only users with the admin role are allowed to SHOW CLUSTER SETTING`,
-	) {
-		t.Fatal(err)
-	}
-	if _, err := testuser.Exec(`SHOW ALL CLUSTER SETTINGS`); !testutils.IsError(err,
-		`only users with the admin role are allowed to SHOW CLUSTER SETTINGS`,
-	) {
-		t.Fatal(err)
-	}
-	if _, err := testuser.Exec(`SHOW CLUSTER SETTINGS`); !testutils.IsError(err,
-		`only users with the admin role are allowed to SHOW CLUSTER SETTINGS`,
-	) {
-		t.Fatal(err)
-	}
-	if _, err := testuser.Exec(`SELECT * FROM crdb_internal.cluster_settings`); !testutils.IsError(err,
-		`only users with the admin role are allowed to read crdb_internal.cluster_settings`,
-	) {
-		t.Fatal(err)
-	}
 }
 
 func TestSettingsShowAll(t *testing.T) {

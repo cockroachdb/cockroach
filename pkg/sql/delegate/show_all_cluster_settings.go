@@ -10,13 +10,24 @@
 
 package delegate
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 func (d *delegator) delegateShowClusterSettingList(
 	stmt *tree.ShowClusterSettingList,
 ) (tree.Statement, error) {
-	if err := d.catalog.RequireAdminRole(d.ctx, "SHOW CLUSTER SETTINGS"); err != nil {
+	hasModify, err := d.catalog.HasRoleOption(d.ctx, roleoption.MODIFYCLUSTERSETTING)
+	if err != nil {
 		return nil, err
+	}
+	if !hasModify {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with the %s privilege are allowed to SHOW CLUSTER SETTINGS",
+			roleoption.MODIFYCLUSTERSETTING)
 	}
 	if stmt.All {
 		return parse(
