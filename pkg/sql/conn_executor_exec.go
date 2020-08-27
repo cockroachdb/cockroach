@@ -244,7 +244,10 @@ func (ex *connExecutor) execStmtInOpenState(
 			ex.incrementExecutedStmtCounter(stmt)
 		}
 	}()
+
+	ex.state.mu.Lock()
 	ex.state.mu.stmtCount++
+	ex.state.mu.Unlock()
 
 	os := ex.machine.CurState().(stateOpen)
 
