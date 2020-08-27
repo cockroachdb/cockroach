@@ -163,6 +163,7 @@ func newConn(
 		metrics:     metrics,
 		rd:          *bufio.NewReader(netConn),
 		sv:          sv,
+		readBuf:     pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
 	}
 	c.stmtBuf.Init()
 	c.res.released = true

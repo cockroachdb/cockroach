@@ -68,18 +68,12 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		}
 	}
 
-	hasAdmin, err := p.HasAdminRole(ctx)
+	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
 	if err != nil {
 		return nil, err
 	}
-	if !hasAdmin {
-		hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
-		if err != nil {
-			return nil, err
-		}
-		if !hasCreateDB {
-			return nil, pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create database")
-		}
+	if !hasCreateDB {
+		return nil, pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create database")
 	}
 
 	return &createDatabaseNode{n: n}, nil

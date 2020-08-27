@@ -561,7 +561,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 			latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", tc.name, latestFileName))
 			require.NoError(t, err)
 			backedUp := th.sqlDB.QueryStr(t,
-				`SELECT database_name, table_name FROM [SHOW BACKUP $1] ORDER BY database_name, table_name`,
+				`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,
 				fmt.Sprintf("%s/%s", destination, string(latest)))
 			require.Equal(t, tc.verifyTables, backedUp)
 		})
@@ -607,4 +607,20 @@ func TestCreateBackupScheduleCollectionOverwrite(t *testing.T) {
 	// flag.
 	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' "+
 		"RECURRING '@daily' WITH EXPERIMENTAL SCHEDULE OPTIONS ignore_existing_backups;")
+}
+
+func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	res := th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
+	require.False(t, res.Next())
+
+	th.sqlDB.Exec(t, "BEGIN;")
+	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' RECURRING '@daily';")
+	th.sqlDB.Exec(t, "ROLLBACK;")
+
+	res = th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
+	require.False(t, res.Next())
 }

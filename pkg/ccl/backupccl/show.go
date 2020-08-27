@@ -17,13 +17,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -204,7 +208,9 @@ type backupShower struct {
 func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.ResultColumns {
 	baseHeaders := colinfo.ResultColumns{
 		{Name: "database_name", Typ: types.String},
-		{Name: "table_name", Typ: types.String},
+		{Name: "parent_schema_name", Typ: types.String},
+		{Name: "object_name", Typ: types.String},
+		{Name: "object_type", Typ: types.String},
 		{Name: "start_time", Typ: types.Timestamp},
 		{Name: "end_time", Typ: types.Timestamp},
 		{Name: "size_bytes", Typ: types.Int},
@@ -228,13 +234,21 @@ func backupShowerDefault(
 		fn: func(manifests []BackupManifest) ([]tree.Datums, error) {
 			var rows []tree.Datums
 			for _, manifest := range manifests {
-				descs := make(map[descpb.ID]string)
+				// Map database ID to descriptor name.
+				dbIDToName := make(map[descpb.ID]string)
+				schemaIDToName := make(map[descpb.ID]string)
+				schemaIDToName[keys.PublicSchemaID] = sessiondata.PublicSchemaName
 				for i := range manifest.Descriptors {
 					descriptor := &manifest.Descriptors[i]
 					if descriptor.GetDatabase() != nil {
 						id := descpb.GetDescriptorID(descriptor)
-						if _, ok := descs[id]; !ok {
-							descs[id] = descpb.GetDescriptorName(descriptor)
+						if _, ok := dbIDToName[id]; !ok {
+							dbIDToName[id] = descpb.GetDescriptorName(descriptor)
+						}
+					} else if descriptor.GetSchema() != nil {
+						id := descpb.GetDescriptorID(descriptor)
+						if _, ok := schemaIDToName[id]; !ok {
+							schemaIDToName[id] = descpb.GetDescriptorName(descriptor)
 						}
 					}
 				}
@@ -267,44 +281,80 @@ func backupShowerDefault(
 				var row tree.Datums
 				for i := range manifest.Descriptors {
 					descriptor := &manifest.Descriptors[i]
-					if table := descpb.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
-						dbName := descs[table.ParentID]
-						row = tree.Datums{
-							tree.NewDString(dbName),
-							tree.NewDString(table.Name),
-							start,
-							end,
-							tree.NewDInt(tree.DInt(descSizes[table.ID].DataSize)),
-							tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
-							tree.MakeDBool(manifest.DescriptorCoverage == tree.AllDescriptors),
+
+					var dbName string
+					var parentSchemaName string
+					var descriptorType string
+
+					createStmtDatum := tree.DNull
+					dataSizeDatum := tree.DNull
+					rowCountDatum := tree.DNull
+
+					desc := catalogkv.UnwrapDescriptorRaw(ctx, descriptor)
+
+					descriptorName := desc.GetName()
+					switch desc := desc.(type) {
+					case catalog.DatabaseDescriptor:
+						descriptorType = "database"
+					case catalog.SchemaDescriptor:
+						descriptorType = "schema"
+						dbName = dbIDToName[desc.GetParentID()]
+					case catalog.TypeDescriptor:
+						descriptorType = "type"
+						dbName = dbIDToName[desc.GetParentID()]
+						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
+					case catalog.TableDescriptor:
+						descriptorType = "table"
+						dbName = dbIDToName[desc.GetParentID()]
+						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
+						descSize := descSizes[desc.GetID()]
+						dataSizeDatum = tree.NewDInt(tree.DInt(descSize.DataSize))
+						rowCountDatum = tree.NewDInt(tree.DInt(descSize.Rows))
+
+						displayOptions := sql.ShowCreateDisplayOptions{
+							FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
+							IgnoreComments: true,
 						}
-						if showSchemas {
-							displayOptions := sql.ShowCreateDisplayOptions{
-								FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
-								IgnoreComments: true,
-							}
-							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-								tabledesc.NewImmutable(*table), displayOptions)
-							if err != nil {
-								continue
-							}
-							row = append(row, tree.NewDString(schema))
+						createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
+							tabledesc.NewImmutable(*desc.TableDesc()), displayOptions)
+						if err != nil {
+							continue
 						}
-						if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
-							row = append(row, tree.NewDString(showPrivileges(descriptor)))
-						}
-						rows = append(rows, row)
+						createStmtDatum = tree.NewDString(createStmt)
+					default:
+						descriptorType = "unknown"
 					}
+
+					row = tree.Datums{
+						nullIfEmpty(dbName),
+						nullIfEmpty(parentSchemaName),
+						tree.NewDString(descriptorName),
+						tree.NewDString(descriptorType),
+						start,
+						end,
+						dataSizeDatum,
+						rowCountDatum,
+						tree.MakeDBool(manifest.DescriptorCoverage == tree.AllDescriptors),
+					}
+					if showSchemas {
+						row = append(row, createStmtDatum)
+					}
+					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
+						row = append(row, tree.NewDString(showPrivileges(descriptor)))
+					}
+					rows = append(rows, row)
 				}
 				for _, t := range manifest.Tenants {
 					row := tree.Datums{
-						tree.NewDString("TENANT"),
-						tree.NewDString(roachpb.MakeTenantID(t.ID).String()),
+						tree.DNull, // Database
+						tree.DNull, // Schema
+						tree.NewDString(roachpb.MakeTenantID(t.ID).String()), // Object Name
+						tree.NewDString("TENANT"),                            // Object Type
 						start,
 						end,
-						tree.DNull,
-						tree.DNull,
-						tree.DNull,
+						tree.DNull, // DataSize
+						tree.DNull, // RowCount
+						tree.DNull, // Descriptor Coverage
 					}
 					if showSchemas {
 						row = append(row, tree.DNull)
@@ -318,6 +368,13 @@ func backupShowerDefault(
 			return rows, nil
 		},
 	}
+}
+
+func nullIfEmpty(s string) tree.Datum {
+	if s == "" {
+		return tree.DNull
+	}
+	return tree.NewDString(s)
 }
 
 func showPrivileges(descriptor *descpb.Descriptor) string {

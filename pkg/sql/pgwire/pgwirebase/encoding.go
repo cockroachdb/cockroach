@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -37,11 +38,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/lib/pq/oid"
 )
 
-const maxMessageSize = 1 << 24
+const (
+	defaultMaxReadBufferMessageSize = 1 << 24
+	minReadBufferMessageSize        = 1 << 14
+)
+
+// ReadBufferMaxMessageSizeClusterSetting is the cluster setting for configuring
+// ReadBuffer default message sizes.
+var ReadBufferMaxMessageSizeClusterSetting = settings.RegisterValidatedByteSizeSetting(
+	"sql.conn.max_read_buffer_message_size",
+	"maximum buffer size to allow for ingesting sql statements. Connections must be restarted for this to take effect.",
+	defaultMaxReadBufferMessageSize,
+	func(val int64) error {
+		if val < minReadBufferMessageSize {
+			return errors.Newf("buffer message size must be at least %s", humanize.Bytes(minReadBufferMessageSize))
+		}
+		return nil
+	},
+)
 
 // FormatCode represents a pgwire data format.
 //
@@ -67,8 +86,33 @@ type BufferedReader interface {
 
 // ReadBuffer provides a convenient way to read pgwire protocol messages.
 type ReadBuffer struct {
-	Msg []byte
-	tmp [4]byte
+	Msg            []byte
+	tmp            [4]byte
+	maxMessageSize int
+}
+
+// ReadBufferOption is an optional argument to use with ReadBuffer.
+type ReadBufferOption func(*ReadBuffer)
+
+// ReadBufferOptionWithClusterSettings utilizes the cluster settings for setting
+// various defaults in the ReadBuffer.
+func ReadBufferOptionWithClusterSettings(sv *settings.Values) ReadBufferOption {
+	return func(b *ReadBuffer) {
+		if sv != nil {
+			b.maxMessageSize = int(ReadBufferMaxMessageSizeClusterSetting.Get(sv))
+		}
+	}
+}
+
+// MakeReadBuffer returns a new ReaderBuffer with the given size.
+func MakeReadBuffer(opts ...ReadBufferOption) ReadBuffer {
+	buf := ReadBuffer{
+		maxMessageSize: defaultMaxReadBufferMessageSize,
+	}
+	for _, opt := range opts {
+		opt(&buf)
+	}
+	return buf
 }
 
 // reset sets b.Msg to exactly size, attempting to use spare capacity
@@ -105,9 +149,12 @@ func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 	size := int(binary.BigEndian.Uint32(b.tmp[:]))
 	// size includes itself.
 	size -= 4
-	if size > maxMessageSize || size < 0 {
-		return nread, NewProtocolViolationErrorf("message size %d out of bounds (0..%d)",
-			size, maxMessageSize)
+	if size > b.maxMessageSize || size < 0 {
+		return nread, NewProtocolViolationErrorf(
+			"message size %d out of bounds (0..%d)",
+			size,
+			b.maxMessageSize,
+		)
 	}
 
 	b.reset(size)

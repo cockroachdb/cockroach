@@ -3,10 +3,10 @@
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement ok
 CREATE USER user1
@@ -14,11 +14,11 @@ CREATE USER user1
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
-user1     ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
 
 statement error pgcode 42710 a role/user named admin already exists
 CREATE USER admin
@@ -79,16 +79,16 @@ EXECUTE chpw('blix', 'blah')
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-foo       ·                        {}
-foo-bar   ·                        {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
-user1     ·                        {}
-user2     ·                        {}
-user3     ·                        {}
-ομηρος    ·                        {}
+username  options  member_of
+admin     ·        {}
+foo       ·        {}
+foo-bar   ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
+user2     ·        {}
+user3     ·        {}
+ομηρος    ·        {}
 
 statement error no username specified
 CREATE USER ""
@@ -148,12 +148,8 @@ CREATE USER user4 CREATEROLE
 query TTT
 SELECT * FROM system.role_options
 ----
-admin     CREATELOGIN  NULL
-admin     CREATEROLE   NULL
-root      CREATELOGIN  NULL
-root      CREATEROLE   NULL
-testuser  CREATEROLE   NULL
-user4     CREATEROLE   NULL
+testuser  CREATEROLE  NULL
+user4     CREATEROLE  NULL
 
 statement ok
 DROP USER user4
