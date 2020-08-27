@@ -40,32 +40,35 @@ import (
 
 // Files that may appear in a backup directory.
 const (
-	// BackupManifestName is the file name used for serialized BackupManifest
+	// backupManifestName is the file name used for serialized BackupManifest
 	// protos.
-	BackupManifestName = "BACKUP"
-	// BackupNewManifestName is a future name for the serialized BackupManifest
+	backupManifestName = "BACKUP"
+	// backupNewManifestName is a future name for the serialized BackupManifest
 	// proto.
-	BackupNewManifestName = "BACKUP_MANIFEST"
-	// BackupManifestChecksumSuffix indicates where the checksum for the manifest
+	backupNewManifestName = "BACKUP_MANIFEST"
+	// backupManifestChecksumSuffix indicates where the checksum for the manifest
 	// is stored if present. It can be found in the name of the backup manifest +
 	// this suffix.
-	BackupManifestChecksumSuffix = "-CHECKSUM"
+	backupManifestChecksumSuffix = "-CHECKSUM"
 
-	// BackupPartitionDescriptorPrefix is the file name prefix for serialized
+	// backupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
-	BackupPartitionDescriptorPrefix = "BACKUP_PART"
-	// BackupManifestCheckpointName is the file name used to store the serialized
+	backupPartitionDescriptorPrefix = "BACKUP_PART"
+	// backupManifestCheckpointName is the file name used to store the serialized
 	// BackupManifest proto while the backup is in progress.
-	BackupManifestCheckpointName = "BACKUP-CHECKPOINT"
-	// BackupStatisticsFileName is the file name used to store the serialized
+	backupManifestCheckpointName = "BACKUP-CHECKPOINT"
+	// backupStatisticsFileName is the file name used to store the serialized
 	// table statistics for the tables being backed up.
-	BackupStatisticsFileName = "BACKUP-STATISTICS"
-	// BackupSentinelWriteFile is a file that we write to the backup directory to
+	backupStatisticsFileName = "BACKUP-STATISTICS"
+	// backupSentinelWriteFile is a file that we write to the backup directory to
 	// ensure that we have write privileges to the directory. Nothing should check
 	// for its existence since we don't guarantee that it's cleaned up after it is
 	// written (for example, we may not have DELETE permissions for the
 	// destination, which should be allowed).
-	BackupSentinelWriteFile = "COCKROACH-BACKUP-PLACEHOLDER"
+	backupSentinelWriteFile = "COCKROACH-BACKUP-PLACEHOLDER"
+	// backupEncryptionInfoFile is the file name used to store the serialized
+	// EncryptionInfo proto while the backup is in progress.
+	backupEncryptionInfoFile = "ENCRYPTION-INFO"
 )
 
 const (
@@ -116,10 +119,10 @@ func readBackupManifestFromStore(
 	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, error) {
 
-	backupManifest, err := readBackupManifest(ctx, exportStore, BackupManifestName,
+	backupManifest, err := readBackupManifest(ctx, exportStore, backupManifestName,
 		encryption)
 	if err != nil {
-		newManifest, newErr := readBackupManifest(ctx, exportStore, BackupNewManifestName,
+		newManifest, newErr := readBackupManifest(ctx, exportStore, backupNewManifestName,
 			encryption)
 		if newErr != nil {
 			return BackupManifest{}, err
@@ -133,7 +136,7 @@ func readBackupManifestFromStore(
 }
 
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
-	r, err := exportStore.ReadFile(ctx, BackupManifestName)
+	r, err := exportStore.ReadFile(ctx, backupManifestName)
 	if err != nil {
 		if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 			return false, nil
@@ -187,7 +190,7 @@ func readBackupManifest(
 		return BackupManifest{}, err
 	}
 
-	checksumFile, err := exportStore.ReadFile(ctx, filename+BackupManifestChecksumSuffix)
+	checksumFile, err := exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
 	if err == nil {
 		// If there is a checksum file present, check that it matches.
 		defer checksumFile.Close()
@@ -378,7 +381,7 @@ func writeBackupManifest(
 	if err != nil {
 		return errors.Wrap(err, "calculating checksum")
 	}
-	if err := exportStore.WriteFile(ctx, filename+BackupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+	if err := exportStore.WriteFile(ctx, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
 		return errors.Wrap(err, "writing manifest checksum")
 	}
 
@@ -570,7 +573,7 @@ func getLocalityInfo(
 // findPriorBackupLocations and appends the backup manifest file name to
 // the URI.
 func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	prev, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/"+BackupManifestName)
+	prev, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/"+backupManifestName)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
@@ -871,8 +874,8 @@ func sanitizeLocalityKV(kv string) string {
 
 func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
-) (*EncryptionInfo, error) {
-	r, err := src.ReadFile(ctx, "encryption-info")
+) (*jobspb.EncryptionInfo, error) {
+	r, err := src.ReadFile(ctx, backupEncryptionInfoFile)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
@@ -881,21 +884,34 @@ func readEncryptionOptions(
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
-	var encInfo EncryptionInfo
+	var encInfo jobspb.EncryptionInfo
 	if err := protoutil.Unmarshal(encInfoBytes, &encInfo); err != nil {
 		return nil, err
 	}
 	return &encInfo, nil
 }
 
-func writeEncryptionOptions(
-	ctx context.Context, opts *EncryptionInfo, dest cloud.ExternalStorage,
+func writeEncryptionInfoIfNotExists(
+	ctx context.Context, opts *jobspb.EncryptionInfo, dest cloud.ExternalStorage,
 ) error {
+	r, err := dest.ReadFile(ctx, backupEncryptionInfoFile)
+	if err == nil {
+		r.Close()
+		// If the file already exists, then we don't need to create a new one.
+		return nil
+	}
+
+	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		return errors.Wrapf(err,
+			"returned an unexpected error when checking for the existence of %s file",
+			backupEncryptionInfoFile)
+	}
+
 	buf, err := protoutil.Marshal(opts)
 	if err != nil {
 		return err
 	}
-	if err := dest.WriteFile(ctx, "encryption-info", bytes.NewReader(buf)); err != nil {
+	if err := dest.WriteFile(ctx, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
 		return err
 	}
 	return nil
@@ -910,7 +926,7 @@ func createCheckpointIfNotExists(
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
 ) error {
-	r, err := exportStore.ReadFile(ctx, BackupManifestCheckpointName)
+	r, err := exportStore.ReadFile(ctx, backupManifestCheckpointName)
 	if err == nil {
 		r.Close()
 		// If the file already exists, then we don't need to create a new one.
@@ -920,15 +936,15 @@ func createCheckpointIfNotExists(
 	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"returned an unexpected error when checking for the existence of %s file",
-			BackupManifestCheckpointName)
+			backupManifestCheckpointName)
 	}
 
 	// If there is not checkpoint manifest yet, write one to lock out other
 	// backups from starting to write to this destination.
 	if err := writeBackupManifest(
-		ctx, settings, exportStore, BackupManifestCheckpointName, encryption, &BackupManifest{},
+		ctx, settings, exportStore, backupManifestCheckpointName, encryption, &BackupManifest{},
 	); err != nil {
-		return errors.Wrapf(err, "writing checkpoint file %s", BackupManifestCheckpointName)
+		return errors.Wrapf(err, "writing checkpoint file %s", backupManifestCheckpointName)
 	}
 
 	return nil
@@ -941,32 +957,32 @@ func createCheckpointIfNotExists(
 func checkForPreviousBackup(
 	ctx context.Context, exportStore cloud.ExternalStorage, readable string,
 ) error {
-	r, err := exportStore.ReadFile(ctx, BackupManifestName)
+	r, err := exportStore.ReadFile(ctx, backupManifestName)
 	if err == nil {
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
-			readable, BackupManifestName)
+			readable, backupManifestName)
 	}
 
 	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
-			readable, BackupManifestName)
+			readable, backupManifestName)
 	}
 
-	r, err = exportStore.ReadFile(ctx, BackupManifestCheckpointName)
+	r, err = exportStore.ReadFile(ctx, backupManifestCheckpointName)
 	if err == nil {
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file (is another operation already in progress?)",
-			readable, BackupManifestCheckpointName)
+			readable, backupManifestCheckpointName)
 	}
 
 	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
-			readable, BackupManifestCheckpointName)
+			readable, backupManifestCheckpointName)
 	}
 
 	return nil
@@ -991,17 +1007,17 @@ func verifyWriteableDestination(
 	// Write arbitrary bytes to a sentinel file in the backup directory to ensure
 	// that we're able to write to this directory.
 	arbitraryBytes := bytes.NewReader([]byte("✇"))
-	if err := baseStore.WriteFile(ctx, BackupSentinelWriteFile, arbitraryBytes); err != nil {
+	if err := baseStore.WriteFile(ctx, backupSentinelWriteFile, arbitraryBytes); err != nil {
 		return errors.Wrapf(err, "writing sentinel file to %s", baseURI)
 	}
 
-	if err := baseStore.Delete(ctx, BackupSentinelWriteFile); err != nil {
+	if err := baseStore.Delete(ctx, backupSentinelWriteFile); err != nil {
 		// Don't require that we're able to clean up the sentinel file. Nothing
 		// should check for it's existence so it should be fine to leave it around.
 		// Let's still log if we can't clean up.
 		log.Warningf(ctx,
 			"could not clean up sentinel backup %s file in %s: %+v",
-			BackupSentinelWriteFile, baseURI, err)
+			backupSentinelWriteFile, baseURI, err)
 	}
 
 	return nil

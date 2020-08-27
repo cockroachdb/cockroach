@@ -265,7 +265,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	// have been stored in the GZip compressed format.
 	t.Run("GZipBackupManifest", func(t *testing.T) {
 		backupDir := fmt.Sprintf("%s/foo", dir)
-		backupManifestFile := backupDir + "/" + BackupManifestName
+		backupManifestFile := backupDir + "/" + backupManifestName
 		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
 		if err != nil {
 			t.Fatal(err)
@@ -1246,7 +1246,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	var checkpointPath string
 
 	checkBackup := func(ctx context.Context, ip inProgressState) error {
-		checkpointPath = filepath.Join(ip.dir, ip.name, BackupManifestCheckpointName)
+		checkpointPath = filepath.Join(ip.dir, ip.name, backupManifestCheckpointName)
 		checkpointDescBytes, err := ioutil.ReadFile(checkpointPath)
 		if err != nil {
 			return errors.Errorf("%+v", err)
@@ -1369,7 +1369,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err := os.MkdirAll(backupDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		checkpointFile := backupDir + "/" + BackupManifestCheckpointName
+		checkpointFile := backupDir + "/" + backupManifestCheckpointName
 		if err := ioutil.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -1385,7 +1385,7 @@ func TestBackupRestoreResume(t *testing.T) {
 
 		// If the backup properly took the (incorrect) checkpoint into account, it
 		// won't have tried to re-export any keys within backupCompletedSpan.
-		backupManifestFile := backupDir + "/" + BackupManifestName
+		backupManifestFile := backupDir + "/" + backupManifestName
 		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
 		if err != nil {
 			t.Fatal(err)
@@ -1683,7 +1683,7 @@ INSERT INTO d.tb VALUES ('hello'), ('hello');
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == BackupManifestName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == backupManifestName || !strings.HasSuffix(path, ".sst") {
 			return nil
 		}
 		return os.Remove(path)
@@ -1738,7 +1738,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == BackupManifestName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == backupManifestName || !strings.HasSuffix(path, ".sst") {
 			return nil
 		}
 		return os.Remove(path)
@@ -1792,7 +1792,7 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == BackupManifestName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == backupManifestName || !strings.HasSuffix(path, ".sst") {
 			return nil
 		}
 		return os.Remove(path)
@@ -3766,7 +3766,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 	var backupManifest BackupManifest
 	{
-		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, BackupManifestName))
+		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, backupManifestName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -6038,7 +6038,7 @@ func flipBitInManifests(t *testing.T, rawDir string) {
 	foundManifest := false
 	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
 		log.Infof(context.Background(), "visiting %s", path)
-		if filepath.Base(path) == BackupManifestName {
+		if filepath.Base(path) == backupManifestName {
 			foundManifest = true
 			data, err := ioutil.ReadFile(path)
 			require.NoError(t, err)
