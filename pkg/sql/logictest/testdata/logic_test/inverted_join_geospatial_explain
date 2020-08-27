@@ -99,21 +99,22 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.g
 sort                                    ·                      ·                                                                                      (lk, rk1)                                 +lk,+rk1
  │                                      estimated row count    10000 (missing stats)                                                                  ·                                         ·
  │                                      order                  +lk,+rk1                                                                               ·                                         ·
- └── project                            ·                      ·                                                                                      (lk, rk1)                                 ·
+ │                                      already ordered        +lk                                                                                    ·                                         ·
+ └── project                            ·                      ·                                                                                      (lk, rk1)                                 +lk
       │                                 estimated row count    10000 (missing stats)                                                                  ·                                         ·
-      └── project                       ·                      ·                                                                                      (lk, geom1, rk1, geom)                    ·
+      └── project                       ·                      ·                                                                                      (lk, geom1, rk1, geom)                    +lk
            │                            estimated row count    10000 (missing stats)                                                                  ·                                         ·
-           └── lookup join (inner)      ·                      ·                                                                                      (lk, geom1, rk1, rk2, geom)               ·
+           └── lookup join (inner)      ·                      ·                                                                                      (lk, geom1, rk1, rk2, geom)               +lk
                 │                       table                  rtable@primary                                                                         ·                                         ·
                 │                       equality               (rk1, rk2) = (rk1,rk2)                                                                 ·                                         ·
                 │                       equality cols are key  ·                                                                                      ·                                         ·
                 │                       pred                   st_intersects(geom1, geom) AND st_dwithin(geom, geom1, 2.0)                            ·                                         ·
-                └── project             ·                      ·                                                                                      (lk, geom1, rk1, rk2)                     ·
+                └── project             ·                      ·                                                                                      (lk, geom1, rk1, rk2)                     +lk
                      │                  estimated row count    10000 (missing stats)                                                                  ·                                         ·
-                     └── inverted join  ·                      ·                                                                                      (lk, geom1, rk1, rk2, geom_inverted_key)  ·
+                     └── inverted join  ·                      ·                                                                                      (lk, geom1, rk1, rk2, geom_inverted_key)  +lk
                           │             table                  rtable@geom_index                                                                      ·                                         ·
                           │             inverted expr          st_intersects(geom1, geom_inverted_key) AND st_dwithin(geom1, geom_inverted_key, 2.0)  ·                                         ·
-                          └── scan      ·                      ·                                                                                      (lk, geom1)                               ·
+                          └── scan      ·                      ·                                                                                      (lk, geom1)                               +lk
 ·                                       estimated row count    1000 (missing stats)                                                                   ·                                         ·
 ·                                       table                  ltable@primary                                                                         ·                                         ·
 ·                                       spans                  FULL SCAN                                                                              ·                                         ·
@@ -158,20 +159,21 @@ project                                      ·                      ·         
  └── distinct                                ·                      ·                                        (lk, geom2)                               ·
       │                                      estimated row count    1000 (missing stats)                     ·                                         ·
       │                                      distinct on            lk                                       ·                                         ·
-      └── project                            ·                      ·                                        (lk, geom2)                               ·
-           └── project                       ·                      ·                                        (lk, geom2, geom)                         ·
+      │                                      order key              lk                                       ·                                         ·
+      └── project                            ·                      ·                                        (lk, geom2)                               +lk
+           └── project                       ·                      ·                                        (lk, geom2, geom)                         +lk
                 │                            estimated row count    10000 (missing stats)                    ·                                         ·
-                └── lookup join (inner)      ·                      ·                                        (lk, geom2, rk1, rk2, geom)               ·
+                └── lookup join (inner)      ·                      ·                                        (lk, geom2, rk1, rk2, geom)               +lk
                      │                       table                  rtable@primary                           ·                                         ·
                      │                       equality               (rk1, rk2) = (rk1,rk2)                   ·                                         ·
                      │                       equality cols are key  ·                                        ·                                         ·
                      │                       pred                   st_intersects(geom2, geom)               ·                                         ·
-                     └── project             ·                      ·                                        (lk, geom2, rk1, rk2)                     ·
+                     └── project             ·                      ·                                        (lk, geom2, rk1, rk2)                     +lk
                           │                  estimated row count    10000 (missing stats)                    ·                                         ·
-                          └── inverted join  ·                      ·                                        (lk, geom2, rk1, rk2, geom_inverted_key)  ·
+                          └── inverted join  ·                      ·                                        (lk, geom2, rk1, rk2, geom_inverted_key)  +lk
                                │             table                  rtable@geom_index                        ·                                         ·
                                │             inverted expr          st_intersects(geom2, geom_inverted_key)  ·                                         ·
-                               └── scan      ·                      ·                                        (lk, geom2)                               ·
+                               └── scan      ·                      ·                                        (lk, geom2)                               +lk
 ·                                            estimated row count    1000 (missing stats)                     ·                                         ·
 ·                                            table                  ltable@primary                           ·                                         ·
 ·                                            spans                  FULL SCAN                                ·                                         ·

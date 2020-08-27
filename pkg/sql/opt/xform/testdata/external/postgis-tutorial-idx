@@ -608,42 +608,45 @@ GROUP BY
 ORDER BY
     n.name
 ----
-sort
+project
  ├── columns: name:15!null popn_per_sqkm:20
  ├── immutable
  ├── ordering: +15
- └── project
-      ├── columns: popn_per_sqkm:20 name:15!null
-      ├── immutable
-      ├── group-by
-      │    ├── columns: name:15!null n.geom:16 sum:19
-      │    ├── grouping columns: name:15!null n.geom:16
-      │    ├── immutable
-      │    ├── key: (15,16)
-      │    ├── fd: (15,16)-->(19)
-      │    ├── inner-join (lookup nyc_census_blocks)
-      │    │    ├── columns: popn_total:3 c.geom:10 name:15!null n.geom:16
-      │    │    ├── key columns: [1] = [1]
-      │    │    ├── lookup columns are key
-      │    │    ├── immutable
-      │    │    ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geom_idx)
-      │    │    │    ├── columns: c.gid:1!null name:15!null n.geom:16
-      │    │    │    ├── inverted-expr
-      │    │    │    │    └── st_intersects(n.geom:16, c.geom:10)
-      │    │    │    ├── select
-      │    │    │    │    ├── columns: name:15!null n.geom:16
-      │    │    │    │    ├── scan n
-      │    │    │    │    │    └── columns: name:15 n.geom:16
-      │    │    │    │    └── filters
-      │    │    │    │         └── (name:15 = 'Upper West Side') OR (name:15 = 'Upper East Side') [outer=(15), constraints=(/15: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
-      │    │    │    └── filters (true)
-      │    │    └── filters
-      │    │         └── st_intersects(c.geom:10, n.geom:16) [outer=(10,16), immutable]
-      │    └── aggregations
-      │         └── sum [as=sum:19, outer=(3)]
-      │              └── popn_total:3
-      └── projections
-           └── sum:19 / (st_area(n.geom:16) / 1e+06) [as=popn_per_sqkm:20, outer=(16,19), immutable]
+ ├── group-by
+ │    ├── columns: name:15!null n.geom:16 sum:19
+ │    ├── grouping columns: name:15!null n.geom:16
+ │    ├── immutable
+ │    ├── key: (15,16)
+ │    ├── fd: (15,16)-->(19)
+ │    ├── ordering: +15
+ │    ├── inner-join (lookup nyc_census_blocks)
+ │    │    ├── columns: popn_total:3 c.geom:10 name:15!null n.geom:16
+ │    │    ├── key columns: [1] = [1]
+ │    │    ├── lookup columns are key
+ │    │    ├── immutable
+ │    │    ├── ordering: +15
+ │    │    ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geom_idx)
+ │    │    │    ├── columns: c.gid:1!null name:15!null n.geom:16
+ │    │    │    ├── inverted-expr
+ │    │    │    │    └── st_intersects(n.geom:16, c.geom:10)
+ │    │    │    ├── ordering: +15
+ │    │    │    ├── sort
+ │    │    │    │    ├── columns: name:15!null n.geom:16
+ │    │    │    │    ├── ordering: +15
+ │    │    │    │    └── select
+ │    │    │    │         ├── columns: name:15!null n.geom:16
+ │    │    │    │         ├── scan n
+ │    │    │    │         │    └── columns: name:15 n.geom:16
+ │    │    │    │         └── filters
+ │    │    │    │              └── (name:15 = 'Upper West Side') OR (name:15 = 'Upper East Side') [outer=(15), constraints=(/15: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
+ │    │    │    └── filters (true)
+ │    │    └── filters
+ │    │         └── st_intersects(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+ │    └── aggregations
+ │         └── sum [as=sum:19, outer=(3)]
+ │              └── popn_total:3
+ └── projections
+      └── sum:19 / (st_area(n.geom:16) / 1e+06) [as=popn_per_sqkm:20, outer=(16,19), immutable]
 
 # 15.0
 opt
