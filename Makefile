@@ -772,8 +772,27 @@ $(LIBPROTOBUF): $(PROTOBUF_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 $(LIBSNAPPY): $(SNAPPY_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(SNAPPY_SRC_DIR) || $(MAKE) --no-print-directory -C $(SNAPPY_DIR) snappy
 
+ifdef is-cross-compile
+ifdef target-is-macos
+geos_require_install_name_tool := 1
+endif
+endif
+
+# For dlopen to work with OSX from any location, we need the @rpath directory prefix.
+# However, no matter what CMake flags I try, cross-compiling OSX does not output
+# the correct rpath locations. As such, use the install-name-tool to do the work
+# of setting the correct rpaths on OSX.
 GEOS_NATIVE_LIB_DIR = $(GEOS_DIR)/$(if $(target-is-windows),bin,lib)
-$(LIBGEOS): $(GEOS_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+ifdef geos_require_install_name_tool
+$(LIBGEOS): libgeos_inner .ALWAYS_REBUILD
+	$(TARGET_TRIPLE)-install_name_tool -id @rpath/libgeos.3.8.1.dylib lib/libgeos.dylib
+	$(TARGET_TRIPLE)-install_name_tool -id @rpath/libgeos_c.1.dylib lib/libgeos_c.dylib
+	$(TARGET_TRIPLE)-install_name_tool -change "$(GEOS_NATIVE_LIB_DIR)/libgeos.3.8.1.dylib" "@rpath/libgeos.3.8.1.dylib" lib.docker_amd64/libgeos_c.dylib
+else
+$(LIBGEOS): libgeos_inner .ALWAYS_REBUILD
+endif
+
+libgeos_inner: $(GEOS_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $(GEOS_NATIVE_LIB_DIR)/libgeos.$(DYN_EXT) $(GEOS_SRC_DIR) || $(MAKE) --no-print-directory -C $(GEOS_DIR) geos_c
 	mkdir -p $(DYN_LIB_DIR)
 	rm -f $(DYN_LIB_DIR)/lib{geos,geos_c}.$(DYN_EXT)
