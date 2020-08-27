@@ -293,18 +293,13 @@ func constructVirtualScan(
 	return n, nil
 }
 
-func collectSystemColumnsFromCfg(
-	colCfg *scanColumnsConfig,
-) (systemColumns []descpb.SystemColumnKind, systemColumnOrdinals []int) {
-	for i, id := range colCfg.wantedColumns {
-		sysColKind := colinfo.GetSystemColumnKindFromColumnID(descpb.ColumnID(id))
-		if sysColKind != descpb.SystemColumnKind_NONE {
-			// The scan is requested to produce a system column.
-			systemColumns = append(systemColumns, sysColKind)
-			systemColumnOrdinals = append(systemColumnOrdinals, i)
+func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
+	for _, id := range colCfg.wantedColumns {
+		if colinfo.IsColIDSystemColumn(descpb.ColumnID(id)) {
+			return true
 		}
 	}
-	return systemColumns, systemColumnOrdinals
+	return false
 }
 
 func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {
