@@ -109,12 +109,14 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	}
 	var rf row.Fetcher
 	if err := rf.Init(
+		ctx,
 		keys.SystemSQLCodec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		true, /* isCheck */
 		&rowenc.DatumAlloc{},
+		nil, /* memMonitor */
 		args...,
 	); err != nil {
 		t.Fatal(err)

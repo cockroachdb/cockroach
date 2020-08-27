@@ -194,12 +194,14 @@ func DecodeRowInfo(
 	}
 	rf.IgnoreUnexpectedNulls = true
 	if err := rf.Init(
+		ctx,
 		codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&rowenc.DatumAlloc{},
+		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {
 		return nil, nil, nil, err
