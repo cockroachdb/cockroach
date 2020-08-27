@@ -28,18 +28,23 @@ type LimitConfig struct {
 // It is exported for convenience and testing.
 // The values are derived from cluster settings.
 type LimitConfigs struct {
-	Requests   LimitConfig
-	ReadBytes  LimitConfig
-	WriteBytes LimitConfig
+	ReadRequests  LimitConfig
+	WriteRequests LimitConfig
+	ReadBytes     LimitConfig
+	WriteBytes    LimitConfig
 }
 
 // LimitConfigsFromSettings constructs LimitConfigs from the values stored in
 // the settings.
 func LimitConfigsFromSettings(settings *cluster.Settings) LimitConfigs {
 	return LimitConfigs{
-		Requests: LimitConfig{
-			Rate:  Limit(requestRateLimit.Get(&settings.SV)),
-			Burst: requestBurstLimit.Get(&settings.SV),
+		ReadRequests: LimitConfig{
+			Rate:  Limit(readRequestRateLimit.Get(&settings.SV)),
+			Burst: readRequestBurstLimit.Get(&settings.SV),
+		},
+		WriteRequests: LimitConfig{
+			Rate:  Limit(writeRequestRateLimit.Get(&settings.SV)),
+			Burst: writeRequestBurstLimit.Get(&settings.SV),
 		},
 		ReadBytes: LimitConfig{
 			Rate:  Limit(readRateLimit.Get(&settings.SV)),
@@ -53,14 +58,24 @@ func LimitConfigsFromSettings(settings *cluster.Settings) LimitConfigs {
 }
 
 var (
-	requestRateLimit = settings.RegisterPositiveFloatSetting(
-		"kv.tenant_rate_limiter.requests.rate_limit",
-		"per-tenant request rate limit in requests per second",
+	readRequestRateLimit = settings.RegisterPositiveFloatSetting(
+		"kv.tenant_rate_limiter.read_requests.rate_limit",
+		"per-tenant read request rate limit in requests per second",
 		128)
 
-	requestBurstLimit = settings.RegisterPositiveIntSetting(
-		"kv.tenant_rate_limiter.request.burst_limit",
-		"per-tenant request burst limit in requests",
+	readRequestBurstLimit = settings.RegisterPositiveIntSetting(
+		"kv.tenant_rate_limiter.read_requests.burst_limit",
+		"per-tenant read request burst limit in requests",
+		512)
+
+	writeRequestRateLimit = settings.RegisterPositiveFloatSetting(
+		"kv.tenant_rate_limiter.write_requests.rate_limit",
+		"per-tenant write request rate limit in requests per second",
+		128)
+
+	writeRequestBurstLimit = settings.RegisterPositiveIntSetting(
+		"kv.tenant_rate_limiter.write_requests.burst_limit",
+		"per-tenant write request burst limit in requests",
 		512)
 
 	readRateLimit = settings.RegisterByteSizeSetting(
@@ -86,8 +101,10 @@ var (
 	// settingsSetOnChangeFuncs are the functions used to register the factory to
 	// be notified of changes to any of the settings which configure it.
 	settingsSetOnChangeFuncs = [...]func(*settings.Values, func()){
-		requestRateLimit.SetOnChange,
-		requestBurstLimit.SetOnChange,
+		readRequestRateLimit.SetOnChange,
+		readRequestBurstLimit.SetOnChange,
+		writeRequestRateLimit.SetOnChange,
+		writeRequestBurstLimit.SetOnChange,
 		readRateLimit.SetOnChange,
 		readBurstLimit.SetOnChange,
 		writeRateLimit.SetOnChange,

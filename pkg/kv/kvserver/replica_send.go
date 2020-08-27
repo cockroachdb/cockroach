@@ -65,8 +65,6 @@ func (r *Replica) sendWithRangeID(
 	r.maybeInitializeRaftGroup(ctx)
 
 	isReadOnly := ba.IsReadOnly()
-	useRaft := !isReadOnly && ba.IsWrite()
-
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -92,13 +90,13 @@ func (r *Replica) sendWithRangeID(
 
 	// Differentiate between read-write, read-only, and admin.
 	var pErr *roachpb.Error
-	if useRaft {
-		log.Event(ctx, "read-write path")
-		fn := (*Replica).executeWriteBatch
-		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
-	} else if isReadOnly {
+	if isReadOnly {
 		log.Event(ctx, "read-only path")
 		fn := (*Replica).executeReadOnlyBatch
+		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
+	} else if ba.IsWrite() {
+		log.Event(ctx, "read-write path")
+		fn := (*Replica).executeWriteBatch
 		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
 	} else if ba.IsAdmin() {
 		log.Event(ctx, "admin path")

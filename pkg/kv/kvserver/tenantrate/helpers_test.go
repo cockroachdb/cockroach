@@ -15,8 +15,10 @@ import "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 // OverrideSettingsWithRateLimits utilizes LimitConfigs from the values stored in the
 // settings.
 func OverrideSettingsWithRateLimits(settings *cluster.Settings, rl LimitConfigs) {
-	requestRateLimit.Override(&settings.SV, float64(rl.Requests.Rate))
-	requestBurstLimit.Override(&settings.SV, rl.Requests.Burst)
+	readRequestRateLimit.Override(&settings.SV, float64(rl.ReadRequests.Rate))
+	readRequestBurstLimit.Override(&settings.SV, rl.ReadRequests.Burst)
+	writeRequestRateLimit.Override(&settings.SV, float64(rl.WriteRequests.Rate))
+	writeRequestBurstLimit.Override(&settings.SV, rl.WriteRequests.Burst)
 	readRateLimit.Override(&settings.SV, int64(rl.ReadBytes.Rate))
 	readBurstLimit.Override(&settings.SV, rl.ReadBytes.Burst)
 	writeRateLimit.Override(&settings.SV, int64(rl.WriteBytes.Rate))
