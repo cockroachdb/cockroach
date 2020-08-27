@@ -15,18 +15,18 @@ EXPLAIN (TYPES) SELECT min(1), max(1), count(NULL), sum_int(1), avg(1), sum(1), 
 ·               vectorized           true                  ·                                                                                                                                                   ·
 group (scalar)  ·                    ·                     (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
  │              estimated row count  1 (missing stats)     ·                                                                                                                                                   ·
- │              aggregate 0          min(column6)          ·                                                                                                                                                   ·
- │              aggregate 1          max(column6)          ·                                                                                                                                                   ·
- │              aggregate 2          count(column9)        ·                                                                                                                                                   ·
- │              aggregate 3          sum_int(column6)      ·                                                                                                                                                   ·
- │              aggregate 4          avg(column6)          ·                                                                                                                                                   ·
- │              aggregate 5          sum(column6)          ·                                                                                                                                                   ·
- │              aggregate 6          stddev(column6)       ·                                                                                                                                                   ·
- │              aggregate 7          variance(column6)     ·                                                                                                                                                   ·
- │              aggregate 8          bool_and(column16)    ·                                                                                                                                                   ·
- │              aggregate 9          bool_or(column18)     ·                                                                                                                                                   ·
- │              aggregate 10         xor_agg(column20)     ·                                                                                                                                                   ·
- └── render     ·                    ·                     (column6 int, column9 unknown, column16 bool, column18 bool, column20 bytes)                                                                        ·
+ │              aggregate 0          min(column7)          ·                                                                                                                                                   ·
+ │              aggregate 1          max(column7)          ·                                                                                                                                                   ·
+ │              aggregate 2          count(column10)       ·                                                                                                                                                   ·
+ │              aggregate 3          sum_int(column7)      ·                                                                                                                                                   ·
+ │              aggregate 4          avg(column7)          ·                                                                                                                                                   ·
+ │              aggregate 5          sum(column7)          ·                                                                                                                                                   ·
+ │              aggregate 6          stddev(column7)       ·                                                                                                                                                   ·
+ │              aggregate 7          variance(column7)     ·                                                                                                                                                   ·
+ │              aggregate 8          bool_and(column17)    ·                                                                                                                                                   ·
+ │              aggregate 9          bool_or(column19)     ·                                                                                                                                                   ·
+ │              aggregate 10         xor_agg(column21)     ·                                                                                                                                                   ·
+ └── render     ·                    ·                     (column7 int, column10 unknown, column17 bool, column19 bool, column21 bytes)                                                                       ·
       │         estimated row count  1000 (missing stats)  ·                                                                                                                                                   ·
       │         render 0             (1)[int]              ·                                                                                                                                                   ·
       │         render 1             (NULL)[unknown]       ·                                                                                                                                                   ·
@@ -49,14 +49,14 @@ project              ·                    ·                            (min in
       │              aggregate 0          min(v)                       ·                                                                                                                                                    ·
       │              aggregate 1          max(v)                       ·                                                                                                                                                    ·
       │              aggregate 2          count(v)                     ·                                                                                                                                                    ·
-      │              aggregate 3          sum_int(column9)             ·                                                                                                                                                    ·
+      │              aggregate 3          sum_int(column10)            ·                                                                                                                                                    ·
       │              aggregate 4          avg(v)                       ·                                                                                                                                                    ·
       │              aggregate 5          sum(v)                       ·                                                                                                                                                    ·
       │              aggregate 6          stddev(v)                    ·                                                                                                                                                    ·
       │              aggregate 7          variance(v)                  ·                                                                                                                                                    ·
-      │              aggregate 8          bool_and(column15)           ·                                                                                                                                                    ·
-      │              aggregate 9          xor_agg(column17)            ·                                                                                                                                                    ·
-      └── render     ·                    ·                            (column9 int, column15 bool, column17 bytes, v int)                                                                                                  ·
+      │              aggregate 8          bool_and(column16)           ·                                                                                                                                                    ·
+      │              aggregate 9          xor_agg(column18)            ·                                                                                                                                                    ·
+      └── render     ·                    ·                            (column10 int, column16 bool, column18 bytes, v int)                                                                                                 ·
            │         estimated row count  1000 (missing stats)         ·                                                                                                                                                    ·
            │         render 0             (1)[int]                     ·                                                                                                                                                    ·
            │         render 1             ((v)[int] = (1)[int])[bool]  ·                                                                                                                                                    ·
@@ -130,8 +130,8 @@ EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 group           ·                    ·                           (count int, r int)  ·
  │              estimated row count  1000 (missing stats)        ·                   ·
  │              aggregate 0          count_rows()                ·                   ·
- │              group by             column7                     ·                   ·
- └── render     ·                    ·                           (column7 int)       ·
+ │              group by             column8                     ·                   ·
+ └── render     ·                    ·                           (column8 int)       ·
       │         estimated row count  1000 (missing stats)        ·                   ·
       │         render 0             ((k)[int] + (v)[int])[int]  ·                   ·
       └── scan  ·                    ·                           (k int, v int)      ·
@@ -213,11 +213,11 @@ EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ·                                  vectorized           true                          ·             ·
 group (scalar)                     ·                    ·                             (count)       ·
  │                                 estimated row count  1 (missing stats)             ·             ·
- │                                 aggregate 0          count(column11)               ·             ·
- └── distinct                      ·                    ·                             (column11)    ·
+ │                                 aggregate 0          count(column13)               ·             ·
+ └── distinct                      ·                    ·                             (column13)    ·
       │                            estimated row count  1000 (missing stats)          ·             ·
-      │                            distinct on          column11                      ·             ·
-      └── render                   ·                    ·                             (column11)    ·
+      │                            distinct on          column13                      ·             ·
+      └── render                   ·                    ·                             (column13)    ·
            │                       estimated row count  1000000 (missing stats)       ·             ·
            │                       render 0             ((k, v, w, s) AS k, v, w, s)  ·             ·
            └── cross join (inner)  ·                    ·                             (k, v, w, s)  ·
@@ -641,10 +641,10 @@ project                   ·                    ·                     (v int, c
       │                   order                +count_rows           ·                                   ·
       └── group           ·                    ·                     (v int, count int, count_rows int)  ·
            │              estimated row count  100 (missing stats)   ·                                   ·
-           │              aggregate 0          count(column6)        ·                                   ·
+           │              aggregate 0          count(column7)        ·                                   ·
            │              aggregate 1          count_rows()          ·                                   ·
            │              group by             v                     ·                                   ·
-           └── render     ·                    ·                     (column6 unknown, v int)            ·
+           └── render     ·                    ·                     (column7 unknown, v int)            ·
                 │         estimated row count  1000 (missing stats)  ·                                   ·
                 │         render 0             (NULL)[unknown]       ·                                   ·
                 │         render 1             (v)[int]              ·                                   ·
@@ -661,9 +661,9 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(NULL) FROM kv GROUP BY v) WHERE
 ·                    vectorized           true                  ·             ·
 group                ·                    ·                     (v, count)    ·
  │                   estimated row count  33 (missing stats)    ·             ·
- │                   aggregate 0          count(column6)        ·             ·
+ │                   aggregate 0          count(column7)        ·             ·
  │                   group by             v                     ·             ·
- └── render          ·                    ·                     (column6, v)  ·
+ └── render          ·                    ·                     (column7, v)  ·
       │              estimated row count  333 (missing stats)   ·             ·
       │              render 0             NULL                  ·             ·
       │              render 1             v                     ·             ·
@@ -694,10 +694,10 @@ project              ·                    ·                                   
  │                   estimated row count  100 (missing stats)                    ·                      ·
  └── group           ·                    ·                                      (v, count, max)        ·
       │              estimated row count  100 (missing stats)                    ·                      ·
-      │              aggregate 0          count(column6) FILTER (WHERE column7)  ·                      ·
-      │              aggregate 1          max(column7) FILTER (WHERE column7)    ·                      ·
+      │              aggregate 0          count(column7) FILTER (WHERE column8)  ·                      ·
+      │              aggregate 1          max(column8) FILTER (WHERE column8)    ·                      ·
       │              group by             v                                      ·                      ·
-      └── render     ·                    ·                                      (column6, column7, v)  ·
+      └── render     ·                    ·                                      (column7, column8, v)  ·
            │         estimated row count  1000 (missing stats)                   ·                      ·
            │         render 0             true                                   ·                      ·
            │         render 1             k > 5                                  ·                      ·
@@ -716,9 +716,9 @@ project              ·                    ·                                   
  │                   estimated row count  100 (missing stats)                    ·                      ·
  └── group           ·                    ·                                      (v, count)             ·
       │              estimated row count  100 (missing stats)                    ·                      ·
-      │              aggregate 0          count(column6) FILTER (WHERE column7)  ·                      ·
+      │              aggregate 0          count(column7) FILTER (WHERE column8)  ·                      ·
       │              group by             v                                      ·                      ·
-      └── render     ·                    ·                                      (column6, column7, v)  ·
+      └── render     ·                    ·                                      (column7, column8, v)  ·
            │         estimated row count  1000 (missing stats)                   ·                      ·
            │         render 0             true                                   ·                      ·
            │         render 1             k > 5                                  ·                      ·
@@ -816,8 +816,8 @@ EXPLAIN (TYPES) SELECT min(v+1) FROM opt_test
 ·               vectorized           true                        ·              ·
 group (scalar)  ·                    ·                           (min int)      ·
  │              estimated row count  1 (missing stats)           ·              ·
- │              aggregate 0          min(column4)                ·              ·
- └── render     ·                    ·                           (column4 int)  ·
+ │              aggregate 0          min(column5)                ·              ·
+ └── render     ·                    ·                           (column5 int)  ·
       │         estimated row count  1000 (missing stats)        ·              ·
       │         render 0             ((v)[int] + (1)[int])[int]  ·              ·
       └── scan  ·                    ·                           (v int)        ·
@@ -1007,13 +1007,13 @@ EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 render                    ·                    ·                                          (a int)                   ·
  │                        estimated row count  333 (missing stats)                        ·                         ·
  │                        render 0             (1)[int]                                   ·                         ·
- └── distinct             ·                    ·                                          (column6 decimal, v int)  ·
+ └── distinct             ·                    ·                                          (column7 decimal, v int)  ·
       │                   estimated row count  333 (missing stats)                        ·                         ·
-      │                   distinct on          column6, v                                 ·                         ·
-      └── filter          ·                    ·                                          (column6 decimal, v int)  ·
+      │                   distinct on          column7, v                                 ·                         ·
+      └── filter          ·                    ·                                          (column7 decimal, v int)  ·
            │              estimated row count  333 (missing stats)                        ·                         ·
-           │              filter               ((column6)[decimal] > (1)[decimal])[bool]  ·                         ·
-           └── render     ·                    ·                                          (column6 decimal, v int)  ·
+           │              filter               ((column7)[decimal] > (1)[decimal])[bool]  ·                         ·
+           └── render     ·                    ·                                          (column7 decimal, v int)  ·
                 │         estimated row count  1000 (missing stats)                       ·                         ·
                 │         render 0             ((w)[int]::DECIMAL)[decimal]               ·                         ·
                 │         render 1             (v)[int]                                   ·                         ·
@@ -1033,11 +1033,11 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ·                    vectorized           true                  ·               ·
 project              ·                    ·                     (m)             ·
  │                   estimated row count  100 (missing stats)   ·               ·
- └── group           ·                    ·                     (column6, min)  ·
+ └── group           ·                    ·                     (column7, min)  ·
       │              estimated row count  100 (missing stats)   ·               ·
       │              aggregate 0          min(a)                ·               ·
-      │              group by             column6               ·               ·
-      └── render     ·                    ·                     (column6, a)    ·
+      │              group by             column7               ·               ·
+      └── render     ·                    ·                     (column7, a)    ·
            │         estimated row count  1000 (missing stats)  ·               ·
            │         render 0             a                     ·               ·
            │         render 1             a                     ·               ·
@@ -1053,11 +1053,11 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ·                    vectorized           true                  ·               ·
 project              ·                    ·                     (m)             ·
  │                   estimated row count  100 (missing stats)   ·               ·
- └── group           ·                    ·                     (column6, min)  ·
+ └── group           ·                    ·                     (column7, min)  ·
       │              estimated row count  100 (missing stats)   ·               ·
       │              aggregate 0          min(a)                ·               ·
-      │              group by             column6               ·               ·
-      └── render     ·                    ·                     (column6, a)    ·
+      │              group by             column7               ·               ·
+      └── render     ·                    ·                     (column7, a)    ·
            │         estimated row count  1000 (missing stats)  ·               ·
            │         render 0             b                     ·               ·
            │         render 1             a                     ·               ·
@@ -1132,8 +1132,8 @@ EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
 ·               vectorized           true                    ·                ·
 group (scalar)  ·                    ·                       (string_agg)     ·
  │              estimated row count  1 (missing stats)       ·                ·
- │              aggregate 0          string_agg(s, column6)  ·                ·
- └── render     ·                    ·                       (column6, k, s)  +k
+ │              aggregate 0          string_agg(s, column7)  ·                ·
+ └── render     ·                    ·                       (column7, k, s)  +k
       │         estimated row count  1000 (missing stats)    ·                ·
       │         render 0             ','                     ·                ·
       │         render 1             k                       ·                ·
@@ -1193,8 +1193,8 @@ EXPLAIN (VERBOSE) SELECT string_agg(s, ', ') FROM kv
 ·               vectorized           true                    ·             ·
 group (scalar)  ·                    ·                       (string_agg)  ·
  │              estimated row count  1 (missing stats)       ·             ·
- │              aggregate 0          string_agg(s, column6)  ·             ·
- └── render     ·                    ·                       (column6, s)  ·
+ │              aggregate 0          string_agg(s, column7)  ·             ·
+ └── render     ·                    ·                       (column7, s)  ·
       │         estimated row count  1000 (missing stats)    ·             ·
       │         render 0             ', '                    ·             ·
       │         render 1             s                       ·             ·
@@ -1228,9 +1228,9 @@ sort                 ·                    ·                              (comp
  │                   order                +company_id                    ·                                ·
  └── group           ·                    ·                              (company_id, string_agg)         ·
       │              estimated row count  100 (missing stats)            ·                                ·
-      │              aggregate 0          string_agg(employee, column5)  ·                                ·
+      │              aggregate 0          string_agg(employee, column6)  ·                                ·
       │              group by             company_id                     ·                                ·
-      └── render     ·                    ·                              (column5, company_id, employee)  ·
+      └── render     ·                    ·                              (column6, company_id, employee)  ·
            │         estimated row count  1000 (missing stats)           ·                                ·
            │         render 0             ','                            ·                                ·
            │         render 1             company_id                     ·                                ·
@@ -1258,9 +1258,9 @@ sort                 ·                    ·                             (compa
  │                   order                +company_id                   ·                               ·
  └── group           ·                    ·                             (company_id, string_agg)        ·
       │              estimated row count  100 (missing stats)           ·                               ·
-      │              aggregate 0          string_agg(column5, column6)  ·                               ·
+      │              aggregate 0          string_agg(column6, column7)  ·                               ·
       │              group by             company_id                    ·                               ·
-      └── render     ·                    ·                             (column5, column6, company_id)  ·
+      └── render     ·                    ·                             (column6, column7, company_id)  ·
            │         estimated row count  1000 (missing stats)          ·                               ·
            │         render 0             employee::BYTES               ·                               ·
            │         render 1             '\x2c'                        ·                               ·
@@ -1288,9 +1288,9 @@ sort                 ·                    ·                              (comp
  │                   order                +company_id                    ·                                ·
  └── group           ·                    ·                              (company_id, string_agg)         ·
       │              estimated row count  100 (missing stats)            ·                                ·
-      │              aggregate 0          string_agg(employee, column5)  ·                                ·
+      │              aggregate 0          string_agg(employee, column6)  ·                                ·
       │              group by             company_id                     ·                                ·
-      └── render     ·                    ·                              (column5, company_id, employee)  ·
+      └── render     ·                    ·                              (column6, company_id, employee)  ·
            │         estimated row count  1000 (missing stats)           ·                                ·
            │         render 0             NULL                           ·                                ·
            │         render 1             company_id                     ·                                ·
@@ -1318,9 +1318,9 @@ sort                 ·                    ·                             (compa
  │                   order                +company_id                   ·                               ·
  └── group           ·                    ·                             (company_id, string_agg)        ·
       │              estimated row count  100 (missing stats)           ·                               ·
-      │              aggregate 0          string_agg(column5, column6)  ·                               ·
+      │              aggregate 0          string_agg(column6, column7)  ·                               ·
       │              group by             company_id                    ·                               ·
-      └── render     ·                    ·                             (column5, column6, company_id)  ·
+      └── render     ·                    ·                             (column6, column7, company_id)  ·
            │         estimated row count  1000 (missing stats)          ·                               ·
            │         render 0             employee::BYTES               ·                               ·
            │         render 1             NULL                          ·                               ·

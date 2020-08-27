@@ -716,10 +716,10 @@ EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ·                    distribution         local                 ·                ·
 ·                    vectorized           true                  ·                ·
 project              ·                    ·                     (b, a)           ·
- └── sort            ·                    ·                     (column5, a, b)  +a
+ └── sort            ·                    ·                     (column6, a, b)  +a
       │              estimated row count  1000 (missing stats)  ·                ·
       │              order                +a                    ·                ·
-      └── render     ·                    ·                     (column5, a, b)  ·
+      └── render     ·                    ·                     (column6, a, b)  ·
            │         estimated row count  1000 (missing stats)  ·                ·
            │         render 0             a                     ·                ·
            │         render 1             a                     ·                ·
@@ -735,10 +735,10 @@ EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 ·                    distribution         local                 ·                ·
 ·                    vectorized           true                  ·                ·
 project              ·                    ·                     (b, a)           ·
- └── sort            ·                    ·                     (column5, a, b)  +b
+ └── sort            ·                    ·                     (column6, a, b)  +b
       │              estimated row count  1000 (missing stats)  ·                ·
       │              order                +b                    ·                ·
-      └── render     ·                    ·                     (column5, a, b)  ·
+      └── render     ·                    ·                     (column6, a, b)  ·
            │         estimated row count  1000 (missing stats)  ·                ·
            │         render 0             b                     ·                ·
            │         render 1             a                     ·                ·

@@ -143,11 +143,11 @@ upsert                                  ·                    ·
  └── project                            ·                    ·
       └── render                        ·                    ·
            │                            estimated row count  1 (missing stats)
-           │                            render 0             column8 > 0
+           │                            render 0             column9 > 0
            │                            render 1             column1
-           │                            render 2             column7
-           │                            render 3             column8
-           │                            render 4             column9
+           │                            render 2             column8
+           │                            render 3             column9
+           │                            render 4             column10
            │                            render 5             a
            │                            render 6             b
            │                            render 7             c
@@ -180,11 +180,11 @@ upsert                                   ·                      ·
  └── project                             ·                      ·
       └── render                         ·                      ·
            │                             estimated row count    4 (missing stats)
-           │                             render 0               column8 > 0
+           │                             render 0               column9 > 0
            │                             render 1               column1
-           │                             render 2               column7
-           │                             render 3               column8
-           │                             render 4               column9
+           │                             render 2               column8
+           │                             render 3               column9
+           │                             render 4               column10
            │                             render 5               a
            │                             render 6               b
            │                             render 7               c
@@ -387,8 +387,8 @@ root                                     ·                    ·               
                 └── upsert               ·                    ·                                                    (z, rowid)                    ·
                      │                   estimated row count  1000 (missing stats)                                 ·                             ·
                      │                   into                 xyz(x, y, z, rowid)                                  ·                             ·
-                     └── project         ·                    ·                                                    (a, b, c, column11, a, b, c)  ·
-                          └── render     ·                    ·                                                    (column11, a, b, c)           ·
+                     └── project         ·                    ·                                                    (a, b, c, column13, a, b, c)  ·
+                          └── render     ·                    ·                                                    (column13, a, b, c)           ·
                                │         estimated row count  1000 (missing stats)                                 ·                             ·
                                │         render 0             unique_rowid()                                       ·                             ·
                                │         render 1             a                                                    ·                             ·

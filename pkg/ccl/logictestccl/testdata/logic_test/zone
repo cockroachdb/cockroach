@@ -41,6 +41,7 @@ TABLE t
  ├── k int not null
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
@@ -86,6 +87,7 @@ TABLE t
  ├── k int not null
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
@@ -152,6 +154,7 @@ TABLE t
  ├── k int not null
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
@@ -259,6 +262,7 @@ TABLE t
  ├── k int not null
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
@@ -314,6 +318,7 @@ TABLE t
  ├── k int not null
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
@@ -420,6 +425,7 @@ TABLE t
  ├── k int not null
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null

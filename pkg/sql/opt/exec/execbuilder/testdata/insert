@@ -428,18 +428,18 @@ render                              ·                    ·                    
  └── insert                         ·                    ·                       (x, v, rowid)                   ·
       │                             estimated row count  10 (missing stats)      ·                               ·
       │                             into                 insert_t(x, v, rowid)   ·                               ·
-      └── render                    ·                    ·                       (length, "?column?", column11)  ·
+      └── render                    ·                    ·                       (length, "?column?", column13)  ·
            │                        estimated row count  10 (missing stats)      ·                               ·
            │                        render 0             unique_rowid()          ·                               ·
            │                        render 1             length                  ·                               ·
            │                        render 2             "?column?"              ·                               ·
-           └── limit                ·                    ·                       (length, "?column?", column10)  ·
+           └── limit                ·                    ·                       (length, "?column?", column12)  ·
                 │                   estimated row count  10 (missing stats)      ·                               ·
                 │                   count                10                      ·                               ·
-                └── sort            ·                    ·                       (length, "?column?", column10)  +column10
+                └── sort            ·                    ·                       (length, "?column?", column12)  +column12
                      │              estimated row count  1000 (missing stats)    ·                               ·
-                     │              order                +column10               ·                               ·
-                     └── render     ·                    ·                       (length, "?column?", column10)  ·
+                     │              order                +column12               ·                               ·
+                     └── render     ·                    ·                       (length, "?column?", column12)  ·
                           │         estimated row count  1000 (missing stats)    ·                               ·
                           │         render 0             length(k)               ·                               ·
                           │         render 1             2                       ·                               ·
@@ -530,7 +530,7 @@ root                                ·                    ·                    
                 └── insert          ·                    ·                                                    (z, rowid)           ·
                      │              estimated row count  1000 (missing stats)                                 ·                    ·
                      │              into                 xyz(x, y, z, rowid)                                  ·                    ·
-                     └── render     ·                    ·                                                    (a, b, c, column11)  ·
+                     └── render     ·                    ·                                                    (a, b, c, column13)  ·
                           │         estimated row count  1000 (missing stats)                                 ·                    ·
                           │         render 0             unique_rowid()                                       ·                    ·
                           │         render 1             a                                                    ·                    ·
