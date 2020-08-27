@@ -1005,7 +1005,10 @@ CREATE TABLE crdb_internal.%s (
   session_id STRING,       -- the ID of the session
   start TIMESTAMP,         -- the start time of the transaction
   txn_string STRING,       -- the string representation of the transcation
-  application_name STRING  -- the name of the application as per SET application_name
+  application_name STRING, -- the name of the application as per SET application_name
+  num_stmts INT,           -- the number of statements executed so far
+  num_retries INT,         -- the number of times the transaction was restarted
+  num_auto_retries INT     -- the number of times the transaction was automatically restarted
 )`
 
 var crdbInternalLocalTxnsTable = virtualSchemaTable{
@@ -1071,6 +1074,9 @@ func populateTransactionsTable(
 				ts,
 				tree.NewDString(txn.TxnDescription),
 				tree.NewDString(session.ApplicationName),
+				tree.NewDInt(tree.DInt(txn.NumStatementsExecuted)),
+				tree.NewDInt(tree.DInt(txn.NumRetries)),
+				tree.NewDInt(tree.DInt(txn.NumAutoRetries)),
 			); err != nil {
 				return err
 			}
@@ -1368,8 +1374,8 @@ func populateSessionsTable(
 		}
 
 		kvTxnIDDatum := tree.DNull
-		if session.KvTxnID != nil {
-			kvTxnIDDatum = tree.NewDString(session.KvTxnID.String())
+		if session.ActiveTxn != nil {
+			kvTxnIDDatum = tree.NewDString(session.ActiveTxn.ID.String())
 		}
 
 		sessionID := getSessionID(session)

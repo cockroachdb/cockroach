@@ -31,6 +31,10 @@ var _ catalog.MutableDescriptor = (*Mutable)(nil)
 // Immutable wraps a Schema descriptor and provides methods on it.
 type Immutable struct {
 	descpb.SchemaDescriptor
+
+	// isUncommittedVersion is set to true if this descriptor was created from
+	// a copy of a Mutable with an uncommitted version.
+	isUncommittedVersion bool
 }
 
 // Mutable is a mutable reference to a SchemaDescriptor.
@@ -72,10 +76,10 @@ var (
 	_ = NewImmutable
 )
 
-// NewMutableCreatedSchemaDescriptor returns a Mutable from the
+// NewCreatedMutable returns a Mutable from the
 // given SchemaDescriptor with the cluster version being the zero schema. This
 // is for a schema that is created within the current transaction.
-func NewMutableCreatedSchemaDescriptor(desc descpb.SchemaDescriptor) *Mutable {
+func NewCreatedMutable(desc descpb.SchemaDescriptor) *Mutable {
 	return &Mutable{
 		Immutable: makeImmutable(desc),
 	}
@@ -89,6 +93,11 @@ func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 // GetParentSchemaID implements the Descriptor interface.
 func (desc *Immutable) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
+}
+
+// IsUncommittedVersion implements the Descriptor interface.
+func (desc *Immutable) IsUncommittedVersion() bool {
+	return desc.isUncommittedVersion
 }
 
 // GetAuditMode implements the DescriptorProto interface.
@@ -171,7 +180,9 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutable(*protoutil.Clone(desc.SchemaDesc()).(*descpb.SchemaDescriptor))
+	imm := NewImmutable(*protoutil.Clone(desc.SchemaDesc()).(*descpb.SchemaDescriptor))
+	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+	return imm
 }
 
 // IsNew implements the MutableDescriptor interface.
@@ -188,6 +199,11 @@ func (desc *Mutable) SetName(name string) {
 		Name:           desc.Name,
 	})
 	desc.Name = name
+}
+
+// IsUncommittedVersion implements the Descriptor interface.
+func (desc *Mutable) IsUncommittedVersion() bool {
+	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
 }
 
 // IsSchemaNameValid returns whether the input name is valid for a user defined

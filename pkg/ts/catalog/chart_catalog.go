@@ -1488,7 +1488,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{SQLLayer, "SQL Livness"}},
+		Organization: [][]string{{SQLLayer, "SQL Catalog", "Hydrated Descriptor Cache"}},
+		Charts: []chartDescription{
+			{
+				Title: "Cache Hits and Misses",
+				Metrics: []string{
+					"sql.hydrated_table_cache.hits",
+					"sql.hydrated_table_cache.misses",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{SQLLayer, "SQL Liveness"}},
 		Charts: []chartDescription{
 			{
 				Title: "Session Writes",

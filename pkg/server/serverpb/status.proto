@@ -476,6 +476,21 @@ message TxnInfo {
   // txn_description is a text description of the underlying kv.Txn, intended
   // for troubleshooting purposes.
   string txn_description = 3;
+
+  // num_statements_executed is the number of statements that were executed so
+  // far on this transaction.
+  int32 num_statements_executed = 4;
+
+  // num_retries is the number of times that this transaction was retried.
+  int32 num_retries = 5;
+
+  // num_retries is the number of times that this transaction was automatically
+  // retried by the SQL executor.
+  int32 num_auto_retries = 6;
+
+  // The deadline by which the transaction must be committed.
+  google.protobuf.Timestamp deadline = 7
+  [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -533,16 +548,8 @@ message Session {
   // Timestamp of session's start.
   google.protobuf.Timestamp start = 6
       [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
-  // ID of the current KV transaction for this session. Nil if the session
-  // doesn't currently have a transaction.
-  bytes kv_txn_id = 7 [
-    (gogoproto.customname) = "KvTxnID",
-    (gogoproto.customtype) =
-        "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
-  ];
-  // Information about the txn in progress on this session. Nil if the
-  // session doesn't currently have a transaction.
-  TxnInfo active_txn = 12;
+  // This used to be active_txn_id until it was moved inside of active_txn.
+  reserved 7;
   // SQL string of the last query executed on this session.
   string last_active_query = 8;
   // ID of the session (uint128 represented as raw bytes).
@@ -551,6 +558,9 @@ message Session {
   int64 alloc_bytes = 10;
   // High water mark of allocated bytes in the session memory monitor.
   int64 max_alloc_bytes = 11;
+  // Information about the txn in progress on this session. Nil if the
+  // session doesn't currently have a transaction.
+  TxnInfo active_txn = 12;
 }
 
 // An error wrapper object for ListSessionsResponse.
