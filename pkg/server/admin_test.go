@@ -1443,7 +1443,7 @@ func TestAdminAPILocations(t *testing.T) {
 		)
 	}
 	var res serverpb.LocationsResponse
-	if err := getAdminJSONProto(s, "locations", &res); err != nil {
+	if err := getAdminJSONProtoWithAdminOption(s, "locations", &res, false /* isAdmin */); err != nil {
 		t.Fatal(err)
 	}
 	for i, loc := range testLocations {
