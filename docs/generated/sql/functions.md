@@ -1235,6 +1235,10 @@ Bottom Left.</p>
 </span></td></tr>
 <tr><td><a name="st_force2d"></a><code>st_force2d(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry which only contains X and Y coordinates.</p>
 </span></td></tr>
+<tr><td><a name="st_forcepolygonccw"></a><code>st_forcepolygonccw(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry where all Polygon objects have exterior rings in the counter-clockwise orientation and interior rings in the clockwise orientation. Non-Polygon objects are unchanged.</p>
+</span></td></tr>
+<tr><td><a name="st_forcepolygoncw"></a><code>st_forcepolygoncw(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry where all Polygon objects have exterior rings in the clockwise orientation and interior rings in the counter-clockwise orientation. Non-Polygon objects are unchanged.</p>
+</span></td></tr>
 <tr><td><a name="st_geogfromewkb"></a><code>st_geogfromewkb(val: <a href="bytes.html">bytes</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an EWKB representation.</p>
 </span></td></tr>
 <tr><td><a name="st_geogfromewkt"></a><code>st_geogfromewkt(val: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an EWKT representation.</p>
@@ -1337,6 +1341,10 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <tr><td><a name="st_iscollection"></a><code>st_iscollection(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is of a collection type (including multi-types).</p>
 </span></td></tr>
 <tr><td><a name="st_isempty"></a><code>st_isempty(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is empty.</p>
+</span></td></tr>
+<tr><td><a name="st_ispolygonccw"></a><code>st_ispolygonccw(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the Polygon objects inside the Geometry have exterior rings in the counter-clockwise orientation and interior rings in the clockwise orientation. Non-Polygon objects are considered counter-clockwise.</p>
+</span></td></tr>
+<tr><td><a name="st_ispolygoncw"></a><code>st_ispolygoncw(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the Polygon objects inside the Geometry have exterior rings in the clockwise orientation and interior rings in the counter-clockwise orientation. Non-Polygon objects are considered clockwise.</p>
 </span></td></tr>
 <tr><td><a name="st_isring"></a><code>st_isring(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is a single linestring that is closed and simple, as defined by ST_IsClosed and ST_IsSimple.</p>
 <p>This function utilizes the GEOS module.</p>
