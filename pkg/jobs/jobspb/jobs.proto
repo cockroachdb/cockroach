@@ -59,6 +59,23 @@ message BackupEncryptionOptions {
   KMSInfo kms_info  = 3 [(gogoproto.customname) = "KMSInfo"];
 }
 
+// EncryptionInfo is stored IN PLAINTEXT along side collections of encrypted
+// files stored outside of cockroach, for example by BACKUP/RESTORE.
+message EncryptionInfo {
+  enum Scheme {
+    AES256GCM = 0;
+  }
+  option (gogoproto.equal) = true;
+
+  Scheme scheme = 1;
+  bytes salt = 2;
+
+  // EncryptedDataKeyByKMSMasterKeyID is a mapping from the hashed master key
+  // identifier of a KMS to the encrypted version of the DataKey obtained from
+  // that KMS.
+  map<string, bytes> encryptedDataKeyByKMSMasterKeyID = 3;
+}
+
 
 message BackupDetails {
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
@@ -72,7 +89,8 @@ message BackupDetails {
   // partitioned backups.
   map<string, string> uris_by_locality_kv = 5 [(gogoproto.customname) = "URIsByLocalityKV"];
   bytes backup_manifest = 4;
-  BackupEncryptionOptions encryption = 6;
+  BackupEncryptionOptions encryption_options = 6;
+  EncryptionInfo encryption_info = 9;
 
   // ProtectedTimestampRecord is the ID of the protected timestamp record
   // corresponding to this job. While the job ought to clean up the record
@@ -143,7 +161,7 @@ message RestoreDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
   ];
   BackupEncryptionOptions encryption = 12;
-  // NEXT ID: 14.
+  // NEXT ID: 16.
 }
 
 message RestoreProgress {
