@@ -52,6 +52,10 @@ func (p *planner) ReparentDatabase(
 			clusterversion.VersionByKey(clusterversion.VersionUserDefinedSchemas))
 	}
 
+	if string(n.Name) == p.CurrentDatabase() {
+		return nil, pgerror.DangerousStatementf("CONVERT TO SCHEMA on current database")
+	}
+
 	db, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), true /* required */)
 	if err != nil {
 		return nil, err
