@@ -183,7 +183,7 @@ func TestEncodings(t *testing.T) {
 				pgwirebase.FormatText:   tc.TextAsBinary,
 				pgwirebase.FormatBinary: tc.Binary,
 			} {
-				d, err := pgwirebase.DecodeOidDatum(nil, tc.Oid, code, value)
+				d, err := pgwirebase.DecodeOidDatum(context.Background(), nil, tc.Oid, code, value, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -241,7 +241,7 @@ func TestExoticNumericEncodings(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(nil)
 	for i, c := range testCases {
 		t.Run(fmt.Sprintf("%d_%s", i, c.Value), func(t *testing.T) {
-			d, err := pgwirebase.DecodeOidDatum(nil, oid.T_numeric, pgwirebase.FormatBinary, c.Encoding)
+			d, err := pgwirebase.DecodeOidDatum(context.Background(), nil, oid.T_numeric, pgwirebase.FormatBinary, c.Encoding, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

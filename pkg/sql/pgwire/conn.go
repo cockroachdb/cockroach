@@ -782,6 +782,12 @@ func (c *conn) handleParse(
 			if t == 0 {
 				continue
 			}
+			// If the OID is user defined, then write nil into the type hints and let
+			// the consumer of the PrepareStmt resolve the types.
+			if types.IsOIDUserDefinedType(t) {
+				sqlTypeHints[i] = nil
+				continue
+			}
 			v, ok := types.OidToType[t]
 			if !ok {
 				err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)
