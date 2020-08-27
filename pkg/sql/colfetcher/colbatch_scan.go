@@ -180,7 +180,7 @@ func NewColBatchScan(
 		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap,
+		flowCtx.Codec(), allocator, &fetcher, table, int(spec.IndexIdx), columnIdxMap,
 		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
 		sysColDescs,
 	); err != nil {
@@ -209,7 +209,7 @@ func initCRowFetcher(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	fetcher *cFetcher,
-	desc *descpb.TableDescriptor,
+	desc *tabledesc.Immutable,
 	indexIdx int,
 	colIdxMap map[descpb.ColumnID]int,
 	reverseScan bool,
@@ -219,21 +219,20 @@ func initCRowFetcher(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	systemColumnDescs []descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
-	immutDesc := tabledesc.NewImmutable(*desc)
-	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
+	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
 		return nil, false, err
 	}
 
-	cols := immutDesc.Columns
+	cols := desc.Columns
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = immutDesc.ReadableColumns
+		cols = desc.ReadableColumns
 	}
 	// Add on any requested system columns. We slice cols to avoid modifying
 	// the underlying table descriptor.
 	cols = append(cols[:len(cols):len(cols)], systemColumnDescs...)
 	tableArgs := row.FetcherTableArgs{
-		Desc:             immutDesc,
+		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
