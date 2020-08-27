@@ -934,7 +934,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
-%type <str> schema_name
+%type <str> schema_name opt_schema_name
 %type <[]string> schema_name_list
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
@@ -5294,7 +5294,7 @@ pause_schedules_stmt:
 // %Help: CREATE SCHEMA - create a new schema
 // %Category: DDL
 // %Text:
-// CREATE SCHEMA [IF NOT EXISTS] <schemaname>
+// CREATE SCHEMA [IF NOT EXISTS] { <schemaname> | [<schemaname>] AUTHORIZATION <rolename> }
 create_schema_stmt:
   CREATE SCHEMA schema_name
   {
@@ -5307,6 +5307,21 @@ create_schema_stmt:
     $$.val = &tree.CreateSchema{
       Schema: $6,
       IfNotExists: true,
+    }
+  }
+| CREATE SCHEMA opt_schema_name AUTHORIZATION role_spec
+  {
+    $$.val = &tree.CreateSchema{
+      Schema: $3,
+      AuthRole: $5,
+    }
+  }
+| CREATE SCHEMA IF NOT EXISTS opt_schema_name AUTHORIZATION role_spec
+  {
+    $$.val = &tree.CreateSchema{
+      Schema: $6,
+      IfNotExists: true,
+      AuthRole: $8,
     }
   }
 | CREATE SCHEMA error // SHOW HELP: CREATE SCHEMA
@@ -11104,6 +11119,8 @@ sequence_name:         db_object_name
 
 schema_name:           name
 
+opt_schema_name:       opt_name
+
 table_name:            db_object_name
 
 standalone_index_name: db_object_name
@@ -11317,7 +11334,6 @@ unreserved_keyword:
 | AT
 | ATTRIBUTE
 | AUTOMATIC
-| AUTHORIZATION
 | BACKUP
 | BACKUPS
 | BEFORE
@@ -11688,7 +11704,8 @@ type_func_name_keyword:
 //
 // See type_func_name_crdb_extra_keyword below.
 type_func_name_no_crdb_extra_keyword:
-  COLLATION
+  AUTHORIZATION
+| COLLATION
 | CROSS
 | FULL
 | INNER
