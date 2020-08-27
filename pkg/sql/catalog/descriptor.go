@@ -115,6 +115,7 @@ type TableDescriptor interface {
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
 	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)
 	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error)
+	FindIndexByIndexIdx(idx int) (*descpb.IndexDescriptor, bool, error)
 	FindIndexesWithPartition(name string) []*descpb.IndexDescriptor
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
@@ -125,6 +126,7 @@ type TableDescriptor interface {
 	PrimaryKeyString() string
 
 	GetPublicColumns() []descpb.ColumnDescriptor
+	GetReadableColumns() []descpb.ColumnDescriptor
 	ForeachPublicColumn(f func(col *descpb.ColumnDescriptor) error) error
 	ForeachNonDropColumn(f func(col *descpb.ColumnDescriptor) error) error
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
@@ -172,6 +174,8 @@ type TableDescriptor interface {
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
 	WritableColumns() []descpb.ColumnDescriptor
+	ColumnTypes() []*types.T
+	ColumnTypesWithMutations(mutations bool) []*types.T
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.

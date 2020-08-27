@@ -49,6 +49,7 @@ type Immutable struct {
 	// are all set to nullable while column backfilling is still in
 	// progress, as mutation columns may have NULL values.
 	ReadableColumns []descpb.ColumnDescriptor
+	//	columnIdxMap    map[descpb.ColumnID]int
 
 	// columnsWithUDTs is a set of indexes into publicAndNonPublicCols containing
 	// indexes of columns that contain user defined types.
@@ -122,4 +123,8 @@ func (desc *Mutable) IsUncommittedVersion() bool {
 // SetDrainingNames implements the MutableDescriptor interface.
 func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
+}
+
+func (desc *Immutable) GetReadableColumns() []descpb.ColumnDescriptor {
+	return desc.ReadableColumns
 }

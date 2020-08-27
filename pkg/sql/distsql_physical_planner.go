@@ -941,12 +941,13 @@ func initTableReaderSpec(
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
 	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
-		Table:             *n.desc.TableDesc(),
-		Reverse:           n.reverse,
-		IsCheck:           n.isCheck,
-		Visibility:        n.colCfg.visibility,
-		LockingStrength:   n.lockingStrength,
-		LockingWaitPolicy: n.lockingWaitPolicy,
+		Table:                     *n.desc.TableDesc(),
+		TableIsUncommittedVersion: n.desc.IsUncommittedVersion(),
+		Reverse:                   n.reverse,
+		IsCheck:                   n.isCheck,
+		Visibility:                n.colCfg.visibility,
+		LockingStrength:           n.lockingStrength,
+		LockingWaitPolicy:         n.lockingWaitPolicy,
 
 		// Retain the capacity of the spans slice.
 		Spans:         s.Spans[:0],
@@ -1940,13 +1941,14 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.AddProjection(pkCols)
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:             *n.table.desc.TableDesc(),
-		IndexIdx:          0,
-		Visibility:        n.table.colCfg.visibility,
-		LockingStrength:   n.table.lockingStrength,
-		LockingWaitPolicy: n.table.lockingWaitPolicy,
-		MaintainOrdering:  len(n.reqOrdering) > 0,
-		SystemColumns:     n.table.systemColumns,
+		Table:                     *n.table.desc.TableDesc(),
+		TableIsUncommittedVersion: n.table.desc.IsUncommittedVersion(),
+		IndexIdx:                  0,
+		Visibility:                n.table.colCfg.visibility,
+		LockingStrength:           n.table.lockingStrength,
+		LockingWaitPolicy:         n.table.lockingWaitPolicy,
+		MaintainOrdering:          len(n.reqOrdering) > 0,
+		SystemColumns:             n.table.systemColumns,
 	}
 
 	post := execinfrapb.PostProcessSpec{
@@ -1998,13 +2000,14 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:             *n.table.desc.TableDesc(),
-		Type:              n.joinType,
-		Visibility:        n.table.colCfg.visibility,
-		LockingStrength:   n.table.lockingStrength,
-		LockingWaitPolicy: n.table.lockingWaitPolicy,
-		MaintainOrdering:  len(n.reqOrdering) > 0,
-		SystemColumns:     n.table.systemColumns,
+		Table:                     *n.table.desc.TableDesc(),
+		TableIsUncommittedVersion: n.table.desc.IsUncommittedVersion(),
+		Type:                      n.joinType,
+		Visibility:                n.table.colCfg.visibility,
+		LockingStrength:           n.table.lockingStrength,
+		LockingWaitPolicy:         n.table.lockingWaitPolicy,
+		MaintainOrdering:          len(n.reqOrdering) > 0,
+		SystemColumns:             n.table.systemColumns,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
 	if err != nil {
@@ -2180,11 +2183,14 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	plan = &p
 
 	tables := make([]descpb.TableDescriptor, len(n.sides))
+	tableIsUncommittedVersions := make([]bool, len(n.sides))
 	indexOrdinals := make([]uint32, len(n.sides))
 	cols := make([]execinfrapb.Columns, len(n.sides))
+
 	numStreamCols := 0
 	for i, side := range n.sides {
 		tables[i] = *side.scan.desc.TableDesc()
+		tableIsUncommittedVersions[i] = side.scan.desc.IsUncommittedVersion()
 		indexOrdinals[i], err = getIndexIdx(side.scan.index, side.scan.desc)
 		if err != nil {
 			return nil, err
@@ -2201,10 +2207,11 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	// The zigzag join node only represents inner joins, so hardcode Type to
 	// InnerJoin.
 	zigzagJoinerSpec := execinfrapb.ZigzagJoinerSpec{
-		Tables:        tables,
-		IndexOrdinals: indexOrdinals,
-		EqColumns:     cols,
-		Type:          descpb.InnerJoin,
+		Tables:                    tables,
+		TableIsUncommittedVersion: tableIsUncommittedVersions,
+		IndexOrdinals:             indexOrdinals,
+		EqColumns:                 cols,
+		Type:                      descpb.InnerJoin,
 	}
 	zigzagJoinerSpec.FixedValues = make([]*execinfrapb.ValuesCoreSpec, len(n.sides))
 

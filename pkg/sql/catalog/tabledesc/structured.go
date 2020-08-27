@@ -151,11 +151,12 @@ func MakeImmutable(tbl descpb.TableDescriptor) Immutable {
 		}
 
 		// Iterate through all mutation columns.
-		for _, c := range publicAndNonPublicCols[len(tbl.Columns):] {
+		for i := range publicAndNonPublicCols[len(tbl.Columns):] {
 			// Mutation column may need to be fetched, but may not be completely backfilled
 			// and have be null values (even though they may be configured as NOT NULL).
+			c := &publicAndNonPublicCols[i]
 			c.Nullable = true
-			readableCols = append(readableCols, c)
+			readableCols = append(readableCols, *c)
 		}
 	}
 
@@ -2472,7 +2473,7 @@ func (desc *Immutable) FindColumnMutationByName(name tree.Name) *descpb.Descript
 }
 
 // ColumnIdxMap returns a map from Column ID to the ordinal position of that
-// column.
+// column. It must not be modified as it is shared.
 func (desc *Immutable) ColumnIdxMap() map[descpb.ColumnID]int {
 	return desc.ColumnIdxMapWithMutations(false)
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -137,30 +138,58 @@ func NewColBatchScan(
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just seting the ID and Version in the spec or something like that and
 	// retrieving the hydrated Immutable from cache.
-	table := tabledesc.NewImmutable(spec.Table)
+	var table catalog.TableDescriptor
+	if spec.TableIsUncommittedVersion {
+		var err error
+		table, err = flowCtx.TypeResolverFactory.Descriptors.GetTableVersionByIDWithMinVersion(
+			flowCtx.EvalCtx.Ctx(),
+			spec.Table.ModificationTime,
+			flowCtx.EvalCtx.Txn,
+			spec.Table.ID, spec.Table.Version, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		table = tabledesc.NewImmutable(spec.Table)
+	}
+
 	typs := table.ColumnTypesWithMutations(returnMutations)
 	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
+
 	// Add all requested system columns to the output.
-	sysColTypes, sysColDescs, err := colinfo.GetSystemColumnTypesAndDescriptors(spec.SystemColumns)
-	if err != nil {
-		return nil, err
-	}
-	typs = append(typs, sysColTypes...)
-	for i := range sysColDescs {
-		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+	var sysColDescs []descpb.ColumnDescriptor
+	if len(spec.SystemColumns) > 0 {
+		columnIdxMapCpy := make(map[descpb.ColumnID]int, len(columnIdxMap)+len(spec.SystemColumns))
+		for id, idx := range columnIdxMap {
+			columnIdxMapCpy[id] = idx
+		}
+		columnIdxMap = columnIdxMapCpy
+		var sysColTypes []*types.T
+		var err error
+		sysColTypes, sysColDescs, err = colinfo.GetSystemColumnTypesAndDescriptors(spec.SystemColumns)
+		if err != nil {
+			return nil, err
+		}
+		typs = append(typs, sysColTypes...)
+		for i := range sysColDescs {
+			columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+		}
 	}
 
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := flowCtx.NewEvalCtx()
-	// Before we can safely use types from the table descriptor, we need to
-	// make sure they are hydrated. In row execution engine it is done during
-	// the processor initialization, but neither ColBatchScan nor cFetcher are
-	// processors, so we need to do the hydration ourselves.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
-	semaCtx.TypeResolver = resolver
-	if err := resolver.HydrateTypeSlice(evalCtx.Context, typs); err != nil {
-		return nil, err
+	if spec.TableIsUncommittedVersion {
+		// Before we can safely use types from the table descriptor, we need to
+		// make sure they are hydrated. In row execution engine it is done during
+		// the processor initialization, but neither ColBatchScan nor cFetcher are
+		// processors, so we need to do the hydration ourselves.
+		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
+		semaCtx.TypeResolver = resolver
+		if err := resolver.HydrateTypeSlice(evalCtx.Context, typs); err != nil {
+			return nil, err
+		}
 	}
+
 	helper := execinfra.ProcOutputHelper{}
 	if err := helper.Init(
 		post,
@@ -227,7 +256,7 @@ func initCRowFetcher(
 
 	cols := immutDesc.Columns
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = immutDesc.ReadableColumns
+		cols = immutDesc.GetReadableColumns()
 	}
 	// Add on any requested system columns. We slice cols to avoid modifying
 	// the underlying table descriptor.

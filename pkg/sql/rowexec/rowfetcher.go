@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -61,7 +60,7 @@ type rowFetcher interface {
 func initRowFetcher(
 	flowCtx *execinfra.FlowCtx,
 	fetcher *row.Fetcher,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	indexIdx int,
 	colIdxMap map[descpb.ColumnID]int,
 	reverseScan bool,
@@ -79,9 +78,9 @@ func initRowFetcher(
 		return nil, false, err
 	}
 
-	cols := desc.Columns
+	cols := desc.GetPublicColumns()
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns
+		cols = desc.GetReadableColumns()
 	}
 	// Add on any requested system columns. We slice cols to avoid modifying
 	// the underlying table descriptor.

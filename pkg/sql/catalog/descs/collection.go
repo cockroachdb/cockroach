@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -536,7 +537,7 @@ func (tc *Collection) getUserDefinedSchemaVersion(
 	// the database which doesn't reflect the changes to the schema. But this
 	// isn't a problem for correctness; it can only happen on other sessions
 	// before the schema change has returned results.
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, schemaInfo.ID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, txn.ReadTimestamp(), schemaInfo.ID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
@@ -853,7 +854,7 @@ func (tc *Collection) GetDatabaseVersionByID(
 		return tc.deprecatedDatabaseCache().GetDatabaseDescByID(ctx, txn, dbID)
 	}
 
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, dbID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, txn.ReadTimestamp(), dbID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
@@ -867,11 +868,34 @@ func (tc *Collection) GetDatabaseVersionByID(
 	return db, nil
 }
 
-// GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
-func (tc *Collection) GetTableVersionByID(
-	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
+func (tc *Collection) GetTableVersionByIDWithMinVersion(
+	ctx context.Context,
+	minTimestamp hlc.Timestamp,
+	txn *kv.Txn,
+	tableID descpb.ID,
+	version descpb.DescriptorVersion,
+	flags tree.ObjectLookupFlags,
 ) (*tabledesc.Immutable, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	desc, err := tc.getTableVersionByIDImpl(ctx, txn, minTimestamp, tableID, flags)
+	if err != nil {
+		return nil, err
+	}
+	if desc.GetVersion() != version {
+		if err := tc.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID()); err != nil {
+			return nil, err
+		}
+	}
+	return tc.getTableVersionByIDImpl(ctx, txn, minTimestamp, tableID, flags)
+}
+
+func (tc *Collection) getTableVersionByIDImpl(
+	ctx context.Context,
+	txn *kv.Txn,
+	readTimestamp hlc.Timestamp,
+	tableID descpb.ID,
+	flags tree.ObjectLookupFlags,
+) (*tabledesc.Immutable, error) {
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, readTimestamp, tableID, flags.CommonLookupFlags, txn != nil)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlerrors.NewUndefinedRelationError(
@@ -891,8 +915,20 @@ func (tc *Collection) GetTableVersionByID(
 	return hydrated.(*tabledesc.Immutable), nil
 }
 
+// GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
+func (tc *Collection) GetTableVersionByID(
+	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
+) (*tabledesc.Immutable, error) {
+	return tc.getTableVersionByIDImpl(ctx, txn, txn.ReadTimestamp(), tableID, flags)
+}
+
 func (tc *Collection) getDescriptorVersionByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags, setTxnDeadline bool,
+	ctx context.Context,
+	txn *kv.Txn,
+	readTimestamp hlc.Timestamp,
+	id descpb.ID,
+	flags tree.CommonLookupFlags,
+	setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
 	if flags.AvoidCached || lease.TestingTableLeasesAreDisabled() {
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id, catalogkv.Immutable,
@@ -926,7 +962,6 @@ func (tc *Collection) getDescriptorVersionByID(
 		return desc, nil
 	}
 
-	readTimestamp := txn.ReadTimestamp()
 	desc, expiration, err := tc.leaseMgr.Acquire(ctx, readTimestamp, id)
 	if err != nil {
 		return nil, err
@@ -939,7 +974,7 @@ func (tc *Collection) getDescriptorVersionByID(
 	tc.leasedDescriptors.add(desc)
 	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.GetName())
 
-	if setTxnDeadline {
+	if setTxnDeadline && txn != nil {
 		// If the descriptor we just acquired expires before the txn's deadline,
 		// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
 		// timestamp, so we need to set a deadline on the transaction to prevent it
@@ -1018,7 +1053,7 @@ func (tc *Collection) ResolveSchemaByID(
 
 	// Otherwise, fall back to looking up the descriptor with the desired ID.
 	desc, err := tc.getDescriptorVersionByID(
-		ctx, txn, schemaID, tree.CommonLookupFlags{Required: true}, true /* setTxnDeadline */)
+		ctx, txn, txn.ReadTimestamp(), schemaID, tree.CommonLookupFlags{Required: true}, true /* setTxnDeadline */)
 	if err != nil {
 		return catalog.ResolvedSchema{}, err
 	}
@@ -1319,7 +1354,7 @@ func (tc *Collection) GetTypeVersion(
 func (tc *Collection) GetTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*typedesc.Immutable, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, txn.ReadTimestamp(), typeID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, pgerror.Newf(
@@ -1701,6 +1736,7 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	desc, err := dt.descriptors.getDescriptorVersionByID(
 		ctx,
 		dt.txn,
+		dt.txn.ReadTimestamp(),
 		id,
 		tree.CommonLookupFlags{Required: true},
 		false, /* setTxnDeadline */

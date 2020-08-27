@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -72,7 +74,7 @@ type joinReader struct {
 
 	diskMonitor *mon.BytesMonitor
 
-	desc             tabledesc.Immutable
+	desc             catalog.TableDescriptor
 	index            *descpb.IndexDescriptor
 	colIdxMap        map[descpb.ColumnID]int
 	maintainOrdering bool
@@ -137,8 +139,22 @@ func newJoinReader(
 	default:
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
+	var table catalog.TableDescriptor
+	if spec.TableIsUncommittedVersion {
+		table = tabledesc.NewImmutable(spec.Table)
+	} else {
+		var err error
+		table, err = flowCtx.TypeResolverFactory.Descriptors.GetTableVersionByIDWithMinVersion(
+			flowCtx.EvalCtx.Ctx(), spec.Table.ModificationTime,
+			flowCtx.EvalCtx.Txn,
+			spec.Table.ID,
+			spec.Table.Version, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return nil, err
+		}
+	}
 	jr := &joinReader{
-		desc:             tabledesc.MakeImmutable(spec.Table),
+		desc:             table,
 		maintainOrdering: spec.MaintainOrdering,
 		input:            input,
 		inputTypes:       input.OutputTypes(),
@@ -235,7 +251,7 @@ func newJoinReader(
 	}
 
 	_, _, err = initRowFetcher(
-		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+		flowCtx, &fetcher, jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		rightCols, false /* isCheck */, jr.EvalCtx.Mon, &jr.alloc, spec.Visibility, spec.LockingStrength,
 		spec.LockingWaitPolicy, sysColDescs,
 	)
@@ -265,7 +281,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	neededRightCols util.FastIntSet,
 	readerType joinReaderType,
 ) {
-	spanBuilder := span.MakeBuilder(flowCtx.Codec(), &jr.desc, jr.index)
+	spanBuilder := span.MakeBuilder(flowCtx.Codec(), jr.desc, jr.index)
 	spanBuilder.SetNeededColumns(neededRightCols)
 
 	var keyToInputRowIndices map[string][]int

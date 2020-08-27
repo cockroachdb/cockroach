@@ -64,6 +64,7 @@ enum ScanVisibility {
 //  - JSON of all decoded column values.
 message TableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  optional bool table_is_uncommitted_version = 14 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
   // i.e. table.indexes[index_idx-1]
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
@@ -148,6 +149,7 @@ message TableReaderSpec {
 // when operating on a prefix of a compound key.
 message IndexSkipTableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  optional bool table_is_uncommitted_version = 8 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
   // i.e. table.indexes[index_idx-1]
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
@@ -196,6 +198,7 @@ message IndexSkipTableReaderSpec {
 //        Internal columns: | c | d | e |
 message JoinReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  optional bool table_is_uncommitted_version = 13 [(gogoproto.nullable) = false];
 
   // If 0, we use the primary index; each row in the input stream has a value
   // for each primary key. The index must provide all lookup columns.
@@ -332,6 +335,7 @@ message ZigzagJoinerSpec {
   // TODO(pbardea): Replace these with inputs that conform to a RowSource-like
   // interface.
   repeated sqlbase.TableDescriptor tables = 1 [(gogoproto.nullable) = false];
+  repeated bool table_is_uncommitted_version = 7;
 
   // An array of arrays. The array at eq_columns[side_idx] contains the
   // equality columns for that side. All arrays in eq_columns should have
@@ -500,6 +504,7 @@ message HashJoinerSpec {
 // Internal columns for LEFT_SEMI and LEFT_ANTI: | a | b |
 message InvertedJoinerSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  optional bool table_is_uncommitted_version = 8 [(gogoproto.nullable) = false];
 
   // The ID of the inverted index. The first column in the index is the
   // inverted column, and the the remaining columns are the primary key.
@@ -689,6 +694,7 @@ message AggregatorSpec {
 message InterleavedReaderJoinerSpec {
   message Table {
     optional sqlbase.TableDescriptor desc = 1 [(gogoproto.nullable) = false];
+    optional bool table_is_uncommitted_version = 6 [(gogoproto.nullable) = false];
     // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
     // i.e. desc.indexes[index_idx-1]
     optional uint32 index_idx = 2 [(gogoproto.nullable) = false];

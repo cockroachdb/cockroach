@@ -13,8 +13,8 @@ package span
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -28,7 +28,7 @@ import (
 // Builder is a single struct for generating key spans from Constraints, Datums and encDatums.
 type Builder struct {
 	codec         keys.SQLCodec
-	table         *tabledesc.Immutable
+	table         catalog.TableDescriptor
 	index         *descpb.IndexDescriptor
 	indexColTypes []*types.T
 	indexColDirs  []descpb.IndexDescriptor_Direction
@@ -52,7 +52,7 @@ var _ = (*Builder).UnsetNeededFamilies
 
 // MakeBuilder creates a Builder for a table and index.
 func MakeBuilder(
-	codec keys.SQLCodec, table *tabledesc.Immutable, index *descpb.IndexDescriptor,
+	codec keys.SQLCodec, table catalog.TableDescriptor, index *descpb.IndexDescriptor,
 ) *Builder {
 	s := &Builder{
 		codec:          codec,
@@ -68,7 +68,8 @@ func MakeBuilder(
 	s.indexColTypes = make([]*types.T, len(columnIDs))
 	for i, colID := range columnIDs {
 		// TODO (rohany): do I need to look at table columns with mutations here as well?
-		for _, col := range table.Columns {
+		columns := table.GetPublicColumns()
+		for _, col := range columns {
 			if col.ID == colID {
 				s.indexColTypes[i] = col.Type
 				break
@@ -92,7 +93,7 @@ func MakeBuilder(
 				s.interstices[sharedPrefixLen])
 		}
 		s.interstices[sharedPrefixLen] = rowenc.EncodePartialTableIDIndexID(
-			s.interstices[sharedPrefixLen], table.ID, index.ID)
+			s.interstices[sharedPrefixLen], table.GetID(), index.ID)
 	}
 
 	return s
@@ -183,15 +184,15 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 	//   and it cannot be an inverted index.
 	// * We have all of the lookup columns of the index.
 	// * We don't need all of the families.
-	return s.index.Unique && len(s.table.Families) > 1 &&
-		(s.index.ID == s.table.PrimaryIndex.ID ||
+	return s.index.Unique && len(s.table.GetFamilies()) > 1 &&
+		(s.index.ID == s.table.GetPrimaryIndexID() ||
 			// Secondary index specific checks.
 			(s.index.Version == descpb.SecondaryIndexFamilyFormatVersion &&
 				!containsNull &&
 				len(s.index.StoreColumnIDs) > 0 &&
 				s.index.Type == descpb.IndexDescriptor_FORWARD)) &&
 		prefixLen == len(s.index.ColumnIDs) &&
-		numNeededFamilies < len(s.table.Families)
+		numNeededFamilies < len(s.table.GetFamilies())
 }
 
 // Functions for optimizer related span generation are below.

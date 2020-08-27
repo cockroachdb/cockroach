@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -89,8 +91,21 @@ func newTableReader(
 	// just in case.
 	tr.parallelize = spec.Parallelize && tr.limitHint == 0
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
+	var tableDesc catalog.TableDescriptor
+	if spec.TableIsUncommittedVersion {
+		tableDesc = tabledesc.NewImmutable(spec.Table)
+	} else {
+		var err error
+		tableDesc, err = flowCtx.TypeResolverFactory.Descriptors.GetTableVersionByIDWithMinVersion(
+			flowCtx.EvalCtx.Ctx(), spec.Table.ModificationTime,
+			flowCtx.EvalCtx.Txn,
+			spec.Table.ID, spec.Table.Version,
+			tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return nil, err
+		}
+	}
 
-	tableDesc := tabledesc.NewImmutable(spec.Table)
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	resultTypes := tableDesc.ColumnTypesWithMutations(returnMutations)
 	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(returnMutations)
