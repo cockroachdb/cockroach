@@ -1806,12 +1806,12 @@ func (oi *optVirtualIndex) Predicate() (string, bool) {
 
 // KeyColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) KeyColumnCount() int {
-	return 1
+	return 2
 }
 
 // LaxKeyColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) LaxKeyColumnCount() int {
-	return 1
+	return 2
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -1830,19 +1830,19 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	if oi.isPrimary {
 		return cat.IndexColumn{Column: oi.tab.Column(i)}
 	}
-	if i == oi.ColumnCount()-1 {
-		// The special bogus PK column goes at the end. It has ID 0.
-		return cat.IndexColumn{Column: oi.tab.Column(0)}
-	}
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
 		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
 		return cat.IndexColumn{
 			Column: oi.tab.Column(ord),
 		}
+	} else if i == length {
+		// The special bogus PK column goes at the end of the index columns. It
+		// has ID 0.
+		return cat.IndexColumn{Column: oi.tab.Column(0)}
 	}
 
-	i -= length
+	i -= length + 1
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
 	return cat.IndexColumn{Column: oi.tab.Column(ord)}
 }
@@ -1869,7 +1869,7 @@ func (oi *optVirtualIndex) Ordinal() int {
 
 // PartitionByListPrefixes is part of the cat.Index interface.
 func (oi *optVirtualIndex) PartitionByListPrefixes() []tree.Datums {
-	panic("no partition")
+	return nil
 }
 
 // InterleaveAncestorCount is part of the cat.Index interface.
