@@ -739,7 +739,6 @@ unreserved_keyword ::=
 	| 'AT'
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
-	| 'AUTHORIZATION'
 	| 'BACKUP'
 	| 'BACKUPS'
 	| 'BEFORE'
@@ -1215,6 +1214,8 @@ create_index_stmt ::=
 create_schema_stmt ::=
 	'CREATE' 'SCHEMA' schema_name
 	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' schema_name
+	| 'CREATE' 'SCHEMA' opt_schema_name 'AUTHORIZATION' role_spec
+	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' opt_schema_name 'AUTHORIZATION' role_spec
 
 create_table_stmt ::=
 	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
@@ -1689,6 +1690,9 @@ opt_interleave ::=
 opt_partition_by ::=
 	partition_by
 	| 
+
+opt_schema_name ::=
+	opt_name
 
 opt_persistence_temp_table ::=
 	opt_temp
@@ -2217,7 +2221,8 @@ row_source_extension_stmt ::=
 	| upsert_stmt
 
 type_func_name_no_crdb_extra_keyword ::=
-	'COLLATION'
+	'AUTHORIZATION'
+	| 'COLLATION'
 	| 'CROSS'
 	| 'FULL'
 	| 'INNER'
