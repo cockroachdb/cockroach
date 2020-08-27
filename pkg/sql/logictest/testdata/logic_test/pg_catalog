@@ -2665,3 +2665,10 @@ WHERE
   AND attname = 'x'
 ----
 'howdy'::STRING
+
+# Regression test for limits on virtual index scans. (#53522)
+
+query T
+SELECT attname FROM pg_attribute WHERE attrelid = 't47285'::REGCLASS::OID LIMIT 1
+----
+x
