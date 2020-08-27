@@ -1903,7 +1903,30 @@ CREATE TABLE pg_catalog.pg_matviews (
   definition TEXT
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		return nil
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual,
+			func(db *dbdesc.Immutable, scName string, desc catalog.TableDescriptor) error {
+				if !desc.MaterializedView() {
+					return nil
+				}
+				// Note that the view query printed will not include any column aliases
+				// specified outside the initial view query into the definition
+				// returned, unlike postgres. For example, for the view created via
+				//  `CREATE VIEW (a) AS SELECT b FROM foo`
+				// we'll only print `SELECT b FROM foo` as the view definition here,
+				// while postgres would more accurately print `SELECT b AS a FROM foo`.
+				// TODO(SQL Features): Insert column aliases into view query once we
+				// have a semantic query representation to work with (#10083).
+				return addRow(
+					tree.NewDName(scName),         // schemaname
+					tree.NewDName(desc.GetName()), // matviewname
+					// TODO (rohany): Include the owner here once #53495 lands.
+					tree.DNull, // matviewowner
+					tree.DNull, // tablespace
+					tree.MakeDBool(len(desc.TableDesc().Indexes) > 0), // hasindexes
+					tree.DBoolTrue,                       // ispopulated,
+					tree.NewDString(desc.GetViewQuery()), // definition
+				)
+			})
 	},
 }
 
@@ -3081,7 +3104,7 @@ CREATE TABLE pg_catalog.pg_views (
 		// because it does not distinguish views in separate databases.
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /*virtual schemas do not have views*/
 			func(db *dbdesc.Immutable, scName string, desc catalog.TableDescriptor) error {
-				if !desc.IsView() {
+				if !desc.IsView() || desc.MaterializedView() {
 					return nil
 				}
 				// Note that the view query printed will not include any column aliases
@@ -3090,7 +3113,7 @@ CREATE TABLE pg_catalog.pg_views (
 				//  `CREATE VIEW (a) AS SELECT b FROM foo`
 				// we'll only print `SELECT b FROM foo` as the view definition here,
 				// while postgres would more accurately print `SELECT b AS a FROM foo`.
-				// TODO(a-robinson): Insert column aliases into view query once we
+				// TODO(SQL Features): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
 					tree.NewDName(scName),                // schemaname
