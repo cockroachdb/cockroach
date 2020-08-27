@@ -2,8 +2,8 @@
 # into debt
 
 init
-requests: { rate: 1, burst: 2 }
-readbytes: { rate: 10, burst: 100 }
+readrequests: { rate: 1, burst: 2 }
+readbytes:    { rate: 10, burst: 100 }
 ----
 00:00:00.000
 

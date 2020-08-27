@@ -1,9 +1,10 @@
 # Test updating the configuration of the rate limiter.
 
 init
-requests: { rate: 1, burst: 2 }
-readbytes: { rate: 1024, burst: 2048 }
-writebytes: { rate: 10, burst: 20 }
+readrequests:  { rate: 1, burst: 2 }
+writerequests: { rate: 1, burst: 2 }
+readbytes:     { rate: 1024, burst: 2048 }
+writebytes:    { rate: 10, burst: 20 }
 ----
 00:00:00.000
 
@@ -15,7 +16,7 @@ get_tenants
 # Launch a request that puts the limiter in debt by 10.
 
 launch
-- { id: g1, tenant: 2, writebytes: 30 }
+- { id: g1, tenant: 2, iswrite: true, writebytes: 30 }
 ----
 [g1@2]
 
@@ -28,7 +29,7 @@ await
 # with the current debt.
 
 launch
-- { id: g1, tenant: 2, writebytes: 20 }
+- { id: g1, tenant: 2, iswrite: true, writebytes: 20 }
 ----
 [g1@2]
 

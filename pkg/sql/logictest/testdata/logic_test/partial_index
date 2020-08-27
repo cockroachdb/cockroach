@@ -900,7 +900,7 @@ statement ok
 CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0
 
 # Error if the arbiter predicate does not imply the partial index predicate.
-statement error pgcode 42P10 there are multiple unique or exclusion constraints matching the ON CONFLICT specification
+statement error pgcode 0A000 there are multiple unique or exclusion constraints matching the ON CONFLICT specification
 INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b < 0 AND b > 0 DO UPDATE SET b = 10
 
 statement ok

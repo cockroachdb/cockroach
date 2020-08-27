@@ -1348,8 +1348,10 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		// Increase tenant rate limits for faster tests.
 		conn := t.cluster.ServerConn(0)
 		for _, settingName := range []string{
-			"kv.tenant_rate_limiter.requests.rate_limit",
-			"kv.tenant_rate_limiter.request.burst_limit",
+			"kv.tenant_rate_limiter.read_requests.rate_limit",
+			"kv.tenant_rate_limiter.read_requests.burst_limit",
+			"kv.tenant_rate_limiter.write_requests.rate_limit",
+			"kv.tenant_rate_limiter.write_requests.burst_limit",
 		} {
 			if _, err := conn.Exec(
 				fmt.Sprintf("SET CLUSTER SETTING %s = %d", settingName, 100000),

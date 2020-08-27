@@ -2381,7 +2381,7 @@ DROP INDEX u4
 build
 INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO UPDATE SET b = 10
 ----
-error (42P10): there are multiple unique or exclusion constraints matching the ON CONFLICT specification
+error (0A000): unimplemented: there are multiple unique or exclusion constraints matching the ON CONFLICT specification
 
 build
 INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' DO UPDATE SET b = 10
