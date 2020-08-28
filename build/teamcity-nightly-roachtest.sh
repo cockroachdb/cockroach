@@ -75,6 +75,7 @@ ARTIFACTS="${artifacts}"
 PARALLELISM=16
 CPUQUOTA=1024
 ZONES=""
+TESTS=""
 case "${CLOUD}" in
   gce)
     # We specify --zones below so that nodes are created in us-central1-b by
@@ -86,8 +87,7 @@ case "${CLOUD}" in
     PARALLELISM=3
     CPUQUOTA=384
     if [ -z "${TESTS}" ]; then
-      TESTS="kv(0|95)|ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/
-      (nodes=3/ops=2000/conc=1)|backup/(KMS/n3cpu4)"
+      TESTS="kv(0|95)|ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/n3cpu4)"
     fi
     ;;
   *)
