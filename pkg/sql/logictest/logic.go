@@ -1284,7 +1284,7 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BootstrapVersionOverride = cfg.bootstrapVersion
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = cfg.bootstrapVersion
 	}
 	if cfg.disableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {
