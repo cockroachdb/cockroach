@@ -51,3 +51,31 @@ ReadyForQuery
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
 {"Type":"ErrorResponse","Code":"22P04"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that only one COPY can run at once.
+send
+Query {"String": "COPY t FROM STDIN"}
+Query {"String": "COPY t FROM STDIN"}
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that after a COPY has started another statement cannot run.
+send
+Query {"String": "COPY t FROM STDIN"}
+Query {"String": "SELECT 2"}
+----
+
+until ignore=RowDescription
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

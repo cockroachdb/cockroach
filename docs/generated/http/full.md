@@ -4,7 +4,7 @@
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -19,7 +19,7 @@
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -73,7 +73,7 @@
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -88,7 +88,7 @@
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -126,7 +126,7 @@
 Don't introduce additional usages of this RPC. See #50707 for more details.
 The underlying response type is something we're looking to get rid of.
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -137,7 +137,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -171,7 +171,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -186,7 +186,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -196,7 +196,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -211,7 +211,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -402,7 +402,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -418,7 +418,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -549,7 +549,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -564,7 +564,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -574,7 +574,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -589,7 +589,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -623,7 +623,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -639,7 +639,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -684,7 +684,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -699,7 +699,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -745,7 +745,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -760,7 +760,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -849,7 +849,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -864,7 +864,7 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -953,18 +953,14 @@ The underlying response type is something we're looking to get rid of.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| node_id | [string](#cockroach.server.serverpb.CancelQueryRequest-string) |  | ID of gateway node for the query to be canceled.
-
-TODO(itsbilal): use [(gogoproto.customname) = "NodeID"] below. Need to figure out how to teach grpc-gateway about custom names.
-
-node_id is a string so that "local" can be used to specify that no forwarding is necessary. |
+| node_id | [string](#cockroach.server.serverpb.CancelQueryRequest-string) |  | ID of gateway node for the query to be canceled.<br><br>TODO(itsbilal): use [(gogoproto.customname) = "NodeID"] below. Need to figure out how to teach grpc-gateway about custom names.<br><br>node_id is a string so that "local" can be used to specify that no forwarding is necessary. |
 | query_id | [string](#cockroach.server.serverpb.CancelQueryRequest-string) |  | ID of query to be canceled (converted to string). |
 | username | [string](#cockroach.server.serverpb.CancelQueryRequest-string) |  | Username of the user making this cancellation request. |
 
@@ -974,7 +970,7 @@ node_id is a string so that "local" can be used to specify that no forwarding is
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -996,16 +992,14 @@ node_id is a string so that "local" can be used to specify that no forwarding is
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| node_id | [string](#cockroach.server.serverpb.CancelSessionRequest-string) |  | TODO(abhimadan): use [(gogoproto.customname) = "NodeID"] below. Need to figure out how to teach grpc-gateway about custom names.
-
-node_id is a string so that "local" can be used to specify that no forwarding is necessary. |
+| node_id | [string](#cockroach.server.serverpb.CancelSessionRequest-string) |  | TODO(abhimadan): use [(gogoproto.customname) = "NodeID"] below. Need to figure out how to teach grpc-gateway about custom names.<br><br>node_id is a string so that "local" can be used to specify that no forwarding is necessary. |
 | session_id | [bytes](#cockroach.server.serverpb.CancelSessionRequest-bytes) |  |  |
 | username | [string](#cockroach.server.serverpb.CancelSessionRequest-string) |  |  |
 
@@ -1015,7 +1009,7 @@ node_id is a string so that "local" can be used to specify that no forwarding is
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1041,7 +1035,7 @@ in that span. This is designed to compute stats specific to a SQL table:
 it will be called with the highest/lowest key for a SQL table, and return
 information about the resources on a node used by that table.
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1058,7 +1052,7 @@ information about the resources on a node used by that table.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1081,7 +1075,7 @@ information about the resources on a node used by that table.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1097,7 +1091,7 @@ information about the resources on a node used by that table.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1118,7 +1112,7 @@ information about the resources on a node used by that table.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1135,7 +1129,7 @@ information about the resources on a node used by that table.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1156,7 +1150,7 @@ information about the resources on a node used by that table.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1171,7 +1165,7 @@ information about the resources on a node used by that table.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1192,7 +1186,7 @@ information about the resources on a node used by that table.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1210,7 +1204,7 @@ information about the resources on a node used by that table.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1244,7 +1238,7 @@ information about the resources on a node used by that table.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1259,7 +1253,7 @@ information about the resources on a node used by that table.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1280,7 +1274,7 @@ information about the resources on a node used by that table.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1298,7 +1292,7 @@ information about the resources on a node used by that table.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1319,7 +1313,7 @@ information about the resources on a node used by that table.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1341,7 +1335,7 @@ information about the resources on a node used by that table.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1362,7 +1356,7 @@ information about the resources on a node used by that table.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1377,7 +1371,7 @@ information about the resources on a node used by that table.
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1430,16 +1424,14 @@ information about the resources on a node used by that table.
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| node_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  | NodeID indicates which node to query for a hot range report. It is posssible to populate any node ID; if the node receiving the request is not the target node, it will forward the request to the target node.
-
-If left empty, the request is forwarded to every node in the cluster. |
+| node_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  | NodeID indicates which node to query for a hot range report. It is posssible to populate any node ID; if the node receiving the request is not the target node, it will forward the request to the target node.<br><br>If left empty, the request is forwarded to every node in the cluster. |
 
 
 
@@ -1447,7 +1439,7 @@ If left empty, the request is forwarded to every node in the cluster. |
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1479,9 +1471,7 @@ If left empty, the request is forwarded to every node in the cluster. |
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| error_message | [string](#cockroach.server.serverpb.HotRangesResponse-string) |  | ErrorMessage is set to a non-empty string if this target node was unable to produce a hot range report.
-
-The contents of this string indicates the cause of the failure. |
+| error_message | [string](#cockroach.server.serverpb.HotRangesResponse-string) |  | ErrorMessage is set to a non-empty string if this target node was unable to produce a hot range report.<br><br>The contents of this string indicates the cause of the failure. |
 | stores | [HotRangesResponse.StoreResponse](#cockroach.server.serverpb.HotRangesResponse-cockroach.server.serverpb.HotRangesResponse.StoreResponse) | repeated | Stores contains the hot ranges report if no error was encountered. There is one part to the report for each store in the target node. |
 
 
@@ -1505,9 +1495,7 @@ The contents of this string indicates the cause of the failure. |
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| desc | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.HotRangesResponse-cockroach.roachpb.RangeDescriptor) |  | Desc is the descriptor of the range for which the report was produced.
-
-Note: this field is generally RESERVED and will likely be removed or replaced in a later version. See: https://github.com/cockroachdb/cockroach/issues/53212 |
+| desc | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.HotRangesResponse-cockroach.roachpb.RangeDescriptor) |  | Desc is the descriptor of the range for which the report was produced.<br><br>Note: this field is generally RESERVED and will likely be removed or replaced in a later version. See: https://github.com/cockroachdb/cockroach/issues/53212 |
 | queries_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | QueriesPerSecond is the recent number of queries per second on this range. |
 
 
@@ -1521,7 +1509,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1536,7 +1524,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1694,7 +1682,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1709,7 +1697,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1719,7 +1707,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1734,7 +1722,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1771,7 +1759,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1786,7 +1774,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1846,7 +1834,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1861,7 +1849,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1897,7 +1885,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1908,7 +1896,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1944,7 +1932,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -1959,7 +1947,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -1994,7 +1982,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -2009,7 +1997,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 
@@ -2042,7 +2030,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Request Parameters
+#### Request Parameters
 
 
 
@@ -2057,7 +2045,7 @@ Note: this field is generally RESERVED and will likely be removed or replaced in
 
 
 
-### Response Parameters
+#### Response Parameters
 
 
 

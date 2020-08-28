@@ -1224,14 +1224,15 @@ func (c *CustomFuncs) LimitScanPrivate(
 	return &newScanPrivate
 }
 
-// CanLimitConstrainedScan returns true if the given scan has already been
-// constrained and can have a row count limit installed as well. This is only
-// possible when the required ordering of the rows to be limited can be
-// satisfied by the Scan operator.
+// CanLimitFilteredScan returns true if the given scan has not already been
+// limited, and is constrained or scans a partial index. This is only possible
+// when the required ordering of the rows to be limited can be satisfied by the
+// Scan operator.
 //
-// NOTE: Limiting unconstrained scans is done by the GenerateLimitedScans rule,
-//       since that can require IndexJoin operators to be generated.
-func (c *CustomFuncs) CanLimitConstrainedScan(
+// NOTE: Limiting unconstrained, non-partial index scans is done by the
+//       GenerateLimitedScans rule, since that can require IndexJoin operators
+//       to be generated.
+func (c *CustomFuncs) CanLimitFilteredScan(
 	scanPrivate *memo.ScanPrivate, required physical.OrderingChoice,
 ) bool {
 	if scanPrivate.HardLimit != 0 {
@@ -1241,9 +1242,10 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 		return false
 	}
 
-	if scanPrivate.Constraint == nil {
-		// This is not a constrained scan, so skip it. The GenerateLimitedScans
-		// rule is responsible for limited unconstrained scans.
+	if scanPrivate.Constraint == nil && !scanPrivate.UsesPartialIndex(c.e.mem.Metadata()) {
+		// This is not a constrained scan nor a partial index scan, so skip it.
+		// The GenerateLimitedScans rule is responsible for limited
+		// unconstrained scans on non-partial indexes.
 		return false
 	}
 
@@ -1267,8 +1269,9 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 //
 // Partial indexes do not index every row in the table and they can only be used
 // in cases where a query filter implies the partial index predicate.
-// GenerateLimitedScans deals with limits, but no filters. Therefore, partial
-// indexes cannot be considered for limited scans.
+// GenerateLimitedScans deals with limits, but no filters, so it cannot generate
+// limited partial index scans. Limiting partial indexes is done by the
+// PushLimitIntoFilteredScans rule.
 func (c *CustomFuncs) GenerateLimitedScans(
 	grp memo.RelExpr,
 	scanPrivate *memo.ScanPrivate,
