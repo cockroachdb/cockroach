@@ -1094,6 +1094,9 @@ func populateTransactionsTable(
 				tree.DNull,                             // start
 				tree.NewDString("-- "+rpcErr.Message),  // txn string
 				tree.DNull,                             // application name
+				tree.DNull,                             // NumStatementsExecuted
+				tree.DNull,                             // NumRetries
+				tree.DNull,                             // NumAutoRetries
 			); err != nil {
 				return err
 			}
