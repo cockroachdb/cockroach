@@ -35,6 +35,15 @@ func registerTypeORM(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
+		version, err := fetchCockroachVersion(ctx, c, node[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+			t.Fatal(err)
+		}
+
 		t.Status("cloning TypeORM and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(ctx, c, "typeorm", "typeorm", typeORMReleaseTagRegex)
 		if err != nil {
