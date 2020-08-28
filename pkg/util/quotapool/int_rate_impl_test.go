@@ -73,6 +73,15 @@ func (rl *RateLimiter) WaitN(ctx context.Context, n int64) error {
 	return nil
 }
 
+// AdmitN acquire n quota from the RateLimiter if it succeeds. It will return
+// false and not block if there is currently insufficient quota or the pool is
+// closed.
+func (rl *RateLimiter) AdmitN(n int64) bool {
+	r := rl.newRateRequest(n)
+	defer rl.putRateRequest(r)
+	return rl.qp.Acquire(context.Background(), (*rateRequestNoWait)(r)) == nil
+}
+
 // UpdateLimit updates the rate and burst limits. The change in burst will
 // be applied to the current quantity of quota. For example, if the RateLimiter
 // currently had a quota of 5 available with a burst of 10 and the burst is
@@ -226,3 +235,19 @@ func (rl *RateLimiter) putRateAlloc(a *rateAlloc) {
 	*a = rateAlloc{}
 	rateAllocSyncPool.Put(a)
 }
+
+// rateRequestNoWait is like a rate request but will not block waiting for
+// quota.
+type rateRequestNoWait rateRequest
+
+func (r *rateRequestNoWait) Acquire(
+	ctx context.Context, resource Resource,
+) (fulfilled bool, tryAgainAfter time.Duration) {
+	return (*rateRequest)(r).Acquire(ctx, resource)
+}
+
+func (r *rateRequestNoWait) ShouldWait() bool {
+	return false
+}
+
+var _ Request = (*rateRequestNoWait)(nil)
