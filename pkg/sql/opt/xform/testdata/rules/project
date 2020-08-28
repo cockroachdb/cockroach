@@ -1,0 +1,69 @@
+exec-ddl
+CREATE TABLE a (
+    i INT,
+    s STRING,
+    b BOOL,
+    INDEX (i) WHERE s = 'foo'
+)
+----
+
+# --------------------------------------------------
+# EliminateIndexJoinInsideProject
+# --------------------------------------------------
+
+# Eliminate IndexJoin when Project passthrough columns are a subset of the
+# IndexJoin's input columns.
+opt expect=EliminateIndexJoinInsideProject
+SELECT i FROM a WHERE s = 'foo'
+----
+project
+ ├── columns: i:1
+ └── scan a@secondary,partial
+      ├── columns: i:1 rowid:4!null
+      ├── key: (4)
+      └── fd: (4)-->(1)
+
+# Eliminate IndexJoin when Project projection outer columns are a subset of the
+# IndexJoin's input columns.
+opt expect=EliminateIndexJoinInsideProject
+SELECT i + 1 FROM a WHERE s = 'foo'
+----
+project
+ ├── columns: "?column?":6
+ ├── immutable
+ ├── scan a@secondary,partial
+ │    ├── columns: i:1 rowid:4!null
+ │    ├── key: (4)
+ │    └── fd: (4)-->(1)
+ └── projections
+      └── i:1 + 1 [as="?column?":6, outer=(1), immutable]
+
+# Do not eliminate IndexJoin when Project passthrough columns are not a subset
+# of the IndexJoin's input columns.
+opt expect-not=EliminateIndexJoinInsideProject
+SELECT b FROM a WHERE s = 'foo'
+----
+project
+ ├── columns: b:3
+ └── index-join a
+      ├── columns: s:2!null b:3
+      ├── fd: ()-->(2)
+      └── scan a@secondary,partial
+           ├── columns: rowid:4!null
+           └── key: (4)
+
+# Do not eliminate IndexJoin when Project projection outer columns are not a
+# subset of the IndexJoin's input columns.
+opt expect-not=EliminateIndexJoinInsideProject
+SELECT NOT b FROM a WHERE s = 'foo'
+----
+project
+ ├── columns: "?column?":6
+ ├── index-join a
+ │    ├── columns: s:2!null b:3
+ │    ├── fd: ()-->(2)
+ │    └── scan a@secondary,partial
+ │         ├── columns: rowid:4!null
+ │         └── key: (4)
+ └── projections
+      └── NOT b:3 [as="?column?":6, outer=(3)]
