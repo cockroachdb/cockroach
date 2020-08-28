@@ -167,6 +167,13 @@ var ExportRequestsLimit = settings.RegisterPositiveIntSetting(
 	3,
 )
 
+// Minimum time interval between system config updates which will lead to
+// enqueuing replicas.
+var queueAdditionOnSystemConfigUpdateMinInterval = settings.RegisterNonNegativeDurationSetting(
+	"kv.store.system_config_update.queue_add_min_interval",
+	"the minimum interval at which replicas will be added to the split and merge queue due to system config gossip",
+	time.Second)
+
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	if clock == nil {
@@ -611,6 +618,10 @@ type Store struct {
 	tenantRateLimiters *tenantrate.LimiterFactory
 
 	computeInitialMetrics sync.Once
+	systemCfgUpdateMu     struct {
+		sync.Mutex
+		lastQueueOnSystemConfigUpdate time.Time
+	}
 }
 
 var _ kv.Sender = &Store{}
@@ -1824,7 +1835,10 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	// careful about not spawning too many individual goroutines.
 
 	// For every range, update its zone config and check if it needs to
-	// be split or merged.
+	// be split or merged. We'll update each range's zone config but we'll only
+	// attempt to add to the queues periodically.
+	shouldQueue := timeutil.Since(s.getLastQueuedOnSystemConfigUpdate()) >
+		queueAdditionOnSystemConfigUpdateMinInterval.Get(&s.ClusterSettings().SV)
 	now := s.cfg.Clock.Now()
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
@@ -1836,14 +1850,31 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			zone = s.cfg.DefaultZoneConfig
 		}
 		repl.SetZoneConfig(zone)
-		s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
-		s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
+		if shouldQueue {
+			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+		}
 		return true // more
 	})
+	if shouldQueue {
+		s.setLastQueuedOnSystemConfigUpdate(timeutil.Now())
+	}
+}
+
+func (s *Store) getLastQueuedOnSystemConfigUpdate() time.Time {
+	s.systemCfgUpdateMu.Lock()
+	defer s.systemCfgUpdateMu.Unlock()
+	return s.systemCfgUpdateMu.lastQueueOnSystemConfigUpdate
+}
+
+func (s *Store) setLastQueuedOnSystemConfigUpdate(lastQueued time.Time) {
+	s.systemCfgUpdateMu.Lock()
+	defer s.systemCfgUpdateMu.Unlock()
+	s.systemCfgUpdateMu.lastQueueOnSystemConfigUpdate = lastQueued
 }
 
 func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached bool) {
