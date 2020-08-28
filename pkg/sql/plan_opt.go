@@ -198,9 +198,6 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	}
 
 	// Build the plan tree.
-	// TODO(yuzefovich): we're creating a new exec.Factory for every query, but
-	// we probably could pool those allocations using sync.Pool. Investigate
-	// this.
 	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondata.ExperimentalDistSQLPlanningOff {
 		planningMode := distSQLDefaultPlanning
 		// If this transaction has modified or created any types, it is not safe to
