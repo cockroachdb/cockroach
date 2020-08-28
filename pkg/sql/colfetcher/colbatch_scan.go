@@ -140,13 +140,14 @@ func NewColBatchScan(
 	table := tabledesc.NewImmutable(spec.Table)
 	typs := table.ColumnTypesWithMutations(returnMutations)
 	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
+
 	// Add all requested system columns to the output.
-	sysColTypes, sysColDescs, err := colinfo.GetSystemColumnTypesAndDescriptors(spec.SystemColumns)
-	if err != nil {
-		return nil, err
+	var sysColDescs []descpb.ColumnDescriptor
+	if spec.HasSystemColumns {
+		sysColDescs = colinfo.AllSystemColumnDescs
 	}
-	typs = append(typs, sysColTypes...)
 	for i := range sysColDescs {
+		typs = append(typs, sysColDescs[i].Type)
 		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
 	}
 

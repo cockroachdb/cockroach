@@ -167,12 +167,12 @@ func newJoinReader(
 	jr.readerType = readerType
 
 	// Add all requested system columns to the output.
-	sysColTypes, sysColDescs, err := colinfo.GetSystemColumnTypesAndDescriptors(spec.SystemColumns)
-	if err != nil {
-		return nil, err
+	var sysColDescs []descpb.ColumnDescriptor
+	if spec.HasSystemColumns {
+		sysColDescs = colinfo.AllSystemColumnDescs
 	}
-	columnTypes = append(columnTypes, sysColTypes...)
 	for i := range sysColDescs {
+		columnTypes = append(columnTypes, sysColDescs[i].Type)
 		jr.colIdxMap[sysColDescs[i].ID] = len(jr.colIdxMap)
 	}
 

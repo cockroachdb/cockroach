@@ -250,10 +250,10 @@ render                                      ·                    ·            
            │                                distinct on          id                                ·                                             ·
            │                                error on duplicate   ·                                 ·                                             ·
            └── project                      ·                    ·                                 (id, data, "?column?")                        ·
-                └── hash join (left outer)  ·                    ·                                 (column10, id, data, column11, "?column?")    ·
+                └── hash join (left outer)  ·                    ·                                 (column12, id, data, column13, "?column?")    ·
                      │                      estimated row count  10000 (missing stats)             ·                                             ·
-                     │                      equality             (column10) = (column11)           ·                                             ·
-                     ├── render             ·                    ·                                 (column10, id, data)                          ·
+                     │                      equality             (column12) = (column13)           ·                                             ·
+                     ├── render             ·                    ·                                 (column12, id, data)                          ·
                      │    │                 estimated row count  1000 (missing stats)              ·                                             ·
                      │    │                 render 0             data->>'name'                     ·                                             ·
                      │    │                 render 1             id                                ·                                             ·
@@ -262,7 +262,7 @@ render                                      ·                    ·            
                      │                      estimated row count  1000 (missing stats)              ·                                             ·
                      │                      table                groups@primary                    ·                                             ·
                      │                      spans                FULL SCAN                         ·                                             ·
-                     └── render             ·                    ·                                 (column11, "?column?")                        ·
+                     └── render             ·                    ·                                 (column13, "?column?")                        ·
                           │                 estimated row count  1000 (missing stats)              ·                                             ·
                           │                 render 0             data->>'name'                     ·                                             ·
                           │                 render 1             data->'members'                   ·                                             ·

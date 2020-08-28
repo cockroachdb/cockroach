@@ -101,11 +101,9 @@ type scanNode struct {
 	lockingStrength   descpb.ScanLockingStrength
 	lockingWaitPolicy descpb.ScanLockingWaitPolicy
 
-	// systemColumns and systemColumnOrdinals contain information about what
-	// system columns the scan needs to produce, and what row ordinals to
-	// write those columns out into.
-	systemColumns        []descpb.SystemColumnKind
-	systemColumnOrdinals []int
+	// containsSystemColumns holds whether or not this scan is expected to
+	// produce any system columns.
+	containsSystemColumns bool
 }
 
 // scanColumnsConfig controls the "schema" of a scan node.
@@ -213,7 +211,7 @@ func (n *scanNode) initTable(
 	}
 
 	// Check if any system columns are requested, as they need special handling.
-	n.systemColumns, n.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg)
+	n.containsSystemColumns = scanContainsSystemColumns(&colCfg)
 
 	n.noIndexJoin = (indexFlags != nil && indexFlags.NoIndexJoin)
 	return n.initDescDefaults(colCfg)

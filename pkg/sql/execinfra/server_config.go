@@ -65,11 +65,11 @@ import (
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version execinfrapb.DistSQLVersion = 34
+const Version execinfrapb.DistSQLVersion = 35
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 30
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 35
 
 // SettingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
