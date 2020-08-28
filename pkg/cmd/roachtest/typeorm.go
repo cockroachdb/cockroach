@@ -34,6 +34,11 @@ func registerTypeORM(r *testRegistry) {
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
+		if _, err := c.Conn(ctx, 1).ExecContext(ctx, `
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 10;
+SET CLUSTER SETTING kv.range_merge.queue_interval = '200ms';`); err != nil {
+			t.Fatal(err)
+		}
 
 		t.Status("cloning TypeORM and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(ctx, c, "typeorm", "typeorm", typeORMReleaseTagRegex)
