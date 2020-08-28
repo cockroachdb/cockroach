@@ -133,6 +133,21 @@ var concurrentRangefeedItersLimit = settings.RegisterPositiveIntSetting(
 	64,
 )
 
+// Minimum time interval between system config updates which will lead to
+// enqueuing replicas.
+var queueAdditionOnSystemConfigUpdateRate = settings.RegisterNonNegativeFloatSetting(
+	"kv.store.system_config_update.queue_add_rate",
+	"the rate (per second) at which the store will add all replicas to the split and merge queue due to system config gossip",
+	.5)
+
+// Minimum time interval between system config updates which will lead to
+// enqueuing replicas. The default is relatively high to deal with startup
+// scenarios.
+var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterNonNegativeIntSetting(
+	"kv.store.system_config_update.queue_add_burst",
+	"the burst rate at which the store will add all replicas to the split and merge queue due to system config gossip",
+	32)
+
 // raftLeadershipTransferTimeout limits the amount of time a drain command
 // waits for lease transfers.
 var raftLeadershipTransferWait = func() *settings.DurationSetting {
@@ -610,7 +625,8 @@ type Store struct {
 	// tenantRateLimiters manages tenantrate.Limiters
 	tenantRateLimiters *tenantrate.LimiterFactory
 
-	computeInitialMetrics sync.Once
+	computeInitialMetrics              sync.Once
+	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 }
 
 var _ kv.Sender = &Store{}
@@ -904,6 +920,20 @@ func NewStore(
 
 	s.tenantRateLimiters = tenantrate.NewLimiterFactory(cfg.Settings, &cfg.TestingKnobs.TenantRateKnobs)
 	s.metrics.registry.AddMetricStruct(s.tenantRateLimiters.Metrics())
+
+	s.systemConfigUpdateQueueRateLimiter = quotapool.NewRateLimiter(
+		"SystemConfigUpdateQueue",
+		quotapool.Limit(queueAdditionOnSystemConfigUpdateRate.Get(&cfg.Settings.SV)),
+		queueAdditionOnSystemConfigUpdateBurst.Get(&cfg.Settings.SV))
+	updateSystemConfigUpdateQueueLimits := func() {
+		s.systemConfigUpdateQueueRateLimiter.UpdateLimit(
+			quotapool.Limit(queueAdditionOnSystemConfigUpdateRate.Get(&cfg.Settings.SV)),
+			queueAdditionOnSystemConfigUpdateBurst.Get(&cfg.Settings.SV))
+	}
+	queueAdditionOnSystemConfigUpdateRate.SetOnChange(&cfg.Settings.SV,
+		updateSystemConfigUpdateQueueLimits)
+	queueAdditionOnSystemConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
+		updateSystemConfigUpdateQueueLimits)
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
@@ -1826,6 +1856,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	// For every range, update its zone config and check if it needs to
 	// be split or merged.
 	now := s.cfg.Clock.Now()
+	shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
 		zone, err := sysCfg.GetZoneConfigForKey(key)
@@ -1836,12 +1867,14 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			zone = s.cfg.DefaultZoneConfig
 		}
 		repl.SetZoneConfig(zone)
-		s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
-		s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
+		if shouldQueue {
+			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+				h.MaybeAdd(ctx, repl, now)
+			})
+		}
 		return true // more
 	})
 }
