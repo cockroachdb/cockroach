@@ -1,6 +1,5 @@
 statement ok
 SET experimental_enable_user_defined_schemas = true;
-SET experimental_enable_enums = true;
 
 statement ok
 CREATE DATABASE pgdatabase;

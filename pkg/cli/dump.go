@@ -215,12 +215,6 @@ func runDump(cmd *cobra.Command, args []string) error {
 
 		// Dump any type creation statements.
 		if shouldDumpTypes && dumpCtx.dumpMode != dumpDataOnly {
-			// Only emit the settings change if there are any user defined types.
-			if len(typContext.createStatements) > 0 {
-				if _, err := fmt.Fprintf(w, "SET experimental_enable_enums = true;\n"); err != nil {
-					return err
-				}
-			}
 			for _, stmt := range typContext.createStatements {
 				if _, err := fmt.Fprintf(w, "%s;\n\n", stmt); err != nil {
 					return err

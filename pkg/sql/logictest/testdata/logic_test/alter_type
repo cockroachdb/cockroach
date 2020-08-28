@@ -1,6 +1,3 @@
-statement ok
-SET experimental_enable_enums=true;
-
 # Some tests for RENAME TYPE.
 statement ok
 CREATE TYPE greeting AS ENUM ('hi', 'hello');

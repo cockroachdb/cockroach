@@ -55,8 +55,7 @@ typedef struct CR_GEOS CR_GEOS;
 // Returns a string containing an error if an error was found. The loc slice
 // must be convertible to a NUL character terminated C string.
 // The CR_GEOS object will be stored in lib.
-// The error returned does not need to be freed (see comment for CR_GEOS_Slice).
-CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice geoscLoc, CR_GEOS_Slice geosLoc, CR_GEOS** lib);
+CR_GEOS_Status CR_GEOS_Init(CR_GEOS_Slice geoscLoc, CR_GEOS_Slice geosLoc, CR_GEOS** lib);
 
 // CR_GEOS_WKTToWKB converts a given WKT into it's EWKB form. The wkt slice must be
 // convertible to a NUL character terminated C string.

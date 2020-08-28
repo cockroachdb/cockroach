@@ -262,7 +262,6 @@ func TestExportUserDefinedTypes(t *testing.T) {
 
 	// Set up some initial state for the tests.
 	sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
 CREATE TYPE greeting AS ENUM ('hello', 'hi');
 CREATE TABLE greeting_table (x greeting, y greeting);
 INSERT INTO greeting_table VALUES ('hello', 'hello'), ('hi', 'hi');

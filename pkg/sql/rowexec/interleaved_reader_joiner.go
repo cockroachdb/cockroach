@@ -387,6 +387,7 @@ func newInterleavedReaderJoiner(
 	if err := irj.initRowFetcher(
 		flowCtx,
 		spec.Tables,
+		tableDescs,
 		tables,
 		spec.Reverse,
 		spec.LockingStrength,
@@ -426,6 +427,7 @@ func newInterleavedReaderJoiner(
 func (irj *interleavedReaderJoiner) initRowFetcher(
 	flowCtx *execinfra.FlowCtx,
 	tables []execinfrapb.InterleavedReaderJoinerSpec_Table,
+	tableDescs []*tabledesc.Immutable,
 	tableInfos []tableInfo,
 	reverseScan bool,
 	lockStrength descpb.ScanLockingStrength,
@@ -435,7 +437,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	args := make([]row.FetcherTableArgs, len(tables))
 
 	for i, table := range tables {
-		desc := tabledesc.NewImmutable(table.Desc)
+		desc := tableDescs[i]
 		var err error
 		args[i].Index, args[i].IsSecondaryIndex, err = desc.FindIndexByIndexIdx(int(table.IndexIdx))
 		if err != nil {

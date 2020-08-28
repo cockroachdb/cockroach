@@ -338,7 +338,6 @@ func TestCanCloneTableWithUDT(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_enums=true;
 CREATE DATABASE test;
 CREATE TYPE test.t AS ENUM ('hello');
 CREATE TABLE test.tt (x test.t);
@@ -445,7 +444,6 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 	CREATE DATABASE test;
 	USE test;
-	SET experimental_enable_enums=true;
 	CREATE TYPE greeting AS ENUM ('hello');
 `); err != nil {
 		t.Fatal(err)

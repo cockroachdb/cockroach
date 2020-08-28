@@ -1,9 +1,6 @@
 # LogicTest: !3node-tenant(49854)
 
 statement ok
-SET experimental_enable_enums=true;
-
-statement ok
 CREATE TYPE t AS ENUM ()
 
 statement error pq: relation "t" does not exist

@@ -152,7 +152,6 @@ func (w *kv) Hooks() workload.Hooks {
 				return nil
 			}
 			_, err := db.Exec(`
-SET experimental_enable_enums = true;
 CREATE TYPE enum_type AS ENUM ('v');
 ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 			return err

@@ -1665,7 +1665,6 @@ func TestRestoreFailCleansUpTypeBackReferences(t *testing.T) {
 
 	// Create a database with a type and table.
 	sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.ty AS ENUM ('hello');
 CREATE TABLE d.tb (x d.ty);
@@ -1728,7 +1727,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 
 	// Create a user defined type and check that it is cleaned up after the
 	// failed restore.
-	sqlDB.Exec(t, `SET experimental_enable_enums = true; CREATE TYPE data.myenum AS ENUM ('hello')`)
+	sqlDB.Exec(t, `CREATE TYPE data.myenum AS ENUM ('hello')`)
 	// Do the same with a user defined schema.
 	sqlDB.Exec(t, `SET experimental_enable_user_defined_schemas = true; USE data; CREATE SCHEMA myschema`)
 
@@ -1913,10 +1912,10 @@ CREATE TABLE sc.t1 (a FLOAT);
 		defer cleanupFn()
 		sqlDB.Exec(t, `
 SET experimental_enable_user_defined_schemas = true;
-SET experimental_enable_enums = true;
 
 CREATE DATABASE d;
 USE d;
+CREATE SCHEMA unused;
 CREATE SCHEMA sc;
 CREATE TABLE sc.tb1 (x INT);
 INSERT INTO sc.tb1 VALUES (1);
@@ -1940,6 +1939,7 @@ INSERT INTO sc.tb2 VALUES ('hello');
 
 		// We shouldn't be able to create a new schema with the same name.
 		sqlDBRestore.ExpectErr(t, `pq: schema "sc" already exists`, `USE d; CREATE SCHEMA sc`)
+		sqlDBRestore.ExpectErr(t, `pq: schema "unused" already exists`, `USE d; CREATE SCHEMA unused`)
 	})
 
 	// Tests restoring databases with user defined schemas.
@@ -1949,11 +1949,11 @@ INSERT INTO sc.tb2 VALUES ('hello');
 
 		sqlDB.Exec(t, `
 SET experimental_enable_user_defined_schemas = true;
-SET experimental_enable_enums = true;
 
 CREATE DATABASE d;
 USE d;
 CREATE SCHEMA sc;
+CREATE SCHEMA unused;
 CREATE TABLE sc.tb1 (x INT);
 INSERT INTO sc.tb1 VALUES (1);
 CREATE TYPE sc.typ1 AS ENUM ('hello');
@@ -1974,6 +1974,7 @@ INSERT INTO sc.tb2 VALUES ('hello');
 
 		// We shouldn't be able to create a new schema with the same name.
 		sqlDB.ExpectErr(t, `pq: schema "sc" already exists`, `USE d; CREATE SCHEMA sc`)
+		sqlDB.ExpectErr(t, `pq: schema "unused" already exists`, `USE d; CREATE SCHEMA unused`)
 	})
 
 	// Test restoring tables with user defined schemas when restore schemas are
@@ -1984,7 +1985,6 @@ INSERT INTO sc.tb2 VALUES ('hello');
 
 		sqlDB.Exec(t, `
 SET experimental_enable_user_defined_schemas = true;
-SET experimental_enable_enums = true;
 
 CREATE DATABASE d;
 USE d;
@@ -2045,7 +2045,6 @@ INSERT INTO sc.tb2 VALUES (1);
 
 		sqlDB.Exec(t, `
 SET experimental_enable_user_defined_schemas = true;
-SET experimental_enable_enums = true;
 
 CREATE DATABASE d1;
 USE d1;
@@ -2106,7 +2105,6 @@ INSERT INTO sc4.tb VALUES (4);
 
 		sqlDB.Exec(t, `
 SET experimental_enable_user_defined_schemas = true;
-SET experimental_enable_enums = true;
 
 CREATE DATABASE d;
 USE d;
@@ -2145,14 +2143,11 @@ func TestBackupRestoreUserDefinedTypes(t *testing.T) {
 		var ts1, ts2, ts3, ts4, ts5 string
 		// Create some types, databases, and tables that use them.
 		sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
-
 CREATE DATABASE d;
+CREATE TYPE d.unused AS ENUM ('lonely');
 CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
 CREATE TABLE d.t1 (x d.farewell);
 INSERT INTO d.t1 VALUES ('bye'), ('cya');
-CREATE TABLE d.plain (x int);
-INSERT INTO d.plain VALUES (1), (2);
 `)
 		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts1)
 
@@ -2195,6 +2190,8 @@ RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
 `, ts1))
 			sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`,
 				`CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
+			sqlDB.ExpectErr(t, `pq: type "d.public.unused" already exists`,
+				`CREATE TYPE d.unused AS ENUM ('some_enum')`)
 			sqlDB.Exec(t, `SELECT 'bye'::d.farewell; SELECT 'cya'::d.public.farewell;`)
 			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
 				`SELECT 'another'::d.farewell;`)
@@ -2270,7 +2267,6 @@ RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
 		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
 		defer cleanupFn()
 		sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 CREATE TABLE d.t (x d.greeting);
@@ -2332,7 +2328,6 @@ INSERT INTO d.t3 VALUES ('hi');
 		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
 		defer cleanupFn()
 		sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 CREATE TABLE d.t (x d.greeting);
@@ -2444,7 +2439,6 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
 		defer cleanupFn()
 		sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 CREATE TABLE d.t (x d.greeting);
@@ -2527,7 +2521,6 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 
 	// Create a database with a type.
 	sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 `)
