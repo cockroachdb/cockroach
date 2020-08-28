@@ -208,13 +208,13 @@ EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x
 ·                 vectorized           true                  ·          ·
 hash join (semi)  ·                    ·                     (x, y)     ·
  │                estimated row count  1000 (missing stats)  ·          ·
- │                equality             (x) = (column7)       ·          ·
+ │                equality             (x) = (column9)       ·          ·
  │                left cols are key    ·                     ·          ·
  ├── scan         ·                    ·                     (x, y)     ·
  │                estimated row count  1000 (missing stats)  ·          ·
  │                table                a@primary             ·          ·
  │                spans                FULL SCAN             ·          ·
- └── render       ·                    ·                     (column7)  ·
+ └── render       ·                    ·                     (column9)  ·
       │           estimated row count  1000 (missing stats)  ·          ·
       │           render 0             x - 1                 ·          ·
       └── scan    ·                    ·                     (x)        ·
@@ -249,13 +249,13 @@ EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b
 ·                 vectorized           true                  ·          ·
 hash join (anti)  ·                    ·                     (x, z)     ·
  │                estimated row count  0 (missing stats)     ·          ·
- │                equality             (x) = (column7)       ·          ·
+ │                equality             (x) = (column9)       ·          ·
  │                left cols are key    ·                     ·          ·
  ├── scan         ·                    ·                     (x, z)     ·
  │                estimated row count  1000 (missing stats)  ·          ·
  │                table                b@primary             ·          ·
  │                spans                FULL SCAN             ·          ·
- └── render       ·                    ·                     (column7)  ·
+ └── render       ·                    ·                     (column9)  ·
       │           estimated row count  1000 (missing stats)  ·          ·
       │           render 0             x - 1                 ·          ·
       └── scan    ·                    ·                     (x)        ·

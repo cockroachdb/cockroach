@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -94,13 +95,14 @@ func newTableReader(
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	resultTypes := tableDesc.ColumnTypesWithMutations(returnMutations)
 	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(returnMutations)
+
 	// Add all requested system columns to the output.
-	sysColTypes, sysColDescs, err := colinfo.GetSystemColumnTypesAndDescriptors(spec.SystemColumns)
-	if err != nil {
-		return nil, err
+	var sysColDescs []descpb.ColumnDescriptor
+	if spec.HasSystemColumns {
+		sysColDescs = colinfo.AllSystemColumnDescs
 	}
-	resultTypes = append(resultTypes, sysColTypes...)
 	for i := range sysColDescs {
+		resultTypes = append(resultTypes, sysColDescs[i].Type)
 		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
 	}
 

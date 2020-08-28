@@ -248,10 +248,13 @@ ORDER BY
 			return fmt.Errorf("zero columns for %s.%s", lastCatalog, lastName)
 		}
 		// All non virtual tables contain implicit system columns.
-		currentCols = append(currentCols, &tree.ColumnTableDef{
-			Name: colinfo.MVCCTimestampColumnName,
-			Type: colinfo.MVCCTimestampColumnType,
-		})
+		for i := range colinfo.AllSystemColumnDescs {
+			col := &colinfo.AllSystemColumnDescs[i]
+			currentCols = append(currentCols, &tree.ColumnTableDef{
+				Name: tree.Name(col.Name),
+				Type: col.Type,
+			})
+		}
 		tables = append(tables, &tableRef{
 			TableName: tree.NewTableName(lastCatalog, lastName),
 			Columns:   currentCols,

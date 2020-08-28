@@ -610,9 +610,7 @@ func newOptTable(
 
 	// First, determine how many columns we will potentially need.
 	colDescs := ot.desc.DeletableColumns()
-	numCols := len(colDescs)
-	// One for the MVCC timestamp system column.
-	numCols++
+	numCols := len(colDescs) + len(colinfo.AllSystemColumnDescs)
 	// One for each inverted index virtual column.
 	secondaryIndexes := ot.desc.DeletableIndexes()
 	for i := range secondaryIndexes {
@@ -656,24 +654,27 @@ func newOptTable(
 		return &ot.columns[ordinal], ordinal
 	}
 
-	// Set up the MVCC timestamp system column. However, we won't add it
+	// Set up any registered system columns. However, we won't add the column
 	// in case a column with the same name already exists in the table.
 	// Note that the column does not exist when err != nil. This check is done
 	// for migration purposes. We need to avoid adding the system column if the
 	// table has a column with this name for some reason.
-	if _, _, err := desc.FindColumnByName(colinfo.MVCCTimestampColumnName); err != nil {
-		col, ord := newColumn()
-		col.InitNonVirtual(
-			ord,
-			cat.StableID(colinfo.MVCCTimestampColumnID),
-			tree.Name(colinfo.MVCCTimestampColumnName),
-			cat.System,
-			colinfo.MVCCTimestampColumnType,
-			true, /* nullable */
-			true, /* hidden */
-			nil,  /* defaultExpr */
-			nil,  /* computedExpr */
-		)
+	for i := range colinfo.AllSystemColumnDescs {
+		sysCol := &colinfo.AllSystemColumnDescs[i]
+		if _, _, err := desc.FindColumnByName(tree.Name(sysCol.Name)); err != nil {
+			col, ord := newColumn()
+			col.InitNonVirtual(
+				ord,
+				cat.StableID(sysCol.ID),
+				tree.Name(sysCol.Name),
+				cat.System,
+				sysCol.Type,
+				sysCol.Nullable,
+				sysCol.Hidden,
+				sysCol.DefaultExpr,
+				sysCol.ComputeExpr,
+			)
+		}
 	}
 
 	// Create the table's column mapping from descpb.ColumnID to column ordinal.

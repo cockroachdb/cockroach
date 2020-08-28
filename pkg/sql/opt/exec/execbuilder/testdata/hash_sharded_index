@@ -15,12 +15,12 @@ insert                 ·                    ·                                 
  │                     estimated row count  0 (missing stats)                              ·                           ·
  │                     into                 sharded_primary(crdb_internal_a_shard_11, a)   ·                           ·
  │                     auto commit          ·                                              ·                           ·
- └── render            ·                    ·                                              (column5, column1, check1)  ·
+ └── render            ·                    ·                                              (column6, column1, check1)  ·
       │                estimated row count  2                                              ·                           ·
-      │                render 0             column5 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)  ·                           ·
+      │                render 0             column6 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)  ·                           ·
       │                render 1             column1                                        ·                           ·
-      │                render 2             column5                                        ·                           ·
-      └── render       ·                    ·                                              (column5, column1)          ·
+      │                render 2             column6                                        ·                           ·
+      └── render       ·                    ·                                              (column6, column1)          ·
            │           estimated row count  2                                              ·                           ·
            │           render 0             mod(fnv32(COALESCE(column1::STRING, '')), 11)  ·                           ·
            │           render 1             column1                                        ·                           ·
@@ -41,13 +41,13 @@ insert                 ·                    ·                                 
  │                     estimated row count  0 (missing stats)                                      ·                                    ·
  │                     into                 sharded_secondary(a, crdb_internal_a_shard_12, rowid)  ·                                    ·
  │                     auto commit          ·                                                      ·                                    ·
- └── render            ·                    ·                                                      (column1, column7, column6, check1)  ·
+ └── render            ·                    ·                                                      (column1, column8, column7, check1)  ·
       │                estimated row count  2                                                      ·                                    ·
-      │                render 0             column7 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)      ·                                    ·
+      │                render 0             column8 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)      ·                                    ·
       │                render 1             column1                                                ·                                    ·
-      │                render 2             column6                                                ·                                    ·
-      │                render 3             column7                                                ·                                    ·
-      └── render       ·                    ·                                                      (column7, column6, column1)          ·
+      │                render 2             column7                                                ·                                    ·
+      │                render 3             column8                                                ·                                    ·
+      └── render       ·                    ·                                                      (column8, column7, column1)          ·
            │           estimated row count  2                                                      ·                                    ·
            │           render 0             mod(fnv32(COALESCE(column1::STRING, '')), 12)          ·                                    ·
            │           render 1             unique_rowid()                                         ·                                    ·

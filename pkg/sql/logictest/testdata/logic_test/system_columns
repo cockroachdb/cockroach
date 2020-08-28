@@ -146,3 +146,45 @@ ALTER TABLE t ADD COLUMN crdb_internal_mvcc_timestamp INT
 
 statement error pq: column name "crdb_internal_mvcc_timestamp" conflicts with a system column name
 ALTER TABLE t RENAME COLUMN x TO crdb_internal_mvcc_timestamp
+
+subtest tableoid
+
+statement ok
+CREATE TABLE tab1 (x INT PRIMARY KEY);
+CREATE TABLE tab2 (x INT PRIMARY KEY);
+INSERT INTO tab1 VALUES (1), (2);
+INSERT INTO tab2 VALUES (1), (2);
+
+query OI rowsort
+SELECT tableoid, x FROM tab1
+----
+56 1
+56 2
+
+query OI rowsort
+SELECT tableoid, x FROM tab2
+----
+57 1
+57 2
+
+query OIOI rowsort
+SELECT tab1.tableoid, tab1.x, tab2.tableoid, tab2.x FROM tab1 JOIN tab2 ON tab1.x = tab2.x
+----
+56 1 57 1
+56 2 57 2
+
+query OIOI rowsort
+SELECT tab1.tableoid, tab1.x, tab2.tableoid, tab2.x FROM tab1 INNER LOOKUP JOIN tab2 ON tab1.x = tab2.x
+----
+56 1 57 1
+56 2 57 2
+
+# We should be able to produce both system columns.
+query OB
+SELECT tableoid, crdb_internal_mvcc_timestamp IS NOT NULL FROM tab1
+----
+56 true
+56 true
+
+statement error pq: column name "tableoid" conflicts with a system column name
+CREATE TABLE bad (tableoid int)

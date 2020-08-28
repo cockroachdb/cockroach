@@ -55,10 +55,10 @@ SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDE
                                     distribution         local
                                     vectorized           false
 project                                                                                               (cid int, sum decimal)
- └── sort                                                                                             (column7 decimal, cid int, sum decimal)  +column7
+ └── sort                                                                                             (column8 decimal, cid int, sum decimal)  +column8
       │                             estimated row count  98 (missing stats)
-      │                             order                +column7
-      └── render                                                                                      (column7 decimal, cid int, sum decimal)
+      │                             order                +column8
+      └── render                                                                                      (column8 decimal, cid int, sum decimal)
            │                        estimated row count  98 (missing stats)
            │                        render 0             ((1)[decimal] - (sum)[decimal])[decimal]
            │                        render 1             (cid)[int]
@@ -82,7 +82,7 @@ SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDE
 name: sort
 attrs:
 - key: order
-  value: +column7
+  value: +column8
 children:
 - name: render
   attrs: []

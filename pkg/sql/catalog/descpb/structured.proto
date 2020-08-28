@@ -152,6 +152,8 @@ enum SystemColumnKind {
   // A system column containing the value of the MVCC timestamp associated
   // with the kv's corresponding to the row.
   MVCCTIMESTAMP = 1;
+  // A system column containing the OID of the table that the row came from.
+  TABLEOID = 2;
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.

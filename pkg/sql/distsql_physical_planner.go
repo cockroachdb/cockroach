@@ -949,8 +949,8 @@ func initTableReaderSpec(
 		LockingWaitPolicy: n.lockingWaitPolicy,
 
 		// Retain the capacity of the spans slice.
-		Spans:         s.Spans[:0],
-		SystemColumns: n.systemColumns,
+		Spans:            s.Spans[:0],
+		HasSystemColumns: n.containsSystemColumns,
 	}
 	indexIdx, err := getIndexIdx(n.index, n.desc)
 	if err != nil {
@@ -993,9 +993,11 @@ func tableOrdinal(
 	}
 
 	// The column is an implicit system column, so give it an ordinal based
-	// on its ID that is larger than physical columns.
+	// on its ID that is larger than physical columns. These ordinals are
+	// different for each system column kind. MVCCTimestampColumnID is the
+	// largest column ID, and all system columns are decreasing from it.
 	if colinfo.IsColIDSystemColumn(colID) {
-		return len(desc.Columns) + len(desc.MutationColumns()) + int(colID-colinfo.MVCCTimestampColumnID)
+		return len(desc.Columns) + len(desc.MutationColumns()) + int(colinfo.MVCCTimestampColumnID-colID)
 	}
 
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
@@ -1149,8 +1151,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			reqOrdering:           n.reqOrdering,
 			cols:                  n.cols,
 			colsToTableOrdinalMap: scanNodeToTableOrdinalMap,
-			systemColumns:         n.systemColumns,
-			systemColumnOrdinals:  n.systemColumnOrdinals,
+			containsSystemColumns: n.containsSystemColumns,
 		},
 	)
 	return &p, err
@@ -1171,8 +1172,7 @@ type tableReaderPlanningInfo struct {
 	reqOrdering           ReqOrdering
 	cols                  []*descpb.ColumnDescriptor
 	colsToTableOrdinalMap []int
-	systemColumns         []descpb.SystemColumnKind
-	systemColumnOrdinals  []int
+	containsSystemColumns bool
 }
 
 func (dsp *DistSQLPlanner) planTableReaders(
@@ -1235,12 +1235,16 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	}
 
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-	var typs []*types.T
+
+	numCols := len(info.desc.Columns)
 	if returnMutations {
-		typs = make([]*types.T, 0, len(info.desc.Columns)+len(info.desc.MutationColumns()))
-	} else {
-		typs = make([]*types.T, 0, len(info.desc.Columns))
+		numCols += len(info.desc.MutationColumns())
 	}
+	if info.containsSystemColumns {
+		numCols += len(colinfo.AllSystemColumnDescs)
+	}
+
+	typs := make([]*types.T, 0, numCols)
 	for i := range info.desc.Columns {
 		typs = append(typs, info.desc.Columns[i].Type)
 	}
@@ -1249,9 +1253,10 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			typs = append(typs, col.Type)
 		}
 	}
-	// Append all system column types to the output.
-	for _, kind := range info.systemColumns {
-		typs = append(typs, colinfo.GetSystemColumnTypeForKind(kind))
+	if info.containsSystemColumns {
+		for i := range colinfo.AllSystemColumnDescs {
+			typs = append(typs, colinfo.AllSystemColumnDescs[i].Type)
+		}
 	}
 
 	p.AddNoInputStage(
@@ -1269,9 +1274,10 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			descColumnIDs = append(descColumnIDs, c.ID)
 		}
 	}
-	// Add all system column IDs to the projection.
-	for _, ord := range info.systemColumnOrdinals {
-		descColumnIDs = append(descColumnIDs, info.cols[ord].ID)
+	if info.containsSystemColumns {
+		for i := range colinfo.AllSystemColumnDescs {
+			descColumnIDs = append(descColumnIDs, colinfo.AllSystemColumnDescs[i].ID)
+		}
 	}
 
 	for i := range planToStreamColMap {
@@ -1946,7 +1952,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
-		SystemColumns:     n.table.systemColumns,
+		HasSystemColumns:  n.table.containsSystemColumns,
 	}
 
 	post := execinfrapb.PostProcessSpec{
@@ -2004,7 +2010,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
-		SystemColumns:     n.table.systemColumns,
+		HasSystemColumns:  n.table.containsSystemColumns,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
 	if err != nil {
