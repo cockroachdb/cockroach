@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -46,13 +47,22 @@ type testHelper struct {
 // function executes.  Because of this, the execution of job scheduler daemon
 // is disabled by this test helper.
 // If you want to run daemon, invoke it directly.
+//
+// The testHelper will accelerate the adoption and cancellation loops inside of
+// the registry.
 func newTestHelper(t *testing.T) (*testHelper, func()) {
-	return newTestHelperForTables(t, jobstest.UseTestTables)
+	return newTestHelperForTables(t, jobstest.UseTestTables,
+		true /* accelerateIntervals */)
 }
 
 func newTestHelperForTables(
-	t *testing.T, envTableType jobstest.EnvTablesType,
+	t *testing.T, envTableType jobstest.EnvTablesType, accelerateIntervals bool,
 ) (*testHelper, func()) {
+	var cleanupIntervals func()
+	if accelerateIntervals {
+		cleanupIntervals = TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)
+	}
+
 	knobs := &TestingKnobs{
 		TakeOverJobsScheduling: func(_ func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
 		},
@@ -83,6 +93,10 @@ func newTestHelperForTables(
 			},
 			sqlDB: sqlDB,
 		}, func() {
+			if cleanupIntervals != nil {
+				cleanupIntervals()
+			}
+
 			if envTableType == jobstest.UseTestTables {
 				sqlDB.Exec(t, "DROP TABLE "+env.SystemJobsTableName())
 				sqlDB.Exec(t, "DROP TABLE "+env.ScheduledJobsTableName())

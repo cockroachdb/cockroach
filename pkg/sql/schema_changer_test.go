@@ -69,12 +69,7 @@ import (
 // and returns a function to reset it after the test. The intention is that
 // the returned function should be deferred.
 func setTestJobsAdoptInterval() (reset func()) {
-	const testingJobsAdoptionInverval = 100 * time.Millisecond
-	old := jobs.DefaultAdoptInterval
-	jobs.DefaultAdoptInterval = testingJobsAdoptionInverval
-	return func() {
-		jobs.DefaultAdoptInterval = old
-	}
+	return jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)
 }
 
 // TestSchemaChangeProcess adds mutations manually to a table descriptor and

@@ -304,7 +304,9 @@ func (r *Registry) deprecatedCancelAllLocked(ctx context.Context) {
 		log.Warningf(ctx, "job %d: canceling due to liveness failure", jobID)
 		cancel()
 	}
-	r.mu.deprecatedJobs = make(map[int64]context.CancelFunc)
+	for jobID := range r.mu.deprecatedJobs {
+		delete(r.mu.deprecatedJobs, jobID)
+	}
 }
 
 // deprecatedRegister registers an about to be resumed job in memory so that it can be
