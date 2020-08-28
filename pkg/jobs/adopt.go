@@ -77,7 +77,7 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 func (r *Registry) resumeClaimedJobs(
 	ctx context.Context, s sqlliveness.Session, claimedToResume map[int64]struct{},
 ) {
-	const resumeConcurrency = 10
+	const resumeConcurrency = 64
 	sem := make(chan struct{}, resumeConcurrency)
 	var wg sync.WaitGroup
 	add := func() { sem <- struct{}{}; wg.Add(1) }
