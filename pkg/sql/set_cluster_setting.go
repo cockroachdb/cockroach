@@ -221,7 +221,9 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		}
 
 		// Report tracked cluster settings via telemetry.
-		sqltelemetry.RegisterSettingChange(n.setting, n.name, expectedEncodedValue, usingDefault)
+		if err := sqltelemetry.RegisterSettingChange(n.setting, n.name, expectedEncodedValue, usingDefault); err != nil {
+			return err
+		}
 
 		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 			ctx,

@@ -107,10 +107,12 @@ var CreateStatisticsUseCounter = telemetry.GetCounterOnce("sql.plan.stats.create
 
 // TurnAutoStatsOnUseCounter is to be incremented whenever automatic stats
 // collection is explicitly enabled.
+// TODO(knz): This is obsolete. See RegisterSettingChange().
 var TurnAutoStatsOnUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-stats.enabled")
 
 // TurnAutoStatsOffUseCounter is to be incremented whenever automatic stats
 // collection is explicitly disabled.
+// TODO(knz): This is obsolete. See RegisterSettingChange().
 var TurnAutoStatsOffUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-stats.disabled")
 
 // StatsHistogramOOMCounter is to be incremented whenever statistics histogram
@@ -160,39 +162,6 @@ var CancelQueriesUseCounter = telemetry.GetCounterOnce("sql.session.cancel-queri
 // CancelSessionsUseCounter is to be incremented whenever CANCEL SESSION or
 // CANCEL SESSIONS is run.
 var CancelSessionsUseCounter = telemetry.GetCounterOnce("sql.session.cancel-sessions")
-
-// We can't parameterize these telemetry counters, so just make a bunch of
-// buckets for setting the join reorder limit since the range of reasonable
-// values for the join reorder limit is quite small.
-// reorderJoinLimitUseCounters is a list of counters. The entry at position i
-// is the counter for SET reorder_join_limit = i.
-var reorderJoinLimitUseCounters []telemetry.Counter
-
-const reorderJoinsCounters = 12
-
-func init() {
-	reorderJoinLimitUseCounters = make([]telemetry.Counter, reorderJoinsCounters)
-
-	for i := 0; i < reorderJoinsCounters; i++ {
-		reorderJoinLimitUseCounters[i] = telemetry.GetCounterOnce(
-			fmt.Sprintf("sql.plan.reorder-joins.set-limit-%d", i),
-		)
-	}
-}
-
-// ReorderJoinLimitMoreCounter is the counter for the number of times someone
-// set the join reorder limit above reorderJoinsCounters.
-var reorderJoinLimitMoreCounter = telemetry.GetCounterOnce("sql.plan.reorder-joins.set-limit-more")
-
-// ReportJoinReorderLimit is to be called whenever the reorder joins session variable
-// is set.
-func ReportJoinReorderLimit(value int) {
-	if value < reorderJoinsCounters {
-		telemetry.Inc(reorderJoinLimitUseCounters[value])
-	} else {
-		telemetry.Inc(reorderJoinLimitMoreCounter)
-	}
-}
 
 // WindowFunctionCounter is to be incremented every time a window function is
 // being planned.

@@ -27,6 +27,8 @@ import (
 // feature, such as file sizes, qps, etc, without being as revealing as the
 // raw numbers.
 // The numbers 0-10 are reported unchanged.
+//
+// See BucketDuration() to quantize durations instead of integers.
 func Bucket10(num int64) int64 {
 	if num == math.MinInt64 {
 		// This is needed to prevent overflow in the negation below.

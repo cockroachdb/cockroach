@@ -10,11 +10,7 @@
 
 package sqltelemetry
 
-import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-)
+import "github.com/cockroachdb/cockroach/pkg/server/telemetry"
 
 // DistSQLExecCounter is to be incremented whenever a query is distributed
 // across multiple nodes.
@@ -23,12 +19,6 @@ var DistSQLExecCounter = telemetry.GetCounterOnce("sql.exec.query.is-distributed
 // VecExecCounter is to be incremented whenever a query runs with the vectorized
 // execution engine.
 var VecExecCounter = telemetry.GetCounterOnce("sql.exec.query.is-vectorized")
-
-// VecModeCounter is to be incremented every time the vectorized execution mode
-// is changed (including turned off).
-func VecModeCounter(mode string) telemetry.Counter {
-	return telemetry.GetCounter(fmt.Sprintf("sql.exec.vectorized-setting.%s", mode))
-}
 
 // CascadesLimitReached is to be incremented whenever the limit of foreign key
 // cascade for a single query is exceeded.
