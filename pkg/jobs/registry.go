@@ -568,9 +568,9 @@ func TestingSetAdoptAndCancelIntervals(adopt, cancel time.Duration) (cleanup fun
 
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
 
-// gcInterval is how often we check for and delete job records older than the
-// retention limit.
-const gcInterval = 1 * time.Hour
+// maxGCInterval is the maximum duration for how often we check for and delete job
+// records older than the retention limit.
+const maxGCInterval = 1 * time.Hour
 
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
@@ -671,16 +671,37 @@ UPDATE system.jobs
 	}
 	if err := stopper.RunAsyncTask(context.Background(), "jobs/gc", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		settingChanged := make(chan struct{}, 1)
+		gcSetting.SetOnChange(&r.settings.SV, func() {
+			select {
+			case settingChanged <- struct{}{}:
+			default:
+			}
+		})
+		gcInterval := func() time.Duration {
+			if setting := gcSetting.Get(&r.settings.SV); setting < maxGCInterval {
+				return setting
+			}
+			return maxGCInterval
+		}
+		timer := timeutil.NewTimer()
+		lastGC := timeutil.Now()
+		timer.Reset(gcInterval())
 		defer cancel()
 		for {
 			select {
+			case <-settingChanged:
+				timer.Reset(timeutil.Until(lastGC.Add(gcInterval())))
 			case <-stopper.ShouldQuiesce():
 				return
-			case <-time.After(gcInterval):
+			case <-timer.C:
+				timer.Read = true
 				old := timeutil.Now().Add(-1 * gcSetting.Get(&r.settings.SV))
 				if err := r.cleanupOldJobs(ctx, old); err != nil {
 					log.Warningf(ctx, "error cleaning up old job records: %v", err)
 				}
+				lastGC = timeutil.Now()
+				timer.Reset(gcInterval())
 			}
 		}
 	}); err != nil {
