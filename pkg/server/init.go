@@ -520,7 +520,7 @@ func (s *initServer) DiskClusterVersion() clusterversion.ClusterVersion {
 type initServerCfg struct {
 	advertiseAddr             string
 	binaryMinSupportedVersion roachpb.Version
-	binaryVersion             roachpb.Version
+	binaryVersion             roachpb.Version // This is what's used for bootstrap.
 	defaultSystemZoneConfig   zonepb.ZoneConfig
 	defaultZoneConfig         zonepb.ZoneConfig
 
@@ -543,7 +543,7 @@ type initServerCfg struct {
 func newInitServerConfig(cfg Config, dialOpts []grpc.DialOption) initServerCfg {
 	binaryVersion := cfg.Settings.Version.BinaryVersion()
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
-		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
+		if ov := knobs.(*TestingKnobs).BinaryVersionOverride; ov != (roachpb.Version{}) {
 			binaryVersion = ov
 		}
 	}

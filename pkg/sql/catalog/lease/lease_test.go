@@ -2224,7 +2224,7 @@ func TestFinalizeVersionEnablesRangefeedUpdates(t *testing.T) {
 					DisableAutomaticVersionUpgrade: 1,
 					// Bootstrap the cluster at something below VersionRangefeedLeases so
 					// that we can test the upgrade.
-					BootstrapVersionOverride: clusterversion.VersionByKey(clusterversion.Version20_1),
+					BinaryVersionOverride: clusterversion.VersionByKey(clusterversion.Version20_1),
 				},
 			},
 		},
