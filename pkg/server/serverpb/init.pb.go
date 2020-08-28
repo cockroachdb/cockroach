@@ -32,7 +32,7 @@ func (m *BootstrapRequest) Reset()         { *m = BootstrapRequest{} }
 func (m *BootstrapRequest) String() string { return proto.CompactTextString(m) }
 func (*BootstrapRequest) ProtoMessage()    {}
 func (*BootstrapRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_init_5d06be670cd568de, []int{0}
+	return fileDescriptor_init_119a86c40b8bcd78, []int{0}
 }
 func (m *BootstrapRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -64,7 +64,7 @@ func (m *BootstrapResponse) Reset()         { *m = BootstrapResponse{} }
 func (m *BootstrapResponse) String() string { return proto.CompactTextString(m) }
 func (*BootstrapResponse) ProtoMessage()    {}
 func (*BootstrapResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_init_5d06be670cd568de, []int{1}
+	return fileDescriptor_init_119a86c40b8bcd78, []int{1}
 }
 func (m *BootstrapResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -106,7 +106,10 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type InitClient interface {
-	// Bootstrap an uninitialized cluster.
+	// Bootstrap bootstraps an uninitialized cluster. This is primarily used by
+	// cockroach init. It writes the data for a single-node cluster comprised of
+	// this node (with NodeID "1") to the first store (StoreID "1"), after which
+	// the node can start and allow other nodes to join the cluster.
 	Bootstrap(ctx context.Context, in *BootstrapRequest, opts ...grpc.CallOption) (*BootstrapResponse, error)
 }
 
@@ -129,7 +132,10 @@ func (c *initClient) Bootstrap(ctx context.Context, in *BootstrapRequest, opts .
 
 // InitServer is the server API for Init service.
 type InitServer interface {
-	// Bootstrap an uninitialized cluster.
+	// Bootstrap bootstraps an uninitialized cluster. This is primarily used by
+	// cockroach init. It writes the data for a single-node cluster comprised of
+	// this node (with NodeID "1") to the first store (StoreID "1"), after which
+	// the node can start and allow other nodes to join the cluster.
 	Bootstrap(context.Context, *BootstrapRequest) (*BootstrapResponse, error)
 }
 
@@ -449,9 +455,9 @@ var (
 	ErrIntOverflowInit   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("server/serverpb/init.proto", fileDescriptor_init_5d06be670cd568de) }
+func init() { proto.RegisterFile("server/serverpb/init.proto", fileDescriptor_init_119a86c40b8bcd78) }
 
-var fileDescriptor_init_5d06be670cd568de = []byte{
+var fileDescriptor_init_119a86c40b8bcd78 = []byte{
 	// 173 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x4e, 0x2d, 0x2a,
 	0x4b, 0x2d, 0xd2, 0x87, 0x50, 0x05, 0x49, 0xfa, 0x99, 0x79, 0x99, 0x25, 0x7a, 0x05, 0x45, 0xf9,

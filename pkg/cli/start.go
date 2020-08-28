@@ -455,7 +455,7 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 
 		if waitForInit {
 			log.Shout(ctx, log.Severity_INFO,
-				"initial startup completed.\n"+
+				"initial startup completed\n"+
 					"Node will now attempt to join a running cluster, or wait for `cockroach init`.\n"+
 					"Client connections will be accepted after this completes successfully.\n"+
 					"Check the log file(s) for progress. ")
@@ -587,9 +587,9 @@ If problems persist, please see %s.`
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
 
-			initialBoot := s.InitialBoot()
+			initialStart := s.InitialStart()
 
-			if disableReplication && initialBoot {
+			if disableReplication && initialStart {
 				// For start-single-node, set the default replication factor to
 				// 1 so as to avoid warning message and unnecessary rebalance
 				// churn.
@@ -649,7 +649,7 @@ If problems persist, please see %s.`
 			}
 			fmt.Fprintf(tw, "storage engine: \t%s\n", serverCfg.StorageEngine.String())
 			nodeID := s.NodeID()
-			if initialBoot {
+			if initialStart {
 				if nodeID == server.FirstNodeID {
 					fmt.Fprintf(tw, "status:\tinitialized new cluster\n")
 				} else {
