@@ -312,6 +312,7 @@ func TestPartialZip(t *testing.T) {
 	}
 
 	// Strip any non-deterministic messages.
+	t.Log(out)
 	out = eraseNonDeterministicZipOutput(out)
 
 	datadriven.RunTest(t, "testdata/zip/partial1",
