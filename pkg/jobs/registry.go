@@ -298,15 +298,23 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 	}
 	log.Infof(ctx, "scheduled jobs %+v", jobs)
 	buf := bytes.Buffer{}
+	usingSQLLiveness := r.startUsingSQLLivenessAdoption(ctx)
 	for i, id := range jobs {
-		select {
-		case r.adoptionCh <- struct{}{}:
-		case <-r.stopper.ShouldQuiesce():
-			return stop.ErrUnavailable
-		case <-ctx.Done():
-			return ctx.Err()
+		// In the pre-20.2 and mixed-version state, the adoption loop needs to be
+		// notified once per job (in the worst case) in order to ensure that all
+		// newly created jobs get adopted in a timely manner. In the sqlliveness
+		// world of 20.2 and later, we only need to notify the loop once as the
+		// newly created jobs are already claimed. The adoption loop will merely
+		// start all previously claimed jobs.
+		if !usingSQLLiveness || i == 0 {
+			select {
+			case r.adoptionCh <- struct{}{}:
+			case <-r.stopper.ShouldQuiesce():
+				return stop.ErrUnavailable
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
-
 		if i > 0 {
 			buf.WriteString(",")
 		}
@@ -320,9 +328,9 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
        AND (status != 'succeeded' AND status != 'failed' AND status != 'canceled')`,
 		buf.String())
 	for r := retry.StartWithCtx(ctx, retry.Options{
-		InitialBackoff: 10 * time.Millisecond,
+		InitialBackoff: 5 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
-		Multiplier:     2,
+		Multiplier:     1.5,
 	}); r.Next(); {
 		// We poll the number of queued jobs that aren't finished. As with SHOW JOBS
 		// WHEN COMPLETE, if one of the jobs is missing from the jobs table for
@@ -586,6 +594,7 @@ func (r *Registry) Start(
 				}
 				return
 			}
+
 			log.VEventf(ctx, 1, "registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
 			f(ctx, s)
 		}
