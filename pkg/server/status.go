@@ -224,7 +224,7 @@ func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, er
 
 	id, err := strconv.ParseInt(nodeIDParam, 0, 32)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "node id could not be parsed")
+		return 0, false, errors.Wrap(err, "node ID could not be parsed")
 	}
 	nodeID := roachpb.NodeID(id)
 	return nodeID, nodeID == s.gossip.NodeID.Get(), nil

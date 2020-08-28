@@ -611,6 +611,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error.
+	//
 	// We support everything after 19.1, including pre-release 19.2 versions.
 	// This is generally beneficial, but in particular it allows the
 	// version-upgrade roachtest to use a pre-release 19.2 binary before upgrading

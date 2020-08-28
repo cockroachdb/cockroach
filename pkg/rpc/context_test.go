@@ -162,6 +162,8 @@ func TestHeartbeatCB(t *testing.T) {
 	})
 }
 
+var _ roachpb.InternalServer = &internalServer{}
+
 type internalServer struct{}
 
 func (*internalServer) Batch(
@@ -185,6 +187,12 @@ func (*internalServer) RangeFeed(
 func (*internalServer) GossipSubscription(
 	*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer,
 ) error {
+	panic("unimplemented")
+}
+
+func (*internalServer) Join(
+	context.Context, *roachpb.JoinNodeRequest,
+) (*roachpb.JoinNodeResponse, error) {
 	panic("unimplemented")
 }
 

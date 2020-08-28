@@ -12,14 +12,13 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
-message BootstrapRequest {
-}
-
-message BootstrapResponse {
-}
+message BootstrapRequest { }
+message BootstrapResponse { }
 
 service Init {
-  // Bootstrap an uninitialized cluster.
-  rpc Bootstrap(BootstrapRequest) returns (BootstrapResponse) {
-  }
+  // Bootstrap bootstraps an uninitialized cluster. This is primarily used by
+  // cockroach init. It writes the data for a single-node cluster comprised of
+  // this node (with NodeID "1") to the first store (StoreID "1"), after which
+  // the node can start and allow other nodes to join the cluster.
+  rpc Bootstrap(BootstrapRequest) returns (BootstrapResponse) { }
 }

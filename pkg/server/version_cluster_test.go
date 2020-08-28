@@ -218,7 +218,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
-			BootstrapVersionOverride:       oldVersion,
+			BinaryVersionOverride:          oldVersion,
 			DisableAutomaticVersionUpgrade: 1,
 		},
 	}
@@ -421,7 +421,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: 1,
-			BootstrapVersionOverride:       v0,
+			BinaryVersionOverride:          v0,
 		},
 	}
 	tc := setupMixedCluster(t, knobs, versions, "")

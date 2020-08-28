@@ -514,7 +514,7 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 		Settings: st,
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
-				BootstrapVersionOverride: clusterversion.TestingBinaryMinSupportedVersion,
+				BinaryVersionOverride: clusterversion.TestingBinaryMinSupportedVersion,
 			},
 			SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
 				AfterEnsureMigrations: func() {
