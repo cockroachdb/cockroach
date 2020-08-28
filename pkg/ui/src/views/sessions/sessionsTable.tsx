@@ -120,7 +120,6 @@ export function makeSessionsColumns(
                     terminateQueryRef?.current?.showModalFor({
                       query_id: session.active_queries[0].id,
                       node_id: session.node_id.toString(),
-                      username: session.username,
                     });
                   }
                 }}
@@ -133,7 +132,6 @@ export function makeSessionsColumns(
                 onClick={() => terminateSessionRef?.current?.showModalFor({
                   session_id: session.id,
                   node_id: session.node_id.toString(),
-                  username: session.username,
                 })}
               >
                 Terminate Session
