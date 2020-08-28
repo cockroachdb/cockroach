@@ -147,16 +147,17 @@ type counters struct {
 }
 
 type registryTestSuite struct {
-	ctx         context.Context
-	oldInterval time.Duration
-	s           serverutils.TestServerInterface
-	outerDB     *gosql.DB
-	sqlDB       *sqlutils.SQLRunner
-	registry    *jobs.Registry
-	done        chan struct{}
-	mockJob     jobs.Record
-	job         *jobs.Job
-	mu          struct {
+	ctx               context.Context
+	oldAdoptInterval  time.Duration
+	oldCancelInterval time.Duration
+	s                 serverutils.TestServerInterface
+	outerDB           *gosql.DB
+	sqlDB             *sqlutils.SQLRunner
+	registry          *jobs.Registry
+	done              chan struct{}
+	mockJob           jobs.Record
+	job               *jobs.Job
+	mu                struct {
 		syncutil.Mutex
 		a counters
 		e counters
@@ -179,8 +180,10 @@ func noopPauseRequestFunc(
 }
 
 func (rts *registryTestSuite) setUp(t *testing.T) {
-	rts.oldInterval = jobs.DefaultAdoptInterval
+	rts.oldAdoptInterval = jobs.DefaultAdoptInterval
+	rts.oldCancelInterval = jobs.DefaultCancelInterval
 	jobs.DefaultAdoptInterval = time.Millisecond
+	jobs.DefaultCancelInterval = 2 * time.Millisecond
 	rts.ctx = context.Background()
 	rts.s, rts.outerDB, _ = serverutils.StartServer(t, base.TestServerArgs{})
 	rts.sqlDB = sqlutils.MakeSQLRunner(rts.outerDB)
@@ -270,7 +273,8 @@ func (rts *registryTestSuite) tearDown() {
 	close(rts.resumeCheckCh)
 	close(rts.done)
 	rts.s.Stopper().Stop(rts.ctx)
-	jobs.DefaultAdoptInterval = rts.oldInterval
+	jobs.DefaultAdoptInterval = rts.oldAdoptInterval
+	jobs.DefaultCancelInterval = rts.oldCancelInterval
 	jobs.ResetConstructors()()
 }
 
@@ -306,6 +310,7 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	t.Run("normal success", func(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
@@ -1390,6 +1395,7 @@ func TestShowJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
@@ -1780,10 +1786,8 @@ func TestShowJobWhenComplete(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// Canceling a job relies on adopt daemon to move the job to state
 	// reverting.
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
+
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -1919,10 +1923,8 @@ func TestJobInTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
 
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 5 * time.Second
+	// Set the adoption interval to be very long to test the adoption channel.
+	defer jobs.TestingSetAdoptAndCancelIntervals(time.Hour, time.Hour)()
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -2274,10 +2276,7 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
 	ctx := context.Background()
 
@@ -2308,9 +2307,10 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 		select {
 		case <-resuming:
 			t.Fatal("job was resumed")
-		case <-time.After(time.Second):
-			// With an adopt interval of 10 ms, within 1 s we can be reasonably sure
-			// that the job was not adopted.
+		case <-time.After(100 * time.Millisecond):
+			// With an adopt interval of 10 ms, within 100ms we can be reasonably sure
+			// that the job was not adopted. At the very least, the test would be
+			// flakey.
 		}
 	})
 

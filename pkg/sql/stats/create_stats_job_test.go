@@ -46,10 +46,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	// Test with 3 nodes and rowexec.SamplerProgressInterval=100 to ensure
 	// that progress metadata is sent correctly after every 100 input rows.
@@ -138,12 +135,7 @@ func TestCreateStatsLivenessWithRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldAdoptInterval, oldCancelInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldAdoptInterval
-		jobs.DefaultCancelInterval = oldCancelInterval
-	}(jobs.DefaultAdoptInterval, jobs.DefaultCancelInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
-	jobs.DefaultCancelInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)
@@ -252,12 +244,7 @@ func TestCreateStatsLivenessWithLeniency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldAdoptInterval, oldCancelInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldAdoptInterval
-		jobs.DefaultCancelInterval = oldCancelInterval
-	}(jobs.DefaultAdoptInterval, jobs.DefaultCancelInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
-	jobs.DefaultCancelInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)
@@ -345,10 +332,7 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldAdoptInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldAdoptInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	var allowRequest chan struct{}
 
@@ -459,10 +443,7 @@ func TestDeleteFailedJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldAdoptInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldAdoptInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})

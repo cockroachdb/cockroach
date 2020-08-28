@@ -25,6 +25,7 @@ import (
 func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer TestingSetAdoptAndCancelIntervals(time.Millisecond, time.Microsecond)()
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 

@@ -123,7 +123,8 @@ func TestScheduleControl(t *testing.T) {
 
 func TestJobsControlForSchedules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables)
+	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables,
+		true /* accelerateIntervals */)
 	defer cleanup()
 
 	registry := th.server.JobRegistry().(*Registry)
@@ -226,7 +227,8 @@ func TestJobsControlForSchedules(t *testing.T) {
 func TestFilterJobsControlForSchedules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer ResetConstructors()()
-	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables)
+	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables,
+		false /* accelerateIntervals */)
 	defer cleanup()
 
 	registry := th.server.JobRegistry().(*Registry)
