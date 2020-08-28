@@ -84,7 +84,7 @@ var (
 	slownessThresholdByVersion = map[crdbVersion]float64{
 		tpchVecVersion19_2: 1.5,
 		tpchVecVersion20_1: 1.2,
-		tpchVecVersion20_2: 1.2,
+		tpchVecVersion20_2: 1.15,
 	}
 )
 
@@ -278,16 +278,6 @@ func (p tpchVecPerfTest) preTestRunHook(
 	p.tpchVecTestCaseBase.preTestRunHook(ctx, t, c, conn, version, clusterSetup)
 	if !p.disableStatsCreation {
 		createStatsFromTables(t, conn, tpchTables)
-	}
-	// TODO(yuzefovich): remove this once we figure out the issue with random
-	// performance hits on query 7.
-	for node := 1; node <= c.spec.NodeCount; node++ {
-		nodeConn := c.Conn(ctx, node)
-		if _, err := nodeConn.Exec(
-			"SELECT crdb_internal.set_vmodule('vectorized_flow=1,spilling_queue=1,row_container=2,hash_row_container=2');",
-		); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
 

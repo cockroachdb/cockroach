@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -950,6 +949,7 @@ func benchmarkAggregateFunction(
 	aggFn execinfrapb.AggregatorSpec_Func,
 	aggInputTypes []*types.T,
 	groupSize int,
+	distinctProb float64,
 	nullProb float64,
 	numInputBatches int,
 ) {
@@ -1012,6 +1012,17 @@ func benchmarkAggregateFunction(
 		groupCols: []uint32{0},
 		aggCols:   [][]uint32{aggCols},
 	}
+	if distinctProb > 0 {
+		if !typs[0].Identical(types.Int) {
+			skip.IgnoreLint(b, "benchmarking distinct aggregation is supported only on an INT argument")
+		}
+		tc.aggDistinct = []bool{true}
+		distinctModulo := int64(1.0 / distinctProb)
+		vals := cols[1].Int64()
+		for i := range vals {
+			vals[i] = vals[i] % distinctModulo
+		}
+	}
 	require.NoError(b, tc.init())
 	constructors, constArguments, outputTypes, err := ProcessAggregations(
 		&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
@@ -1053,9 +1064,13 @@ func benchmarkAggregateFunction(
 	default:
 		inputTypesString = fmt.Sprintf("%s", aggInputTypes)
 	}
+	distinctProbString := ""
+	if distinctProb > 0 {
+		distinctProbString = fmt.Sprintf("/distinctProb=%.2f", distinctProb)
+	}
 	b.Run(fmt.Sprintf(
-		"%s/%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d",
-		fName, agg.name, inputTypesString, groupSize, nullProb > 0, numInputBatches),
+		"%s/%s/%s/groupSize=%d%s/hasNulls=%t/numInputBatches=%d",
+		fName, agg.name, inputTypesString, groupSize, distinctProbString, nullProb > 0, numInputBatches),
 		func(b *testing.B) {
 			b.SetBytes(int64(argumentsSize * nTuples))
 			for i := 0; i < b.N; i++ {
@@ -1086,7 +1101,8 @@ func BenchmarkAggregator(b *testing.B) {
 			for _, groupSize := range groupSizes {
 				for _, nullProb := range []float64{0.0, nullProbability} {
 					benchmarkAggregateFunction(
-						b, agg, aggFn, []*types.T{types.Int}, groupSize, nullProb, numInputBatches,
+						b, agg, aggFn, []*types.T{types.Int}, groupSize,
+						0 /* distinctProb */, nullProb, numInputBatches,
 					)
 				}
 			}
@@ -1123,7 +1139,8 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 			}
 			for _, groupSize := range []int{1, coldata.BatchSize()} {
 				benchmarkAggregateFunction(
-					b, agg, aggFn, aggInputTypes, groupSize, nullProbability, numInputBatches,
+					b, agg, aggFn, aggInputTypes, groupSize,
+					0 /* distinctProb */, nullProbability, numInputBatches,
 				)
 			}
 		}
@@ -1131,102 +1148,25 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 }
 
 func BenchmarkDistinctAggregation(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(ctx)
-	flowCtx := &execinfra.FlowCtx{
-		EvalCtx: &evalCtx,
-		Cfg: &execinfra.ServerConfig{
-			Settings: st,
-		},
-	}
-
-	typs := []*types.T{types.Int, types.Int}
+	const numInputBatches = 64
 	aggFn := execinfrapb.AggregatorSpec_COUNT
-	aggSpec := &execinfrapb.AggregatorSpec{
-		Type:      execinfrapb.AggregatorSpec_NON_SCALAR,
-		GroupCols: []uint32{0},
-		Aggregations: []execinfrapb.AggregatorSpec_Aggregation{{
-			Func:     aggFn,
-			Distinct: true,
-			ColIdx:   []uint32{1},
-		}},
-	}
-	spec := &execinfrapb.ProcessorSpec{
-		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},
-		Core: execinfrapb.ProcessorCoreUnion{
-			Aggregator: aggSpec,
-		},
-	}
-	args := &NewColOperatorArgs{
-		Spec:                spec,
-		StreamingMemAccount: testMemAcc,
-	}
-	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-
 	for _, agg := range aggTypes {
-		if agg.name == "hash" {
-			aggSpec.OrderedGroupCols = nil
-		} else {
-			aggSpec.OrderedGroupCols = aggSpec.GroupCols
-		}
 		for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()} {
-			for _, distinctProbability := range []float64{0.01, 0.1, 1.0} {
-				distinctModulo := int(1.0 / distinctProbability)
-				if (groupSize == 1 && distinctProbability != 1.0) || float64(groupSize)/float64(distinctModulo) < 0.1 {
-					// We have a such combination of groupSize and
-					// distinctProbability parameters that we will be very
-					// unlikely to satisfy them (for example, with groupSize=1
-					// and distinctProbability=0.01, every value will be
-					// distinct within the group), so we skip such
-					// configuration.
+			for _, distinctProb := range []float64{0.01, 0.1, 1.0} {
+				distinctModulo := int(1.0 / distinctProb)
+				if (groupSize == 1 && distinctProb != 1.0) || float64(groupSize)/float64(distinctModulo) < 0.1 {
+					// We have a such combination of groupSize and distinctProb
+					// parameters that we will be very unlikely to satisfy them
+					// (for example, with groupSize=1 and distinctProb=0.01,
+					// every value will be distinct within the group), so we
+					// skip such configuration.
 					continue
 				}
-				for _, hasNulls := range []bool{false, true} {
-					for _, numInputBatches := range []int{64} {
-						// TODO(yuzefovich): refactor benchmarkAggregateFunction to
-						// be more configurable and reuse it here.
-						b.Run(fmt.Sprintf("%s/%s/groupSize=%d/distinctProb=%.2f/nulls=%t",
-							agg.name, aggFn, groupSize, distinctProbability, hasNulls),
-							func(b *testing.B) {
-								nTuples := numInputBatches * coldata.BatchSize()
-								cols := []coldata.Vec{
-									testAllocator.NewMemColumn(typs[0], nTuples),
-									testAllocator.NewMemColumn(typs[1], nTuples),
-								}
-								groups := cols[0].Int64()
-								vals := cols[1].Int64()
-								nGroups := nTuples / groupSize
-								for i := 0; i < nTuples; i++ {
-									groups[i] = int64(rng.Intn(nGroups))
-									vals[i] = int64(rng.Intn(distinctModulo))
-									if hasNulls && rng.Float64() < nullProbability {
-										cols[1].Nulls().SetNull(i)
-									}
-								}
-								source := newChunkingBatchSource(typs, cols, nTuples)
-								args.Inputs = []colexecbase.Operator{source}
-								r, err := TestNewColOperator(ctx, flowCtx, args)
-								if err != nil {
-									b.Fatal(err)
-								}
-
-								a := r.Op
-								a.Init()
-								b.ResetTimer()
-								// Only count the aggregation column.
-								b.SetBytes(int64(8 * nTuples))
-								for i := 0; i < b.N; i++ {
-									// Exhaust aggregator until all batches have been read.
-									for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
-									}
-									a.(ResettableOperator).reset(ctx)
-								}
-							},
-						)
-					}
+				for _, nullProb := range []float64{0, nullProbability} {
+					benchmarkAggregateFunction(
+						b, agg, aggFn, []*types.T{types.Int}, groupSize,
+						distinctProb, nullProb, numInputBatches,
+					)
 				}
 			}
 		}
