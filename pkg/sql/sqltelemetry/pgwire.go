@@ -44,3 +44,21 @@ var InterleavedPortalRequestCounter = telemetry.GetCounterOnce("pgwire.#40195.in
 // PortalWithLimitRequestCounter is to be incremented every time a portal request is
 // made.
 var PortalWithLimitRequestCounter = telemetry.GetCounterOnce("pgwire.portal_with_limit_request")
+
+// ConnAuditingClusterSettingName is the name of the cluster setting
+// for the cluster setting that enables pgwire-level connection audit
+// logs.
+//
+// This name is defined here because it is needed in the telemetry
+// counts in SetClusterSetting() and importing pgwire here would
+// create a circular dependency.
+const ConnAuditingClusterSettingName = "server.auth_log.sql_connections.enabled"
+
+// AuthAuditingClusterSettingName is the name of the cluster setting
+// for the cluster setting that enables pgwire-level authentication audit
+// logs.
+//
+// This name is defined here because it is needed in the telemetry
+// counts in SetClusterSetting() and importing pgwire here would
+// create a circular dependency.
+const AuthAuditingClusterSettingName = "server.auth_log.sql_sessions.enabled"

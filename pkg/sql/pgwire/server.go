@@ -65,12 +65,12 @@ var connResultsBufferSize = settings.RegisterPublicByteSizeSetting(
 )
 
 var logConnAuth = settings.RegisterPublicBoolSetting(
-	sql.ConnAuditingClusterSettingName,
+	sqltelemetry.ConnAuditingClusterSettingName,
 	"if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)",
 	false)
 
 var logSessionAuth = settings.RegisterPublicBoolSetting(
-	sql.AuthAuditingClusterSettingName,
+	sqltelemetry.AuthAuditingClusterSettingName,
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false)
 

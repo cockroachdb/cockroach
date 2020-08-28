@@ -12,13 +12,11 @@ package sql
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -26,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -171,8 +168,10 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	var expectedEncodedValue string
 	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var reportedValue string
+		usingDefault := false
 		if n.value == nil {
 			reportedValue = "DEFAULT"
+			usingDefault = true
 			expectedEncodedValue = n.setting.EncodedDefault()
 			if _, err := execCfg.InternalExecutor.ExecEx(
 				ctx, "reset-setting", txn,
@@ -222,46 +221,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		}
 
 		// Report tracked cluster settings via telemetry.
-		// TODO(justin): implement a more general mechanism for tracking these.
-		switch n.name {
-		case stats.AutoStatsClusterSettingName:
-			switch expectedEncodedValue {
-			case "true":
-				telemetry.Inc(sqltelemetry.TurnAutoStatsOnUseCounter)
-			case "false":
-				telemetry.Inc(sqltelemetry.TurnAutoStatsOffUseCounter)
-			}
-		case ConnAuditingClusterSettingName:
-			switch expectedEncodedValue {
-			case "true":
-				telemetry.Inc(sqltelemetry.TurnConnAuditingOnUseCounter)
-			case "false":
-				telemetry.Inc(sqltelemetry.TurnConnAuditingOffUseCounter)
-			}
-		case AuthAuditingClusterSettingName:
-			switch expectedEncodedValue {
-			case "true":
-				telemetry.Inc(sqltelemetry.TurnAuthAuditingOnUseCounter)
-			case "false":
-				telemetry.Inc(sqltelemetry.TurnAuthAuditingOffUseCounter)
-			}
-		case ReorderJoinsLimitClusterSettingName:
-			val, err := strconv.ParseInt(expectedEncodedValue, 10, 64)
-			if err != nil {
-				break
-			}
-			sqltelemetry.ReportJoinReorderLimit(int(val))
-		case VectorizeClusterSettingName:
-			val, err := strconv.Atoi(expectedEncodedValue)
-			if err != nil {
-				break
-			}
-			validatedExecMode, isValid := sessiondata.VectorizeExecModeFromString(sessiondata.VectorizeExecMode(val).String())
-			if !isValid {
-				break
-			}
-			telemetry.Inc(sqltelemetry.VecModeCounter(validatedExecMode.String()))
-		}
+		sqltelemetry.RegisterSettingChange(n.setting, n.name, expectedEncodedValue, usingDefault)
 
 		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 			ctx,

@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -145,7 +146,7 @@ var traceSessionEventLogEnabled = settings.RegisterPublicBoolSetting(
 
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
 // the maximum number of joins to reorder.
-const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
+const ReorderJoinsLimitClusterSettingName = sqltelemetry.ReorderJoinsLimitClusterSettingName
 
 // ReorderJoinsLimitClusterValue controls the cluster default for the maximum
 // number of joins reordered.
@@ -276,7 +277,7 @@ var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
 
 // VectorizeClusterSettingName is the name for the cluster setting that controls
 // the VectorizeClusterMode below.
-const VectorizeClusterSettingName = "sql.defaults.vectorize"
+const VectorizeClusterSettingName = sqltelemetry.VectorizeClusterSettingName
 
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.

@@ -482,24 +482,6 @@ func (p *planner) CheckRoleOption(ctx context.Context, roleOption roleoption.Opt
 	return nil
 }
 
-// ConnAuditingClusterSettingName is the name of the cluster setting
-// for the cluster setting that enables pgwire-level connection audit
-// logs.
-//
-// This name is defined here because it is needed in the telemetry
-// counts in SetClusterSetting() and importing pgwire here would
-// create a circular dependency.
-const ConnAuditingClusterSettingName = "server.auth_log.sql_connections.enabled"
-
-// AuthAuditingClusterSettingName is the name of the cluster setting
-// for the cluster setting that enables pgwire-level authentication audit
-// logs.
-//
-// This name is defined here because it is needed in the telemetry
-// counts in SetClusterSetting() and importing pgwire here would
-// create a circular dependency.
-const AuthAuditingClusterSettingName = "server.auth_log.sql_sessions.enabled"
-
 func (p *planner) canCreateOnSchema(ctx context.Context, schemaID descpb.ID, user string) error {
 	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(ctx, p.Txn(), schemaID)
 	if err != nil {

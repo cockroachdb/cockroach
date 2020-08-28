@@ -33,3 +33,15 @@ func VecModeCounter(mode string) telemetry.Counter {
 // CascadesLimitReached is to be incremented whenever the limit of foreign key
 // cascade for a single query is exceeded.
 var CascadesLimitReached = telemetry.GetCounterOnce("sql.exec.cascade-limit-reached")
+
+// AutoStatsClusterSettingName is the name of the automatic stats collection
+// cluster setting.
+const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
+
+// VectorizeClusterSettingName is the name for the cluster setting that controls
+// the VectorizeClusterMode.
+const VectorizeClusterSettingName = "sql.defaults.vectorize"
+
+// ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
+// the maximum number of joins to reorder.
+const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
