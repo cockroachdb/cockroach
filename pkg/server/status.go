@@ -1644,10 +1644,6 @@ func (s *statusServer) ListLocalSessions(
 		return nil, err
 	}
 
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	if !isAdmin && !hasViewActivity {
 		// For non-superusers, requests with an empty username is
 		// implicitly a request for the client's own sessions.
@@ -1772,10 +1768,6 @@ func (s *statusServer) ListSessions(
 
 	if _, _, err := s.admin.getUserAndRole(ctx); err != nil {
 		return nil, err
-	}
-
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
 	}
 
 	response := &serverpb.ListSessionsResponse{
