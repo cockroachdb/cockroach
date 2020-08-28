@@ -51,9 +51,6 @@ SELECT ST_AsText(geom), ST_AsText(geog) FROM geom_table_public_schema
 ----
 POINT (1 0)  POINT (3 2)
 
-statement ok
-SET experimental_enable_enums = true
-
 statement error type .*geometry.* already exists
 CREATE TYPE geometry AS enum('no')
 

@@ -1287,7 +1287,6 @@ SELECT random() from t51841
 # that we don't panic.
 statement ok
 RESET vectorize;
-SET experimental_enable_enums = true;
 CREATE TYPE greeting AS ENUM ('hello');
 CREATE TABLE greeting_table (x greeting);
 EXPLAIN (VEC) SELECT * FROM greeting_table;

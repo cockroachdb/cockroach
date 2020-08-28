@@ -135,8 +135,6 @@ typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geomet
 
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
-const char* dlopenFailError = "failed to execute dlopen";
-
 }  // namespace
 
 struct CR_GEOS {
@@ -327,34 +325,40 @@ CR_GEOS_String toGEOSString(const char* data, size_t len) {
   return result;
 }
 
-CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice geoscLoc, CR_GEOS_Slice geosLoc, CR_GEOS** lib) {
+void errorHandler(const char* msg, void* buffer) {
+  std::string* str = static_cast<std::string*>(buffer);
+  *str = std::string("geos error: ") + msg;
+}
+
+CR_GEOS_Status CR_GEOS_Init(CR_GEOS_Slice geoscLoc, CR_GEOS_Slice geosLoc, CR_GEOS** lib) {
   // Open the libgeos.$(EXT) first, so that libgeos_c.$(EXT) can read it.
+  std::string error;
   auto geosLocStr = ToString(geosLoc);
   dlhandle geosHandle = dlopen(geosLocStr.c_str(), RTLD_LAZY);
   if (!geosHandle) {
-    return cStringToSlice((char*)dlopenFailError);
+    errorHandler(dlerror(), &error);
+    return toGEOSString(error.data(), error.length());
   }
 
   auto geoscLocStr = ToString(geoscLoc);
   dlhandle geoscHandle = dlopen(geoscLocStr.c_str(), RTLD_LAZY);
   if (!geoscHandle) {
+    errorHandler(dlerror(), &error);
     dlclose(geosHandle);
-    return cStringToSlice((char*)dlopenFailError);
+    return toGEOSString(error.data(), error.length());
   }
 
   std::unique_ptr<CR_GEOS> ret(new CR_GEOS(geoscHandle, geosHandle));
-  auto error = ret->Init();
-  if (error != nullptr) {
-    return cStringToSlice(error);
+  auto initError = ret->Init();
+  if (initError != nullptr) {
+    errorHandler(initError, &error);
+    dlclose(geosHandle);
+    dlclose(geoscHandle);
+    return toGEOSString(error.data(), error.length());
   }
 
   *lib = ret.release();
-  return CR_GEOS_Slice{.data = NULL, .len = 0};
-}
-
-void errorHandler(const char* msg, void* buffer) {
-  std::string* str = static_cast<std::string*>(buffer);
-  *str = std::string("geos error: ") + msg;
+  return toGEOSString(error.data(), error.length());
 }
 
 CR_GEOS_Handle initHandleWithErrorBuffer(CR_GEOS* lib, std::string* buffer) {

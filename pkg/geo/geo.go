@@ -57,35 +57,20 @@ const (
 	FnInclusive FnExclusivity = false
 )
 
-//
-// Geospatial Type
-//
-
-// GeospatialType are functions that are common between all Geospatial types.
-type GeospatialType interface {
-	// SRID returns the SRID of the given type.
-	SRID() geopb.SRID
-	// ShapeType returns the ShapeType of the given type.
-	ShapeType() geopb.ShapeType
-}
-
-var _ GeospatialType = (*Geometry)(nil)
-var _ GeospatialType = (*Geography)(nil)
-
-// GeospatialTypeFitsColumnMetadata determines whether a GeospatialType is compatible with the
+// SpatialObjectFitsColumnMetadata determines whether a GeospatialType is compatible with the
 // given SRID and Shape.
 // Returns an error if the types does not fit.
-func GeospatialTypeFitsColumnMetadata(
-	t GeospatialType, srid geopb.SRID, shapeType geopb.ShapeType,
+func SpatialObjectFitsColumnMetadata(
+	so geopb.SpatialObject, srid geopb.SRID, shapeType geopb.ShapeType,
 ) error {
 	// SRID 0 can take in any SRID. Otherwise SRIDs must match.
-	if srid != 0 && t.SRID() != srid {
-		return errors.Newf("object SRID %d does not match column SRID %d", t.SRID(), srid)
+	if srid != 0 && so.SRID != srid {
+		return errors.Newf("object SRID %d does not match column SRID %d", so.SRID, srid)
 	}
 	// Shape_Geometry/Shape_Unset can take in any kind of shape.
 	// Otherwise, shapes must match.
-	if shapeType != geopb.ShapeType_Unset && shapeType != geopb.ShapeType_Geometry && shapeType != t.ShapeType() {
-		return errors.Newf("object type %s does not match column type %s", t.ShapeType(), shapeType)
+	if shapeType != geopb.ShapeType_Unset && shapeType != geopb.ShapeType_Geometry && shapeType != so.ShapeType {
+		return errors.Newf("object type %s does not match column type %s", so.ShapeType, shapeType)
 	}
 	return nil
 }

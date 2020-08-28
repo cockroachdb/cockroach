@@ -64,7 +64,6 @@ func randTables(r *rand.Rand) string {
 	sb.WriteString(`
 		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 		SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;
-		SET experimental_enable_enums = true;
 	`)
 
 	// Create the random tables.
@@ -95,7 +94,6 @@ func randTables(r *rand.Rand) string {
 
 const (
 	seedTable = `
-SET experimental_enable_enums = true;
 CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
 CREATE TABLE IF NOT EXISTS seed AS
 	SELECT

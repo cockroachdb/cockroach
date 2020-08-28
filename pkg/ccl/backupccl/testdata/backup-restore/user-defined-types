@@ -4,8 +4,6 @@ new-server name=s1
 ----
 
 exec-sql
-SET experimental_enable_enums = true;
-
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 CREATE TABLE d.t1 (x d.greeting);
@@ -71,10 +69,6 @@ INSERT INTO d2.t2 VALUES (ARRAY['cya']);
 # Each of the restored types should have namespace entries. Test this by
 # trying to create types that would cause namespace conflicts.
 exec-sql
-SET experimental_enable_enums = true;
-----
-
-exec-sql
 CREATE TYPE d.greeting AS ENUM ('hello', 'hiya')
 ----
 pq: type "d.public.greeting" already exists
@@ -117,7 +111,6 @@ new-server name=s
 ----
 
 exec-sql
-SET experimental_enable_enums = true;
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 CREATE TYPE d.farewell AS ENUM ('bye', 'cya');

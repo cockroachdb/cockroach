@@ -729,8 +729,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DCollatedString:
 			return ParseDGeography(d.Contents)
 		case *DGeography:
-			if err := geo.GeospatialTypeFitsColumnMetadata(
-				&d.Geography,
+			if err := geo.SpatialObjectFitsColumnMetadata(
+				d.Geography.SpatialObject(),
 				t.InternalType.GeoMetadata.SRID,
 				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
@@ -742,8 +742,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if err != nil {
 				return nil, err
 			}
-			if err := geo.GeospatialTypeFitsColumnMetadata(
-				&g,
+			if err := geo.SpatialObjectFitsColumnMetadata(
+				g.SpatialObject(),
 				t.InternalType.GeoMetadata.SRID,
 				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
@@ -774,8 +774,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DCollatedString:
 			return ParseDGeometry(d.Contents)
 		case *DGeometry:
-			if err := geo.GeospatialTypeFitsColumnMetadata(
-				&d.Geometry,
+			if err := geo.SpatialObjectFitsColumnMetadata(
+				d.Geometry.SpatialObject(),
 				t.InternalType.GeoMetadata.SRID,
 				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
@@ -783,8 +783,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			}
 			return d, nil
 		case *DGeography:
-			if err := geo.GeospatialTypeFitsColumnMetadata(
-				&d.Geography,
+			if err := geo.SpatialObjectFitsColumnMetadata(
+				d.Geography.SpatialObject(),
 				t.InternalType.GeoMetadata.SRID,
 				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {

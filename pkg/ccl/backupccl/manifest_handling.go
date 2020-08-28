@@ -845,7 +845,7 @@ func loadSQLDescsFromBackupsAtTime(
 		desc := catalogkv.UnwrapDescriptorRaw(context.TODO(), raw)
 		var isObject bool
 		switch desc.(type) {
-		case catalog.TableDescriptor, catalog.TypeDescriptor:
+		case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
 			isObject = true
 		}
 		if isObject && byID[desc.GetParentID()] == nil {
