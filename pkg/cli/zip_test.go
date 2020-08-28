@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -122,7 +121,7 @@ func TestZip(t *testing.T) {
 	})
 	defer c.cleanup()
 
-	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=0 " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=1s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,9 +281,7 @@ func eraseNonDeterministicZipOutput(out string) string {
 // need the SSL certs dir to run a CLI test securely.
 func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 51538)
+	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	// We want a low timeout so that the test doesn't take forever;
 	// however low timeouts make race runs flaky with false positives.
@@ -309,14 +306,13 @@ func TestPartialZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	// NB: we spend a second profiling here to make sure it actually tries the
-	// down nodes (and fails only there, succeeding on the available node).
-	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=1s " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=0s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Strip any non-deterministic messages.
+	t.Log(out)
 	out = eraseNonDeterministicZipOutput(out)
 
 	datadriven.RunTest(t, "testdata/zip/partial1",
@@ -325,7 +321,7 @@ func TestPartialZip(t *testing.T) {
 		})
 
 	// Now do it again and exclude the down node explicitly.
-	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --exclude-nodes=2 --cpu-profile-duration=1s")
+	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --exclude-nodes=2 --cpu-profile-duration=0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,29 +350,26 @@ func TestPartialZip(t *testing.T) {
 	s := tc.Server(0)
 	kvserver.TimeUntilStoreDead.Override(&s.ClusterSettings().SV, kvserver.TestTimeUntilStoreDead)
 
+	// This last case may take a little while to converge. To make this work with datadriven and at the same
+	// time retain the ability to use the `-rewrite` flag, we use a retry loop within that already checks the
+	// output ahead of time and retries for some time if necessary.
 	datadriven.RunTest(t, "testdata/zip/partial2",
 		func(t *testing.T, td *datadriven.TestData) string {
-
-			testutils.SucceedsSoon(t, func() error {
-				out, err = c.RunWithCapture("debug zip --cpu-profile-duration=0 " + os.DevNull)
+			f := func() string {
+				out, err := c.RunWithCapture("debug zip --cpu-profile-duration=0 " + os.DevNull)
 				if err != nil {
 					t.Fatal(err)
 				}
 
 				// Strip any non-deterministic messages.
-				out = eraseNonDeterministicZipOutput(out)
+				return eraseNonDeterministicZipOutput(out)
+			}
 
+			var out string
+			_ = testutils.SucceedsSoonError(func() error {
+				out = f()
 				if out != td.Expected {
-					diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-						A:        difflib.SplitLines(td.Expected),
-						B:        difflib.SplitLines(out),
-						FromFile: "Expected",
-						FromDate: "",
-						ToFile:   "Actual",
-						ToDate:   "",
-						Context:  1,
-					})
-					return errors.Newf("Diff:\n%s", diff)
+					return errors.New("output did not match (yet)")
 				}
 				return nil
 			})
