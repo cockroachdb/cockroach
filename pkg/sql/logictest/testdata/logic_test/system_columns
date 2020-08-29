@@ -186,5 +186,15 @@ SELECT tableoid, crdb_internal_mvcc_timestamp IS NOT NULL FROM tab1
 56 true
 56 true
 
+# We should be able to index join against the primary key to get the tableoid column.
+statement ok
+CREATE TABLE tab3 (x INT, INDEX i (x));
+INSERT INTO tab3 VALUES (1)
+
+query OI
+SELECT tableoid, x FROM tab3@i WHERE x = 1
+----
+58 1
+
 statement error pq: column name "tableoid" conflicts with a system column name
 CREATE TABLE bad (tableoid int)
