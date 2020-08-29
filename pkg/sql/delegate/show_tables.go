@@ -48,6 +48,7 @@ SELECT ns.nspname AS schema_name,
        pc.relname AS table_name,
        CASE
        WHEN pc.relkind = 'v' THEN 'view'
+       WHEN pc.relkind = 'm' THEN 'materialized view'
        WHEN pc.relkind = 'S' THEN 'sequence'
        ELSE 'table'
        END AS type,
@@ -59,7 +60,7 @@ SELECT ns.nspname AS schema_name,
   JOIN %[1]s.pg_catalog.pg_description AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0)
   LEFT
   JOIN crdb_internal.table_row_statistics AS s on (s.table_id = pc.oid::INT8)
- WHERE pc.relkind IN ('r', 'v', 'S') %[2]s
+ WHERE pc.relkind IN ('r', 'v', 'S', 'm') %[2]s
  ORDER BY schema_name, table_name
 `
 	var comment string
