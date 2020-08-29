@@ -339,6 +339,53 @@ func collectionHomogenizeGeomT(t geom.T) (geom.T, error) {
 	}
 }
 
+// ForceCollection converts the input into a GeometryCollection.
+func ForceCollection(g geo.Geometry) (geo.Geometry, error) {
+	t, err := g.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	t, err = forceCollectionFromGeomT(t)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.MakeGeometryFromGeomT(t)
+}
+
+// forceCollectionFromGeomT converts a geom.T into a geom.GeometryCollection.
+func forceCollectionFromGeomT(t geom.T) (geom.T, error) {
+	gc := geom.NewGeometryCollection().SetSRID(t.SRID())
+	switch t := t.(type) {
+	case *geom.Point, *geom.LineString, *geom.Polygon:
+		if err := gc.Push(t); err != nil {
+			return nil, err
+		}
+	case *geom.MultiPoint:
+		for i := 0; i < t.NumPoints(); i++ {
+			if err := gc.Push(t.Point(i)); err != nil {
+				return nil, err
+			}
+		}
+	case *geom.MultiLineString:
+		for i := 0; i < t.NumLineStrings(); i++ {
+			if err := gc.Push(t.LineString(i)); err != nil {
+				return nil, err
+			}
+		}
+	case *geom.MultiPolygon:
+		for i := 0; i < t.NumPolygons(); i++ {
+			if err := gc.Push(t.Polygon(i)); err != nil {
+				return nil, err
+			}
+		}
+	case *geom.GeometryCollection:
+		gc = t
+	default:
+		return nil, errors.AssertionFailedf("unknown geometry type: %T", t)
+	}
+	return gc, nil
+}
+
 // Multi converts the given geometry into a new multi-geometry.
 func Multi(g geo.Geometry) (geo.Geometry, error) {
 	t, err := g.AsGeomT() // implicitly clones the input

@@ -2413,6 +2413,23 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_forcecollection": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ForceCollection(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: ret}, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Converts the geometry into a GeometryCollection.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Unary predicates
