@@ -100,6 +100,8 @@ typedef CR_GEOS_Geometry (*CR_GEOS_ConvexHull_r)(CR_GEOS_Handle, CR_GEOS_Geometr
 typedef CR_GEOS_Geometry (*CR_GEOS_Union_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_Intersection_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                    CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_SymDifference_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                    CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_PointOnSurface_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
 typedef CR_GEOS_Geometry (*CR_GEOS_Interpolate_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
@@ -185,6 +187,7 @@ struct CR_GEOS {
   CR_GEOS_Union_r GEOSUnion_r;
   CR_GEOS_PointOnSurface_r GEOSPointOnSurface_r;
   CR_GEOS_Intersection_r GEOSIntersection_r;
+  CR_GEOS_SymDifference_r GEOSSymDifference_r;
 
   CR_GEOS_Interpolate_r GEOSInterpolate_r;
 
@@ -266,6 +269,7 @@ struct CR_GEOS {
     INIT(GEOSUnion_r);
     INIT(GEOSPointOnSurface_r);
     INIT(GEOSIntersection_r);
+    INIT(GEOSSymDifference_r);
     INIT(GEOSInterpolate_r);
     INIT(GEOSDistance_r);
     INIT(GEOSCovers_r);
@@ -785,6 +789,33 @@ CR_GEOS_Status CR_GEOS_Intersection(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice
       auto srid = lib->GEOSGetSRID_r(handle, geomA);
       CR_GEOS_writeGeomToEWKB(lib, handle, intersectionGeom, intersectionEWKB, srid);
       lib->GEOSGeom_destroy_r(handle, intersectionGeom);
+    }
+  }
+  if (geomA != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
+  }
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_SymDifference(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                    CR_GEOS_String* symdifferenceEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  *symdifferenceEWKB = {.data = NULL, .len = 0};
+
+  auto geomA = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  auto geomB = CR_GEOS_GeometryFromSlice(lib, handle, b);
+  if (geomA != nullptr && geomB != nullptr) {
+    auto symdifferenceGeom = lib->GEOSSymDifference_r(handle, geomA, geomB);
+    if (symdifferenceGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geomA);
+      CR_GEOS_writeGeomToEWKB(lib, handle, symdifferenceGeom, symdifferenceEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, symdifferenceGeom);
     }
   }
   if (geomA != nullptr) {

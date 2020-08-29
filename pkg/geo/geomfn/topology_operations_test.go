@@ -183,6 +183,32 @@ func TestUnion(t *testing.T) {
 	})
 }
 
+func TestSymDifference(t *testing.T) {
+	testCases := []struct {
+		a        geo.Geometry
+		b        geo.Geometry
+		expected geo.Geometry
+	}{
+		{rightRect, rightRect, emptyRect},
+		{leftRect, rightRect, geo.MustParseGeometry("POLYGON((0 0, -1 0, -1 1, 0 1, 1 1, 1 0, 0 0))")},
+		{leftRect, overlappingRightRect, geo.MustParseGeometry("MULTIPOLYGON(((-0.1 0, -1 0, -1 1, -0.1 1, -0.1 0)), ((0 0, 0 1, 1 1, 1 0, 0 0)))")},
+		{rightRect, rightRectPoint, geo.MustParseGeometry("POLYGON((0 0, 0 1, 1 1, 1 0, 0 0))")},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
+			g, err := SymDifference(tc.a, tc.b)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, g)
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := SymDifference(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
 func TestSharedPaths(t *testing.T) {
 	type args struct {
 		a geo.Geometry

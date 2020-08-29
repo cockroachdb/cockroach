@@ -66,12 +66,24 @@ func Intersection(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 	return geo.ParseGeometryFromEWKB(retEWKB)
 }
 
-// Union returns the geometries of intersection between A and B.
+// Union returns the geometries of union between A and B.
 func Union(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 	if a.SRID() != b.SRID() {
 		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	retEWKB, err := geos.Union(a.EWKB(), b.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.ParseGeometryFromEWKB(retEWKB)
+}
+
+// SymDifference returns the geometries of symmetric difference between A and B.
+func SymDifference(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
+	if a.SRID() != b.SRID() {
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	retEWKB, err := geos.SymDifference(a.EWKB(), b.EWKB())
 	if err != nil {
 		return geo.Geometry{}, err
 	}
