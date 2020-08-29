@@ -937,8 +937,12 @@ func (ot *optTable) getColDesc(i int) *descpb.ColumnDescriptor {
 	if i < len(ot.desc.DeletableColumns()) {
 		return &ot.desc.DeletableColumns()[i]
 	}
-	if ot.columns[i].ColID() == cat.StableID(colinfo.MVCCTimestampColumnID) {
-		return &colinfo.MVCCTimestampColumnDesc
+	// Check if the column matches any registered system columns.
+	for j := range colinfo.AllSystemColumnDescs {
+		colDesc := &colinfo.AllSystemColumnDescs[j]
+		if descpb.ColumnID(ot.columns[i].ColID()) == colDesc.ID {
+			return colDesc
+		}
 	}
 	return nil
 }
