@@ -32,37 +32,37 @@ func alterZoneConfigAndClusterSettings(
 	defer db.Close()
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER TABLE system.public.jobs CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER TABLE system.public.jobs CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER RANGE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
 
 	if _, err := db.ExecContext(
-		ctx, `ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 120;`,
+		ctx, `ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 60;`,
 	); err != nil {
 		return err
 	}
@@ -74,6 +74,13 @@ func alterZoneConfigAndClusterSettings(
 
 	if _, err := db.ExecContext(
 		ctx, `SET CLUSTER SETTING jobs.retention_time = '180s';`,
+	); err != nil {
+		return err
+	}
+
+	// Shorten the merge queue interval to clean up ranges due to dropped tables.
+	if _, err := db.ExecContext(
+		ctx, `SET CLUSTER SETTING kv.range_merge.queue_interval = '200ms'`,
 	); err != nil {
 		return err
 	}
