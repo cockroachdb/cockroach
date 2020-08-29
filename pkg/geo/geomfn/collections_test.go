@@ -254,6 +254,57 @@ func TestCollectionHomogenize(t *testing.T) {
 	}
 }
 
+func TestForceCollection(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected string
+	}{
+		{"POINT EMPTY", "GEOMETRYCOLLECTION (POINT EMPTY)"},
+		{"POINT (1 2)", "GEOMETRYCOLLECTION (POINT (1 2))"},
+		{"MULTIPOINT EMPTY", "GEOMETRYCOLLECTION EMPTY"},
+		{"MULTIPOINT (1 2)", "GEOMETRYCOLLECTION (POINT (1 2))"},
+		{"MULTIPOINT (1 2, 3 4)", "GEOMETRYCOLLECTION (POINT (1 2), POINT (3 4))"},
+		{"LINESTRING EMPTY", "GEOMETRYCOLLECTION (LINESTRING EMPTY)"},
+		{"LINESTRING (1 2, 3 4)", "GEOMETRYCOLLECTION (LINESTRING (1 2, 3 4))"},
+		{"MULTILINESTRING EMPTY", "GEOMETRYCOLLECTION EMPTY"},
+		{"MULTILINESTRING ((1 2, 3 4))", "GEOMETRYCOLLECTION (LINESTRING (1 2, 3 4))"},
+		{
+			"MULTILINESTRING ((1 2, 3 4), (5 6, 7 8))",
+			"GEOMETRYCOLLECTION (LINESTRING (1 2, 3 4), LINESTRING (5 6, 7 8))",
+		},
+		{"POLYGON EMPTY", "GEOMETRYCOLLECTION (POLYGON EMPTY)"},
+		{"POLYGON ((1 2, 3 4, 5 6, 1 2))", "GEOMETRYCOLLECTION (POLYGON ((1 2, 3 4, 5 6, 1 2)))"},
+		{"MULTIPOLYGON EMPTY", "GEOMETRYCOLLECTION EMPTY"},
+		{"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)))", "GEOMETRYCOLLECTION (POLYGON ((1 2, 3 4, 5 6, 1 2)))"},
+		{
+			"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), ((7 8, 9 0, 1 2, 7 8)))",
+			"GEOMETRYCOLLECTION (POLYGON ((1 2, 3 4, 5 6, 1 2)), POLYGON ((7 8, 9 0, 1 2, 7 8)))",
+		},
+		{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION EMPTY"},
+		{"GEOMETRYCOLLECTION (MULTIPOINT (1 1, 2 2))", "GEOMETRYCOLLECTION (MULTIPOINT (1 1, 2 2))"},
+		{"GEOMETRYCOLLECTION (GEOMETRYCOLLECTION EMPTY)", "GEOMETRYCOLLECTION (GEOMETRYCOLLECTION EMPTY)"},
+		{
+			"GEOMETRYCOLLECTION (GEOMETRYCOLLECTION(MULTIPOINT (1 1)))",
+			"GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (MULTIPOINT (1 1)))",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			srid := geopb.SRID(4000)
+			g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.wkt), srid, true)
+			require.NoError(t, err)
+
+			result, err := ForceCollection(g)
+			require.NoError(t, err)
+			wkt, err := geo.SpatialObjectToWKT(result.SpatialObject(), 0)
+			require.NoError(t, err)
+			require.EqualValues(t, tc.expected, wkt)
+			require.EqualValues(t, srid, result.SRID())
+		})
+	}
+}
+
 func TestMulti(t *testing.T) {
 	testCases := []struct {
 		wkt      string
