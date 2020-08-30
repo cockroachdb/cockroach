@@ -35,7 +35,7 @@ const (
 
 // MinDistance returns the minimum distance between geometries A and B.
 // This returns a geo.EmptyGeometryError if either A or B is EMPTY.
-func MinDistance(a geo.Geometry, b geo.Geometry) (float64, error) {
+func MinDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
 	if a.SRID() != b.SRID() {
 		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
@@ -44,7 +44,7 @@ func MinDistance(a geo.Geometry, b geo.Geometry) (float64, error) {
 
 // MaxDistance returns the maximum distance across every pair of points comprising
 // geometries A and B.
-func MaxDistance(a geo.Geometry, b geo.Geometry) (float64, error) {
+func MaxDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
 	if a.SRID() != b.SRID() {
 		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
@@ -55,7 +55,7 @@ func MaxDistance(a geo.Geometry, b geo.Geometry) (float64, error) {
 // If exclusive, DWithin is equivalent to Distance(a, b) < d. Otherwise, DWithin
 // is equivalent to Distance(a, b) <= d.
 func DWithin(
-	a geo.Geometry, b geo.Geometry, d float64, exclusivity geo.FnExclusivity,
+	a *geo.Geometry, b *geo.Geometry, d float64, exclusivity geo.FnExclusivity,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
@@ -85,7 +85,7 @@ func DWithin(
 // DFullyWithin is equivalent to MaxDistance(a, b) < d. Otherwise, DFullyWithin
 // is equivalent to MaxDistance(a, b) <= d.
 func DFullyWithin(
-	a geo.Geometry, b geo.Geometry, d float64, exclusivity geo.FnExclusivity,
+	a *geo.Geometry, b *geo.Geometry, d float64, exclusivity geo.FnExclusivity,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
@@ -112,7 +112,7 @@ func DFullyWithin(
 
 // LongestLineString returns the LineString corresponds to maximum distance across
 // every pair of points comprising geometries A and B.
-func LongestLineString(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
+func LongestLineString(a *geo.Geometry, b *geo.Geometry) (geo.Geometry, error) {
 	if a.SRID() != b.SRID() {
 		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
@@ -122,7 +122,7 @@ func LongestLineString(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 
 // ShortestLineString returns the LineString corresponds to minimum distance across
 // every pair of points comprising geometries A and B.
-func ShortestLineString(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
+func ShortestLineString(a *geo.Geometry, b *geo.Geometry) (geo.Geometry, error) {
 	if a.SRID() != b.SRID() {
 		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
@@ -136,7 +136,7 @@ func ShortestLineString(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 // EmptyGeometryError if A or B contains only EMPTY geometries, even if emptyBehavior
 // is set to EmptyBehaviorOmit.
 func distanceLineStringInternal(
-	a geo.Geometry, b geo.Geometry, u geodist.DistanceUpdater, emptyBehavior geo.EmptyBehavior,
+	a *geo.Geometry, b *geo.Geometry, u geodist.DistanceUpdater, emptyBehavior geo.EmptyBehavior,
 ) (geo.Geometry, error) {
 	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox())}
 	_, err := distanceInternal(a, b, c, emptyBehavior)
@@ -162,8 +162,8 @@ func distanceLineStringInternal(
 // We can re-use the same algorithm as min-distance, allowing skips of checks that involve
 // the interiors or intersections as those will always be less then the maximum min-distance.
 func maxDistanceInternal(
-	a geo.Geometry,
-	b geo.Geometry,
+	a *geo.Geometry,
+	b *geo.Geometry,
 	stopAfter float64,
 	emptyBehavior geo.EmptyBehavior,
 	exclusivity geo.FnExclusivity,
@@ -176,8 +176,8 @@ func maxDistanceInternal(
 // minDistanceInternal finds the minimum distance between two geometries.
 // This implementation is done in-house, as compared to using GEOS.
 func minDistanceInternal(
-	a geo.Geometry,
-	b geo.Geometry,
+	a *geo.Geometry,
+	b *geo.Geometry,
 	stopAfter float64,
 	emptyBehavior geo.EmptyBehavior,
 	exclusivity geo.FnExclusivity,
@@ -193,7 +193,7 @@ func minDistanceInternal(
 // EmptyGeometryError if A or B contains only EMPTY geometries, even if emptyBehavior
 // is set to EmptyBehaviorOmit.
 func distanceInternal(
-	a geo.Geometry, b geo.Geometry, c geodist.DistanceCalculator, emptyBehavior geo.EmptyBehavior,
+	a *geo.Geometry, b *geo.Geometry, c geodist.DistanceCalculator, emptyBehavior geo.EmptyBehavior,
 ) (float64, error) {
 	// If either side has no geoms, then we error out regardless of emptyBehavior.
 	if a.Empty() || b.Empty() {

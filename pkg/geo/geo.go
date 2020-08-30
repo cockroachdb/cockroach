@@ -82,6 +82,10 @@ func SpatialObjectFitsColumnMetadata(
 // Geometry is planar spatial object.
 type Geometry struct {
 	spatialObject geopb.SpatialObject
+	// spatialObject and GeomT represent the same shape. GeomT may contain an
+	// unmarshalled spatialObject, or a newly constructed Geometry using a
+	// geom.T may not have yet marshalled to the spatialObject.
+	GeomT geom.T
 }
 
 // MakeGeometry returns a new Geometry. Assumes the input EWKB is validated and in little endian.
@@ -114,11 +118,17 @@ func MakeGeometryFromPointCoords(x, y float64) (Geometry, error) {
 
 // MakeGeometryFromGeomT creates a new Geometry object from a geom.T object.
 func MakeGeometryFromGeomT(g geom.T) (Geometry, error) {
-	spatialObject, err := spatialObjectFromGeomT(g, geopb.SpatialObjectType_GeometryType)
-	if err != nil {
-		return Geometry{}, err
-	}
-	return MakeGeometry(spatialObject)
+	// Initialize the GeomT but don't marshal to SpatialObject until it is needed,
+	// since it may not needed for intermediate results.
+	// TODO: this is delaying the error checking.
+	return Geometry{GeomT: g}, nil
+	/*
+		spatialObject, err := spatialObjectFromGeomT(g, geopb.SpatialObjectType_GeometryType)
+		if err != nil {
+			return Geometry{}, err
+		}
+		return MakeGeometry(spatialObject)
+	*/
 }
 
 // ParseGeometry parses a Geometry from a given text.
@@ -215,6 +225,9 @@ func (g *Geometry) AsGeography() (Geography, error) {
 // CloneWithSRID sets a given Geometry's SRID to another, without any transformations.
 // Returns a new Geometry object.
 func (g *Geometry) CloneWithSRID(srid geopb.SRID) (Geometry, error) {
+	if g.spatialObject.Type == geopb.SpatialObjectType_Unknown && g.GeomT != nil {
+		g.initSpatialObject()
+	}
 	spatialObject, err := adjustSpatialObject(g.spatialObject, srid, geopb.SpatialObjectType_GeometryType)
 	if err != nil {
 		return Geometry{}, err
@@ -236,47 +249,92 @@ func adjustSpatialObject(
 
 // AsGeomT returns the geometry as a geom.T object.
 func (g *Geometry) AsGeomT() (geom.T, error) {
-	return ewkb.Unmarshal(g.spatialObject.EWKB)
+	var err error
+	if g.GeomT == nil {
+		// TODO: This initialization of GeomT may not pass all the
+		// way up the stack if the original caller passed Geometry
+		// by value. Ensure everything is passing the pointer.
+		g.GeomT, err = ewkb.Unmarshal(g.spatialObject.EWKB)
+	}
+	return g.GeomT, err
 }
 
 // Empty returns whether the given Geometry is empty.
 func (g *Geometry) Empty() bool {
+	if g.spatialObject.Type == geopb.SpatialObjectType_Unknown && g.GeomT != nil {
+		g.initSpatialObject()
+	}
 	return g.spatialObject.BoundingBox == nil
 }
 
 // EWKB returns the EWKB representation of the Geometry.
 func (g *Geometry) EWKB() geopb.EWKB {
+	if g.spatialObject.Type == geopb.SpatialObjectType_Unknown && g.GeomT != nil {
+		g.initSpatialObject()
+	}
 	return g.spatialObject.EWKB
+}
+
+func (g *Geometry) initSpatialObject() {
+	spatialObject, err := spatialObjectFromGeomT(g.GeomT, geopb.SpatialObjectType_GeometryType)
+	if err != nil {
+		// TODO: don't panic here.
+		panic("SpatialObject")
+	}
+	gg, err := MakeGeometry(spatialObject)
+	if err != nil {
+		// TODO: don't panic here.
+		panic("SpatialObject2")
+	}
+	g.spatialObject = gg.spatialObject
 }
 
 // SpatialObject returns the SpatialObject representation of the Geometry.
 func (g *Geometry) SpatialObject() geopb.SpatialObject {
+	if g.spatialObject.Type == geopb.SpatialObjectType_Unknown && g.GeomT != nil {
+		g.initSpatialObject()
+	}
 	return g.spatialObject
 }
 
 // SpatialObjectRef return a pointer to the SpatialObject representation of the
 // Geometry.
 func (g *Geometry) SpatialObjectRef() *geopb.SpatialObject {
+	if g.spatialObject.Type == geopb.SpatialObjectType_Unknown && g.GeomT != nil {
+		g.initSpatialObject()
+	}
 	return &g.spatialObject
 }
 
 // EWKBHex returns the EWKBHex representation of the Geometry.
 func (g *Geometry) EWKBHex() string {
+	if g.spatialObject.Type == geopb.SpatialObjectType_Unknown && g.GeomT != nil {
+		g.initSpatialObject()
+	}
 	return g.spatialObject.EWKBHex()
 }
 
 // SRID returns the SRID representation of the Geometry.
 func (g *Geometry) SRID() geopb.SRID {
+	if g.spatialObject.Type == geopb.SpatialObjectType_Unknown && g.GeomT != nil {
+		g.initSpatialObject()
+	}
 	return g.spatialObject.SRID
 }
 
 // ShapeType returns the shape type of the Geometry.
 func (g *Geometry) ShapeType() geopb.ShapeType {
+	if g.spatialObject.Type == geopb.SpatialObjectType_Unknown && g.GeomT != nil {
+		g.initSpatialObject()
+	}
 	return g.spatialObject.ShapeType
 }
 
 // CartesianBoundingBox returns a Cartesian bounding box.
 func (g *Geometry) CartesianBoundingBox() *CartesianBoundingBox {
+	if g.spatialObject.Type == geopb.SpatialObjectType_Unknown && g.GeomT != nil {
+		g.initSpatialObject()
+	}
 	if g.spatialObject.BoundingBox == nil {
 		return nil
 	}
