@@ -417,6 +417,19 @@ func Union(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+// SymDifference returns an EWKB which is the symmetric difference of shapes A and B.
+func SymDifference(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_SymDifference(g, goToCSlice(a), goToCSlice(b), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
 // InterpolateLine returns the point along the given LineString which is at
 // a given distance from starting point.
 // Note: For distance less than 0 it returns start point similarly for distance
