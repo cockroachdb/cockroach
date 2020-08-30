@@ -17,6 +17,71 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
+// Collect collects two geometries into a GeometryCollection or multi-type.
+//
+// This is the binary version of `ST_Collect()`, but since it's not possible to
+// have an aggregate and non-aggregate function with the same name (different
+// args), this is not used. Code is left behind for when we add support for
+// this. Be sure to handle NULL args when adding the builtin for this, where it
+// should return the non-NULL arg unused like PostGIS.
+func Collect(g1 geo.Geometry, g2 geo.Geometry) (geo.Geometry, error) {
+	t1, err := g1.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	t2, err := g2.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+
+	// First, try to generate multi-types
+	switch t1 := t1.(type) {
+	case *geom.Point:
+		if t2, ok := t2.(*geom.Point); ok {
+			multi := geom.NewMultiPoint(t1.Layout()).SetSRID(t1.SRID())
+			if err := multi.Push(t1); err != nil {
+				return geo.Geometry{}, err
+			}
+			if err := multi.Push(t2); err != nil {
+				return geo.Geometry{}, err
+			}
+			return geo.MakeGeometryFromGeomT(multi)
+		}
+	case *geom.LineString:
+		if t2, ok := t2.(*geom.LineString); ok {
+			multi := geom.NewMultiLineString(t1.Layout()).SetSRID(t1.SRID())
+			if err := multi.Push(t1); err != nil {
+				return geo.Geometry{}, err
+			}
+			if err := multi.Push(t2); err != nil {
+				return geo.Geometry{}, err
+			}
+			return geo.MakeGeometryFromGeomT(multi)
+		}
+	case *geom.Polygon:
+		if t2, ok := t2.(*geom.Polygon); ok {
+			multi := geom.NewMultiPolygon(t1.Layout()).SetSRID(t1.SRID())
+			if err := multi.Push(t1); err != nil {
+				return geo.Geometry{}, err
+			}
+			if err := multi.Push(t2); err != nil {
+				return geo.Geometry{}, err
+			}
+			return geo.MakeGeometryFromGeomT(multi)
+		}
+	}
+
+	// Otherwise, just put them in a collection
+	gc := geom.NewGeometryCollection().SetSRID(t1.SRID())
+	if err := gc.Push(t1); err != nil {
+		return geo.Geometry{}, err
+	}
+	if err := gc.Push(t2); err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.MakeGeometryFromGeomT(gc)
+}
+
 // CollectionExtract returns a (multi-)geometry consisting only of the specified type.
 // The type can only be point, line, or polygon.
 func CollectionExtract(g geo.Geometry, shapeType geopb.ShapeType) (geo.Geometry, error) {
