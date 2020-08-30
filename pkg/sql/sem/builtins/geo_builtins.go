@@ -3263,6 +3263,24 @@ The paths themselves are given in the direction of the first geometry.`,
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_symdifference": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.SymDifference(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns the symmetric difference of both geometries.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Transformations
