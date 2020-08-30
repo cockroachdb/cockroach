@@ -879,6 +879,11 @@ define STUnion {
 }
 
 [Scalar, Aggregate]
+define STCollect {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define XorAgg {
     Input ScalarExpr
 }

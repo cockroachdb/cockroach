@@ -191,6 +191,8 @@
 </span></td></tr>
 <tr><td><a name="sqrdiff"></a><code>sqrdiff(arg1: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the sum of squared differences from the mean of the selected values.</p>
 </span></td></tr>
+<tr><td><a name="st_collect"></a><code>st_collect(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Collects geometries into a GeometryCollection or multi-type as appropriate.</p>
+</span></td></tr>
 <tr><td><a name="st_extent"></a><code>st_extent(arg1: geometry) &rarr; box2d</code></td><td><span class="funcdesc"><p>Forms a Box2D that encapsulates all provided geometries.</p>
 </span></td></tr>
 <tr><td><a name="st_makeline"></a><code>st_makeline(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Forms a LineString from Point, MultiPoint or LineStrings. Other shapes will be ignored.</p>
