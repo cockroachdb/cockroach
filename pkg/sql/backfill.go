@@ -168,6 +168,23 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 
 	var viewToRefresh *descpb.MaterializedViewRefresh
 
+	// Note that this descriptor is intentionally not leased. If the schema change
+	// held the lease, certain non-mutation related schema changes would not be
+	// able to proceed. That might be okay and even desirable. The bigger reason
+	// to not hold a lease throughout the duration of this schema change stage
+	// is more practical. The lease manager (and associated descriptor
+	// infrastructure) does not provide a mechanism to hold a lease over a long
+	// period of time and update the transaction commit deadline. As such, when
+	// the schema change job attempts to mutate the descriptor later in this
+	// method, the descriptor will need to be re-read and the operation should be
+	// revalidated against the new state of the descriptor. Any work to hold
+	// leases during mutations will need to consider the user experience when the
+	// user would like to issue schema changes to be applied asynchronously.
+	// Perhaps such schema changes could avoid waiting for a single version and
+	// thus avoid blocked. This will get ironed out in the context of
+	// transactional schema changes. In all likelihood, not holding a lease here
+	// is the right thing to do as we would never want this operation to fail
+	// because a new mutation was enqueued.
 	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
 	if err != nil {
 		return err
