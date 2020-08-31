@@ -3599,3 +3599,30 @@ USE db2
 
 statement ok
 CREATE TABLE child2 (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
+
+
+# Test that reversing a constraint addition after adding a self foreign key
+# works correctly.
+
+subtest reverse_failed_self_fk
+
+statement ok
+CREATE TABLE add_self_fk_fail (k int primary key, a int unique, b int);
+
+statement ok
+INSERT INTO add_self_fk_fail VALUES (1, 2, 3);
+
+statement error foreign key violation: "add_self_fk_fail" row b=3, k=1 has no match in "add_self_fk_fail"
+ALTER TABLE add_self_fk_fail ADD CONSTRAINT self_fk FOREIGN KEY (b) REFERENCES add_self_fk_fail (a);
+
+# The error from running will be reported to the user but if there is an
+# error reverting it will be in the jobs table. Ensure that there was no
+# problem reverting the change.
+
+query T
+select error from [SHOW JOBS] WHERE description LIKE '%add_self_fk_fail%'
+----
+foreign key violation: "add_self_fk_fail" row b=3, k=1 has no match in "add_self_fk_fail"
+
+statement ok
+DROP TABLE add_self_fk_fail
