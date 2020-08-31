@@ -391,7 +391,7 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	// Issue a batch containing only the EndTxn request.
 	baSuffix := ba
 	baSuffix.Requests = ba.Requests[etIdx:]
-	baSuffix.Txn = brPrefix.Txn
+	baSuffix.UpdateTxn(brPrefix.Txn)
 	brSuffix, pErr := sr.SendLocked(ctx, baSuffix)
 	if pErr != nil {
 		return nil, pErr
