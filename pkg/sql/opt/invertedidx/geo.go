@@ -14,8 +14,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
@@ -25,7 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/r1"
+	"github.com/golang/geo/s1"
+	"github.com/golang/geo/s2"
 )
 
 // This file contains functions for building geospatial inverted index scans
@@ -641,6 +648,171 @@ type geoInvertedExpr struct {
 
 var _ tree.TypedExpr = &geoInvertedExpr{}
 
+// State for pre-filtering, returned by PreFilterer.Bind.
+type filterState struct {
+	geopb.BoundingBox
+	srid geopb.SRID
+}
+
+// The pre-filtering interface{} returned by Convert refers to *filterState
+// which are backed by batch allocated []filterState to reduce the number of
+// heap allocations.
+const preFilterAllocBatch = 100
+
+// PreFilterer captures the pre-filtering state for a function whose
+// non-indexed parameter (the lookup column for an inverted join) has not been
+// bound to a value. The bound value is captured in the interface{} returned
+// by Bind, to allow the caller to hold onto that state for a batch of lookup
+// columns.
+//
+// TODO(sumeer):
+// - extend PreFilterer to more general expressions.
+// - use PreFilterer for invertedFilterer (where it will be bound once).
+type PreFilterer struct {
+	// The type of the lookup column.
+	typ *types.T
+	// The relationship represented by the function.
+	preFilterRelationship     geoindex.RelationshipType
+	additionalPreFilterParams []tree.Datum
+	// Batch allocated for reducing heap allocations.
+	preFilterState []filterState
+}
+
+// NewPreFilterer constructs a PreFilterer
+func NewPreFilterer(
+	typ *types.T, preFilterRelationship geoindex.RelationshipType, additionalParams []tree.Datum,
+) *PreFilterer {
+	return &PreFilterer{
+		typ:                       typ,
+		preFilterRelationship:     preFilterRelationship,
+		additionalPreFilterParams: additionalParams,
+	}
+}
+
+// Bind binds the datum and returns the pre-filter state.
+func (p *PreFilterer) Bind(d tree.Datum) interface{} {
+	bbox := geopb.BoundingBox{}
+	var srid geopb.SRID
+	// Earlier type-checking ensures we only see these two types.
+	switch g := d.(type) {
+	case *tree.DGeometry:
+		bboxRef := g.BoundingBoxRef()
+		if bboxRef != nil {
+			bbox = *bboxRef
+		}
+		srid = g.SRID()
+	case *tree.DGeography:
+		rect := g.BoundingRect()
+		bbox = geopb.BoundingBox{
+			LoX: rect.Lng.Lo,
+			HiX: rect.Lng.Hi,
+			LoY: rect.Lat.Lo,
+			HiY: rect.Lat.Hi,
+		}
+		srid = g.SRID()
+	default:
+		panic(errors.AssertionFailedf("datum of unhandled type: %s", d))
+	}
+	if len(p.preFilterState) == 0 {
+		p.preFilterState = make([]filterState, preFilterAllocBatch)
+	}
+	p.preFilterState[0] = filterState{BoundingBox: bbox, srid: srid}
+	rv := &p.preFilterState[0]
+	p.preFilterState = p.preFilterState[1:]
+	return rv
+}
+
+// PreFilter pre-filters a retrieved inverted value against a set of
+// pre-filter states. The function signature matches the PreFilter function of
+// the DatumsToInvertedExpr interface (PreFilterer does not implement the full
+// interface): the result slice indicates which pre-filters matched and the
+// single bool in the return value is true iff there is at least one result
+// index with a true value.
+func (p *PreFilterer) PreFilter(
+	enc invertedexpr.EncInvertedVal, preFilters []interface{}, result []bool,
+) (bool, error) {
+	loX, loY, hiX, hiY, _, err := encoding.DecodeGeoInvertedKey(enc)
+	if err != nil {
+		return false, err
+	}
+	switch p.typ {
+	case types.Geometry:
+		var bb geo.CartesianBoundingBox
+		bb.LoX, bb.LoY, bb.HiX, bb.HiY = loX, loY, hiX, hiY
+		switch p.preFilterRelationship {
+		case geoindex.DWithin, geoindex.DFullyWithin:
+			distance := float64(tree.MustBeDFloat(p.additionalPreFilterParams[0]))
+			bb.LoX -= distance
+			bb.LoY -= distance
+			bb.HiX += distance
+			bb.HiY += distance
+		}
+		rv := false
+		for i := range preFilters {
+			pbb := geo.CartesianBoundingBox{BoundingBox: preFilters[i].(*filterState).BoundingBox}
+			switch p.preFilterRelationship {
+			case geoindex.Intersects, geoindex.DWithin:
+				result[i] = bb.Intersects(&pbb)
+			case geoindex.Covers:
+				result[i] = pbb.Covers(&bb)
+			case geoindex.CoveredBy, geoindex.DFullyWithin:
+				result[i] = bb.Covers(&pbb)
+			default:
+				return false, errors.Errorf("unhandled relationship %s", p.preFilterRelationship)
+			}
+			if result[i] {
+				rv = true
+			}
+		}
+		return rv, nil
+	case types.Geography:
+		bb := s2.Rect{
+			Lat: r1.Interval{Lo: loY, Hi: hiY},
+			Lng: s1.Interval{Lo: loX, Hi: hiX},
+		}
+		rv := false
+		for i := range preFilters {
+			fs := preFilters[i].(*filterState)
+			pbb := s2.Rect{
+				Lat: r1.Interval{Lo: fs.LoY, Hi: fs.HiY},
+				Lng: s1.Interval{Lo: fs.LoX, Hi: fs.HiX},
+			}
+			switch p.preFilterRelationship {
+			case geoindex.Intersects:
+				result[i] = pbb.Intersects(bb)
+			case geoindex.Covers:
+				result[i] = pbb.Contains(bb)
+			case geoindex.CoveredBy:
+				result[i] = bb.Contains(pbb)
+			case geoindex.DWithin:
+				distance := float64(tree.MustBeDFloat(p.additionalPreFilterParams[0]))
+				useSphereOrSpheroid := geogfn.UseSpheroid
+				if len(p.additionalPreFilterParams) == 2 {
+					useSphereOrSpheroid =
+						geogfn.UseSphereOrSpheroid(tree.MustBeDBool(p.additionalPreFilterParams[1]))
+				}
+				// TODO(sumeer): refactor to share code with geogfn.DWithin.
+				proj, ok := geoprojbase.Projection(fs.srid)
+				if !ok {
+					return false, errors.Errorf("cannot compute DWithin on unknown SRID %d", fs.srid)
+				}
+				angleToExpand := s1.Angle(distance / proj.Spheroid.SphereRadius)
+				if useSphereOrSpheroid == geogfn.UseSpheroid {
+					angleToExpand *= (1 + geogfn.SpheroidErrorFraction)
+				}
+				result[i] = pbb.CapBound().Expanded(angleToExpand).Intersects(bb.CapBound())
+			default:
+				return false, errors.Errorf("unhandled relationship %s", p.preFilterRelationship)
+			}
+			if result[i] {
+				rv = true
+			}
+		}
+		return rv, nil
+	}
+	panic(errors.AssertionFailedf("unhandled type %s", p.typ))
+}
+
 // geoDatumsToInvertedExpr implements invertedexpr.DatumsToInvertedExpr for
 // geospatial columns.
 type geoDatumsToInvertedExpr struct {
@@ -650,6 +822,9 @@ type geoDatumsToInvertedExpr struct {
 	indexConfig  *geoindex.Config
 	typ          *types.T
 	getSpanExpr  getSpanExprForGeoIndexFn
+
+	// Non-nil only when it can pre-filter.
+	filterer *PreFilterer
 
 	row   rowenc.EncDatumRow
 	alloc rowenc.DatumAlloc
@@ -712,6 +887,9 @@ func NewGeoDatumsToInvertedExpr(
 	// computing and caching the SpanExpressions for any functions that have a
 	// constant as the non-indexed argument.
 	var getInvertedExpr func(expr tree.TypedExpr) (tree.TypedExpr, error)
+	funcExprCount := 0
+	var preFilterRelationship geoindex.RelationshipType
+	var additionalPreFilterParams []tree.Datum
 	getInvertedExpr = func(expr tree.TypedExpr) (tree.TypedExpr, error) {
 		switch t := expr.(type) {
 		case *tree.AndExpr:
@@ -737,6 +915,7 @@ func NewGeoDatumsToInvertedExpr(
 			return tree.NewTypedOrExpr(leftExpr, rightExpr), nil
 
 		case *tree.FuncExpr:
+			funcExprCount++
 			name := t.Func.FunctionReference.String()
 			relationship, ok := geoindex.RelationshipMap[name]
 			if !ok {
@@ -766,6 +945,10 @@ func NewGeoDatumsToInvertedExpr(
 			var spanExpr *invertedexpr.SpanExpression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
 				spanExpr = g.getSpanExpr(evalCtx.Ctx(), d, additionalParams, relationship, g.indexConfig)
+			} else if funcExprCount == 1 {
+				// Currently pre-filtering is limited to a single FuncExpr.
+				preFilterRelationship = relationship
+				additionalPreFilterParams = additionalParams
 			}
 
 			return &geoInvertedExpr{
@@ -786,18 +969,21 @@ func NewGeoDatumsToInvertedExpr(
 	if err != nil {
 		return nil, err
 	}
-
+	if funcExprCount == 1 {
+		g.filterer = NewPreFilterer(g.typ, preFilterRelationship, additionalPreFilterParams)
+	}
 	return g, nil
 }
 
 // Convert implements the invertedexpr.DatumsToInvertedExpr interface.
 func (g *geoDatumsToInvertedExpr) Convert(
 	ctx context.Context, datums rowenc.EncDatumRow,
-) (*invertedexpr.SpanExpressionProto, error) {
+) (*invertedexpr.SpanExpressionProto, interface{}, error) {
 	g.row = datums
 	g.evalCtx.PushIVarContainer(g)
 	defer g.evalCtx.PopIVarContainer()
 
+	var preFilterState interface{}
 	var evalInvertedExpr func(expr tree.TypedExpr) (invertedexpr.InvertedExpression, error)
 	evalInvertedExpr = func(expr tree.TypedExpr) (invertedexpr.InvertedExpression, error) {
 		switch t := expr.(type) {
@@ -843,6 +1029,9 @@ func (g *geoDatumsToInvertedExpr) Convert(
 			if d == tree.DNull {
 				return nil, nil
 			}
+			if g.filterer != nil {
+				preFilterState = g.filterer.Bind(d)
+			}
 			return g.getSpanExpr(ctx, d, t.additionalParams, t.relationship, g.indexConfig), nil
 
 		default:
@@ -852,19 +1041,29 @@ func (g *geoDatumsToInvertedExpr) Convert(
 
 	invertedExpr, err := evalInvertedExpr(g.invertedExpr)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if invertedExpr == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	spanExpr, ok := invertedExpr.(*invertedexpr.SpanExpression)
 	if !ok {
-		return nil, fmt.Errorf("unable to construct span expression")
+		return nil, nil, fmt.Errorf("unable to construct span expression")
 	}
 
-	return spanExpr.ToProto(), nil
+	return spanExpr.ToProto(), preFilterState, nil
+}
+
+func (g *geoDatumsToInvertedExpr) CanPreFilter() bool {
+	return g.filterer != nil
+}
+
+func (g *geoDatumsToInvertedExpr) PreFilter(
+	enc invertedexpr.EncInvertedVal, preFilters []interface{}, result []bool,
+) (bool, error) {
+	return g.filterer.PreFilter(enc, preFilters, result)
 }
 
 func (g *geoDatumsToInvertedExpr) String() string {
