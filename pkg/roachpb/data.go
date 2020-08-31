@@ -1576,13 +1576,13 @@ func confChangeImpl(
 			if err := checkExists(rDesc); err != nil {
 				return nil, err
 			}
-			// It's being re-added as a learner, not only removed.
+			// It's being re-added as an ephemeral learner, not only removed.
 			sl = append(sl, raftpb.ConfChangeSingle{
 				Type:   raftpb.ConfChangeAddLearnerNode,
 				NodeID: uint64(rDesc.ReplicaID),
 			})
-		case LEARNER:
-			// A learner could in theory show up in the descriptor if the
+		case LEARNER_EPHEMERAL:
+			// An ephemeral learner could in theory show up in the descriptor if the
 			// removal was really a demotion and no joint consensus is used.
 			// But etcd/raft currently forces us to go through joint consensus
 			// when demoting, so demotions will always have a VOTER_DEMOTING
@@ -1618,8 +1618,8 @@ func confChangeImpl(
 			// We're adding a voter, but will transition into a joint config
 			// first.
 			changeType = raftpb.ConfChangeAddNode
-		case LEARNER:
-			// We're adding a learner.
+		case LEARNER_EPHEMERAL:
+			// We're adding an ephemeral learner.
 			// Note that we're guaranteed by virtue of the upstream
 			// ChangeReplicas txn that this learner is not currently a voter.
 			// Demotions (i.e. transitioning from voter to learner) are not
@@ -1879,10 +1879,11 @@ func (l Lease) Equivalent(newL Lease) bool {
 	l.Sequence, newL.Sequence = 0, 0
 	// Ignore the ReplicaDescriptor's type. This shouldn't affect lease
 	// equivalency because Raft state shouldn't be factored into the state of a
-	// Replica's lease. We don't expect a leaseholder to ever become a LEARNER
-	// replica, but that also shouldn't prevent it from extending its lease. The
-	// code also avoids a potential bug where an unset ReplicaType and a set
-	// VOTER ReplicaType are considered distinct and non-equivalent.
+	// Replica's lease. We don't expect a leaseholder to ever become a
+	// LEARNER_EPHEMERAL replica, but that also shouldn't prevent it from
+	// extending its lease. The code also avoids a potential bug where an unset
+	// ReplicaType and a set VOTER ReplicaType are considered distinct and
+	// non-equivalent.
 	//
 	// Change this line to the following when ReplicaType becomes non-nullable:
 	//  l.Replica.Type, newL.Replica.Type = 0, 0

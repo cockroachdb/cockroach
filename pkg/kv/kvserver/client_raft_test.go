@@ -1058,7 +1058,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	repDesc, err := rep.GetReplicaDescriptor()
 	require.NoError(t, err)
 	desc := protoutil.Clone(rep.Desc()).(*roachpb.RangeDescriptor)
-	desc.AddReplica(2, 2, roachpb.LEARNER)
+	desc.AddReplica(2, 2, roachpb.LEARNER_EPHEMERAL)
 	rep2Desc, found := desc.GetReplicaDescriptor(2)
 	require.True(t, found)
 	header := kvserver.SnapshotRequest_Header{
@@ -3697,9 +3697,10 @@ func TestRemovedReplicaError(t *testing.T) {
 
 	// Expect to get a RangeNotFoundError. We have to allow for ambiguous result
 	// errors to avoid the occasional test flake. Since we use demotions to remove
-	// voters, the actual removal sees a learner, and so the learner is not in
-	// the commit quorum for the removal itself. That is to say, we will only
-	// start seeing the RangeNotFoundError after a little bit of time has passed.
+	// voters, the actual removal sees an ephemeral learner, and so the learner is
+	// not in the commit quorum for the removal itself. That is to say, we will
+	// only start seeing the RangeNotFoundError after a little bit of time has
+	// passed.
 	getArgs := getArgs([]byte("a"))
 	testutils.SucceedsSoon(t, func() error {
 		_, pErr := kv.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{}, getArgs)

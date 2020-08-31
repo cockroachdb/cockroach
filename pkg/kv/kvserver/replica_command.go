@@ -633,11 +633,11 @@ func (r *Replica) AdminMerge(
 			// Should never happen, but just in case.
 			return errors.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
 		}
-		// For simplicity, don't handle learner replicas or joint states, expect
-		// the caller to resolve them first. (Defensively, we check that there
-		// are no non-voter replicas, in case some third type is later added).
-		// This behavior can be changed later if the complexity becomes worth
-		// it, but it's not right now.
+		// For simplicity, don't handle ephemeral learner replicas or joint states,
+		// expect the caller to resolve them first. (Defensively, we check that
+		// there are no non-voter replicas, in case some third type is later added).
+		// This behavior can be changed later if the complexity becomes worth it,
+		// but it's not right now.
 		//
 		// NB: the merge queue transitions out of any joint states and removes
 		// any learners it sees. It's sort of silly that we don't do that here
@@ -883,7 +883,7 @@ func IsSnapshotError(err error) bool {
 //    Learner replicas receive the log, but do not have voting rights. They are
 //    used to catch up these new replicas before turning them into voters, which
 //    is important for the continued availability of the range throughout the
-//    replication change. Learners are added (and removed) one by one due to a
+//    replication change. EphemeralLearners are added (and removed) one by one due to a
 //    technicality (see https://github.com/cockroachdb/cockroach/pull/40268).
 //
 //    The distributed transaction updates both copies of the range descriptor
@@ -896,6 +896,9 @@ func IsSnapshotError(err error) bool {
 //
 //    If no replicas are being added, this first step is elided.
 //
+//    If persistent replicas are being added, then this step is all we need. The
+//    rest of the steps only apply if voter replicas are being added.
+//
 // 2. Send Raft snapshots to all learner replicas. This would happen
 //    automatically by the existing recovery mechanisms (raft snapshot queue), but
 //    it is done explicitly as a convenient way to ensure learners are caught up
@@ -907,10 +910,10 @@ func IsSnapshotError(err error) bool {
 //    If no replicas are being added, this step is similarly elided.
 //
 // 3. Carry out a distributed transaction similar to that which added the
-//    learner replicas, except this time it (atomically) changes all learners to
-//    voters and removes any replicas for which this was requested; voters are
-//    demoted before actually being removed to avoid bug in etcd/raft:
-//    See https://github.com/cockroachdb/cockroach/pull/40268.
+//    learner replicas, except this time it (atomically) changes all ephemeral
+//    learners to voters and removes any replicas for which this was requested;
+//    voters are demoted before actually being removed to avoid bug in
+//    etcd/raft: See https://github.com/cockroachdb/cockroach/pull/40268.
 //
 //    If only one replica is being added, raft can chose the simple
 //    configuration change protocol; otherwise it has to use joint consensus. In
@@ -928,11 +931,11 @@ func IsSnapshotError(err error) bool {
 // s2/2, the following range descriptors would form the overall transition:
 //
 // 1. s1/1 s2/2 s3/3 (VOTER_FULL is implied)
-// 2. s1/1 s2/2 s3/3 s4/4LEARNER
-// 3. s1/1 s2/2 s3/3 s4/4LEARNER s5/5LEARNER
+// 2. s1/1 s2/2 s3/3 s4/4LEARNER_EPHEMERAL
+// 3. s1/1 s2/2 s3/3 s4/4LEARNER_EPHEMERAL s5/5LEARNER_EPHEMERAL
 // 4. s1/1VOTER_DEMOTING s2/2VOTER_DEMOTING s3/3 s4/4VOTER_INCOMING s5/5VOTER_INCOMING
-// 5. s1/1LEARNER s2/2LEARNER s3/3 s4/4 s5/5
-// 6. s2/2LEARNER s3/3 s4/4 s5/5
+// 5. s1/1LEARNER_EPHEMERAL s2/2LEARNER_EPHEMERAL s3/3 s4/4 s5/5
+// 6. s2/2LEARNER_EPHEMERAL s3/3 s4/4 s5/5
 // 7. s3/3 s4/4 s5/5
 //
 // A replica that learns that it was removed will queue itself for replicaGC.
@@ -1020,9 +1023,9 @@ func (r *Replica) changeReplicasImpl(
 		// For all newly added nodes, first add raft learner replicas. They accept raft traffic
 		// (so they can catch up) but don't get to vote (so they don't affect quorum and thus
 		// don't introduce fragility into the system). For details see:
-		_ = roachpb.ReplicaDescriptors.Learners
+		_ = roachpb.ReplicaDescriptors.EphemeralLearners
 		var err error
-		desc, err = addLearnerReplicas(ctx, r.store, desc, reason, details, adds)
+		desc, err = addEphemeralLearner(ctx, r.store, desc, reason, details, adds)
 		if err != nil {
 			return nil, err
 		}
@@ -1045,7 +1048,7 @@ func (r *Replica) changeReplicasImpl(
 		if targets := chgs.Additions(); len(targets) > 0 {
 			log.Infof(ctx, "could not promote %v to voter, rolling back: %v", targets, err)
 			for _, target := range targets {
-				r.tryRollBackLearnerReplica(ctx, r.Desc(), target, reason, details)
+				r.tryRollBackEphemeralLearner(ctx, r.Desc(), target, reason, details)
 			}
 		}
 		return nil, err
@@ -1056,8 +1059,8 @@ func (r *Replica) changeReplicasImpl(
 // maybeLeaveAtomicChangeReplicas transitions out of the joint configuration if
 // the descriptor indicates one. This involves running a distributed transaction
 // updating said descriptor, the result of which will be returned. The
-// descriptor returned from this method will contain replicas of type LEARNER
-// and VOTER_FULL only.
+// descriptor returned from this method will contain replicas of type
+// LEARNER_EPHEMERAL and VOTER_FULL only.
 func maybeLeaveAtomicChangeReplicas(
 	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
@@ -1079,10 +1082,10 @@ func maybeLeaveAtomicChangeReplicas(
 	)
 }
 
-// maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
+// maybeLeaveAtomicChangeReplicasAndRemoveEphemeralLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL.
-func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
+func maybeLeaveAtomicChangeReplicasAndRemoveEphemeralLearners(
 	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
 	desc, err := maybeLeaveAtomicChangeReplicas(ctx, store, desc)
@@ -1092,7 +1095,7 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	// Now the config isn't joint any more, but we may have demoted some voters
 	// into learners. These learners should go as well.
 
-	learners := desc.Replicas().Learners()
+	learners := desc.Replicas().EphemeralLearners()
 	if len(learners) == 0 {
 		return desc, nil
 	}
@@ -1110,7 +1113,7 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	for _, target := range targets {
 		var err error
 		desc, err = execChangeReplicasTxn(
-			ctx, store, desc, kvserverpb.ReasonAbandonedLearner, "",
+			ctx, store, desc, kvserverpb.ReasonAbandonedEphemeralLearner, "",
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
 		)
 		if err != nil {
@@ -1178,14 +1181,15 @@ func validateReplicationChanges(
 			if chg.ChangeType == roachpb.REMOVE_REPLICA {
 				continue
 			}
+
 			// Looks like we found a replica with the same store and node id. If the
 			// replica is already a learner, then either some previous leaseholder was
 			// trying to add it with the learner+snapshot+voter cycle and got
 			// interrupted or else we hit a race between the replicate queue and
 			// AdminChangeReplicas.
-			if rDesc.GetType() == roachpb.LEARNER {
+			if rDesc.GetType() == roachpb.LEARNER_EPHEMERAL {
 				return errors.Errorf(
-					"unable to add replica %v which is already present as a learner in %s", chg.Target, desc)
+					"unable to add replica %v which is already present as an ephemeral learner in %s", chg.Target, desc)
 			}
 
 			// Otherwise, we already had a full voter replica. Can't add another to
@@ -1218,8 +1222,8 @@ func validateReplicationChanges(
 	return nil
 }
 
-// addLearnerReplicas adds learners to the given replication targets.
-func addLearnerReplicas(
+// addEphemeralLearner adds learners to the given replication targets.
+func addEphemeralLearner(
 	ctx context.Context,
 	store *Store,
 	desc *roachpb.RangeDescriptor,
@@ -1234,7 +1238,7 @@ func addLearnerReplicas(
 	// before returning from this method, and it's unclear that it's worth
 	// doing.
 	for _, target := range targets {
-		iChgs := []internalReplicationChange{{target: target, typ: internalChangeTypeAddLearner}}
+		iChgs := []internalReplicationChange{{target: target, typ: internalChangeTypeAddEphemeralLearner}}
 		var err error
 		desc, err = execChangeReplicasTxn(
 			ctx, store, desc, reason, details, iChgs,
@@ -1311,7 +1315,7 @@ func (r *Replica) atomicReplicationChange(
 	iChgs := make([]internalReplicationChange, 0, len(chgs))
 
 	for _, target := range chgs.Additions() {
-		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypePromoteLearner})
+		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypePromoteEphemeralLearner})
 		// All adds must be present as learners right now, and we send them
 		// snapshots in anticipation of promoting them to voters.
 		rDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
@@ -1319,7 +1323,7 @@ func (r *Replica) atomicReplicationChange(
 			return nil, errors.Errorf("programming error: replica %v not found in %v", target, desc)
 		}
 
-		if rDesc.GetType() != roachpb.LEARNER {
+		if rDesc.GetType() != roachpb.LEARNER_EPHEMERAL {
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
@@ -1374,14 +1378,14 @@ func (r *Replica) atomicReplicationChange(
 
 	// Leave the joint config if we entered one. Also, remove any learners we
 	// might have picked up due to removal-via-demotion.
-	return maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, r.store, desc)
+	return maybeLeaveAtomicChangeReplicasAndRemoveEphemeralLearners(ctx, r.store, desc)
 }
 
-// tryRollbackLearnerReplica attempts to remove a learner specified by the
+// tryRollBackEphemeralLearner attempts to remove a learner specified by the
 // target. If no such learner is found in the descriptor (including when it is a
 // voter instead), no action is taken. Otherwise, a single time-limited
 // best-effort attempt at removing the learner is made.
-func (r *Replica) tryRollBackLearnerReplica(
+func (r *Replica) tryRollBackEphemeralLearner(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	target roachpb.ReplicationTarget,
@@ -1389,7 +1393,7 @@ func (r *Replica) tryRollBackLearnerReplica(
 	details string,
 ) {
 	repDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
-	if !ok || repDesc.GetType() != roachpb.LEARNER {
+	if !ok || repDesc.GetType() != roachpb.LEARNER_EPHEMERAL {
 		// There's no learner to roll back.
 		log.Event(ctx, "learner to roll back not found; skipping")
 		return
@@ -1413,7 +1417,7 @@ func (r *Replica) tryRollBackLearnerReplica(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
 		log.Infof(ctx,
-			"failed to rollback learner %s, abandoning it for the replicate queue: %v", target, err)
+			"failed to rollback ephemeral learner %s, abandoning it for the replicate queue: %v", target, err)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	} else {
 		log.Infof(ctx, "rolled back learner %s in %s", target, desc)
@@ -1424,9 +1428,9 @@ type internalChangeType byte
 
 const (
 	_ internalChangeType = iota + 1
-	internalChangeTypeAddLearner
-	internalChangeTypePromoteLearner
-	// internalChangeTypeDemote changes a voter to a learner. This will
+	internalChangeTypeAddEphemeralLearner
+	internalChangeTypePromoteEphemeralLearner
+	// internalChangeTypeDemote changes a voter to an ephemeral learner. This will
 	// necessarily go through joint consensus since it requires two individual
 	// changes (only one changes the quorum, so we could allow it in a simple
 	// change too, with some work here and upstream). Demotions are treated like
@@ -1484,16 +1488,16 @@ func prepareChangeReplicasTrigger(
 		}
 		for _, chg := range chgs {
 			switch chg.typ {
-			case internalChangeTypeAddLearner:
+			case internalChangeTypeAddEphemeralLearner:
 				added = append(added,
-					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.LEARNER))
-			case internalChangeTypePromoteLearner:
+					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.LEARNER_EPHEMERAL))
+			case internalChangeTypePromoteEphemeralLearner:
 				typ := roachpb.VOTER_FULL
 				if useJoint {
 					typ = roachpb.VOTER_INCOMING
 				}
 				rDesc, prevTyp, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
-				if !ok || prevTyp != roachpb.LEARNER {
+				if !ok || prevTyp != roachpb.LEARNER_EPHEMERAL {
 					return nil, errors.Errorf("cannot promote target %v which is missing as Learner", chg.target)
 				}
 				added = append(added, rDesc)
@@ -1503,7 +1507,7 @@ func prepareChangeReplicasTrigger(
 					return nil, errors.Errorf("target %s not found", chg.target)
 				}
 				prevTyp := rDesc.GetType()
-				if !useJoint || prevTyp == roachpb.LEARNER {
+				if !useJoint || prevTyp == roachpb.LEARNER_EPHEMERAL {
 					rDesc, _ = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
 				} else if prevTyp != roachpb.VOTER_FULL {
 					// NB: prevTyp is already known to be VOTER_FULL because of
@@ -1551,7 +1555,7 @@ func prepareChangeReplicasTrigger(
 				updatedDesc.RemoveReplica(rDesc.NodeID, rDesc.StoreID)
 				isJoint = true
 			case roachpb.VOTER_DEMOTING:
-				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.LEARNER)
+				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.LEARNER_EPHEMERAL)
 				isJoint = true
 			default:
 			}
@@ -1985,7 +1989,7 @@ func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescripto
 	// updating the copy in kv. These two factors makes it possible for the
 	// in-memory copy to be out of sync from the copy in kv. The sorted invariant
 	// of InternalReplicas is used by ReplicaDescriptors.Voters() and
-	// ReplicaDescriptors.Learners().
+	// ReplicaDescriptors.EphemeralLearners().
 	if desc != nil {
 		desc.Replicas() // for sorting side-effect
 	}
@@ -2078,7 +2082,7 @@ func (s *Store) AdminRelocateRange(
 ) error {
 	// Step 0: Remove everything that's not a full voter so we don't have to think
 	// about them.
-	newDesc, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, s, &rangeDesc)
+	newDesc, err := maybeLeaveAtomicChangeReplicasAndRemoveEphemeralLearners(ctx, s, &rangeDesc)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
 		return err

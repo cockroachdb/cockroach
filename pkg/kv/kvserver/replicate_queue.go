@@ -79,8 +79,8 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueRemoveLearnerReplicaCount = metric.Metadata{
-		Name:        "queue.replicate.removelearnerreplica",
-		Help:        "Number of learner replica removals attempted by the replicate queue (typically due to internal race conditions)",
+		Name:        "queue.replicate.removeephemerallearnerreplica",
+		Help:        "Number of ephemeral learner replica removals attempted by the replicate queue (typically due to internal race conditions)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -217,7 +217,7 @@ func (rq *replicateQueue) shouldQueue(
 	// For simplicity, the first thing the allocator does is remove learners, so
 	// it can do all of its reasoning about only voters. We do the same here so
 	// the executions of the allocator's decisions can be in terms of voters.
-	if action == AllocatorRemoveLearner {
+	if action == AllocatorRemoveEphemeralLearner {
 		return true, priority
 	}
 	voterReplicas := desc.Replicas().Voters()
@@ -345,8 +345,8 @@ func (rq *replicateQueue) processOneChange(
 	// For simplicity, the first thing the allocator does is remove learners, so
 	// it can do all of its reasoning about only voters. We do the same here so
 	// the executions of the allocator's decisions can be in terms of voters.
-	if action == AllocatorRemoveLearner {
-		return rq.removeLearner(ctx, repl, dryRun)
+	if action == AllocatorRemoveEphemeralLearner {
+		return rq.removeEphemeralLearner(ctx, repl, dryRun)
 	}
 
 	switch action {
@@ -406,12 +406,12 @@ func (rq *replicateQueue) processOneChange(
 		// has dead replicas; in the common case we'll hit AllocatorReplaceDead
 		// above.
 		return rq.removeDead(ctx, repl, deadVoterReplicas, dryRun)
-	case AllocatorRemoveLearner:
-		return rq.removeLearner(ctx, repl, dryRun)
+	case AllocatorRemoveEphemeralLearner:
+		return rq.removeEphemeralLearner(ctx, repl, dryRun)
 	case AllocatorConsiderRebalance:
 		return rq.considerRebalance(ctx, repl, voterReplicas, canTransferLease, dryRun)
 	case AllocatorFinalizeAtomicReplicationChange:
-		_, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, repl.store, repl.Desc())
+		_, err := maybeLeaveAtomicChangeReplicasAndRemoveEphemeralLearners(ctx, repl.store, repl.Desc())
 		// Requeue because either we failed to transition out of a joint state
 		// (bad) or we did and there might be more to do for that range.
 		return true, err
@@ -784,11 +784,11 @@ func (rq *replicateQueue) removeDead(
 	return true, nil
 }
 
-func (rq *replicateQueue) removeLearner(
+func (rq *replicateQueue) removeEphemeralLearner(
 	ctx context.Context, repl *Replica, dryRun bool,
 ) (requeue bool, _ error) {
 	desc := repl.Desc()
-	learnerReplicas := desc.Replicas().Learners()
+	learnerReplicas := desc.Replicas().EphemeralLearners()
 	if len(learnerReplicas) == 0 {
 		log.VEventf(ctx, 1, "range of replica %s was identified as having learner replicas, "+
 			"but no learner replicas were found", repl)
@@ -810,7 +810,7 @@ func (rq *replicateQueue) removeLearner(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
 		desc,
 		SnapshotRequest_UNKNOWN,
-		kvserverpb.ReasonAbandonedLearner,
+		kvserverpb.ReasonAbandonedEphemeralLearner,
 		"",
 		dryRun,
 	); err != nil {

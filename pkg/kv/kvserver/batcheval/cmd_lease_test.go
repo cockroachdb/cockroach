@@ -108,7 +108,7 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 	}
 }
 
-func TestLeaseCommandLearnerReplica(t *testing.T) {
+func TestLeaseCommandEphemeralLearnerReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -116,7 +116,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	const voterStoreID, learnerStoreID roachpb.StoreID = 1, 2
 	replicas := []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: voterStoreID, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
-		{NodeID: 2, StoreID: learnerStoreID, Type: roachpb.ReplicaTypeLearner(), ReplicaID: 2},
+		{NodeID: 2, StoreID: learnerStoreID, Type: roachpb.ReplicaTypeEphemeralLearner(), ReplicaID: 2},
 	}
 	desc := roachpb.RangeDescriptor{}
 	desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
@@ -132,16 +132,16 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 		},
 	}
 
-	// Learners are not allowed to become leaseholders for now, see the comments
-	// in TransferLease and RequestLease.
+	// Learners are not allowed to become leaseholders for now, see the
+	// comments in TransferLease and RequestLease.
 	_, err := TransferLease(ctx, nil, cArgs, nil)
-	require.EqualError(t, err, `replica (n2,s2):2LEARNER of type LEARNER cannot hold lease`)
+	require.EqualError(t, err, `replica (n2,s2):2LEARNER_EPHEMERAL of type LEARNER_EPHEMERAL cannot hold lease`)
 
 	cArgs.Args = &roachpb.RequestLeaseRequest{}
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
 	const expForUnknown = `cannot replace lease <empty> with <empty>: ` +
-		`replica (n0,s0):? not found in r0:{-} [(n1,s1):1, (n2,s2):2LEARNER, next=0, gen=0]`
+		`replica (n0,s0):? not found in r0:{-} [(n1,s1):1, (n2,s2):2LEARNER_EPHEMERAL, next=0, gen=0]`
 	require.EqualError(t, err, expForUnknown)
 
 	cArgs.Args = &roachpb.RequestLeaseRequest{
@@ -152,7 +152,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
 	const expForLearner = `cannot replace lease <empty> ` +
-		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil>: ` +
-		`replica (n2,s2):2LEARNER of type LEARNER cannot hold lease`
+		`with repl=(n2,s2):2LEARNER_EPHEMERAL seq=0 start=0,0 exp=<nil>: ` +
+		`replica (n2,s2):2LEARNER_EPHEMERAL of type LEARNER_EPHEMERAL cannot hold lease`
 	require.EqualError(t, err, expForLearner)
 }

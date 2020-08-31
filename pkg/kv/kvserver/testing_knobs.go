@@ -209,10 +209,10 @@ type StoreTestingKnobs struct {
 	// that happens when promotion to a voter fails.
 	ReplicaAddSkipLearnerRollback func() bool
 	// ReplicaAddStopAfterLearnerSnapshot causes replica addition to return early
-	// if the func returns true. Specifically, after the learner txn is successful
-	// and after the LEARNER type snapshot, but before promoting it to a voter.
-	// This ensures the `*Replica` will be materialized on the Store when it
-	// returns.
+	// if the func returns true. Specifically, after the ephemeral learner txn is
+	// successful and after the LEARNER type snapshot, but before promoting it to
+	// a voter. This ensures the `*Replica` will be materialized on the Store when
+	// it returns.
 	ReplicaAddStopAfterLearnerSnapshot func([]roachpb.ReplicationTarget) bool
 	// ReplicaSkipLearnerSnapshot causes snapshots to never be sent to learners
 	// if the func returns true. Adding replicas proceeds as usual, though if

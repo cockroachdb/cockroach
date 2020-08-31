@@ -333,7 +333,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// replicas that is now stale (because it raced with some other operation
 			// created by that Generator): a replica is being added and in the
 			// meantime, some other operation added the same replica.
-		} else if resultIsError(t.Result, `unable to add replica .* which is already present as a learner`) {
+		} else if resultIsError(t.Result, `unable to add replica .* which is already present as an ephemeral learner`) {
 			// Generator created this operations based on data about a range's
 			// replicas that is now stale (because it raced with some other operation
 			// created by that Generator): a replica is being added and in the

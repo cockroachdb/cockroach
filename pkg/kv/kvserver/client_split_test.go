@@ -3078,7 +3078,7 @@ func TestStoreSplitDisappearingReplicas(t *testing.T) {
 // Add s2:
 //     s1:  [-r1@all-|--r2@s1s3-----]
 //     s2:  [----r1@all-------------] (outdated)
-// Add learner to s2 on r2 (remains uninitialized due to LHS state blocking it):
+// Add ephemeral learner to s2 on r2 (remains uninitialized due to LHS state blocking it):
 //     s1:  [-r1@s1s3-|--r2@all-----]
 //     s2:  [----r1@all-------------] (outdated), uninitialized replica r2/3
 // Remove and re-add learner multiple times: r2/3 becomes r2/100

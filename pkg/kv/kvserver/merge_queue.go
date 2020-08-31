@@ -270,17 +270,17 @@ func (mq *mergeQueue) process(
 
 	{
 		store := lhsRepl.store
-		// AdminMerge errors if there is a learner or joint config on either
-		// side and AdminRelocateRange removes any on the range it operates on.
-		// For the sake of obviousness, just fix this all upfront.
+		// AdminMerge errors if there is an ephemeral learner or joint config on
+		// either side and AdminRelocateRange removes any on the range it operates
+		// on. For the sake of obviousness, just fix this all upfront.
 		var err error
-		lhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, store, lhsDesc)
+		lhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveEphemeralLearners(ctx, store, lhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return false, err
 		}
 
-		rhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, store, rhsDesc)
+		rhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveEphemeralLearners(ctx, store, rhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return false, err

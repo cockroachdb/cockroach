@@ -95,7 +95,7 @@ func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 func TestValidateReplicationChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	learnerType := roachpb.LEARNER
+	learnerType := roachpb.LEARNER_EPHEMERAL
 	desc := &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},

@@ -667,7 +667,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			return nil, nil, errors.Errorf("unable to find store %d in range %+v", target, desc)
 		}
 
-		// For now, don't allow replicas of type LEARNER to be leaseholders, see
+		// For now, don't allow replicas of type LEARNER_EPHEMERAL to be leaseholders, see
 		// comments in RequestLease and TransferLease for why.
 		//
 		// TODO(dan): We shouldn't need this, the checks in RequestLease and

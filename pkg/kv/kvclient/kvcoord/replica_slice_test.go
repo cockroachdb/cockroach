@@ -72,15 +72,15 @@ func TestNewReplicaSlice(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
 
-	// Check that learners are not included.
-	typLearner := roachpb.LEARNER
+	// Check that ephemeral learners are not included.
+	typLearner := roachpb.LEARNER_EPHEMERAL
 	rd.InternalReplicas[2].Type = &typLearner
 	rs, err = NewReplicaSlice(ctx, ns, rd, nil /* leaseholder */)
 	require.NoError(t, err)
 	require.Equal(t, 2, rs.Len())
 
-	// Check that, if the leasehoder points to a learner, that learner is
-	// included.
+	// Check that, if the leaseholder points to an ephemeral learner, that learner
+	// is included.
 	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3}
 	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder)
 	require.NoError(t, err)

@@ -15,12 +15,12 @@ type RangeLogEventReason string
 
 // The set of possible reasons for range events to happen.
 const (
-	ReasonUnknown              RangeLogEventReason = ""
-	ReasonRangeUnderReplicated RangeLogEventReason = "range under-replicated"
-	ReasonRangeOverReplicated  RangeLogEventReason = "range over-replicated"
-	ReasonStoreDead            RangeLogEventReason = "store dead"
-	ReasonStoreDecommissioning RangeLogEventReason = "store decommissioning"
-	ReasonRebalance            RangeLogEventReason = "rebalance"
-	ReasonAdminRequest         RangeLogEventReason = "admin request"
-	ReasonAbandonedLearner     RangeLogEventReason = "abandoned learner replica"
+	ReasonUnknown                   RangeLogEventReason = ""
+	ReasonRangeUnderReplicated      RangeLogEventReason = "range under-replicated"
+	ReasonRangeOverReplicated       RangeLogEventReason = "range over-replicated"
+	ReasonStoreDead                 RangeLogEventReason = "store dead"
+	ReasonStoreDecommissioning      RangeLogEventReason = "store decommissioning"
+	ReasonRebalance                 RangeLogEventReason = "rebalance"
+	ReasonAdminRequest              RangeLogEventReason = "admin request"
+	ReasonAbandonedEphemeralLearner RangeLogEventReason = "abandoned ephemeral learner replica"
 )

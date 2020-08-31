@@ -1851,7 +1851,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
 		for _, s := range tc.Servers {
 			if err := kvserver.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) (bool, error) {
-				if len(desc.Replicas().Learners()) > 0 {
+				if len(desc.Replicas().EphemeralLearners()) > 0 {
 					return false, fmt.Errorf("descriptor contains learners: %v", desc)
 				}
 				if existing, ok := replicas[desc.RangeID]; ok && !existing.Equal(desc) {

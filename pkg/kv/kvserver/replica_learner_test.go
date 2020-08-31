@@ -104,7 +104,7 @@ func getFirstStoreReplica(
 
 // Some of the metrics used in these tests live on the queue objects and are
 // registered with of storage.StoreMetrics instead of living on it. Example:
-// queue.replicate.removelearnerreplica.
+// queue.replicate.removeephemerallearnerreplica.
 //
 // TODO(dan): Move things like ReplicateQueueMetrics to be a field on
 // storage.StoreMetrics and just keep a reference in newReplicateQueue. Ditto
@@ -167,12 +167,12 @@ func TestAddReplicaViaLearner(t *testing.T) {
 		return err
 	})
 
-	// Wait until the snapshot starts, which happens after the learner has been
-	// added.
+	// Wait until the snapshot starts, which happens after the ephemeral learner
+	// has been added.
 	<-blockUntilSnapshotCh
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().Voters(), 1)
-	require.Len(t, desc.Replicas().Learners(), 1)
+	require.Len(t, desc.Replicas().EphemeralLearners(), 1)
 
 	var voters, nonVoters string
 	db.QueryRow(t,
@@ -188,7 +188,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 
 	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().Voters(), 2)
-	require.Len(t, desc.Replicas().Learners(), 0)
+	require.Len(t, desc.Replicas().EphemeralLearners(), 0)
 	require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(1), `range.snapshots.learner-applied`))
 }
 
@@ -252,8 +252,8 @@ func TestLearnerRaftConfState(t *testing.T) {
 	ltk.withStopAfterLearnerAtomic(func() {
 		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
 	})
-	require.Len(t, desc.Replicas().Learners(), 1)
-	learnerReplicaID := desc.Replicas().Learners()[0].ReplicaID
+	require.Len(t, desc.Replicas().EphemeralLearners(), 1)
+	learnerReplicaID := desc.Replicas().EphemeralLearners()[0].ReplicaID
 
 	// Verify that raft on every node thinks it's a learner. This checks that we
 	// use ConfChangeAddLearnerNode in the ConfChange and also checks that we
@@ -308,7 +308,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 
 	// Make sure we cleaned up after ourselves (by removing the learner).
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
-	require.Empty(t, desc.Replicas().Learners())
+	require.Empty(t, desc.Replicas().EphemeralLearners())
 }
 
 func TestSplitWithLearnerOrJointConfig(t *testing.T) {
@@ -334,8 +334,8 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	// replication queue will eventually clean this up.
 	left, right, err := tc.SplitRange(scratchStartKey.Next())
 	require.NoError(t, err)
-	require.Len(t, left.Replicas().Learners(), 1)
-	require.Len(t, right.Replicas().Learners(), 1)
+	require.Len(t, left.Replicas().EphemeralLearners(), 1)
+	require.Len(t, right.Replicas().EphemeralLearners(), 1)
 
 	// Remove the learner on the RHS.
 	right = tc.RemoveReplicasOrFatal(t, right.StartKey.AsRawKey(), tc.Target(1))
@@ -365,7 +365,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// NB also see TestAllocatorRemoveLearner for a lower-level test.
+	// NB also see TestAllocatorRemoveEphemeralLearner for a lower-level test.
 
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
@@ -385,15 +385,15 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Run the replicate queue.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
-		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removeephemerallearnerreplica`))
 		_, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
-		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removeephemerallearnerreplica`))
 
 		// Make sure it deleted the learner.
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
-		require.Empty(t, desc.Replicas().Learners())
+		require.Empty(t, desc.Replicas().EphemeralLearners())
 
 		// Bonus points: the replicate queue keeps processing until there is nothing
 		// to do, so it should have upreplicated the range to 3.
@@ -452,7 +452,7 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	}
 	desc := checkNoGC()
 	// Make sure it didn't collect the learner.
-	require.NotEmpty(t, desc.Replicas().Learners())
+	require.NotEmpty(t, desc.Replicas().EphemeralLearners())
 
 	// Now get the range into a joint config.
 	tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1)) // remove learner
@@ -510,7 +510,8 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 		if processErr != nil {
 			return processErr
 		}
-		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
+		const msg = `skipping snapshot; replica is likely an ephemeral learner in the process` +
+			` of being added: (n2,s2):2LEARNER_EPHEMERAL`
 		formattedTrace := trace.String()
 		if !strings.Contains(formattedTrace, msg) {
 			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)
@@ -566,7 +567,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	require.NoError(t, err)
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().Voters(), 1)
-	require.Len(t, desc.Replicas().Learners(), 0)
+	require.Len(t, desc.Replicas().EphemeralLearners(), 0)
 
 	// Unblock the snapshot, and surprise AddReplicas. It should retry and error
 	// that the descriptor has changed since the AdminChangeReplicas command
@@ -581,7 +582,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	}
 	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().Voters(), 1)
-	require.Len(t, desc.Replicas().Learners(), 0)
+	require.Len(t, desc.Replicas().EphemeralLearners(), 0)
 }
 
 // This test verifies the result of a race between the replicate queue running
@@ -657,7 +658,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	desc, err := tc.RemoveReplicas(scratchStartKey, tc.Target(2))
 	require.NoError(t, err)
 	require.Len(t, desc.Replicas().Voters(), 2)
-	require.Len(t, desc.Replicas().Learners(), 0)
+	require.Len(t, desc.Replicas().EphemeralLearners(), 0)
 
 	// Unblock the snapshot, and surprise the replicate queue. It should retry,
 	// get a descriptor changed error, and realize it should stop.
@@ -665,7 +666,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	require.NoError(t, <-queue1ErrCh)
 	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().Voters(), 2)
-	require.Len(t, desc.Replicas().Learners(), 0)
+	require.Len(t, desc.Replicas().EphemeralLearners(), 0)
 }
 
 func TestLearnerNoAcceptLease(t *testing.T) {
@@ -688,8 +689,8 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	err := tc.TransferRangeLease(desc, tc.Target(1))
-	if !testutils.IsError(err, `cannot transfer lease to replica of type LEARNER`) {
-		t.Fatalf(`expected "cannot transfer lease to replica of type LEARNER" error got: %+v`, err)
+	if !testutils.IsError(err, `cannot transfer lease to replica of type LEARNER_EPHEMERAL`) {
+		t.Fatalf(`expected "cannot transfer lease to replica of type LEARNER_EPHEMERAL" error got: %+v`, err)
 	}
 }
 
@@ -780,7 +781,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 		})
 	}
 
-	// Can't serve follower read from the LEARNER.
+	// Can't serve follower read from the LEARNER_EPHEMERAL.
 	check()
 
 	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
@@ -838,7 +839,7 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 			require.Equal(t, targets[i].NodeID, voters[i].NodeID, `%v`, voters)
 			require.Equal(t, targets[i].StoreID, voters[i].StoreID, `%v`, voters)
 		}
-		require.Empty(t, desc.Replicas().Learners())
+		require.Empty(t, desc.Replicas().EphemeralLearners())
 		require.Empty(t, desc.Replicas().Filter(predIncoming))
 		require.Empty(t, desc.Replicas().Filter(predOutgoing))
 	}
@@ -905,8 +906,8 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 		}
 	}
 
-	// LEARNER on the lhs or rhs should fail.
-	// desc{1,2,3} = (VOTER_FULL, LEARNER) (VOTER_FULL) (VOTER_FULL, LEARNER)
+	// LEARNER_EPHEMERAL on the lhs or rhs should fail.
+	// desc{1,2,3} = (VOTER_FULL, LEARNER_EPHEMERAL) (VOTER_FULL) (VOTER_FULL, LEARNER_EPHEMERAL)
 	checkFails()
 
 	// Turn the learners on desc1 and desc3 into VOTER_INCOMINGs.
@@ -1003,7 +1004,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.Equal(t, origDesc.EndKey, desc.EndKey)
 		// The merge removed the learner.
 		require.Len(t, desc.Replicas().Voters(), 1)
-		require.Empty(t, desc.Replicas().Learners())
+		require.Empty(t, desc.Replicas().EphemeralLearners())
 	}
 
 	// Create the RHS again and repeat the same game, except this time the LHS

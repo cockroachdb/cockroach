@@ -12841,17 +12841,17 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 	}
 
 	tcs := []testCase{
-		// Simple addition of learner.
+		// Simple addition of ephemeral learner.
 		mk(
-			"SIMPLE(l2) ADD_REPLICA[(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
+			"SIMPLE(l2) ADD_REPLICA[(n200,s200):2LEARNER_EPHEMERAL]: after=[(n100,s100):1 (n200,s200):2LEARNER_EPHEMERAL] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{none, internalChangeTypeAddLearner},
+			typOp{none, internalChangeTypeAddEphemeralLearner},
 		),
-		// Simple addition of voter (necessarily via learner).
+		// Simple addition of voter (necessarily via an ephemeral learner).
 		mk(
 			"SIMPLE(v2) ADD_REPLICA[(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
+			typOp{roachpb.LEARNER_EPHEMERAL, internalChangeTypePromoteEphemeralLearner},
 		),
 		// Simple removal of voter.
 		mk(
@@ -12859,21 +12859,21 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 		),
-		// Simple removal of learner.
+		// Simple removal of ephemeral learner.
 		mk(
-			"SIMPLE(r2) REMOVE_REPLICA[(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
+			"SIMPLE(r2) REMOVE_REPLICA[(n200,s200):2LEARNER_EPHEMERAL]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.LEARNER, internalChangeTypeRemove},
+			typOp{roachpb.LEARNER_EPHEMERAL, internalChangeTypeRemove},
 		),
 
 		// All other cases below need to go through joint quorums (though some
 		// of them only due to limitations in etcd/raft).
 
-		// Addition of learner and removal of voter at same time.
+		// Addition of ephemeral learner and removal of voter at same time.
 		mk(
-			"ENTER_JOINT(r2 l3) ADD_REPLICA[(n200,s200):3LEARNER], REMOVE_REPLICA[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
+			"ENTER_JOINT(r2 l3) ADD_REPLICA[(n200,s200):3LEARNER_EPHEMERAL], REMOVE_REPLICA[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER_EPHEMERAL] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{none, internalChangeTypeAddLearner},
+			typOp{none, internalChangeTypeAddEphemeralLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 		),
 
@@ -12881,8 +12881,8 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		mk(
 			"ENTER_JOINT(v2 v3) ADD_REPLICA[(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
-			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
+			typOp{roachpb.LEARNER_EPHEMERAL, internalChangeTypePromoteEphemeralLearner},
+			typOp{roachpb.LEARNER_EPHEMERAL, internalChangeTypePromoteEphemeralLearner},
 		),
 
 		// Removal of two voters.
@@ -12902,7 +12902,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		),
 		// Leave joint config entered via demotion.
 		mk(
-			"LEAVE_JOINT: after=[(n100,s100):1 (n200,s200):2LEARNER (n300,s300):3LEARNER] next=4",
+			"LEAVE_JOINT: after=[(n100,s100):1 (n200,s200):2LEARNER_EPHEMERAL (n300,s300):3LEARNER_EPHEMERAL] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_DEMOTING, noop},
 			typOp{roachpb.VOTER_DEMOTING, noop},

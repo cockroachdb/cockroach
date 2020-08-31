@@ -45,11 +45,11 @@ type ReplicaSlice []ReplicaInfo
 //
 // Generally, only voting replicas are returned. However, if a non-nil
 // leaseholder is passed in, it will be included in the result even if the
-// descriptor has it as a learner (we assert that the leaseholder is part of the
-// descriptor). The idea is that the descriptor might be stale and list the
-// leaseholder as a learner erroneously, and lease info is a strong signal in
-// that direction. Note that the returned ReplicaSlice might still not include
-// the leaseholder if info for the respective node is missing from the
+// descriptor has it as an ephemeral learner (we assert that the leaseholder is
+// part of the descriptor). The idea is that the descriptor might be stale and
+// list the leaseholder as a learner erroneously, and lease info is a strong
+// signal in that direction. Note that the returned ReplicaSlice might still not
+// include the leaseholder if info for the respective node is missing from the
 // NodeDescStore.
 //
 // If there's no info in gossip for any of the nodes in the descriptor, a
@@ -66,7 +66,7 @@ func NewReplicaSlice(
 		}
 	}
 
-	// Learner replicas won't serve reads/writes, so we'll send only to the
+	// Ephemeral learners won't serve reads/writes, so we'll send only to the
 	// `Voters` replicas. This is just an optimization to save a network hop,
 	// everything would still work if we had `All` here.
 	voters := desc.Replicas().Voters()

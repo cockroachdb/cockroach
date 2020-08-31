@@ -934,7 +934,7 @@ func TestLeaseEquivalence(t *testing.T) {
 
 	r1Voter, r1Learner := r1, r1
 	r1Voter.Type = ReplicaTypeVoterFull()
-	r1Learner.Type = ReplicaTypeLearner()
+	r1Learner.Type = ReplicaTypeEphemeralLearner()
 	epoch1Voter := Lease{Replica: r1Voter, Start: ts1, Epoch: 1}
 	epoch1Learner := Lease{Replica: r1Learner, Start: ts1, Epoch: 1}
 
@@ -1663,7 +1663,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 	vi := VOTER_INCOMING
 	vo := VOTER_OUTGOING
 	vd := VOTER_DEMOTING
-	l := LEARNER
+	l := LEARNER_EPHEMERAL
 	repl1 := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &vi}
 	repl2 := ReplicaDescriptor{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &vo}
 	learner := ReplicaDescriptor{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: &l}
@@ -1688,7 +1688,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 	act := crt.String()
 	exp := "ENTER_JOINT(r6 r12 l12 v3) ADD_REPLICA[(n1,s2):3VOTER_INCOMING], " +
 		"REMOVE_REPLICA[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING]: " +
-		"after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER " +
+		"after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER_EPHEMERAL " +
 		"(n10,s11):12VOTER_DEMOTING] next=10"
 	require.Equal(t, exp, act)
 
@@ -1699,7 +1699,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 	act = crt.String()
 	require.Empty(t, crt.Added())
 	require.Empty(t, crt.Removed())
-	exp = "LEAVE_JOINT: after=[(n1,s2):3 (n7,s8):9LEARNER] next=10"
+	exp = "LEAVE_JOINT: after=[(n1,s2):3 (n7,s8):9LEARNER_EPHEMERAL] next=10"
 	require.Equal(t, exp, act)
 }
 
@@ -1751,7 +1751,7 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 	vf1 := sl(VOTER_FULL, 1)
 	vo1 := sl(VOTER_OUTGOING, 1)
 	vi1 := sl(VOTER_INCOMING, 1)
-	vl1 := sl(LEARNER, 1)
+	vl1 := sl(LEARNER_EPHEMERAL, 1)
 
 	testCases := []struct {
 		crt mockCRT
@@ -1786,7 +1786,7 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 
 		// Removing a voter or learner via the V1 path but falsely the replica is still in the descriptor.
 		{crt: mk(in{del: vf1, repls: vf1}), err: "(n3,s2):1 must no longer be present in descriptor"},
-		{crt: mk(in{del: vl1, repls: vl1}), err: "(n3,s2):1LEARNER must no longer be present in descriptor"},
+		{crt: mk(in{del: vl1, repls: vl1}), err: "(n3,s2):1LEARNER_EPHEMERAL must no longer be present in descriptor"},
 		// Well-formed examples.
 		{crt: mk(in{del: vf1}), exp: raftpb.ConfChange{
 			Type:   raftpb.ConfChangeRemoveNode,
@@ -1854,11 +1854,11 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		// Run a more complex change (necessarily) via the V2 path.
 		{crt: mk(in{
 			add: sl( // Additions.
-				VOTER_INCOMING, 6, LEARNER, 4, VOTER_INCOMING, 3,
+				VOTER_INCOMING, 6, LEARNER_EPHEMERAL, 4, VOTER_INCOMING, 3,
 			),
 			del: sl(
 				// Removals.
-				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_DEMOTING, 9,
+				LEARNER_EPHEMERAL, 2, VOTER_OUTGOING, 8, VOTER_DEMOTING, 9,
 			),
 			repls: sl(
 				// Replicas.
@@ -1866,7 +1866,7 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 				VOTER_INCOMING, 6, // added
 				VOTER_INCOMING, 3, // added
 				VOTER_DEMOTING, 9, // removing
-				LEARNER, 4, // added
+				LEARNER_EPHEMERAL, 4, // added
 				VOTER_OUTGOING, 8, // removing
 				VOTER_FULL, 10,
 			)}),
