@@ -391,6 +391,11 @@ type WindowFrame struct {
 	FrameExclusion tree.WindowFrameExclusion
 }
 
+// HasOffset returns true if the WindowFrame contains a specific offset.
+func (f *WindowFrame) HasOffset() bool {
+	return f.StartBoundType.IsOffset() || f.EndBoundType.IsOffset()
+}
+
 // NeedResults returns true if the mutation operator can return the rows that
 // were mutated.
 func (m *MutationPrivate) NeedResults() bool {

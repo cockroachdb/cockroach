@@ -1759,20 +1759,14 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		outputIdxs[i] = windowStart + i
 	}
 
-	var rangeOffsetColumn exec.ColumnOrdinal
-	if ord.Empty() {
-		idx, _ := input.outputCols.Get(int(w.RangeOffsetColumn))
-		rangeOffsetColumn = exec.ColumnOrdinal(idx)
-	}
 	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
-		Cols:              resultCols,
-		Exprs:             exprs,
-		OutputIdxs:        outputIdxs,
-		ArgIdxs:           argIdxs,
-		FilterIdxs:        filterIdxs,
-		Partition:         partitionIdxs,
-		Ordering:          input.sqlOrdering(ord),
-		RangeOffsetColumn: rangeOffsetColumn,
+		Cols:       resultCols,
+		Exprs:      exprs,
+		OutputIdxs: outputIdxs,
+		ArgIdxs:    argIdxs,
+		FilterIdxs: filterIdxs,
+		Partition:  partitionIdxs,
+		Ordering:   input.sqlOrdering(ord),
 	})
 	if err != nil {
 		return execPlan{}, err

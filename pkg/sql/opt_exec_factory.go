@@ -878,17 +878,9 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 		if len(wi.Ordering) == 0 {
 			frame := p.funcs[i].frame
 			if frame.Mode == tree.RANGE && frame.Bounds.HasOffset() {
-				// We have an empty ordering, but RANGE mode when at least one bound
-				// has 'offset' requires a single column in ORDER BY. We have optimized
-				// it out, but the execution still needs information about which column
-				// it was, so we reconstruct the "original" ordering (note that the
-				// direction of the ordering doesn't actually matter, so we leave it
-				// with the default value).
-				p.funcs[i].columnOrdering = sqlbase.ColumnOrdering{
-					sqlbase.ColumnOrderInfo{
-						ColIdx: int(wi.RangeOffsetColumn),
-					},
-				}
+				// Execution requires a single column to order by when there is
+				// a RANGE mode frame with at least one 'offset' bound.
+				return nil, errors.AssertionFailedf("a RANGE mode frame with an offset bound must have an ORDER BY column")
 			}
 		}
 
