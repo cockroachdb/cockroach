@@ -328,6 +328,7 @@ func init() {
 
 // lookupCast returns the information for a valid cast.
 // Returns nil if this is not a valid cast.
+// Does not handle array and tuple casts.
 func lookupCast(from, to types.Family) *castInfo {
 	return castsMap[castsMapKey{from: from, to: to}]
 }
@@ -339,6 +340,25 @@ func LookupCastVolatility(from, to *types.T) (_ Volatility, ok bool) {
 	// Special case for casting between arrays.
 	if fromFamily == types.ArrayFamily && toFamily == types.ArrayFamily {
 		return LookupCastVolatility(from.ArrayContents(), to.ArrayContents())
+	}
+	// Special case for casting between tuples.
+	if fromFamily == types.TupleFamily && toFamily == types.TupleFamily {
+		fromTypes := from.TupleContents()
+		toTypes := to.TupleContents()
+		if len(fromTypes) != len(toTypes) {
+			return 0, false
+		}
+		maxVolatility := VolatilityLeakProof
+		for i := range fromTypes {
+			v, ok := LookupCastVolatility(fromTypes[i], toTypes[i])
+			if !ok {
+				return 0, false
+			}
+			if v > maxVolatility {
+				maxVolatility = v
+			}
+		}
+		return maxVolatility, true
 	}
 	cast := lookupCast(fromFamily, toFamily)
 	if cast == nil {

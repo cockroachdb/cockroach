@@ -1930,7 +1930,6 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 
 	t.Run("user-defined-schemas", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE uds`)
-		sqlDB.Exec(t, `SET experimental_enable_user_defined_schemas = true`)
 		sqlDB.Exec(t, `USE uds`)
 		sqlDB.Exec(t, `CREATE SCHEMA sc`)
 		// Now import into a table under sc.
@@ -5475,7 +5474,6 @@ func TestImportAvro(t *testing.T) {
 	}
 
 	t.Run("user-defined-schemas", func(t *testing.T) {
-		sqlDB.Exec(t, `SET experimental_enable_user_defined_schemas = true`)
 		sqlDB.Exec(t, `CREATE SCHEMA myschema`)
 		sqlDB.Exec(t, `CREATE TABLE myschema.simple (i INT8 PRIMARY KEY, s text, b bytea)`)
 		sqlDB.Exec(t, `IMPORT INTO myschema.simple (i, s, b) AVRO DATA ($1)`, simpleOcf)

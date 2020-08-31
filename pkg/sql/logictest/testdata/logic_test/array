@@ -1741,3 +1741,12 @@ SELECT x FROM t GROUP BY x
 {1,2}
 {NULL,NULL}
 {1,2,NULL,4,NULL}
+
+# Regression test for #53395: cast between tuples.
+query T
+SELECT CASE
+  WHEN NULL THEN (('1':::INT8, ARRAY[]:::INT2[]))
+  ELSE ('2':::INT8, ARRAY[(-23791):::INT8])
+END
+----
+(2,{-23791})

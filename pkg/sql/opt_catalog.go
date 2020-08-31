@@ -1811,12 +1811,20 @@ func (oi *optVirtualIndex) Predicate() (string, bool) {
 
 // KeyColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) KeyColumnCount() int {
-	return 1
+	// Virtual indexes for the time being always have exactly 2 key columns,
+	// because they're only constructable on a single column, and we don't support
+	// the concept of a unique virtual index. So, we always export 2 key columns:
+	// the first is the column to be indexed, and the second is the fake virtual
+	// index column that we pretend exists to guarantee uniqueness. See the
+	// implementation of optVirtualIndex.Column().
+	return 2
 }
 
 // LaxKeyColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) LaxKeyColumnCount() int {
-	return 1
+	// Virtual indexes are never unique, so their lax key is the same as their
+	// key.
+	return 2
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -1835,10 +1843,6 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	if oi.isPrimary {
 		return cat.IndexColumn{Column: oi.tab.Column(i)}
 	}
-	if i == oi.ColumnCount()-1 {
-		// The special bogus PK column goes at the end. It has ID 0.
-		return cat.IndexColumn{Column: oi.tab.Column(0)}
-	}
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
 		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
@@ -1846,8 +1850,13 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 			Column: oi.tab.Column(ord),
 		}
 	}
+	if i == length {
+		// The special bogus PK column goes at the end of the index columns. It
+		// has ID 0.
+		return cat.IndexColumn{Column: oi.tab.Column(0)}
+	}
 
-	i -= length
+	i -= length + 1
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
 	return cat.IndexColumn{Column: oi.tab.Column(ord)}
 }
@@ -1874,7 +1883,7 @@ func (oi *optVirtualIndex) Ordinal() int {
 
 // PartitionByListPrefixes is part of the cat.Index interface.
 func (oi *optVirtualIndex) PartitionByListPrefixes() []tree.Datums {
-	panic("no partition")
+	return nil
 }
 
 // InterleaveAncestorCount is part of the cat.Index interface.

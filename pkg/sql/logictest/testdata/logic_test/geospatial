@@ -4328,6 +4328,45 @@ SELECT ST_AsEWKT(ST_Union(g::geometry)) FROM ( VALUES (NULL), ('POINT(1 0)'), ('
 LINESTRING (0 0, 5 0)
 
 query T
+SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES (NULL) ) tbl(g)
+----
+NULL
+
+query T
+SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES (NULL), ('POINT(1 0)') ) tbl(g)
+----
+MULTIPOINT (1 0)
+
+statement error operation on mixed SRIDs forbidden
+SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES ('POINT(1 0)'), ('SRID=3857;POINT(1 0)') ) tbl(g)
+
+query T
+SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES (NULL), ('POINT(1 0)'), ('LINESTRING(0 0, 5 0)')) tbl(g)
+----
+GEOMETRYCOLLECTION (POINT (1 0), LINESTRING (0 0, 5 0))
+
+query T
+SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES (NULL), ('POINT (1 1)'), ('POINT EMPTY'), ('POINT (2 2)')) tbl(g)
+----
+MULTIPOINT (1 1, EMPTY, 2 2)
+
+query T
+SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES ('MULTIPOINT (1 1, 2 2)'), ('POINT (3 3)')) tbl(g)
+----
+GEOMETRYCOLLECTION (MULTIPOINT (1 1, 2 2), POINT (3 3))
+
+query T
+SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES ('MULTIPOINT (1 1, 2 2)'), ('MULTIPOINT (3 3, 4 4)')) tbl(g)
+----
+GEOMETRYCOLLECTION (MULTIPOINT (1 1, 2 2), MULTIPOINT (3 3, 4 4))
+
+query T
+SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES ('GEOMETRYCOLLECTION (POINT (1 1))'), ('GEOMETRYCOLLECTION (POINT (2 2))')) tbl(g)
+----
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (1 1)), GEOMETRYCOLLECTION (POINT (2 2)))
+
+
+query T
 SELECT ST_AsEWKT(
   ST_SharedPaths(
     ST_GeomFromText('MULTILINESTRING((26 125,26 200,126 200,126 125,26 125),

@@ -825,6 +825,8 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructVarPop(args[0])
 	case "st_makeline":
 		return b.factory.ConstructSTMakeLine(args[0])
+	case "st_collect":
+		return b.factory.ConstructSTCollect(args[0])
 	case "st_extent":
 		return b.factory.ConstructSTExtent(args[0])
 	case "st_union":

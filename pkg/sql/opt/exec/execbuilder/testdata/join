@@ -325,92 +325,92 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
            pos.n
   ] WHERE node_type <> 'values' AND field <> 'size'
 ----
-0   ·                                  distribution           local
-0   ·                                  vectorized             false
-0   project                            ·                      ·
-1   sort                               ·                      ·
-1   ·                                  estimated row count    106 (missing stats)
-1   ·                                  order                  +nspname,+relname,+conname,+generate_series
-2   render                             ·                      ·
-2   ·                                  estimated row count    106 (missing stats)
-2   ·                                  render 0               CAST(NULL AS STRING)
-2   ·                                  render 1               CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
-2   ·                                  render 2               CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
-2   ·                                  render 3               CASE WHEN condeferrable AND condeferred THEN 5 WHEN condeferrable THEN 6 ELSE 7 END
-2   ·                                  render 4               nspname
-2   ·                                  render 5               relname
-2   ·                                  render 6               attname
-2   ·                                  render 7               nspname
-2   ·                                  render 8               relname
-2   ·                                  render 9               attname
-2   ·                                  render 10              conname
-2   ·                                  render 11              generate_series
-2   ·                                  render 12              relname
-3   hash join (inner)                  ·                      ·
-3   ·                                  estimated row count    106 (missing stats)
-3   ·                                  equality               (oid) = (objid)
-4   hash join (inner)                  ·                      ·
-4   ·                                  estimated row count    109 (missing stats)
-4   ·                                  equality               (oid) = (relnamespace)
-5   virtual table                      ·                      ·
-5   ·                                  estimated row count    1000 (missing stats)
-5   ·                                  table                  pg_namespace@primary
-5   hash join (inner)                  ·                      ·
-5   ·                                  estimated row count    11 (missing stats)
-5   ·                                  equality               (relnamespace) = (oid)
-6   cross join (inner)                 ·                      ·
-6   ·                                  estimated row count    11 (missing stats)
-6   ·                                  pred                   (attnum = confkey[generate_series]) AND (attnum = conkey[generate_series])
-7   project set                        ·                      ·
-7   ·                                  estimated row count    10
-7   ·                                  render 0               generate_series(1, 32)
-8   emptyrow                           ·                      ·
-7   virtual table lookup join (inner)  ·                      ·
-7   ·                                  estimated row count    10 (missing stats)
-7   ·                                  table                  pg_attribute@pg_attribute_attrelid_idx
-7   ·                                  equality               (oid) = (attrelid)
-7   ·                                  equality cols are key  ·
-8   virtual table lookup join (inner)  ·                      ·
-8   ·                                  estimated row count    10 (missing stats)
-8   ·                                  table                  pg_class@pg_class_oid_idx
-8   ·                                  equality               (attrelid) = (oid)
-8   ·                                  equality cols are key  ·
-9   virtual table lookup join (inner)  ·                      ·
-9   ·                                  estimated row count    10 (missing stats)
-9   ·                                  table                  pg_attribute@pg_attribute_attrelid_idx
-9   ·                                  equality               (confrelid) = (attrelid)
-9   ·                                  equality cols are key  ·
-10  virtual table lookup join (inner)  ·                      ·
-10  ·                                  estimated row count    10 (missing stats)
-10  ·                                  table                  pg_constraint@pg_constraint_conrelid_idx
-10  ·                                  equality               (oid) = (conrelid)
-10  ·                                  equality cols are key  ·
-10  ·                                  pred                   contype = 'f'
-11  filter                             ·                      ·
-11  ·                                  estimated row count    10 (missing stats)
-11  ·                                  filter                 relname = 'orders'
-12  virtual table                      ·                      ·
-12  ·                                  estimated row count    1000 (missing stats)
-12  ·                                  table                  pg_class@primary
-6   filter                             ·                      ·
-6   ·                                  estimated row count    10 (missing stats)
-6   ·                                  filter                 nspname = 'public'
-7   virtual table                      ·                      ·
-7   ·                                  estimated row count    1000 (missing stats)
-7   ·                                  table                  pg_namespace@primary
-4   hash join (inner)                  ·                      ·
-4   ·                                  estimated row count    99 (missing stats)
-4   ·                                  equality               (refobjid) = (oid)
-4   ·                                  right cols are key     ·
-5   virtual table                      ·                      ·
-5   ·                                  estimated row count    1000 (missing stats)
-5   ·                                  table                  pg_depend@primary
-5   filter                             ·                      ·
-5   ·                                  estimated row count    10 (missing stats)
-5   ·                                  filter                 relkind = 'i'
-6   virtual table                      ·                      ·
-6   ·                                  estimated row count    1000 (missing stats)
-6   ·                                  table                  pg_class@primary
+0   ·                                  distribution         local
+0   ·                                  vectorized           false
+0   project                            ·                    ·
+1   sort                               ·                    ·
+1   ·                                  estimated row count  110908 (missing stats)
+1   ·                                  order                +nspname,+relname,+conname,+generate_series
+2   render                             ·                    ·
+2   ·                                  estimated row count  110908 (missing stats)
+2   ·                                  render 0             CAST(NULL AS STRING)
+2   ·                                  render 1             CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
+2   ·                                  render 2             CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
+2   ·                                  render 3             CASE WHEN condeferrable AND condeferred THEN 5 WHEN condeferrable THEN 6 ELSE 7 END
+2   ·                                  render 4             nspname
+2   ·                                  render 5             relname
+2   ·                                  render 6             attname
+2   ·                                  render 7             nspname
+2   ·                                  render 8             relname
+2   ·                                  render 9             attname
+2   ·                                  render 10            conname
+2   ·                                  render 11            generate_series
+2   ·                                  render 12            relname
+3   hash join (inner)                  ·                    ·
+3   ·                                  estimated row count  110908 (missing stats)
+3   ·                                  equality             (oid) = (objid)
+4   hash join (inner)                  ·                    ·
+4   ·                                  estimated row count  114302 (missing stats)
+4   ·                                  equality             (relnamespace) = (oid)
+5   hash join (inner)                  ·                    ·
+5   ·                                  estimated row count  11557 (missing stats)
+5   ·                                  equality             (attrelid) = (oid)
+5   ·                                  pred                 attnum = confkey[generate_series]
+6   hash join (inner)                  ·                    ·
+6   ·                                  estimated row count  3502 (missing stats)
+6   ·                                  equality             (attrelid) = (confrelid)
+7   virtual table                      ·                    ·
+7   ·                                  estimated row count  1000 (missing stats)
+7   ·                                  table                pg_attribute@primary
+7   cross join (inner)                 ·                    ·
+7   ·                                  estimated row count  354 (missing stats)
+7   ·                                  pred                 attnum = conkey[generate_series]
+8   hash join (inner)                  ·                    ·
+8   ·                                  estimated row count  107 (missing stats)
+8   ·                                  equality             (relnamespace) = (oid)
+9   virtual table lookup join (inner)  ·                    ·
+9   ·                                  estimated row count  105 (missing stats)
+9   ·                                  table                pg_attribute@pg_attribute_attrelid_idx
+9   ·                                  equality             (oid) = (attrelid)
+10  virtual table lookup join (inner)  ·                    ·
+10  ·                                  estimated row count  10 (missing stats)
+10  ·                                  table                pg_constraint@pg_constraint_conrelid_idx
+10  ·                                  equality             (oid) = (conrelid)
+10  ·                                  pred                 contype = 'f'
+11  filter                             ·                    ·
+11  ·                                  estimated row count  10 (missing stats)
+11  ·                                  filter               relname = 'orders'
+12  virtual table                      ·                    ·
+12  ·                                  estimated row count  1000 (missing stats)
+12  ·                                  table                pg_class@primary
+9   filter                             ·                    ·
+9   ·                                  estimated row count  10 (missing stats)
+9   ·                                  filter               nspname = 'public'
+10  virtual table                      ·                    ·
+10  ·                                  estimated row count  1000 (missing stats)
+10  ·                                  table                pg_namespace@primary
+8   project set                        ·                    ·
+8   ·                                  estimated row count  10
+8   ·                                  render 0             generate_series(1, 32)
+9   emptyrow                           ·                    ·
+6   virtual table                      ·                    ·
+6   ·                                  estimated row count  1000 (missing stats)
+6   ·                                  table                pg_class@primary
+5   virtual table                      ·                    ·
+5   ·                                  estimated row count  1000 (missing stats)
+5   ·                                  table                pg_namespace@primary
+4   hash join (inner)                  ·                    ·
+4   ·                                  estimated row count  99 (missing stats)
+4   ·                                  equality             (refobjid) = (oid)
+5   virtual table                      ·                    ·
+5   ·                                  estimated row count  1000 (missing stats)
+5   ·                                  table                pg_depend@primary
+5   filter                             ·                    ·
+5   ·                                  estimated row count  10 (missing stats)
+5   ·                                  filter               relkind = 'i'
+6   virtual table                      ·                    ·
+6   ·                                  estimated row count  1000 (missing stats)
+6   ·                                  table                pg_class@primary
 
 # Ensure that left joins on non-null foreign keys turn into inner joins
 statement ok

@@ -1,7 +1,4 @@
 statement ok
-SET experimental_enable_user_defined_schemas = true;
-
-statement ok
 CREATE DATABASE pgdatabase;
 CREATE TABLE pgdatabase.t1 (x INT PRIMARY KEY);
 CREATE DATABASE pgschema;

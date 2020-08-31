@@ -39,8 +39,6 @@ func TestShowBackup(t *testing.T) {
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 	sqlDB.Exec(t, `
-SET experimental_enable_user_defined_schemas = true;
-
 CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
 USE data; CREATE SCHEMA sc;
 CREATE TABLE data.sc.t1 (a INT);

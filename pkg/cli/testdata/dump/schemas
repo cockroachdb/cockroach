@@ -1,5 +1,4 @@
 sql
-SET experimental_enable_user_defined_schemas = true;
 CREATE DATABASE d;
 USE d;
 
@@ -17,7 +16,6 @@ INSERT 1
 dump d
 ----
 ----
-SET experimental_enable_user_defined_schemas = true;
 CREATE SCHEMA sc1;
 
 CREATE SCHEMA sc2;

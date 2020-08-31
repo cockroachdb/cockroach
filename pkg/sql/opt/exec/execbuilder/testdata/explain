@@ -179,65 +179,63 @@ sort                ·             ·
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
 ----
-·                                                 distribution       local
-·                                                 vectorized         false
-sort                                              ·                  ·
- │                                                order              +nspname,+relname
- └── render                                       ·                  ·
-      └── hash join (right outer)                 ·                  ·
-           │                                      equality           (table_id) = (column44)
-           ├── virtual table                      ·                  ·
-           │                                      table              table_row_statistics@primary
-           └── render                             ·                  ·
-                └── hash join                     ·                  ·
-                     │                            equality           (oid) = (relnamespace)
-                     ├── filter                   ·                  ·
-                     │    │                       filter             nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
-                     │    └── virtual table       ·                  ·
-                     │                            table              pg_namespace@primary
-                     └── hash join (left outer)   ·                  ·
-                          │                       equality           (oid) = (objoid)
-                          │                       left cols are key  ·
-                          ├── filter              ·                  ·
-                          │    │                  filter             relkind IN ('S', 'r', 'v')
-                          │    └── virtual table  ·                  ·
-                          │                       table              pg_class@primary
-                          └── filter              ·                  ·
-                               │                  filter             objsubid = 0
-                               └── virtual table  ·                  ·
-·                                                 table              pg_description@primary
+·                                                 distribution  local
+·                                                 vectorized    false
+sort                                              ·             ·
+ │                                                order         +nspname,+relname
+ └── render                                       ·             ·
+      └── hash join (right outer)                 ·             ·
+           │                                      equality      (table_id) = (column44)
+           ├── virtual table                      ·             ·
+           │                                      table         table_row_statistics@primary
+           └── render                             ·             ·
+                └── hash join                     ·             ·
+                     │                            equality      (oid) = (relnamespace)
+                     ├── filter                   ·             ·
+                     │    │                       filter        nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+                     │    └── virtual table       ·             ·
+                     │                            table         pg_namespace@primary
+                     └── hash join (left outer)   ·             ·
+                          │                       equality      (oid) = (objoid)
+                          ├── filter              ·             ·
+                          │    │                  filter        relkind IN ('S', 'r', 'v')
+                          │    └── virtual table  ·             ·
+                          │                       table         pg_class@primary
+                          └── filter              ·             ·
+                               │                  filter        objsubid = 0
+                               └── virtual table  ·             ·
+·                                                 table         pg_description@primary
 
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
 ----
-·                                                 distribution       local
-·                                                 vectorized         false
-sort                                              ·                  ·
- │                                                order              +nspname,+relname
- └── render                                       ·                  ·
-      └── hash join (right outer)                 ·                  ·
-           │                                      equality           (table_id) = (column44)
-           ├── virtual table                      ·                  ·
-           │                                      table              table_row_statistics@primary
-           └── render                             ·                  ·
-                └── hash join                     ·                  ·
-                     │                            equality           (oid) = (relnamespace)
-                     ├── filter                   ·                  ·
-                     │    │                       filter             nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
-                     │    └── virtual table       ·                  ·
-                     │                            table              pg_namespace@primary
-                     └── hash join (left outer)   ·                  ·
-                          │                       equality           (oid) = (objoid)
-                          │                       left cols are key  ·
-                          ├── filter              ·                  ·
-                          │    │                  filter             relkind IN ('S', 'r', 'v')
-                          │    └── virtual table  ·                  ·
-                          │                       table              pg_class@primary
-                          └── filter              ·                  ·
-                               │                  filter             objsubid = 0
-                               └── virtual table  ·                  ·
-·                                                 table              pg_description@primary
+·                                                 distribution  local
+·                                                 vectorized    false
+sort                                              ·             ·
+ │                                                order         +nspname,+relname
+ └── render                                       ·             ·
+      └── hash join (right outer)                 ·             ·
+           │                                      equality      (table_id) = (column44)
+           ├── virtual table                      ·             ·
+           │                                      table         table_row_statistics@primary
+           └── render                             ·             ·
+                └── hash join                     ·             ·
+                     │                            equality      (oid) = (relnamespace)
+                     ├── filter                   ·             ·
+                     │    │                       filter        nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+                     │    └── virtual table       ·             ·
+                     │                            table         pg_namespace@primary
+                     └── hash join (left outer)   ·             ·
+                          │                       equality      (oid) = (objoid)
+                          ├── filter              ·             ·
+                          │    │                  filter        relkind IN ('S', 'r', 'v')
+                          │    └── virtual table  ·             ·
+                          │                       table         pg_class@primary
+                          └── filter              ·             ·
+                               │                  filter        objsubid = 0
+                               └── virtual table  ·             ·
+·                                                 table         pg_description@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE field != 'size'
@@ -347,25 +345,24 @@ render                   ·             ·
 query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-·                                         distribution           local
-·                                         vectorized             false
-sort                                      ·                      ·
- │                                        order                  +conname
- └── render                               ·                      ·
-      └── hash join                       ·                      ·
-           │                              equality               (oid) = (relnamespace)
-           ├── filter                     ·                      ·
-           │    │                         filter                 nspname = 'public'
-           │    └── virtual table         ·                      ·
-           │                              table                  pg_namespace@primary
-           └── virtual table lookup join  ·                      ·
-                │                         table                  pg_constraint@pg_constraint_conrelid_idx
-                │                         equality               (oid) = (conrelid)
-                │                         equality cols are key  ·
-                └── filter                ·                      ·
-                     │                    filter                 relname = 'foo'
-                     └── virtual table    ·                      ·
-·                                         table                  pg_class@primary
+·                                         distribution  local
+·                                         vectorized    false
+sort                                      ·             ·
+ │                                        order         +conname
+ └── render                               ·             ·
+      └── hash join                       ·             ·
+           │                              equality      (relnamespace) = (oid)
+           ├── virtual table lookup join  ·             ·
+           │    │                         table         pg_constraint@pg_constraint_conrelid_idx
+           │    │                         equality      (oid) = (conrelid)
+           │    └── filter                ·             ·
+           │         │                    filter        relname = 'foo'
+           │         └── virtual table    ·             ·
+           │                              table         pg_class@primary
+           └── filter                     ·             ·
+                │                         filter        nspname = 'public'
+                └── virtual table         ·             ·
+·                                         table         pg_namespace@primary
 
 query TTT
 EXPLAIN SHOW USERS

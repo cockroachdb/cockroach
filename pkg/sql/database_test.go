@@ -60,7 +60,6 @@ func TestDatabaseHasChildSchemas(t *testing.T) {
 
 	// Create a database and schema.
 	if _, err := sqlDB.Exec(`
-SET experimental_enable_user_defined_schemas = true;
 CREATE DATABASE d;
 USE d;
 CREATE SCHEMA sc;
