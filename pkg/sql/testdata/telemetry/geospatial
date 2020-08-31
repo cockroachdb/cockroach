@@ -1,0 +1,9 @@
+feature-allowlist
+unimplemented.*
+----
+
+feature-usage
+SELECT ST_ClusterKMeans()
+----
+error: pq: st_clusterkmeans(): unimplemented: this function is not yet supported
+unimplemented.#48900.st_clusterkmeans
