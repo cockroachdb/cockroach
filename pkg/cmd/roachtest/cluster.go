@@ -554,6 +554,20 @@ func execCmdWithBuffer(ctx context.Context, l *logger, args ...string) ([]byte, 
 	return out, nil
 }
 
+// execCmdWithStdout executes the given command and returns its stdout
+// output. If the return code is not 0, an error is also returned.
+// l is used to log the command before running it. No output is logged.
+func execCmdWithStdout(ctx context.Context, l *logger, args ...string) ([]byte, error) {
+	l.Printf("> %s\n", strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+
+	out, err := cmd.Output()
+	if err != nil {
+		return out, errors.Wrapf(err, `%s`, strings.Join(args, ` `))
+	}
+	return out, nil
+}
+
 func makeGCEClusterName(name string) string {
 	name = strings.ToLower(name)
 	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
@@ -2280,6 +2294,18 @@ func (c *cluster) RunWithBuffer(
 		return nil, err
 	}
 	return execCmdWithBuffer(ctx, l,
+		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
+}
+
+// RunWithStdout runs a command on the specified node, returning the resulting
+// stdout.
+func (c *cluster) RunWithStdout(
+	ctx context.Context, l *logger, node nodeListOption, args ...string,
+) ([]byte, error) {
+	if err := errors.Wrap(ctx.Err(), "cluster.RunWithStdout"); err != nil {
+		return nil, err
+	}
+	return execCmdWithStdout(ctx, l,
 		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
 }
 
