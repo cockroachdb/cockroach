@@ -537,7 +537,7 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 func changeRemovesStore(
 	desc *roachpb.RangeDescriptor, change *kvserverpb.ChangeReplicas, storeID roachpb.StoreID,
 ) (removesStore bool) {
-	curReplica, existsInDesc := desc.GetReplicaDescriptor(storeID)
+	_, existsInDesc := desc.GetReplicaDescriptor(storeID)
 	// NB: if we're catching up from a preemptive snapshot then we won't
 	// exist in the current descriptor and we can't be removed.
 	if !existsInDesc {
@@ -547,12 +547,6 @@ func changeRemovesStore(
 	// NB: We don't use change.Removed() because it will include replicas being
 	// transitioned to VOTER_OUTGOING.
 
-	// In 19.1 and before we used DeprecatedUpdatedReplicas instead of providing
-	// a new range descriptor. Check first if this is 19.1 or earlier command which
-	// uses DeprecatedChangeType and DeprecatedReplica
-	if change.Desc == nil {
-		return change.DeprecatedChangeType == roachpb.REMOVE_VOTER && change.DeprecatedReplica.ReplicaID == curReplica.ReplicaID
-	}
 	// In 19.2 and beyond we supply the new range descriptor in the change.
 	// We know we're removed if we do not appear in the new descriptor.
 	_, existsInChange := change.Desc.GetReplicaDescriptor(storeID)

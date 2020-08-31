@@ -267,8 +267,8 @@ static void InitDefaultsChangeReplicasTrigger() {
 
 ::google::protobuf::internal::SCCInfo<2> scc_info_ChangeReplicasTrigger =
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsChangeReplicasTrigger}, {
-      &protobuf_roachpb_2fmetadata_2eproto::scc_info_ReplicaDescriptor.base,
-      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,}};
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_ReplicaDescriptor.base,}};
 
 static void InitDefaultsModifiedSpanTrigger() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -2099,19 +2099,8 @@ void MergeTrigger::InternalSwap(MergeTrigger* other) {
 // ===================================================================
 
 void ChangeReplicasTrigger::InitAsDefaultInstance() {
-  ::cockroach::roachpb::_ChangeReplicasTrigger_default_instance_._instance.get_mutable()->deprecated_replica_ = const_cast< ::cockroach::roachpb::ReplicaDescriptor*>(
-      ::cockroach::roachpb::ReplicaDescriptor::internal_default_instance());
   ::cockroach::roachpb::_ChangeReplicasTrigger_default_instance_._instance.get_mutable()->desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
-}
-void ChangeReplicasTrigger::clear_deprecated_replica() {
-  if (GetArenaNoVirtual() == NULL && deprecated_replica_ != NULL) {
-    delete deprecated_replica_;
-  }
-  deprecated_replica_ = NULL;
-}
-void ChangeReplicasTrigger::clear_deprecated_updated_replicas() {
-  deprecated_updated_replicas_.Clear();
 }
 void ChangeReplicasTrigger::clear_desc() {
   if (GetArenaNoVirtual() == NULL && desc_ != NULL) {
@@ -2119,20 +2108,16 @@ void ChangeReplicasTrigger::clear_desc() {
   }
   desc_ = NULL;
 }
-void ChangeReplicasTrigger::clear_internal_added_replicas() {
-  internal_added_replicas_.Clear();
+void ChangeReplicasTrigger::clear_added_replicas() {
+  added_replicas_.Clear();
 }
-void ChangeReplicasTrigger::clear_internal_removed_replicas() {
-  internal_removed_replicas_.Clear();
+void ChangeReplicasTrigger::clear_removed_replicas() {
+  removed_replicas_.Clear();
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int ChangeReplicasTrigger::kDeprecatedChangeTypeFieldNumber;
-const int ChangeReplicasTrigger::kDeprecatedReplicaFieldNumber;
-const int ChangeReplicasTrigger::kDeprecatedUpdatedReplicasFieldNumber;
-const int ChangeReplicasTrigger::kDeprecatedNextReplicaIdFieldNumber;
 const int ChangeReplicasTrigger::kDescFieldNumber;
-const int ChangeReplicasTrigger::kInternalAddedReplicasFieldNumber;
-const int ChangeReplicasTrigger::kInternalRemovedReplicasFieldNumber;
+const int ChangeReplicasTrigger::kAddedReplicasFieldNumber;
+const int ChangeReplicasTrigger::kRemovedReplicasFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ChangeReplicasTrigger::ChangeReplicasTrigger()
@@ -2145,30 +2130,19 @@ ChangeReplicasTrigger::ChangeReplicasTrigger()
 ChangeReplicasTrigger::ChangeReplicasTrigger(const ChangeReplicasTrigger& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      deprecated_updated_replicas_(from.deprecated_updated_replicas_),
-      internal_added_replicas_(from.internal_added_replicas_),
-      internal_removed_replicas_(from.internal_removed_replicas_) {
+      added_replicas_(from.added_replicas_),
+      removed_replicas_(from.removed_replicas_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from.has_deprecated_replica()) {
-    deprecated_replica_ = new ::cockroach::roachpb::ReplicaDescriptor(*from.deprecated_replica_);
-  } else {
-    deprecated_replica_ = NULL;
-  }
   if (from.has_desc()) {
     desc_ = new ::cockroach::roachpb::RangeDescriptor(*from.desc_);
   } else {
     desc_ = NULL;
   }
-  ::memcpy(&deprecated_change_type_, &from.deprecated_change_type_,
-    static_cast<size_t>(reinterpret_cast<char*>(&deprecated_next_replica_id_) -
-    reinterpret_cast<char*>(&deprecated_change_type_)) + sizeof(deprecated_next_replica_id_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ChangeReplicasTrigger)
 }
 
 void ChangeReplicasTrigger::SharedCtor() {
-  ::memset(&deprecated_replica_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&deprecated_next_replica_id_) -
-      reinterpret_cast<char*>(&deprecated_replica_)) + sizeof(deprecated_next_replica_id_));
+  desc_ = NULL;
 }
 
 ChangeReplicasTrigger::~ChangeReplicasTrigger() {
@@ -2177,7 +2151,6 @@ ChangeReplicasTrigger::~ChangeReplicasTrigger() {
 }
 
 void ChangeReplicasTrigger::SharedDtor() {
-  if (this != internal_default_instance()) delete deprecated_replica_;
   if (this != internal_default_instance()) delete desc_;
 }
 
@@ -2196,20 +2169,12 @@ void ChangeReplicasTrigger::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  deprecated_updated_replicas_.Clear();
-  internal_added_replicas_.Clear();
-  internal_removed_replicas_.Clear();
-  if (GetArenaNoVirtual() == NULL && deprecated_replica_ != NULL) {
-    delete deprecated_replica_;
-  }
-  deprecated_replica_ = NULL;
+  added_replicas_.Clear();
+  removed_replicas_.Clear();
   if (GetArenaNoVirtual() == NULL && desc_ != NULL) {
     delete desc_;
   }
   desc_ = NULL;
-  ::memset(&deprecated_change_type_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&deprecated_next_replica_id_) -
-      reinterpret_cast<char*>(&deprecated_change_type_)) + sizeof(deprecated_next_replica_id_));
   _internal_metadata_.Clear();
 }
 
@@ -2229,56 +2194,6 @@ bool ChangeReplicasTrigger::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // .cockroach.roachpb.ReplicaChangeType deprecated_change_type = 1;
-      case 1: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
-          int value;
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
-                 input, &value)));
-          set_deprecated_change_type(static_cast< ::cockroach::roachpb::ReplicaChangeType >(value));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_deprecated_replica()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      case 3: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_deprecated_updated_replicas()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      case 4: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
-
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &deprecated_next_replica_id_)));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       // .cockroach.roachpb.RangeDescriptor desc = 5;
       case 5: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
@@ -2295,7 +2210,7 @@ bool ChangeReplicasTrigger::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_internal_added_replicas()));
+                input, add_added_replicas()));
         } else {
           goto handle_unusual;
         }
@@ -2306,7 +2221,7 @@ bool ChangeReplicasTrigger::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(58u /* 58 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_internal_removed_replicas()));
+                input, add_removed_replicas()));
         } else {
           goto handle_unusual;
         }
@@ -2339,29 +2254,6 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // .cockroach.roachpb.ReplicaChangeType deprecated_change_type = 1;
-  if (this->deprecated_change_type() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteEnum(
-      1, this->deprecated_change_type(), output);
-  }
-
-  if (this->has_deprecated_replica()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      2, this->_internal_deprecated_replica(), output);
-  }
-
-  for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->deprecated_updated_replicas_size()); i < n; i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      3,
-      this->deprecated_updated_replicas(static_cast<int>(i)),
-      output);
-  }
-
-  if (this->deprecated_next_replica_id() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(4, this->deprecated_next_replica_id(), output);
-  }
-
   // .cockroach.roachpb.RangeDescriptor desc = 5;
   if (this->has_desc()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
@@ -2369,18 +2261,18 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->internal_added_replicas_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->added_replicas_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       6,
-      this->internal_added_replicas(static_cast<int>(i)),
+      this->added_replicas(static_cast<int>(i)),
       output);
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->internal_removed_replicas_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->removed_replicas_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       7,
-      this->internal_removed_replicas(static_cast<int>(i)),
+      this->removed_replicas(static_cast<int>(i)),
       output);
   }
 
@@ -2396,39 +2288,23 @@ size_t ChangeReplicasTrigger::ByteSizeLong() const {
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
   {
-    unsigned int count = static_cast<unsigned int>(this->deprecated_updated_replicas_size());
+    unsigned int count = static_cast<unsigned int>(this->added_replicas_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->deprecated_updated_replicas(static_cast<int>(i)));
+          this->added_replicas(static_cast<int>(i)));
     }
   }
 
   {
-    unsigned int count = static_cast<unsigned int>(this->internal_added_replicas_size());
+    unsigned int count = static_cast<unsigned int>(this->removed_replicas_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->internal_added_replicas(static_cast<int>(i)));
+          this->removed_replicas(static_cast<int>(i)));
     }
-  }
-
-  {
-    unsigned int count = static_cast<unsigned int>(this->internal_removed_replicas_size());
-    total_size += 1UL * count;
-    for (unsigned int i = 0; i < count; i++) {
-      total_size +=
-        ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->internal_removed_replicas(static_cast<int>(i)));
-    }
-  }
-
-  if (this->has_deprecated_replica()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *deprecated_replica_);
   }
 
   // .cockroach.roachpb.RangeDescriptor desc = 5;
@@ -2436,18 +2312,6 @@ size_t ChangeReplicasTrigger::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *desc_);
-  }
-
-  // .cockroach.roachpb.ReplicaChangeType deprecated_change_type = 1;
-  if (this->deprecated_change_type() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::EnumSize(this->deprecated_change_type());
-  }
-
-  if (this->deprecated_next_replica_id() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int32Size(
-        this->deprecated_next_replica_id());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -2467,20 +2331,10 @@ void ChangeReplicasTrigger::MergeFrom(const ChangeReplicasTrigger& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  deprecated_updated_replicas_.MergeFrom(from.deprecated_updated_replicas_);
-  internal_added_replicas_.MergeFrom(from.internal_added_replicas_);
-  internal_removed_replicas_.MergeFrom(from.internal_removed_replicas_);
-  if (from.has_deprecated_replica()) {
-    mutable_deprecated_replica()->::cockroach::roachpb::ReplicaDescriptor::MergeFrom(from.deprecated_replica());
-  }
+  added_replicas_.MergeFrom(from.added_replicas_);
+  removed_replicas_.MergeFrom(from.removed_replicas_);
   if (from.has_desc()) {
     mutable_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.desc());
-  }
-  if (from.deprecated_change_type() != 0) {
-    set_deprecated_change_type(from.deprecated_change_type());
-  }
-  if (from.deprecated_next_replica_id() != 0) {
-    set_deprecated_next_replica_id(from.deprecated_next_replica_id());
   }
 }
 
@@ -2501,13 +2355,9 @@ void ChangeReplicasTrigger::Swap(ChangeReplicasTrigger* other) {
 }
 void ChangeReplicasTrigger::InternalSwap(ChangeReplicasTrigger* other) {
   using std::swap;
-  CastToBase(&deprecated_updated_replicas_)->InternalSwap(CastToBase(&other->deprecated_updated_replicas_));
-  CastToBase(&internal_added_replicas_)->InternalSwap(CastToBase(&other->internal_added_replicas_));
-  CastToBase(&internal_removed_replicas_)->InternalSwap(CastToBase(&other->internal_removed_replicas_));
-  swap(deprecated_replica_, other->deprecated_replica_);
+  CastToBase(&added_replicas_)->InternalSwap(CastToBase(&other->added_replicas_));
+  CastToBase(&removed_replicas_)->InternalSwap(CastToBase(&other->removed_replicas_));
   swap(desc_, other->desc_);
-  swap(deprecated_change_type_, other->deprecated_change_type_);
-  swap(deprecated_next_replica_id_, other->deprecated_next_replica_id_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
