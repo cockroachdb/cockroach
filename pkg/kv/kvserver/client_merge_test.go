@@ -2566,7 +2566,7 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 			*lhsDesc,
 			roachpb.MakeReplicationChanges(
 				roachpb.ADD_VOTER, tc.Target(2),
-		)); !testutils.IsError(err, "descriptor changed") {
+			)); !testutils.IsError(err, "descriptor changed") {
 			t.Fatal(err)
 		}
 
@@ -3074,13 +3074,14 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		snapType kvserver.SnapshotRequest_Type,
 		sstNames []string,
 	) error {
-		// Only verify snapshots of type RAFT and on the range under exercise
-		// (range 2). Note that the keys of range 2 aren't verified in this
+		// Only verify snapshots of type VIA_SNAPSHOT_QUEUE and on the range under
+		// exercise (range 2). Note that the keys of range 2 aren't verified in this
 		// functions. Unreplicated range-id local keys are not verified because
 		// there are too many keys and the other replicated keys are verified later
 		// on in the test. This function verifies that the subsumed replicas have
 		// been handled properly.
-		if snapType != kvserver.SnapshotRequest_RAFT || inSnap.State.Desc.RangeID != roachpb.RangeID(2) {
+		if snapType != kvserver.SnapshotRequest_VIA_SNAPSHOT_QUEUE ||
+			inSnap.State.Desc.RangeID != roachpb.RangeID(2) {
 			return nil
 		}
 		// The seven SSTs we are expecting to ingest are in the following order:
@@ -3285,7 +3286,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		return index
 	}()
 
-	beforeRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
+	beforeRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
 
 	// Restore Raft traffic to the LHS on store2.
 	log.Infof(ctx, "restored traffic to store 2")
@@ -3313,7 +3314,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	// Wait for all replicas to catch up to the same point. Because we truncated
 	// the log while store2 was unavailable, this will require a Raft snapshot.
 	testutils.SucceedsSoon(t, func() error {
-		afterRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
+		afterRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
 		if afterRaftSnaps <= beforeRaftSnaps {
 			return errors.New("expected store2 to apply at least 1 additional raft snapshot")
 		}

@@ -1585,6 +1585,12 @@ func confChangeImpl(
 			if err := checkNotExists(rDesc); err != nil {
 				return nil, err
 			}
+		case NON_VOTER:
+			// Like the case above, we must be removing a non-voter, so the target
+			// should be gone from the descriptor.
+			if err := checkNotExists(rDesc); err != nil {
+				return nil, err
+			}
 		case VOTER_FULL:
 			// A voter can't be in the descriptor if it's being removed.
 			if err := checkNotExists(rDesc); err != nil {
@@ -1618,6 +1624,11 @@ func confChangeImpl(
 			// ChangeReplicas txn that this learner is not currently a voter.
 			// Demotions (i.e. transitioning from voter to learner) are not
 			// represented in `added`; they're handled in `removed` above.
+			changeType = raftpb.ConfChangeAddLearnerNode
+		case NON_VOTER:
+			// We're adding a non-voter. Like the case above, we're guaranteed that
+			// this learner is not a voter. Promotions of non-voters to voters and
+			// demotions vice-versa are not currently supported.
 			changeType = raftpb.ConfChangeAddLearnerNode
 		default:
 			// A voter that is demoting was just removed and re-added in the

@@ -1428,6 +1428,18 @@ func (rc ReplicationChanges) VoterRemovals() []ReplicationTarget {
 	return rc.byType(REMOVE_VOTER)
 }
 
+// NonVoterAdditions returns a slice of all contained replication
+// changes that add non-voters.
+func (rc ReplicationChanges) NonVoterAdditions() []ReplicationTarget {
+	return rc.byType(ADD_NON_VOTER)
+}
+
+// NonVoterRemovals returns a slice of all contained replication changes
+// that remove non-voters.
+func (rc ReplicationChanges) NonVoterRemovals() []ReplicationTarget {
+	return rc.byType(REMOVE_NON_VOTER)
+}
+
 // Changes returns the changes requested by this AdminChangeReplicasRequest, taking
 // the deprecated method of doing so into account.
 func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {

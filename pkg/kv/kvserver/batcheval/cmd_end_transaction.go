@@ -1097,20 +1097,8 @@ func changeReplicasTrigger(
 	// holding the lease.
 	pd.Local.GossipFirstRange = rec.IsFirstRange()
 
-	var desc roachpb.RangeDescriptor
-	if change.Desc != nil {
-		// Trigger proposed by a 19.2+ node (and we're a 19.2+ node as well).
-		desc = *change.Desc
-	} else {
-		// Trigger proposed by a 19.1 node. Reconstruct descriptor from deprecated
-		// fields.
-		desc = *rec.Desc()
-		desc.SetReplicas(roachpb.MakeReplicaDescriptors(change.DeprecatedUpdatedReplicas))
-		desc.NextReplicaID = change.DeprecatedNextReplicaID
-	}
-
 	pd.Replicated.State = &kvserverpb.ReplicaState{
-		Desc: &desc,
+		Desc: change.Desc,
 	}
 	pd.Replicated.ChangeReplicas = &kvserverpb.ChangeReplicas{
 		ChangeReplicasTrigger: *change,

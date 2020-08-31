@@ -6504,23 +6504,31 @@ func TestReplicaCorruption(t *testing.T) {
 func TestChangeReplicasDuplicateError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
 
-	// We now allow adding a replica to the same node, to support rebalances
-	// within the same node when replication is 1x, so add another replica to the
-	// range descriptor to avoid this case.
-	if _, err := tc.addBogusReplicaToRangeDesc(context.Background()); err != nil {
-		t.Fatalf("Unexpected error %v", err)
+	tests := []roachpb.ReplicaChangeType{
+		roachpb.ADD_VOTER,
+		roachpb.ADD_NON_VOTER,
 	}
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
-		NodeID:  tc.store.Ident.NodeID,
-		StoreID: 9999,
-	})
-	if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
-		t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
+	for _, typ := range tests {
+		t.Run(typ.String(), func(t *testing.T) {
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
+			tc.Start(t, stopper)
+			// We now allow adding a replica to the same node, to support rebalances
+			// within the same node when replication is 1x, so add another replica to the
+			// range descriptor to avoid this case.
+			if _, err := tc.addBogusReplicaToRangeDesc(context.Background()); err != nil {
+				t.Fatalf("Unexpected error %v", err)
+			}
+			chgs := roachpb.MakeReplicationChanges(typ, roachpb.ReplicationTarget{
+				NodeID:  tc.store.Ident.NodeID,
+				StoreID: 9999,
+			})
+			if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
+				t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
+			}
+		})
 	}
 }
 
@@ -12959,13 +12967,13 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		mk(
 			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearnerOrVoter},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 		),
 		// Simple removal of learner.
 		mk(
 			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.LEARNER, internalChangeTypeRemoveLearnerOrVoter},
+			typOp{roachpb.LEARNER, internalChangeTypeRemove},
 		),
 
 		// All other cases below need to go through joint quorums (though some
@@ -12976,7 +12984,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 			"ENTER_JOINT(r2 l3) ADD_VOTER[(n200,s200):3LEARNER], REMOVE_VOTER[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearnerOrVoter},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 		),
 
 		// Promotion of two voters.
@@ -12991,8 +12999,8 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		mk(
 			"ENTER_JOINT(r2 r3) REMOVE_VOTER[(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearnerOrVoter},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearnerOrVoter},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
 		),
 
 		// Demoting two voters.

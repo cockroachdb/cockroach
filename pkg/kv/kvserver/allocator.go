@@ -765,6 +765,15 @@ func (a *Allocator) scorerOptions() scorerOptions {
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
 // to from the provided list. It excludes the current lease holder replica
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
+//
+// TODO(aayush, andrei): If a draining leaseholder doesn't see any other voters
+// in its locality, but sees a learner, rather than allowing the lease to be
+// transferred outside of its current locality (likely violating leaseholder
+// preferences, at least temporarily), it would be nice to promote the existing
+// learner to a voter. This could be further extended to cases where we have a
+// dead voter in a given locality along with a live learner. In such cases, we
+// would want to promote the live learner to a voter and demote the dead voter
+// to a learner.
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,
