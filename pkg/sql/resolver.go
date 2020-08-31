@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -652,7 +653,7 @@ type tableLookupFn = *internalLookupCtx
 // appropriate implementation of Descriptor before constructing a
 // new internalLookupCtx. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptors(
-	rawDescs []descpb.Descriptor, prefix *dbdesc.Immutable,
+	ctx context.Context, rawDescs []descpb.Descriptor, prefix *dbdesc.Immutable,
 ) *internalLookupCtx {
 	descs := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
@@ -668,17 +669,20 @@ func newInternalLookupCtxFromDescriptors(
 			descs[i] = schemadesc.NewImmutable(*t.Schema)
 		}
 	}
-	return newInternalLookupCtx(descs, prefix)
+	lCtx := newInternalLookupCtx(ctx, descs, prefix)
+	return lCtx
 }
 
-func newInternalLookupCtx(descs []catalog.Descriptor, prefix *dbdesc.Immutable) *internalLookupCtx {
+func newInternalLookupCtx(
+	ctx context.Context, descs []catalog.Descriptor, prefix *dbdesc.Immutable,
+) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
 	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
 	tbDescs := make(map[descpb.ID]*tabledesc.Immutable)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
 	var tbIDs, typIDs, dbIDs []descpb.ID
-	// Record database descriptors for name lookups.
+	// Record descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
 		case *dbdesc.Immutable:
@@ -703,6 +707,46 @@ func newInternalLookupCtx(descs []catalog.Descriptor, prefix *dbdesc.Immutable) 
 			schemaDescs[desc.GetID()] = desc
 		}
 	}
+
+	if len(typDescs) > 0 {
+		// Since we just scanned all the descriptors, we already have everything
+		// we need to hydrate our types. Set up an accessor for the type hydration
+		// method to look into the scanned set of descriptors.
+		typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
+			typDesc := typDescs[id]
+			dbDesc := dbDescs[typDesc.ParentID]
+			// We don't use the collection's ResolveSchemaByID method here because
+			// we already have all of the descriptors. User defined types are only
+			// members of the public schema or a user defined schema, so those are
+			// the only cases we have to consider here.
+			var scName string
+			switch typDesc.ParentSchemaID {
+			case keys.PublicSchemaID:
+				scName = tree.PublicSchema
+			default:
+				scName = schemaDescs[typDesc.ParentSchemaID].Name
+			}
+			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
+			return name, typDesc, nil
+		}
+		// Now hydrate all table descriptors.
+		for i := range descs {
+			desc := descs[i]
+			if tblDesc, ok := desc.(*tabledesc.Immutable); ok {
+				if err := typedesc.HydrateTypesInTableDescriptor(
+					ctx,
+					tblDesc.TableDesc(),
+					typedesc.TypeLookupFunc(typeLookup),
+				); err != nil {
+					// If we ran into an error hydrating the types, that means that we
+					// have some sort of corrupted descriptor state. Rather than disable
+					// uses of GetAllDescriptors, just log the error.
+					log.Errorf(ctx, "%s", err.Error())
+				}
+			}
+		}
+	}
+
 	return &internalLookupCtx{
 		dbNames:     dbNames,
 		dbDescs:     dbDescs,

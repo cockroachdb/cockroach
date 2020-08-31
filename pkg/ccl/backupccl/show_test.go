@@ -45,6 +45,7 @@ SET experimental_enable_user_defined_schemas = true;
 CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
 USE data; CREATE SCHEMA sc;
 CREATE TABLE data.sc.t1 (a INT);
+CREATE TABLE data.sc.t2 (a data.welcome);
 `)
 
 	const full, inc, inc2 = LocalFoo + "/full", LocalFoo + "/inc", LocalFoo + "/inc2"
@@ -64,6 +65,7 @@ ORDER BY object_type, object_name`, full)
 		{"data", "NULL", "sc", "schema", "NULL", beforeTS, "NULL", "false"},
 		{"data", "public", "bank", "table", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
 		{"data", "sc", "t1", "table", "NULL", beforeTS, strconv.Itoa(0), "false"},
+		{"data", "sc", "t2", "table", "NULL", beforeTS, strconv.Itoa(0), "false"},
 		{"data", "public", "_welcome", "type", "NULL", beforeTS, "NULL", "false"},
 		{"data", "public", "welcome", "type", "NULL", beforeTS, "NULL", "false"},
 	}
@@ -92,6 +94,7 @@ ORDER BY object_type, object_name`, full)
 		{"_welcome", "NULL", beforeTS, "NULL", "false"},
 		{"sc", "NULL", beforeTS, "NULL", "false"},
 		{"t1", "NULL", beforeTS, "0", "false"},
+		{"t2", "NULL", beforeTS, "0", "false"},
 		// Incremental.
 		{"data", beforeTS, incTS, "NULL", "false"},
 		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2)), "false"},
@@ -99,6 +102,7 @@ ORDER BY object_type, object_name`, full)
 		{"_welcome", beforeTS, incTS, "NULL", "false"},
 		{"sc", beforeTS, incTS, "NULL", "false"},
 		{"t1", beforeTS, incTS, "0", "false"},
+		{"t2", beforeTS, incTS, "0", "false"},
 	}, res)
 
 	// Check the separate inc backup.
@@ -123,10 +127,13 @@ ORDER BY object_type, object_name`, full)
 	require.Equal(t, [][]string{
 		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts)},
 		{"t1", "NULL", beforeTS, "0"},
+		{"t2", "NULL", beforeTS, "0"},
 		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
 		{"t1", beforeTS, incTS, "0"},
+		{"t2", beforeTS, incTS, "0"},
 		{"bank", incTS, inc2TS, "0"},
 		{"t1", incTS, inc2TS, "0"},
+		{"t2", incTS, inc2TS, "0"},
 		{"auth", incTS, inc2TS, "0"},
 		{"users", incTS, inc2TS, "3"},
 	}, res)
@@ -136,6 +143,7 @@ ORDER BY object_type, object_name`, full)
 	require.Equal(t, [][]string{
 		{"bank", incTS, inc2TS, "0"},
 		{"t1", incTS, inc2TS, "0"},
+		{"t2", incTS, inc2TS, "0"},
 		{"auth", incTS, inc2TS, "0"},
 		{"users", incTS, inc2TS, "3"},
 	}, res)
@@ -153,15 +161,15 @@ ORDER BY object_type, object_name`, full)
 	details2Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, details2Desc, details2Desc.PrimaryIndex.ID))
 
 	sqlDBRestore.CheckQueryResults(t, fmt.Sprintf(`SHOW BACKUP RANGES '%s'`, details), [][]string{
-		{"/Table/60/1", "/Table/60/2", string(details1Key), string(details1Key.PrefixEnd())},
-		{"/Table/61/1", "/Table/61/2", string(details2Key), string(details2Key.PrefixEnd())},
+		{"/Table/61/1", "/Table/61/2", string(details1Key), string(details1Key.PrefixEnd())},
+		{"/Table/62/1", "/Table/62/2", string(details2Key), string(details2Key.PrefixEnd())},
 	})
 
 	var showFiles = fmt.Sprintf(`SELECT start_pretty, end_pretty, size_bytes, rows
 		FROM [SHOW BACKUP FILES '%s']`, details)
 	sqlDBRestore.CheckQueryResults(t, showFiles, [][]string{
-		{"/Table/60/1/1", "/Table/60/1/42", "369", "41"},
-		{"/Table/60/1/42", "/Table/60/2", "531", "59"},
+		{"/Table/61/1/1", "/Table/61/1/42", "369", "41"},
+		{"/Table/61/1/42", "/Table/61/2", "531", "59"},
 	})
 	sstMatcher := regexp.MustCompile(`\d+\.sst`)
 	pathRows := sqlDB.QueryStr(t, `SELECT path FROM [SHOW BACKUP FILES $1]`, details)

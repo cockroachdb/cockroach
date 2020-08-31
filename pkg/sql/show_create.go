@@ -220,7 +220,7 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 }
 
 // ShowCreate returns a valid SQL representation of the CREATE
-// statement used to create the descriptor passed in. The
+// statement used to create the descriptor passed in.
 //
 // The names of the tables references by foreign keys, and the
 // interleaved parent if any, are prefixed by their own database name
@@ -242,7 +242,7 @@ func (p *planner) ShowCreate(
 	} else if desc.IsSequence() {
 		stmt, err = ShowCreateSequence(ctx, &tn, desc)
 	} else {
-		lCtx := newInternalLookupCtxFromDescriptors(allDescs, nil /* want all tables */)
+		lCtx := newInternalLookupCtxFromDescriptors(ctx, allDescs, nil /* want all tables */)
 		stmt, err = ShowCreateTable(ctx, p, &tn, dbPrefix, desc, lCtx, displayOptions)
 	}
 

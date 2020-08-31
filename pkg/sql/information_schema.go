@@ -1586,7 +1586,7 @@ func forEachTypeDesc(
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(descs, dbContext)
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext)
 	for _, id := range lCtx.typIDs {
 		typ := lCtx.typDescs[id]
 		dbDesc, parentExists := lCtx.dbDescs[typ.ParentID]
@@ -1738,7 +1738,7 @@ func forEachTableDescWithTableLookupInternal(
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(descs, dbContext)
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext)
 
 	if virtualOpts == virtualMany || virtualOpts == virtualOnce {
 		// Virtual descriptors first.
