@@ -508,7 +508,7 @@ func TestSplitTriggerRaftSnapshotRace(t *testing.T) {
 			var c int // num Raft snapshots
 			if err := tc.ServerConn(i).QueryRow(`
 SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
-	name = 'range.snapshots.normal-applied'
+	name = 'range.snapshots.applied-voter'
 `).Scan(&n, &c); err != nil {
 				t.Fatal(err)
 			}

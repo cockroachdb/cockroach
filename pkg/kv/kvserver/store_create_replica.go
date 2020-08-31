@@ -314,6 +314,19 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	return nil
 }
 
+// isReplicaInitializedLocked returns true if a replica of the range designated
+// by `rangeID` is not marked uninitialized on this Store.
+//
+// Requires the caller to have ensured that this store contains the rangeID in
+// its `replicas` map.
+func (s *Store) isReplicaInitializedLocked(ctx context.Context, rangeID roachpb.RangeID) bool {
+	if _, ok := s.mu.replicas.Load(int64(rangeID)); !ok {
+		log.Fatalf(ctx, "programming error: range %d does not exist in store %d", rangeID, s.StoreID())
+	}
+	_, uninitialized := s.mu.uninitReplicas[rangeID]
+	return !uninitialized
+}
+
 // maybeMarkReplicaInitializedLocked should be called whenever a previously
 // unintialized replica has become initialized so that the store can update its
 // internal bookkeeping. It requires that Store.mu and Replica.raftMu

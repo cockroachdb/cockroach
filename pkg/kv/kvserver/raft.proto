@@ -138,8 +138,8 @@ message SnapshotRequest {
   }
 
   enum Type {
-    RAFT = 0;
-    LEARNER = 1;
+    VIA_SNAPSHOT_QUEUE = 0;
+    LEARNER_INITIAL = 1;
     reserved 2;
   }
 
