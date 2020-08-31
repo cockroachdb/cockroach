@@ -679,6 +679,7 @@ type ExecutorConfig struct {
 	DistSQLRunTestingKnobs        *execinfra.TestingKnobs
 	EvalContextTestingKnobs       tree.EvalContextTestingKnobs
 	TenantTestingKnobs            *TenantTestingKnobs
+	BackupRestoreTestingKnobs     *BackupRestoreTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
@@ -850,6 +851,18 @@ func (*TenantTestingKnobs) ModuleTestingKnobs() {}
 func (k *TenantTestingKnobs) CanSetClusterSettings() bool {
 	return k != nil && k.ClusterSettingsUpdater != nil
 }
+
+// BackupRestoreTestingKnobs contains knobs for tenant behavior.
+type BackupRestoreTestingKnobs struct {
+	// AllowImplicitAccess allows implicit access to data sources for non-admin
+	// users.
+	AllowImplicitAccess bool
+}
+
+var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*BackupRestoreTestingKnobs) ModuleTestingKnobs() {}
 
 // databaseCacheHolder is a thread-safe container for a *Cache.
 // It also allows clients to block until the cache is updated to a desired
