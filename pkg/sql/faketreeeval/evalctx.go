@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // DummySequenceOperators implements the tree.SequenceOperators interface by
@@ -116,6 +117,18 @@ func (ep *DummyEvalPlanner) ParseType(sql string) (*types.T, error) {
 
 // EvalSubquery is part of the tree.EvalPlanner interface.
 func (ep *DummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
+func (ep *DummyEvalPlanner) ResolveTypeByOID(_ context.Context, _ oid.Oid) (*types.T, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// ResolveType implements the tree.TypeReferenceResolver interface.
+func (ep *DummyEvalPlanner) ResolveType(
+	_ context.Context, _ *tree.UnresolvedObjectName,
+) (*types.T, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 

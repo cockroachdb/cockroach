@@ -2993,6 +2993,7 @@ type EvalDatabase interface {
 // EvalPlanner is a limited planner that can be used from EvalContext.
 type EvalPlanner interface {
 	EvalDatabase
+	TypeReferenceResolver
 	// ParseType parses a column type.
 	ParseType(sql string) (*types.T, error)
 

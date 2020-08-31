@@ -18,3 +18,18 @@ SELECT pg_my_temp_schema()
 # Regression test for #49072.
 statement ok
 SELECT has_table_privilege('root'::NAME, 0, 'select')
+
+# Regression test for #53684.
+statement ok
+CREATE TYPE typ AS ENUM ('hello')
+
+query T
+SELECT format_type(oid, 0) FROM pg_catalog.pg_type WHERE typname = 'typ'
+----
+typ
+
+# Nothing breaks if we put a non-existing oid into format_type.
+query T
+SELECT format_type(152100, 0)
+----
+unknown (OID=152100)
