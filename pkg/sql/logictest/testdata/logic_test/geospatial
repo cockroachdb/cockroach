@@ -1257,26 +1257,27 @@ Square (right)                            POINT (0.5 0.5)
 Square overlapping left and right square  POINT (0.45 0.5)
 
 # Collections
-query TTT
+query TTTT
 SELECT
   dsc,
-  ST_AsEWKT(ST_Multi(geom)),
-  ST_AsEWKT(ST_CollectionHomogenize(geom))
+  ST_AsText(ST_Multi(geom)),
+  ST_AsText(ST_CollectionHomogenize(geom)),
+  ST_AsText(ST_ForceCollection(geom))
 FROM geom_operators_test
 ORDER BY dsc ASC
 ----
-Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY
-Empty LineString                          MULTILINESTRING EMPTY                                  LINESTRING EMPTY
-Empty Point                               MULTIPOINT EMPTY                                       POINT EMPTY
-Faraway point                             MULTIPOINT (5 5)                                       POINT (5 5)
-Line going through left and right square  MULTILINESTRING ((-0.5 0.5, 0.5 0.5))                  LINESTRING (-0.5 0.5, 0.5 0.5)
-NULL                                      NULL                                                   NULL
-Nested Geometry Collection                GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  POINT (0 0)
-Point middle of Left Square               MULTIPOINT (-0.5 0.5)                                  POINT (-0.5 0.5)
-Point middle of Right Square              MULTIPOINT (0.5 0.5)                                   POINT (0.5 0.5)
-Square (left)                             MULTIPOLYGON (((-1 0, 0 0, 0 1, -1 1, -1 0)))          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
-Square (right)                            MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)))             POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
-Square overlapping left and right square  MULTIPOLYGON (((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))    POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
+Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY                      GEOMETRYCOLLECTION EMPTY
+Empty LineString                          MULTILINESTRING EMPTY                                  LINESTRING EMPTY                              GEOMETRYCOLLECTION (LINESTRING EMPTY)
+Empty Point                               MULTIPOINT EMPTY                                       POINT EMPTY                                   GEOMETRYCOLLECTION (POINT EMPTY)
+Faraway point                             MULTIPOINT (5 5)                                       POINT (5 5)                                   GEOMETRYCOLLECTION (POINT (5 5))
+Line going through left and right square  MULTILINESTRING ((-0.5 0.5, 0.5 0.5))                  LINESTRING (-0.5 0.5, 0.5 0.5)                GEOMETRYCOLLECTION (LINESTRING (-0.5 0.5, 0.5 0.5))
+NULL                                      NULL                                                   NULL                                          NULL
+Nested Geometry Collection                GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  POINT (0 0)                                   GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+Point middle of Left Square               MULTIPOINT (-0.5 0.5)                                  POINT (-0.5 0.5)                              GEOMETRYCOLLECTION (POINT (-0.5 0.5))
+Point middle of Right Square              MULTIPOINT (0.5 0.5)                                   POINT (0.5 0.5)                               GEOMETRYCOLLECTION (POINT (0.5 0.5))
+Square (left)                             MULTIPOLYGON (((-1 0, 0 0, 0 1, -1 1, -1 0)))          POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))        GEOMETRYCOLLECTION (POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0)))
+Square (right)                            MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)))             POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))           GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)))
+Square overlapping left and right square  MULTIPOLYGON (((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))    POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))  GEOMETRYCOLLECTION (POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0)))
 
 query TTTT
 SELECT

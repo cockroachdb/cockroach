@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -28,7 +29,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var v201 = roachpb.Version{Major: 20, Minor: 1}
+var (
+	v201 = roachpb.Version{Major: 20, Minor: 1}
+	v202 = roachpb.Version{Major: 20, Minor: 2}
+)
 
 // Feature tests that are invoked between each step of the version upgrade test.
 // Tests can use u.clusterVersion to determine which version is active at the
@@ -430,6 +434,11 @@ func stmtFeatureTest(
 			}
 			db := u.conn(ctx, t, i)
 			if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
+				if testutils.IsError(err, "no inbound stream connection") && u.clusterVersion(ctx, t, i).Less(v202) {
+					// This error has been fixed in 20.2+ but may still occur on earlier
+					// versions.
+					return true // skipped
+				}
 				t.Fatal(err)
 			}
 			return false

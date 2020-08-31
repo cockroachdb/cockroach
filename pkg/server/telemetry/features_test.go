@@ -11,6 +11,7 @@
 package telemetry_test
 
 import (
+	"math"
 	"sync"
 	"testing"
 
@@ -39,4 +40,54 @@ func TestGetCounterDoesNotRace(t *testing.T) {
 		counterSet[c] = struct{}{}
 	}
 	require.Len(t, counterSet, 1)
+}
+
+// TestBucket checks integer quantization.
+func TestBucket(t *testing.T) {
+	testData := []struct {
+		input    int64
+		expected int64
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 2},
+		{3, 3},
+		{4, 4},
+		{5, 5},
+		{6, 6},
+		{7, 7},
+		{8, 8},
+		{9, 9},
+		{10, 10},
+		{11, 10},
+		{20, 10},
+		{99, 10},
+		{100, 100},
+		{101, 100},
+		{200, 100},
+		{999, 100},
+		{1000, 1000},
+		{math.MaxInt64, 1000000000000000000},
+		{-1, -1},
+		{-2, -2},
+		{-3, -3},
+		{-4, -4},
+		{-5, -5},
+		{-6, -6},
+		{-7, -7},
+		{-8, -8},
+		{-9, -9},
+		{-10, -10},
+		{-11, -10},
+		{-20, -10},
+		{-100, -100},
+		{-200, -100},
+		{math.MinInt64, -1000000000000000000},
+	}
+
+	for _, tc := range testData {
+		if actual, expected := telemetry.Bucket10(tc.input), tc.expected; actual != expected {
+			t.Errorf("%d: expected %d, got %d", tc.input, expected, actual)
+		}
+	}
 }
