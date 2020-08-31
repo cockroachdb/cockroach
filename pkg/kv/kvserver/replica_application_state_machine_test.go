@@ -60,7 +60,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 				if deprecated {
 					trigger = roachpb.ChangeReplicasTrigger{
-						DeprecatedChangeType: roachpb.ADD_REPLICA,
+						DeprecatedChangeType: roachpb.ADD_VOTER,
 						DeprecatedReplica:    addedReplDesc,
 						DeprecatedUpdatedReplicas: []roachpb.ReplicaDescriptor{
 							replDesc,
@@ -86,7 +86,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 				if deprecated {
 					trigger = roachpb.ChangeReplicasTrigger{
-						DeprecatedChangeType:      roachpb.REMOVE_REPLICA,
+						DeprecatedChangeType:      roachpb.REMOVE_VOTER,
 						DeprecatedReplica:         removedReplDesc,
 						DeprecatedUpdatedReplicas: []roachpb.ReplicaDescriptor{},
 						DeprecatedNextReplicaID:   replDesc.ReplicaID + 1,
