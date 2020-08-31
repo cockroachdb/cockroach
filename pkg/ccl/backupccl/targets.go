@@ -487,6 +487,7 @@ func getRelevantDescChanges(
 	descs []catalog.Descriptor,
 	expanded []descpb.ID,
 	priorIDs map[descpb.ID]descpb.ID,
+	descriptorCoverage tree.DescriptorCoverage,
 ) ([]BackupManifest_DescriptorRevision, error) {
 
 	allChanges, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
@@ -559,13 +560,26 @@ func getRelevantDescChanges(
 		}
 	}
 
+	isInterestingID := func(id descpb.ID) bool {
+		// We're interested in changes to all descriptors if we're targeting all
+		// descriptors except for the system database itself.
+		if descriptorCoverage == tree.AllDescriptors && id != keys.SystemDatabaseID {
+			return true
+		}
+		// A change to an ID that we're interested in is obviously interesting.
+		if _, ok := interestingIDs[id]; ok {
+			return true
+		}
+		return false
+	}
+
 	for _, change := range allChanges {
 		// A change to an ID that we are interested in is obviously interesting --
 		// a change is also interesting if it is to a table that has a parent that
 		// we are interested and thereafter it also becomes an ID in which we are
 		// interested in changes (since, as mentioned above, to decide if deletes
 		// are interesting).
-		if _, ok := interestingIDs[change.ID]; ok {
+		if isInterestingID(change.ID) {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
 			desc := catalogkv.UnwrapDescriptorRaw(ctx, change.Desc)
