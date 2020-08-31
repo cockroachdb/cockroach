@@ -620,7 +620,7 @@ WHERE n.nspname = 'public'
 oid         relname  adrelid  adnum  adbin           adsrc
 1666782879  t1       55       4      12              12
 841178406   t2       56       2      unique_rowid()  unique_rowid()
-2186255414  t3       57       3      'FOO'::STRING   'FOO'::STRING
+2186255414  t3       57       3      'FOO'           'FOO'
 2186255409  t3       57       4      unique_rowid()  unique_rowid()
 581442133   mv1      59       2      unique_rowid()  unique_rowid()
 
@@ -2070,7 +2070,7 @@ WHERE n.nspname = 'public'
 ----
 1666782879  t1   12
 841178406   t2   unique_rowid()
-2186255414  t3   'FOO'::STRING
+2186255414  t3   'FOO'
 2186255409  t3   unique_rowid()
 581442133   mv1  unique_rowid()
 
@@ -2689,7 +2689,7 @@ WHERE
   AND NOT a.attisdropped
   AND attname = 'x'
 ----
-'howdy'::STRING
+'howdy'
 
 # Regression test for limits on virtual index scans. (#53522)
 
