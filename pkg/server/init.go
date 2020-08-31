@@ -390,6 +390,24 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) e
 		return ErrJoinRPCUnsupported
 	}
 
+	// Busy-loop through all the resolvers at least once. Keep this code block
+	// roughly in sync with the one below.
+	for _, res := range s.config.resolvers {
+		addr := res.Addr()
+		err := s.attemptJoin(ctx, addr)
+		if err == nil {
+			return nil
+		}
+
+		if errors.Is(err, ErrJoinRPCUnsupported) || errors.Is(err, ErrIncompatibleBinaryVersion) {
+			// Propagate upwards; these are error conditions the caller knows to
+			// expect.
+			return err
+		}
+
+		// Ignore all other errors, they'll be better dealt with below.
+	}
+
 	const joinRPCBackoff = time.Second
 	var tickChan <-chan time.Time
 	{
