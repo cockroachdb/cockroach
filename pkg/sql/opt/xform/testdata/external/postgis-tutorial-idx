@@ -39,12 +39,12 @@ project
       │              ├── columns: gid:1!null
       │              ├── inverted expression: /6
       │              │    ├── tight: false
-      │              │    └── union spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │              ├── key: (1)
       │              └── scan nyc_neighborhoods@nyc_neighborhoods_geom_idx
       │                   ├── columns: gid:1!null geom_inverted_key:6!null
       │                   ├── inverted constraint: /6/1
-      │                   │    └── spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │                   ├── key: (1)
       │                   └── fd: (1)-->(6)
       └── filters
@@ -82,12 +82,12 @@ project
       │              ├── columns: gid:1!null
       │              ├── inverted expression: /8
       │              │    ├── tight: false
-      │              │    └── union spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │              ├── key: (1)
       │              └── scan nyc_streets@nyc_streets_geom_idx
       │                   ├── columns: gid:1!null geom_inverted_key:8!null
       │                   ├── inverted constraint: /8/1
-      │                   │    └── spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │                   ├── key: (1)
       │                   └── fd: (1)-->(8)
       └── filters
@@ -127,12 +127,12 @@ project
       │              ├── columns: gid:1!null
       │              ├── inverted expression: /6
       │              │    ├── tight: false
-      │              │    └── union spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │              ├── key: (1)
       │              └── scan nyc_neighborhoods@nyc_neighborhoods_geom_idx
       │                   ├── columns: gid:1!null geom_inverted_key:6!null
       │                   ├── inverted constraint: /6/1
-      │                   │    └── spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │                   ├── key: (1)
       │                   └── fd: (1)-->(6)
       └── filters
@@ -173,12 +173,12 @@ project
       │              ├── columns: gid:1!null
       │              ├── inverted expression: /8
       │              │    ├── tight: false
-      │              │    └── union spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │              ├── key: (1)
       │              └── scan nyc_streets@nyc_streets_geom_idx
       │                   ├── columns: gid:1!null geom_inverted_key:8!null
       │                   ├── inverted constraint: /8/1
-      │                   │    └── spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │                   ├── key: (1)
       │                   └── fd: (1)-->(8)
       └── filters
@@ -215,12 +215,12 @@ scalar-group-by
  │    │         ├── columns: gid:1!null
  │    │         ├── inverted expression: /12
  │    │         │    ├── tight: false
- │    │         │    └── union spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │    │         │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
  │    │         ├── key: (1)
  │    │         └── scan nyc_census_blocks@nyc_census_blocks_geom_idx
  │    │              ├── columns: gid:1!null geom_inverted_key:12!null
  │    │              ├── inverted constraint: /12/1
- │    │              │    └── spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │    │              │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
  │    │              ├── key: (1)
  │    │              └── fd: (1)-->(12)
  │    └── filters

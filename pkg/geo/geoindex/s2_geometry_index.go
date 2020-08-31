@@ -172,14 +172,16 @@ func isBadGeomCovering(cu s2.CellUnion) bool {
 }
 
 // InvertedIndexKeys implements the GeometryIndex interface.
-func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g geo.Geometry) ([]Key, error) {
+func (s *s2GeometryIndex) InvertedIndexKeys(
+	c context.Context, g geo.Geometry,
+) ([]Key, geopb.BoundingBox, error) {
 	// If the geometry exceeds the bounds, we index the clipped geometry in
 	// addition to the special cell, so that queries for geometries that don't
 	// exceed the bounds don't need to query the special cell (which would
 	// become a hotspot in the key space).
 	gt, clipped, err := s.convertToGeomTAndTryClip(g)
 	if err != nil {
-		return nil, err
+		return nil, geopb.BoundingBox{}, err
 	}
 	var keys []Key
 	if gt != nil {
@@ -189,7 +191,15 @@ func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g geo.Geometry) (
 	if clipped {
 		keys = append(keys, Key(exceedsBoundsCellID))
 	}
-	return keys, nil
+	bbox := geopb.BoundingBox{}
+	bboxRef := g.BoundingBoxRef()
+	if bboxRef == nil && len(keys) > 0 {
+		return keys, bbox, errors.AssertionFailedf("non-empty geometry should have bounding box")
+	}
+	if bboxRef != nil {
+		bbox = *bboxRef
+	}
+	return keys, bbox, nil
 }
 
 // Covers implements the GeometryIndex interface.
