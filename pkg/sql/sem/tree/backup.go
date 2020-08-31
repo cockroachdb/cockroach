@@ -46,14 +46,13 @@ var _ NodeFormatter = &BackupOptions{}
 
 // Backup represents a BACKUP statement.
 type Backup struct {
-	Targets            *TargetList
-	DescriptorCoverage DescriptorCoverage
-	To                 StringOrPlaceholderOptList
-	IncrementalFrom    Exprs
-	AsOf               AsOfClause
-	Options            BackupOptions
-	Nested             bool
-	AppendToLatest     bool
+	Targets         *TargetList
+	To              StringOrPlaceholderOptList
+	IncrementalFrom Exprs
+	AsOf            AsOfClause
+	Options         BackupOptions
+	Nested          bool
+	AppendToLatest  bool
 	// Subdir may be set by the parser when the SQL query is of the form
 	// `BACKUP INTO 'subdir' IN...`. Alternatively, if Nested is true but a subdir
 	// was not explicitly specified by the user, then this will be set during
