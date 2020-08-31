@@ -84,10 +84,18 @@ enum ReplicaType {
   // count towards the quorum(s). Candidates will not ask for (or take into
   // account) votes of (peers they consider) LEARNERs for leadership nor do
   // their acknowledged log entries get taken into account for determining the
-  // committed index. At the time of writing, learners in CockroachDB are a
-  // short-term transient state: a replica being added and on its way to being a
-  // VOTER_{FULL,INCOMING}, or a VOTER_DEMOTING being removed.
+  // committed index. learners in CockroachDB are a short-term transient state:
+  // a replica being added and on its way to being a VOTER_{FULL,INCOMING}, or a
+  // VOTER_DEMOTING being removed.
   LEARNER = 1;
+  // NON_VOTER indicates a replica that applies committed entries, does not
+  // count towards the quorum(s). Candidates will not ask for (or take into
+  // account) votes of (peers they consider) NON_VOTERs for leadership nor do
+  // their acknowledged log entries get taken into account for determining the
+  // committed index.
+  // Under the hood, it is based on an etcd Learner, like the LEARNER replica
+  // type defined above.
+  NON_VOTER = 5;
 }
 
 // ReplicaDescriptor describes a replica location by node ID
