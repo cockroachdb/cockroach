@@ -27,7 +27,6 @@ var pgxBlocklist20_2 = blocklist{
 	"v4.TestConnQueryErrorWhileReturningRows":                      "26925",
 	"v4.TestConnQueryReadRowMultipleTimes":                         "26925",
 	"v4.TestConnQueryValues":                                       "26925",
-	"v4.TestConnQueryValuesWithUnknownOID":                         "26925",
 	"v4.TestConnSendBatch":                                         "44712",
 	"v4.TestConnSendBatchWithPreparedStatement":                    "41558",
 	"v4.TestConnSimpleProtocol":                                    "21286",
