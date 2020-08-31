@@ -3597,6 +3597,31 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_rotate": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"rot_radians", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				rotRadians := float64(tree.MustBeDFloat(args[1]))
+
+				ret, err := geomfn.Rotate(g.Geometry, rotRadians)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_setpoint": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -4478,7 +4503,6 @@ Bottom Left.`,
 	"st_polygonize":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
 	"st_quantizecoordinates":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
 	"st_removerepeatedpoints":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49017}),
-	"st_rotate":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49019}),
 	"st_seteffectivearea":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
 	"st_shiftlongitude":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49034}),
 	"st_simplify":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49036}),
