@@ -140,6 +140,58 @@ func TestRateLimiterBasic(t *testing.T) {
 		mt.Advance(2 * time.Millisecond)
 		<-done
 	}
+	{
+		// Fill the bucket all the way up.
+		mt.Advance(2 * time.Second)
+
+		// Consume some. There should be 10 in the bucket.
+		go doWait(10)
+		<-done
+
+		// THis should need to wait one second for the bucket to fill up.
+		go doWait(30)
+		ensureNotDone()
+
+		// Adjust the rate and the burst down. This should move the current
+		// capacity down to 0 and lower the burst. It will now take 10 seconds
+		// before the bucket is full.
+		rl.UpdateLimit(1, 10)
+		ensureNotDone()
+		mt.Advance(9 * time.Second)
+		ensureNotDone()
+		mt.Advance(time.Second)
+		<-done
+
+		// At this point, the limiter should be 20 in debt so it should take
+		// 20s before the current goroutine is unblocked.
+		go doWait(2)
+		ensureNotDone()
+
+		// Adjust the rate and burst up. The burst delta is 10, so the debt should
+		// reduce to 10 and the rate is doubled. In 6 seconds the goroutine should
+		// unblock.
+		rl.UpdateLimit(2, 20)
+		mt.Advance(5 * time.Second)
+		ensureNotDone()
+		mt.Advance(time.Second)
+		<-done
+
+		// Set the limit and burst back to the default values.
+		rl.UpdateLimit(10, 20)
+	}
+	{
+		// Fill the bucket all the way up.
+		mt.Advance(2 * time.Second)
+
+		// Consume some. There should be 10 in the bucket.
+		go doWait(10)
+		<-done
+
+		require.False(t, rl.AdmitN(11))
+		require.True(t, rl.AdmitN(9)) // 1 left
+		require.False(t, rl.AdmitN(2))
+		require.True(t, rl.AdmitN(1)) // 0 left
+	}
 }
 
 // TestRateLimitWithVerySmallDelta ensures that in cases where the delta is

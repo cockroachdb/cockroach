@@ -379,49 +379,9 @@ CR_GEOS_Geometry CR_GEOS_GeometryFromSlice(CR_GEOS* lib, CR_GEOS_Handle handle,
   return geom;
 }
 
-void CR_GEOS_PushLittleEndianUint32(std::vector<unsigned char>& buf, uint32_t value) {
-  for (auto i = 0; i < sizeof(value); i++) {
-    buf.push_back(static_cast<unsigned char>((value >> (8 * i)) & 0xff));
-  }
-}
-
 void CR_GEOS_writeGeomToEWKB(CR_GEOS* lib, CR_GEOS_Handle handle, CR_GEOS_Geometry geom,
                              CR_GEOS_String* ewkb, int srid) {
   auto hasZ = lib->GEOSHasZ_r(handle, geom);
-  auto isEmpty = lib->GEOSisEmpty_r(handle, geom);
-  // Empty points error in GEOS EWKB encoding. As such, we have to encode ourselves.
-  // This is still broken for GEOMETRYCOLLECTIONs/MULTIPOINT containing empty points,
-  // but there's not much we can do there for now.
-  // TODO(#geo); for 3D / 4D support, patch this to support those dimensions (we cannot extract that info with the GEOS API).
-  // Alternatively, upgrade GEOS to include https://github.com/libgeos/geos/commit/466cff135c8e504632ae38b79a1348dbadb390f1.
-  if (isEmpty && lib->GEOSGeomTypeId_r(handle, geom) == 0) {
-    std::vector<unsigned char> buf;
-    buf.push_back('\x01');  // little endian
-
-    uint32_t metadataInfo = 1;  // 1 means it is a point.
-    if (srid != 0) {
-      metadataInfo |= 0x20000000;  // add SRID bit.
-    }
-    CR_GEOS_PushLittleEndianUint32(buf, metadataInfo);
-    if (srid != 0) {
-      CR_GEOS_PushLittleEndianUint32(buf, uint32_t(srid));
-    }
-    // Push back two NaN float values in little endian order.
-    for (auto i = 0; i < 2; i++) {
-      buf.push_back('\x00');
-      buf.push_back('\x00');
-      buf.push_back('\x00');
-      buf.push_back('\x00');
-      buf.push_back('\x00');
-      buf.push_back('\x00');
-      buf.push_back('\xF8');
-      buf.push_back('\x7F');
-    }
-    ewkb->data = static_cast<char*>(malloc(buf.size()));
-    ewkb->len = buf.size();
-    memcpy(ewkb->data, buf.data(), buf.size());
-    return;
-  }
   auto wkbWriter = lib->GEOSWKBWriter_create_r(handle);
   lib->GEOSWKBWriter_setByteOrder_r(handle, wkbWriter, 1);
   if (hasZ) {
