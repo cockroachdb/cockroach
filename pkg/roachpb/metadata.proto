@@ -93,7 +93,9 @@ enum ReplicaType {
   // their acknowledged log entries get taken into account for determining the
   // committed index.
   // Under the hood, it is based on an etcd Learner, like the LEARNER replica
-  // type defined above.
+  // type defined above. A possibly counter-intuitive behavior is that while
+  // these replicas don't count towards the quorum, they will still cause the
+  // quota pool on the leader to throttle incoming proposals if they fall behind.
   NON_VOTER = 5;
 }
 

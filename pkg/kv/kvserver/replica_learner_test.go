@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func predIncoming(rDesc roachpb.ReplicaDescriptor) bool {
@@ -189,7 +190,52 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().Voters(), 2)
 	require.Len(t, desc.Replicas().Learners(), 0)
-	require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(1), `range.snapshots.learner-applied`))
+	require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(1), `range.snapshots.applied-for-learner-upreplication`))
+}
+
+func TestAddRemoveNonVotingReplicasBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	knobs, ltk := makeReplicationTestKnobs()
+	blockUntilSnapshotCh := make(chan struct{})
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
+		if h.Type == kvserver.SnapshotRequest_NON_VOTER_RAFT {
+			close(blockUntilSnapshotCh)
+		}
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{Knobs: knobs},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchStartKey := tc.ScratchRange(t)
+	g, _ := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		_, err := tc.AddNonVoters(scratchStartKey, tc.Target(1))
+		return err
+	})
+
+	// When we create a non-voting replica, we queue up its range leaseholder into
+	// the raft snapshot queue so that it can receive its LEARNER_UPREPLICATE snapshot and
+	// upreplicate relatively soon (i.e. without having to wait up to a full scanner
+	// cycle).
+	select {
+	case <-blockUntilSnapshotCh:
+	case <-time.After(30 * time.Second):
+		t.Fatal(`test timed out; did not receive NON_VOTER_RAFT snapshot as expected`)
+	}
+	require.NoError(t, g.Wait())
+
+	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+	require.Len(t, desc.Replicas().NonVoters(), 1)
+
+	_, err := tc.RemoveNonVoters(scratchStartKey, tc.Target(1))
+	require.NoError(t, err)
+	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+	require.NoError(t, tc.WaitForFullReplication())
+	require.Len(t, desc.Replicas().NonVoters(), 0)
 }
 
 func TestLearnerRaftConfState(t *testing.T) {
@@ -302,8 +348,8 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	// returning the error from the `ReceiveSnapshot` knob to test the codepath
 	// that uses a new context for the rollback, but plumbing that context is
 	// annoying.
-	if !testutils.IsError(err, `remote couldn't accept LEARNER snapshot`) {
-		t.Fatalf(`expected "remote couldn't accept LEARNER snapshot" error got: %+v`, err)
+	if !testutils.IsError(err, `remote couldn't accept LEARNER_UPREPLICATE snapshot`) {
+		t.Fatalf(`expected "remote couldn't accept LEARNER_UPREPLICATE snapshot" error got: %+v`, err)
 	}
 
 	// Make sure we cleaned up after ourselves (by removing the learner).
@@ -497,7 +543,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 
 	// Note the value of the metrics before.
 	generatedBefore := getFirstStoreMetric(t, tc.Server(0), `range.snapshots.generated`)
-	raftAppliedBefore := getFirstStoreMetric(t, tc.Server(0), `range.snapshots.normal-applied`)
+	raftAppliedBefore := getFirstStoreMetric(t, tc.Server(0), `range.snapshots.raft-applied-for-voter`)
 
 	// Run the raftsnapshot queue. SucceedsSoon because it may take a bit for
 	// raft to figure out that the replica needs a snapshot.
@@ -520,7 +566,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 
 	// Make sure it didn't send any RAFT snapshots.
 	require.Equal(t, generatedBefore, getFirstStoreMetric(t, tc.Server(0), `range.snapshots.generated`))
-	require.Equal(t, raftAppliedBefore, getFirstStoreMetric(t, tc.Server(0), `range.snapshots.normal-applied`))
+	require.Equal(t, raftAppliedBefore, getFirstStoreMetric(t, tc.Server(0), `range.snapshots.raft-applied-for-voter`))
 
 	close(blockSnapshotsCh)
 	require.NoError(t, g.Wait())

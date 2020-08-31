@@ -176,6 +176,22 @@ func (s *Store) logChange(
 			Reason:         reason,
 			Details:        details,
 		}
+	case roachpb.ADD_NON_VOTER:
+		logType = kvserverpb.RangeLogEventType_add_non_voter
+		info = kvserverpb.RangeLogEvent_Info{
+			RemovedReplica: &replica,
+			UpdatedDesc:    &desc,
+			Reason:         reason,
+			Details:        details,
+		}
+	case roachpb.REMOVE_NON_VOTER:
+		logType = kvserverpb.RangeLogEventType_remove_non_voter
+		info = kvserverpb.RangeLogEvent_Info{
+			RemovedReplica: &replica,
+			UpdatedDesc:    &desc,
+			Reason:         reason,
+			Details:        details,
+		}
 	default:
 		return errors.Errorf("unknown replica change type %s", changeType)
 	}

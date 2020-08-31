@@ -475,14 +475,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return stats, expl, errors.Wrap(err, expl)
 	}
 	if !hasReady {
-		// We must update the proposal quota even if we don't have a ready.
-		// Consider the case when our quota is of size 1 and two out of three
-		// replicas have committed one log entry while the third is lagging
-		// behind. When the third replica finally does catch up and sends
-		// along a MsgAppResp, since the entry is already committed on the
-		// leader replica, no Ready is emitted. But given that the third
-		// replica has caught up, we can release
-		// some quota back to the pool.
+		// We must update the proposal quota even if we don't have a ready. Consider the
+		// case when our quota is of size 1 and two out of three replicas have committed
+		// one log entry while the third is lagging behind. When the third replica
+		// finally does catch up and sends along a MsgAppResp, since the entry is already
+		// committed on the leader replica, no Ready is emitted. But given that the third
+		// replica has caught up, we can release some quota back to the pool.
 		r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 		return stats, "", nil
 	}

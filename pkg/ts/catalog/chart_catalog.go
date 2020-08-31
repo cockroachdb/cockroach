@@ -493,9 +493,10 @@ var charts = []sectionDescription{
 				Title: "Snapshots",
 				Metrics: []string{
 					"range.snapshots.generated",
-					"range.snapshots.normal-applied",
+					"range.snapshots.raft-applied-for-voter",
 					"range.snapshots.preemptive-applied",
-					"range.snapshots.learner-applied",
+					"range.snapshots.applied-for-learner-upreplication",
+					"range.snapshots.raft-applied-for-non-voter",
 				},
 			},
 		},

@@ -768,10 +768,12 @@ func (r *Replica) applySnapshot(
 	defer func() {
 		if err == nil {
 			switch snapType {
-			case SnapshotRequest_RAFT:
-				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
-			case SnapshotRequest_LEARNER:
-				r.store.metrics.RangeSnapshotsLearnerApplied.Inc(1)
+			case SnapshotRequest_VOTER_RAFT:
+				r.store.metrics.RangeSnapshotsRaftAppliedForVoter.Inc(1)
+			case SnapshotRequest_LEARNER_UPREPLICATE:
+				r.store.metrics.RangeSnapshotsUpreplicateLearnerApplied.Inc(1)
+			case SnapshotRequest_NON_VOTER_RAFT:
+				r.store.metrics.RangeSnapshotsRaftAppliedForNonVoter.Inc(1)
 			}
 		}
 	}()

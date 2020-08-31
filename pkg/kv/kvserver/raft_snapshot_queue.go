@@ -108,19 +108,31 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
-	snapType := SnapshotRequest_RAFT
+	snapType := SnapshotRequest_VOTER_RAFT
 
-	// A learner replica is either getting a snapshot of type LEARNER by the node
-	// that's adding it or it's been orphaned and it's about to be cleaned up by
-	// the replicate queue. Either way, no point in also sending it a snapshot of
-	// type RAFT.
-	if repDesc.GetType() == roachpb.LEARNER {
+	// A learner replica is either getting a snapshot of type
+	// SnapshotRequest_LEARNER_UPREPLICATE by the node that's adding it or it's been orphaned
+	// and it's about to be cleaned up by the replicate queue. Either way, no
+	// point in also sending it a snapshot of type RAFT.
+	isLearner := repDesc.GetType() == roachpb.LEARNER
+	isLearnerOrNonVoter := isLearner || repDesc.GetType() == roachpb.NON_VOTER
+	if isLearnerOrNonVoter {
 		if fn := repl.store.cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
 			return nil
 		}
-		snapType = SnapshotRequest_LEARNER
-		if index := repl.getAndGCSnapshotLogTruncationConstraints(timeutil.Now(), repDesc.StoreID); index > 0 {
-			// There is a snapshot being transferred. It's probably a LEARNER snap, so
+		// An learner replica is either getting a snapshot of type
+		// SnapshotRequest_LEARNER_UPREPLICATE by the node that's adding it or it's been
+		// orphaned and it's about to be cleaned up by the replicate queue. Either
+		// way, no point in also sending it a snapshot of type RAFT.
+		//
+		// Non-voting replicas, unlike learners, rely on the raft snapshot queue to
+		// upreplicate, even though they are both etcd learners under the hood.
+		// Refer to comment above NonVoters() in metadata_replicas.go for details.
+		snapType = SnapshotRequest_NON_VOTER_RAFT
+		if index := repl.getAndGCSnapshotLogTruncationConstraints(
+			timeutil.Now(), repDesc.StoreID,
+		); isLearner && index > 0 {
+			// There is a snapshot being transferred. It's probably a LEARNER_UPREPLICATE snap, so
 			// bail for now and try again later.
 			err := errors.Errorf(
 				"skipping snapshot; replica is likely a learner in the process of being added: %s", repDesc)

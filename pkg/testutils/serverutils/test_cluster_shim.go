@@ -80,6 +80,18 @@ type TestClusterInterface interface {
 		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
+	// AddNonVoters adds non-voting replicas for a range on a set of stores.
+	//
+	//This method blocks until the new replicas become a part of the Raft group.
+	AddNonVoters(
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) (roachpb.RangeDescriptor, error)
+
+	// RemoveNonVoters removes one or more learners from a range.
+	RemoveNonVoters(
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) (roachpb.RangeDescriptor, error)
+
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
 	// In particular, it returns one particular node's (the hint, if specified) view
 	// of the current lease.

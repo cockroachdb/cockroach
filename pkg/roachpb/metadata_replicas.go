@@ -108,6 +108,10 @@ func predLearner(rDesc ReplicaDescriptor) bool {
 	return rDesc.GetType() == LEARNER
 }
 
+func predNonVoter(rDesc ReplicaDescriptor) bool {
+	return rDesc.GetType() == NON_VOTER
+}
+
 // Voters returns the current and future voter replicas in the set. This means
 // that during an atomic replication change, only the replicas that will be
 // voters once the change completes will be returned; "outgoing" voters will not
@@ -140,10 +144,7 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // then a second ConfChange promotes it to a full replica.
 //
 // This means that learners are currently always expected to have a short
-// lifetime, approximately the time it takes to send a snapshot. Ideas have been
-// kicked around to use learners with follower reads, which could be a cheap way
-// to allow many geographies to have local reads without affecting write
-// latencies. If implemented, these learners would have long lifetimes.
+// lifetime, approximately the time it takes to send a snapshot.
 //
 // For simplicity, CockroachDB treats learner replicas the same as voter
 // replicas as much as possible, but there are a few exceptions:
@@ -154,7 +155,8 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // - Learner replicas cannot become raft leaders, so we also don't allow them to
 //   become leaseholders. As a result, DistSender and the various oracles don't
 //   try to send them traffic.
-// - The raft snapshot queue tries to avoid sending snapshots to learners for
+// - The raft snapshot queue tries to avoid sending snapshots to ephemeral
+//   learners (but not to non-voting replicas, which are also etcd learners) for
 //   reasons described below.
 // - Merges won't run while a learner replica is present.
 //
@@ -177,11 +179,11 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // the node getting the learner going away), it tries to clean up after itself
 // by rolling back the addition of the learner.
 //
-// There is another race between the learner snapshot being sent and the raft
-// snapshot queue happening to check the replica at the same time, also sending
-// it a snapshot. This is safe but wasteful, so the raft snapshot queue won't
-// try to send snapshots to learners if there is already a snapshot to that
-// range in flight.
+// [*] There is another race between the learner snapshot being sent and the
+// raft snapshot queue happening to check the replica at the same time, also
+// sending it a snapshot. This is safe but wasteful, so the raft snapshot queue
+// won't try to send snapshots to learners if there is already a snapshot to
+// that range in flight.
 //
 // *However*, raft is currently pickier than the needs to be about the snapshots
 // it requests and it can get stuck in StateSnapshot if it doesn't receive
@@ -206,13 +208,38 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // would send to any follower, consuming resources. More surprising is that once
 // the learner has received a snapshot, it's considered by the quota pool that
 // prevents the raft leader from getting too far ahead of the followers. This is
-// because a learner (especially one that already has a snapshot) is expected to
-// very soon be a voter, so we treat it like one. However, it means a slow
-// learner can slow down regular traffic, which is possibly counterintuitive.
+// because, currently, we only support ephemeral learners and they (especially
+// ones that already have a snapshot) are expected to very soon be voters, so we
+// treat them as such. However, it means a slow learner can slow down regular
+// traffic, which is possibly counterintuitive.
 //
 // For some related mega-comments, see Replica.sendSnapshot.
 func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
 	return d.Filter(predLearner)
+}
+
+// NonVoters returns the non-voting replicas in the set. Non-voting replicas are
+// different from learners in that the learners are a temporary internal
+// intermediate state used to make atomic replication changes less disruptive to
+// the system, whereas non-voting replicas, even though they are both internally
+// etcd learners in the raft group, are meant to be a user-visible state and are
+// explicitly chosen to be placed in specific localities via zone configs.
+//
+// Key differences between how we treat (ephemeral) learners and non-voting replicas:
+// - Non-voting replicas rely on the raft snapshot queue in order to
+// upreplicate. This is different from the way Learner replicas upreplicate (see
+// comment above) because of the various (necessary) complexities /
+// race-conditions we've discovered between the raft snapshot queue and the
+// separately-issued LEARNER snapshot (see the two paragraphs above [*]). This
+// complexity was necessary in case of learner replicas because we need to
+// _know_ when they finish upreplication so that we can initiate their promotion
+// into full voters. We don't have a similar requirement for non-voting replicas
+// and we're choosing to avoid all the complexity.
+// TODO(aayush): Expand this documentation once `AdminRelocateRange` knows how to
+// deal with such replicas & range merges no longer block due to the presence of
+// non-voting replicas.
+func (d ReplicaDescriptors) NonVoters() []ReplicaDescriptor {
+	return d.Filter(predNonVoter)
 }
 
 // Filter returns only the replica descriptors for which the supplied method
@@ -287,7 +314,7 @@ func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
 		switch rDesc.GetType() {
 		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING:
 			return true
-		case VOTER_FULL, LEARNER:
+		case VOTER_FULL, LEARNER, NON_VOTER:
 		default:
 			panic(fmt.Sprintf("unknown replica type %d", rDesc.GetType()))
 		}
@@ -319,6 +346,8 @@ func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 			cs.VotersOutgoing = append(cs.VotersOutgoing, id)
 			cs.LearnersNext = append(cs.LearnersNext, id)
 		case LEARNER:
+			cs.Learners = append(cs.Learners, id)
+		case NON_VOTER:
 			cs.Learners = append(cs.Learners, id)
 		default:
 			panic(fmt.Sprintf("unknown ReplicaType %d", typ))

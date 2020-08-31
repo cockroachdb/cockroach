@@ -3021,7 +3021,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// there are too many keys and the other replicated keys are verified later
 		// on in the test. This function verifies that the subsumed replicas have
 		// been handled properly.
-		if snapType != kvserver.SnapshotRequest_RAFT || inSnap.State.Desc.RangeID != roachpb.RangeID(2) {
+		if snapType != kvserver.SnapshotRequest_VOTER_RAFT || inSnap.State.Desc.RangeID != roachpb.RangeID(2) {
 			return nil
 		}
 		// The seven SSTs we are expecting to ingest are in the following order:
@@ -3226,7 +3226,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		return index
 	}()
 
-	beforeRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
+	beforeRaftSnaps := store2.Metrics().RangeSnapshotsRaftAppliedForVoter.Count()
 
 	// Restore Raft traffic to the LHS on store2.
 	log.Infof(ctx, "restored traffic to store 2")
@@ -3254,7 +3254,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	// Wait for all replicas to catch up to the same point. Because we truncated
 	// the log while store2 was unavailable, this will require a Raft snapshot.
 	testutils.SucceedsSoon(t, func() error {
-		afterRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
+		afterRaftSnaps := store2.Metrics().RangeSnapshotsRaftAppliedForVoter.Count()
 		if afterRaftSnaps <= beforeRaftSnaps {
 			return errors.New("expected store2 to apply at least 1 additional raft snapshot")
 		}

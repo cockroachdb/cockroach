@@ -138,8 +138,9 @@ message SnapshotRequest {
   }
 
   enum Type {
-    RAFT = 0;
-    LEARNER = 1;
+    VOTER_RAFT = 0;
+    LEARNER_UPREPLICATE = 1;
+    NON_VOTER_RAFT = 3;
     reserved 2;
   }
 
