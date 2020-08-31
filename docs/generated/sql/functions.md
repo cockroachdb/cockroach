@@ -1643,6 +1643,9 @@ The paths themselves are given in the direction of the first geometry.</p>
 <tr><td><a name="st_symdifference"></a><code>st_symdifference(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the symmetric difference of both geometries.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_symmetricdifference"></a><code>st_symmetricdifference(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the symmetric difference of both geometries.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_touches"></a><code>st_touches(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the only points in common between geometry_a and geometry_b are on the boundary. Note points do not touch other points.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>

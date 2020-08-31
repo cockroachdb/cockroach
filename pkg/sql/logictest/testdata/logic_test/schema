@@ -347,3 +347,38 @@ COMMENT ON COLUMN privs.usage_tbl.x IS 'foo'
 
 statement error pq: user testuser does not have USAGE privilege on schema privs
 ALTER TYPE privs.usage_typ ADD VALUE 'denied'
+
+subtest authorization
+
+user root
+# Test the AUTHORIZATION argument to CREATE SCHEMA.
+
+# Create a user to create a schema for.
+statement ok
+CREATE USER user1;
+
+# Creates a schema for named with user1 as the owner.
+statement ok
+CREATE SCHEMA AUTHORIZATION user1
+
+statement error pq: schema "user1" already exists
+CREATE SCHEMA AUTHORIZATION user1
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS AUTHORIZATION user1
+
+statement ok
+CREATE SCHEMA user1_schema AUTHORIZATION user1
+
+# The created schemas should both be owned by user1.
+query TT
+SELECT
+  nspname, usename
+FROM
+  pg_catalog.pg_namespace
+  LEFT JOIN pg_catalog.pg_user ON pg_namespace.nspowner = pg_user.usesysid
+WHERE
+  nspname LIKE 'user1%';
+----
+user1         user1
+user1_schema  user1

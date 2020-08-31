@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -232,11 +233,24 @@ func (t *test) WorkerProgress(frac float64) {
 	t.progress(goid.Get(), frac)
 }
 
-// Skip records msg into t.spec.Skip and calls panic(errTestFatal) - thus
-// interrupting the running of the test.
-func (t *test) Skip(msg string, details string) {
-	t.spec.Skip = msg
-	t.spec.SkipDetails = details
+var _ skip.SkippableTest = (*test)(nil)
+
+// Skip skips the test. The first argument if any is the main message.
+// The remaining argument, if any, form the details.
+// This implements the skip.SkippableTest interface.
+func (t *test) Skip(args ...interface{}) {
+	if len(args) > 0 {
+		t.spec.Skip = fmt.Sprint(args[0])
+		args = args[1:]
+	}
+	t.spec.SkipDetails = fmt.Sprint(args...)
+	panic(errTestFatal)
+}
+
+// Skipf skips the test. The formatted message becomes the skip reason.
+// This implements the skip.SkippableTest interface.
+func (t *test) Skipf(format string, args ...interface{}) {
+	t.spec.Skip = fmt.Sprintf(format, args...)
 	panic(errTestFatal)
 }
 

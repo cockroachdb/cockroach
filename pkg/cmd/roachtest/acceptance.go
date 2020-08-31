@@ -26,12 +26,8 @@ func registerAcceptance(r *testRegistry) {
 		// Sorted. Please keep it that way.
 		{name: "bank/cluster-recovery", fn: runBankClusterRecovery},
 		{name: "bank/node-restart", fn: runBankNodeRestart},
-		{
-			name: "bank/zerosum-splits", fn: runBankNodeZeroSum,
-			skip: "https://github.com/cockroachdb/cockroach/issues/33683 (runs into " +
-				" various errors during its rebalances, see IsExpectedRelocateError)",
-		},
-		// {"bank/zerosum-restart", runBankZeroSumRestart},
+		{name: "bank/zerosum-splits", fn: runBankNodeZeroSum},
+		{name: "bank/zerosum-restart", fn: runBankZeroSumRestart},
 		{name: "build-info", fn: runBuildInfo},
 		{name: "build-analyze", fn: runBuildAnalyze},
 		{name: "cli/node-status", fn: runCLINodeStatus},

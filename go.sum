@@ -162,8 +162,8 @@ github.com/cockroachdb/grpc-gateway v1.14.6-0.20200519165156-52697fc4a249 h1:pZu
 github.com/cockroachdb/grpc-gateway v1.14.6-0.20200519165156-52697fc4a249/go.mod h1:UJ0EZAp832vCd54Wev9N1BMKEyvcZ5+IM0AwDrnlkEc=
 github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f h1:o/kfcElHqOiXqcou5a3rIlMc7oJbMQkeLk0VQJ7zgqY=
 github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f/go.mod h1:i/u985jwjWRlyHXQbwatDASoW0RMlZ/3i9yJHE2xLkI=
-github.com/cockroachdb/pebble v0.0.0-20200824180455-875ca32696b6 h1:erL/39EP/sn3v5oEwYHCPcewADqwQhgzXGRbaRilAjc=
-github.com/cockroachdb/pebble v0.0.0-20200824180455-875ca32696b6/go.mod h1:hU7vhtrqonEphNF+xt8/lHdaBprxmV1h8BOGrd9XwmQ=
+github.com/cockroachdb/pebble v0.0.0-20200831143935-e6a9f9a3c936 h1:MaPvrDBbbWMzmI3uuBMKvcpDfZDY/QHx22T1pb9J6YI=
+github.com/cockroachdb/pebble v0.0.0-20200831143935-e6a9f9a3c936/go.mod h1:hU7vhtrqonEphNF+xt8/lHdaBprxmV1h8BOGrd9XwmQ=
 github.com/cockroachdb/redact v0.0.0-20200622112456-cd282804bbd3 h1:2+dpIJzYMSbLi0587YXpi8tOJT52qCOI/1I0UNThc/I=
 github.com/cockroachdb/redact v0.0.0-20200622112456-cd282804bbd3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/redact v1.0.2 h1:bRktqHBXPqI+9bkOx0ikn9RS09G9k83oAdLx6rXRVTQ=
