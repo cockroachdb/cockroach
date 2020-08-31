@@ -113,7 +113,7 @@ func TestAdminRelocateRange(t *testing.T) {
 			if ic.err != nil {
 				continue
 			}
-			if len(ic.ops) == 2 && ic.ops[0].ChangeType == roachpb.ADD_REPLICA && ic.ops[1].ChangeType == roachpb.REMOVE_REPLICA {
+			if len(ic.ops) == 2 && ic.ops[0].ChangeType == roachpb.ADD_VOTER && ic.ops[1].ChangeType == roachpb.REMOVE_VOTER {
 				actAtomic++
 			} else {
 				actSingle++
