@@ -443,8 +443,8 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	}
 
 	if disjointLeaseholders {
-		tc.AddReplicasOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
-		tc.AddReplicasOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
+		tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
+		tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
 		tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(1))
 		testutils.SucceedsSoon(t, func() error {
 			rhsRepl, err := rhsStore.GetReplica(rhsDesc.RangeID)
@@ -627,14 +627,14 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	rhsRangeDesc := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey("b")).Desc()
 
 	// Replicate [a, b) to s2, s3, and s4, and put the lease on s3.
-	tc.AddReplicasOrFatal(t, lhsRangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
+	tc.AddVotersOrFatal(t, lhsRangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
 	tc.TransferRangeLeaseOrFatal(t, *lhsRangeDesc, tc.Target(2))
-	tc.RemoveReplicasOrFatal(t, lhsRangeDesc.StartKey.AsRawKey(), tc.Target(0))
+	tc.RemoveVotersOrFatal(t, lhsRangeDesc.StartKey.AsRawKey(), tc.Target(0))
 
 	// Replicate [b, Max) to s2, s3, and s4, and put the lease on s4.
-	tc.AddReplicasOrFatal(t, rhsRangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
+	tc.AddVotersOrFatal(t, rhsRangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
 	tc.TransferRangeLeaseOrFatal(t, *rhsRangeDesc, tc.Target(3))
-	tc.RemoveReplicasOrFatal(t, rhsRangeDesc.StartKey.AsRawKey(), tc.Target(0))
+	tc.RemoveVotersOrFatal(t, rhsRangeDesc.StartKey.AsRawKey(), tc.Target(0))
 
 	// N.B. We isolate r1 on s1 so that node liveness heartbeats do not interfere
 	// with our precise clock management on s2, s3, and s4.
@@ -1618,8 +1618,8 @@ func TestStoreRangeMergeCheckConsistencyAfterSubsumption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tc.AddReplicasOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
-	tc.AddReplicasOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
 	tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(1))
 
 	// Launch the merge.
@@ -1829,14 +1829,14 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	store0, store1 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 1)
 
 	rangeDesc := store0.LookupReplica(roachpb.RKey("a")).Desc()
-	tc.AddReplicasOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.AddVotersOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Target(1))
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tc.RemoveReplicasOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
-	tc.RemoveReplicasOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.RemoveVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.RemoveVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
@@ -2049,7 +2049,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
 
 	rangeDesc := store0.LookupReplica(roachpb.RKey("a")).Desc()
-	tc.AddReplicasOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2184,7 +2184,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
 
 	rangeDesc := store0.LookupReplica(roachpb.RKey("a")).Desc()
-	tc.AddReplicasOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2216,7 +2216,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	// Remove store2 from the range after the merge. It won't hear about this yet,
 	// but we'll be able to commit the configuration change because we have two
 	// other live members.
-	tc.RemoveReplicasOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
+	tc.RemoveVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
 
 	// Verify that store2 won't inadvertently GC the RHS before it's heard about
 	// the merge. This is a particularly tricky case for the replica GC queue, as
@@ -2274,7 +2274,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	store2 := tc.GetFirstStoreFromServer(t, 2)
 
 	rangeDesc := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey("a")).Desc()
-	tc.AddReplicasOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 
 	// Split off three ranges.
 	keys := []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b"), roachpb.RKey("c")}
@@ -2301,7 +2301,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 
 	// Remove all replicas from store2.
 	for _, repl := range repls {
-		tc.RemoveReplicasOrFatal(t, repl.Desc().StartKey.AsRawKey(), tc.Target(2))
+		tc.RemoveVotersOrFatal(t, repl.Desc().StartKey.AsRawKey(), tc.Target(2))
 	}
 
 	// Merge all three ranges together. store2 won't hear about this merge.
@@ -2444,7 +2444,7 @@ func TestStoreRangeMergeDeadFollowerBeforeTxn(t *testing.T) {
 	store0 := tc.GetFirstStoreFromServer(t, 0)
 
 	rangeDesc := store0.LookupReplica(roachpb.RKey("a")).Desc()
-	tc.AddReplicasOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 	lhsDesc, _, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2489,7 +2489,7 @@ func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 	store0 := tc.GetFirstStoreFromServer(t, 0)
 
 	rangeDesc := store0.LookupReplica(roachpb.RKey("a")).Desc()
-	tc.AddReplicasOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 	lhsDesc, _, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2528,11 +2528,11 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tc.AddReplicasOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
-		tc.AddReplicasOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
+		tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
+		tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
 
 		// Abandon a replica of the LHS on store2.
-		tc.AddReplicasOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
+		tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
 		var lhsRepl2 *kvserver.Replica
 		testutils.SucceedsSoon(t, func() error {
 			lhsRepl2, err = store2.GetReplica(lhsDesc.RangeID)
@@ -2547,7 +2547,7 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 			}
 			return nil
 		})
-		tc.RemoveReplicasOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
+		tc.RemoveVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
 
 		if withMerge {
 			// Merge the two ranges together.
@@ -2574,7 +2574,7 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tc.AddReplicasOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
+		tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
 		// Give store2 the lease to force all commands to be applied, including the
 		// ChangeReplicas.
 		tc.TransferRangeLeaseOrFatal(t, *lhsDesc, tc.Target(2))
@@ -2841,7 +2841,7 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 	// interesting scenario in which the leaseholder for the RHS has very
 	// out-of-date information about the status of the merge.
 	rangeDesc := store0.LookupReplica(roachpb.RKey("a")).Desc()
-	tc.AddReplicasOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
 	if err != nil {
 		t.Fatal(err)
@@ -2985,7 +2985,7 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 
 	// Create and place the ranges as described in the comment on this test.
 	rangeDesc := store0.LookupReplica(aKey).Desc()
-	tc.AddReplicasOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, rangeDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 	testKeys := []roachpb.RKey{aKey, bKey, cKey}
 	for _, key := range testKeys {
 		splitArgs := adminSplitArgs(key.AsRawKey())
@@ -3910,7 +3910,7 @@ func setupClusterWithSubsumedRange(
 	require.NoError(t, err)
 	add := func(desc *roachpb.RangeDescriptor) {
 		testutils.SucceedsSoon(t, func() error {
-			*desc, err = tc.AddReplicas(desc.StartKey.AsRawKey(), tc.Target(1))
+			*desc, err = tc.AddVoters(desc.StartKey.AsRawKey(), tc.Target(1))
 			if kv.IsExpectedRelocateError(err) {
 				// Retry.
 				return errors.Newf("ChangeReplicas: received error %s", err)
