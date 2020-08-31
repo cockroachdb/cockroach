@@ -1432,7 +1432,7 @@ Available Commands:
   version           output version information
   debug             debugging commands
   sqlfmt            format SQL statements
-  workload          [experimental] generators for data and query loads
+  workload          generators for data and query loads
   systembench       Run systembench
   help              Help about any command
 
