@@ -74,7 +74,7 @@ func TestClosedTimestampWorksWhenRequestsAreSentToNonLeaseHolders(t *testing.T) 
 
 	// Create our scratch range and up-replicate it.
 	k := tc.ScratchRange(t)
-	_, err := tc.AddReplicas(k, tc.Target(1), tc.Target(2))
+	_, err := tc.AddVoters(k, tc.Target(1), tc.Target(2))
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
 
