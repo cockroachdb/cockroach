@@ -3544,6 +3544,31 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_rotate": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"rotRadians", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				rotRadians := float64(*args[1].(*tree.DFloat))
+
+				ret, err := geomfn.Rotate(g.Geometry, rotRadians)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_setpoint": makeBuiltin(
 		defProps(),
 		tree.Overload{
