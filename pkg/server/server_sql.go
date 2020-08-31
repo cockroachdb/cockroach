@@ -549,6 +549,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	if tenantKnobs := cfg.TestingKnobs.TenantTestingKnobs; tenantKnobs != nil {
 		execCfg.TenantTestingKnobs = tenantKnobs.(*sql.TenantTestingKnobs)
 	}
+	if backupRestoreKnobs := cfg.TestingKnobs.BackupRestore; backupRestoreKnobs != nil {
+		execCfg.BackupRestoreTestingKnobs = backupRestoreKnobs.(*sql.BackupRestoreTestingKnobs)
+	}
 
 	statsRefresher := stats.MakeRefresher(
 		cfg.Settings,
