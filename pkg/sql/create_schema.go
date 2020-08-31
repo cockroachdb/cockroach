@@ -75,12 +75,6 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 			clusterversion.VersionByKey(clusterversion.VersionUserDefinedSchemas))
 	}
 
-	// Check that creation of schemas is enabled.
-	if !p.EvalContext().SessionData.UserDefinedSchemasEnabled {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"session variable experimental_enable_user_defined_schemas is set to false, cannot create a schema")
-	}
-
 	// Create the ID.
 	id, err := catalogkv.GenerateUniqueDescID(params.ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {

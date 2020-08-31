@@ -1,5 +1,4 @@
 statement ok
-SET experimental_enable_user_defined_schemas = true;
 SET experimental_enable_temp_tables = true;
 
 statement ok

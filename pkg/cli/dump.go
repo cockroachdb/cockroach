@@ -201,14 +201,9 @@ func runDump(cmd *cobra.Command, args []string) error {
 		// Dump schema create statements, if any. If connecting to a cockroach version
 		// before 20.2 the list of schemas will be empty, so nothing will be emitted.
 		if shouldDumpSchemas && dumpCtx.dumpMode != dumpDataOnly {
-			if len(schemas) > 0 {
-				if _, err := fmt.Fprintf(w, "SET experimental_enable_user_defined_schemas = true;\n"); err != nil {
+			for _, schema := range schemas {
+				if _, err := fmt.Fprintf(w, "CREATE SCHEMA %s;\n\n", tree.Name(schema)); err != nil {
 					return err
-				}
-				for _, schema := range schemas {
-					if _, err := fmt.Fprintf(w, "CREATE SCHEMA %s;\n\n", tree.Name(schema)); err != nil {
-						return err
-					}
 				}
 			}
 		}

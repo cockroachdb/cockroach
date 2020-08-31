@@ -72,15 +72,16 @@ type Batch interface {
 
 var _ Batch = &MemBatch{}
 
-// TODO(jordan): tune.
+// defaultBatchSize is the size of batches that is used in the non-test setting.
+// Initially, 1024 was picked based on MonetDB/X100 paper and was later
+// confirmed to be very good using tpchvec/bench benchmark on TPC-H queries
+// (the best number according to that benchmark was 1280, but it was negligibly
+// better, so we decided to keep 1024 as it is a power of 2).
 const defaultBatchSize = 1024
 
 var batchSize int64 = defaultBatchSize
 
 // BatchSize is the maximum number of tuples that fit in a column batch.
-// TODO(yuzefovich): we are treating this method almost as if it were a
-// constant while it performs an atomic operation. Think through whether it has
-// a noticeable performance hit.
 func BatchSize() int {
 	return int(atomic.LoadInt64(&batchSize))
 }

@@ -11,12 +11,83 @@
 package geomfn
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCollect(t *testing.T) {
+	testCases := []struct {
+		wkt1     string
+		wkt2     string
+		expected string
+	}{
+		{"POINT EMPTY", "POINT EMPTY", "MULTIPOINT (EMPTY, EMPTY)"},
+		{"POINT (1 1)", "POINT EMPTY", "MULTIPOINT (1 1, EMPTY)"},
+		{"POINT EMPTY", "POINT (1 1)", "MULTIPOINT (EMPTY, 1 1)"},
+		{"POINT (1 1)", "POINT (1 1)", "MULTIPOINT (1 1, 1 1)"},
+		{"POINT (1 1)", "POINT (2 2)", "MULTIPOINT (1 1, 2 2)"},
+		{"MULTIPOINT EMPTY", "MULTIPOINT EMPTY", "GEOMETRYCOLLECTION (MULTIPOINT EMPTY, MULTIPOINT EMPTY)"},
+		{
+			"MULTIPOINT (1 1, 2 2)", "MULTIPOINT (3 3, 4 4)",
+			"GEOMETRYCOLLECTION (MULTIPOINT (1 1, 2 2), MULTIPOINT (3 3, 4 4))",
+		},
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", "MULTILINESTRING (EMPTY, EMPTY)"},
+		{"LINESTRING (1 1, 2 2)", "LINESTRING (3 3, 4 4)", "MULTILINESTRING ((1 1, 2 2), (3 3, 4 4))"},
+		{
+			"MULTILINESTRING EMPTY", "MULTILINESTRING EMPTY",
+			"GEOMETRYCOLLECTION (MULTILINESTRING EMPTY, MULTILINESTRING EMPTY)",
+		},
+		{
+			"MULTILINESTRING ((1 1, 2 2), (3 3, 4 4))", "MULTILINESTRING ((5 5, 6 6), (7 7, 8 8))",
+			"GEOMETRYCOLLECTION (MULTILINESTRING ((1 1, 2 2), (3 3, 4 4)), MULTILINESTRING ((5 5, 6 6), (7 7, 8 8)))",
+		},
+		{"POLYGON EMPTY", "POLYGON EMPTY", "MULTIPOLYGON (EMPTY, EMPTY)"},
+		{
+			"POLYGON ((1 2, 2 3, 3 4, 1 2))", "POLYGON ((4 5, 5 6, 6 7, 4 5))",
+			"MULTIPOLYGON (((1 2, 2 3, 3 4, 1 2)), ((4 5, 5 6, 6 7, 4 5)))",
+		},
+		{
+			"MULTIPOLYGON EMPTY", "MULTIPOLYGON EMPTY",
+			"GEOMETRYCOLLECTION (MULTIPOLYGON EMPTY, MULTIPOLYGON EMPTY)",
+		},
+		{
+			"MULTIPOLYGON (((1 2, 2 3, 3 4, 1 2)), ((2 3, 3 4, 4 5, 2 3)))",
+			"MULTIPOLYGON (((3 4, 4 5, 5 6, 3 4)), ((4 5, 5 6, 6 7, 4 5)))",
+			"GEOMETRYCOLLECTION (MULTIPOLYGON (((1 2, 2 3, 3 4, 1 2)), ((2 3, 3 4, 4 5, 2 3))), MULTIPOLYGON (((3 4, 4 5, 5 6, 3 4)), ((4 5, 5 6, 6 7, 4 5))))",
+		},
+		{"POINT (1 1)", "LINESTRING (2 2, 3 3)", "GEOMETRYCOLLECTION (POINT (1 1), LINESTRING (2 2, 3 3))"},
+		{"LINESTRING (1 1, 2 2)", "POLYGON ((1 2, 2 3, 3 4, 1 2))", "GEOMETRYCOLLECTION (LINESTRING (1 1, 2 2), POLYGON ((1 2, 2 3, 3 4, 1 2)))"},
+		{
+			"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION EMPTY",
+			"GEOMETRYCOLLECTION (GEOMETRYCOLLECTION EMPTY, GEOMETRYCOLLECTION EMPTY)",
+		},
+		{
+			"GEOMETRYCOLLECTION (POINT (1 1))", "GEOMETRYCOLLECTION (POINT (2 2))",
+			"GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (1 1)), GEOMETRYCOLLECTION (POINT (2 2)))",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v %v", tc.wkt1, tc.wkt2), func(t *testing.T) {
+			srid := geopb.SRID(4000)
+			g1, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.wkt1), srid, true)
+			require.NoError(t, err)
+			g2, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.wkt2), srid, true)
+			require.NoError(t, err)
+
+			result, err := Collect(g1, g2)
+			require.NoError(t, err)
+			wkt, err := geo.SpatialObjectToWKT(result.SpatialObject(), 0)
+			require.NoError(t, err)
+			require.EqualValues(t, tc.expected, wkt)
+			require.EqualValues(t, srid, result.SRID())
+		})
+	}
+}
 
 func TestCollectionExtract(t *testing.T) {
 	mixedWithDupes := `GEOMETRYCOLLECTION(
