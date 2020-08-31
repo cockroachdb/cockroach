@@ -87,6 +87,13 @@ enum ReplicaType {
   // short-term transient state: a replica being added and on its way to being a
   // VOTER_{FULL,INCOMING}, or a VOTER_DEMOTING being removed.
   LEARNER_EPHEMERAL = 1;
+  // LEARNER_PERSISTENT indicates a replica that applies committed entries, does
+  // not count towards the quorum(s), and is persistent (unlike the ephemeral
+  // state used for atomic replication changes). Candidates will not ask for (or
+  // take into account) votes of (peers they consider) LEARNER_PERSISTENTs for
+  // leadership nor do their acknowledged log entries get taken into account for
+  // determining the committed index.
+  LEARNER_PERSISTENT = 5;
 }
 
 // ReplicaDescriptor describes a replica location by node ID

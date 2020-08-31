@@ -118,11 +118,12 @@ enum ReplicaType {
   VOTER_INCOMING = 2,
   VOTER_OUTGOING = 3,
   VOTER_DEMOTING = 4,
-  LEARNER_EPHEMERAL = 1
+  LEARNER_EPHEMERAL = 1,
+  LEARNER_PERSISTENT = 5
 };
 bool ReplicaType_IsValid(int value);
 const ReplicaType ReplicaType_MIN = VOTER_FULL;
-const ReplicaType ReplicaType_MAX = VOTER_DEMOTING;
+const ReplicaType ReplicaType_MAX = LEARNER_PERSISTENT;
 const int ReplicaType_ARRAYSIZE = ReplicaType_MAX + 1;
 
 // ===================================================================
