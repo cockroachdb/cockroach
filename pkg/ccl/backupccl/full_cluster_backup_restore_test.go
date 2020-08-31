@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func backupRestoreTestSetupEmptyWithParams(
@@ -418,4 +419,109 @@ func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
 
 	// Ensure that the new backup succeeds.
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+}
+
+// TestClusterRevisionHistory tests that cluster backups can be taken with
+// revision_history and correctly restore into various points in time.
+func TestClusterRevisionHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type testCase struct {
+		ts    string
+		check func(t *testing.T, runner *sqlutils.SQLRunner)
+	}
+
+	testCases := make([]testCase, 0, 6)
+	ts := make([]string, 6)
+
+	var tc testCase
+	const numAccounts = 1
+	_, _, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	sqlDB.Exec(t, `CREATE DATABASE d1`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[0])
+	tc = testCase{
+		ts: ts[0],
+		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
+			checkSQLDB.ExpectErr(t, `database "d1" already exists`, `CREATE DATABASE d1`)
+			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+		},
+	}
+	testCases = append(testCases, tc)
+
+	sqlDB.Exec(t, `CREATE DATABASE d2`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[1])
+	tc = testCase{
+		ts: ts[1],
+		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
+			// Expect both databases to exist at this point.
+			checkSQLDB.ExpectErr(t, `database "d1" already exists`, `CREATE DATABASE d1`)
+			checkSQLDB.ExpectErr(t, `database "d2" already exists`, `CREATE DATABASE d2`)
+		},
+	}
+	testCases = append(testCases, tc)
+
+	sqlDB.Exec(t, `DROP DATABASE d1`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[2])
+	tc = testCase{
+		ts: ts[2],
+		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
+			checkSQLDB.Exec(t, `CREATE DATABASE d1`)
+			checkSQLDB.ExpectErr(t, `database "d2" already exists`, `CREATE DATABASE d2`)
+		},
+	}
+	testCases = append(testCases, tc)
+	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
+
+	// Now let's test an incremental backup with revision history. At the start of
+	// the incremental backup, we expect only d2 to exist.
+	sqlDB.Exec(t, `DROP DATABASE d2;`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[3])
+	tc = testCase{
+		ts: ts[3],
+		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
+			// Neither database should exist at this point in time.
+			checkSQLDB.Exec(t, `CREATE DATABASE d1`)
+			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+		},
+	}
+	testCases = append(testCases, tc)
+	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
+
+	sqlDB.Exec(t, `CREATE DATABASE d1`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[4])
+	tc = testCase{
+		ts: ts[4],
+		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
+			checkSQLDB.ExpectErr(t, `database "d1" already exists`, `CREATE DATABASE d1`)
+			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+		},
+	}
+	testCases = append(testCases, tc)
+
+	sqlDB.Exec(t, `DROP DATABASE d1`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[5])
+	tc = testCase{
+		ts: ts[5],
+		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
+			checkSQLDB.Exec(t, `CREATE DATABASE d1`)
+			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+		},
+	}
+	testCases = append(testCases, tc)
+	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
+
+	for i, testCase := range testCases {
+		t.Run(fmt.Sprintf("t%d", i), func(t *testing.T) {
+			_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(
+				t, singleNode, tempDir, initNone,
+			)
+			defer cleanupEmptyCluster()
+
+			sqlDBRestore.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+testCase.ts, localFoo)
+			testCase.check(t, sqlDBRestore)
+		})
+	}
+
 }
