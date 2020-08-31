@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -827,7 +828,7 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"format_type": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+	"format_type": makeBuiltin(tree.FunctionProperties{NullableArgs: true, DistsqlBlocklist: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -838,9 +839,25 @@ var pgBuiltins = map[string]builtinDefinition{
 					return tree.DNull, nil
 				}
 				maybeTypmod := args[1]
-				typ, ok := types.OidToType[oid.Oid(int(oidArg.(*tree.DOid).DInt))]
+				oid := oid.Oid(int(oidArg.(*tree.DOid).DInt))
+				typ, ok := types.OidToType[oid]
 				if !ok {
-					return tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
+					// If the type wasn't statically known, try looking it up as a user
+					// defined type.
+					var err error
+					typ, err = ctx.Planner.ResolveTypeByOID(ctx.Context, oid)
+					if err != nil {
+						// If the error is a descriptor does not exist error, then swallow it.
+						unknown := tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg))
+						switch {
+						case errors.Is(err, catalog.ErrDescriptorNotFound):
+							return unknown, nil
+						case pgerror.GetPGCode(err) == pgcode.UndefinedObject:
+							return unknown, nil
+						default:
+							return nil, err
+						}
+					}
 				}
 				var hasTypmod bool
 				var typmod int
