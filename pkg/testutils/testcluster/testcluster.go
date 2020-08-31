@@ -480,8 +480,8 @@ func (tc *TestCluster) changeReplicas(
 	return *desc, nil
 }
 
-// AddReplicas is part of TestClusterInterface.
-func (tc *TestCluster) AddReplicas(
+// AddVoters is part of TestClusterInterface.
+func (tc *TestCluster) AddVoters(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
@@ -500,8 +500,8 @@ func (tc *TestCluster) AddReplicas(
 	return rangeDesc, nil
 }
 
-// AddReplicasMulti is part of TestClusterInterface.
-func (tc *TestCluster) AddReplicasMulti(
+// AddVotersMulti is part of TestClusterInterface.
+func (tc *TestCluster) AddVotersMulti(
 	kts ...serverutils.KeyAndTargets,
 ) ([]roachpb.RangeDescriptor, []error) {
 	var descs []roachpb.RangeDescriptor
@@ -582,12 +582,12 @@ func (tc *TestCluster) waitForNewReplicas(
 	return nil
 }
 
-// AddReplicasOrFatal is part of TestClusterInterface.
-func (tc *TestCluster) AddReplicasOrFatal(
+// AddVotersOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) AddVotersOrFatal(
 	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	t.Helper()
-	desc, err := tc.AddReplicas(startKey, targets...)
+	desc, err := tc.AddVoters(startKey, targets...)
 	if err != nil {
 		t.Fatalf(`could not add %v replicas to range containing %s: %+v`,
 			targets, startKey, err)
@@ -595,19 +595,19 @@ func (tc *TestCluster) AddReplicasOrFatal(
 	return desc
 }
 
-// RemoveReplicas is part of the TestServerInterface.
-func (tc *TestCluster) RemoveReplicas(
+// RemoveVoters is part of the TestServerInterface.
+func (tc *TestCluster) RemoveVoters(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	return tc.changeReplicas(roachpb.REMOVE_VOTER, keys.MustAddr(startKey), targets...)
 }
 
-// RemoveReplicasOrFatal is part of TestClusterInterface.
-func (tc *TestCluster) RemoveReplicasOrFatal(
+// RemoveVotersOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) RemoveVotersOrFatal(
 	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
 	t.Helper()
-	desc, err := tc.RemoveReplicas(startKey, targets...)
+	desc, err := tc.RemoveVoters(startKey, targets...)
 	if err != nil {
 		t.Fatalf(`could not remove %v replicas from range containing %s: %+v`,
 			targets, startKey, err)

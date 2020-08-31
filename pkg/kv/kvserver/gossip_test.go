@@ -99,7 +99,7 @@ func TestGossipFirstRange(t *testing.T) {
 	firstRangeKey := keys.MinKey
 	for i := 1; i <= 2; i++ {
 		var err error
-		if desc, err = tc.AddReplicas(firstRangeKey, tc.Target(i)); err != nil {
+		if desc, err = tc.AddVoters(firstRangeKey, tc.Target(i)); err != nil {
 			t.Fatal(err)
 		}
 		waitForGossip(desc)
@@ -113,7 +113,7 @@ func TestGossipFirstRange(t *testing.T) {
 	waitForGossip(desc)
 
 	// Remove a non-lease holder replica.
-	desc, err := tc.RemoveReplicas(firstRangeKey, tc.Target(0))
+	desc, err := tc.RemoveVoters(firstRangeKey, tc.Target(0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestGossipFirstRange(t *testing.T) {
 
 	// // Remove the lease holder replica.
 	// leaseHolder, err := tc.FindRangeLeaseHolder(desc, nil)
-	// desc, err = tc.RemoveReplicas(firstRangeKey, leaseHolder)
+	// desc, err = tc.RemoveVoters(firstRangeKey, leaseHolder)
 	// if err != nil {
 	// 	t.Fatal(err)
 	// }

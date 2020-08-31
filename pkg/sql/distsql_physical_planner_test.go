@@ -94,7 +94,7 @@ func SplitTable(
 	for _, rkt := range rkts {
 		kts = append(kts, rkt.KT)
 	}
-	descs, errs := tc.AddReplicasMulti(kts...)
+	descs, errs := tc.AddVotersMulti(kts...)
 	for _, err := range errs {
 		if err != nil && !testutils.IsError(err, "is already present") {
 			t.Fatal(err)

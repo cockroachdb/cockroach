@@ -5261,7 +5261,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	desc, err := tc.LookupRange(key)
 	require.NoError(t, err)
 	atomic.StoreInt64(&rangeID, int64(desc.RangeID))
-	tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 	// Partition node 1 from receiving any requests or responses.
 	// This will prevent it from successfully replicating anything.
 	require.NoError(t, tc.WaitForSplitAndInitialization(key))

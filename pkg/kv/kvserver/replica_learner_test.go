@@ -163,7 +163,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.AddReplicas(scratchStartKey, tc.Target(1))
+		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
 		return err
 	})
 
@@ -250,7 +250,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 	scratchStartKey := tc.ScratchRange(t)
 	var desc roachpb.RangeDescriptor
 	ltk.withStopAfterLearnerAtomic(func() {
-		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		desc = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 	require.Len(t, desc.Replicas().EphemeralLearners(), 1)
 	learnerReplicaID := desc.Replicas().EphemeralLearners()[0].ReplicaID
@@ -297,8 +297,8 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 
 	scratchStartKey := tc.ScratchRange(t)
 	atomic.StoreInt64(&rejectSnapshots, 1)
-	_, err := tc.AddReplicas(scratchStartKey, tc.Target(1))
-	// TODO(dan): It'd be nice if we could cancel the `AddReplicas` context before
+	_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
+	// TODO(dan): It'd be nice if we could cancel the `AddVoters` context before
 	// returning the error from the `ReceiveSnapshot` knob to test the codepath
 	// that uses a new context for the rollback, but plumbing that context is
 	// annoying.
@@ -327,7 +327,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
 	ltk.withStopAfterLearnerAtomic(func() {
-		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
 	// Splitting a learner is allowed. This orphans the two learners, but the
@@ -338,7 +338,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	require.Len(t, right.Replicas().EphemeralLearners(), 1)
 
 	// Remove the learner on the RHS.
-	right = tc.RemoveReplicasOrFatal(t, right.StartKey.AsRawKey(), tc.Target(1))
+	right = tc.RemoveVotersOrFatal(t, right.StartKey.AsRawKey(), tc.Target(1))
 
 	// Put an incoming voter on the RHS and split again. This works because the
 	// split auto-transitions us out of the joint conf before doing work.
@@ -347,7 +347,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	// Use SucceedsSoon to deal with the case where the RHS has not yet been
 	// removed or the split has not yet been processed.
 	testutils.SucceedsSoon(t, func() error {
-		desc, err := tc.AddReplicas(right.StartKey.AsRawKey(), tc.Target(1))
+		desc, err := tc.AddVoters(right.StartKey.AsRawKey(), tc.Target(1))
 		if err == nil {
 			right = desc
 		} else if !testutils.IsError(err, "cannot apply snapshot: snapshot intersects existing range") {
@@ -379,7 +379,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
 	ltk.withStopAfterLearnerAtomic(func() {
-		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
 	// Run the replicate queue.
@@ -402,7 +402,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 
 	// Create a VOTER_OUTGOING, i.e. a joint configuration.
 	ltk.withStopAfterJointConfig(func() {
-		desc := tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(2))
+		desc := tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
 		trace, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
@@ -437,7 +437,7 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
 	ltk.withStopAfterLearnerAtomic(func() {
-		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
 	// Run the replicaGC queue.
@@ -455,10 +455,10 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	require.NotEmpty(t, desc.Replicas().EphemeralLearners())
 
 	// Now get the range into a joint config.
-	tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1)) // remove learner
+	tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(1)) // remove learner
 
 	ltk.withStopAfterJointConfig(func() {
-		desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		desc = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 		require.Len(t, desc.Replicas().Filter(predIncoming), 1, desc)
 	})
 
@@ -491,7 +491,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	scratchStartKey := tc.ScratchRange(t)
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.AddReplicas(scratchStartKey, tc.Target(1))
+		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
 		return err
 	})
 
@@ -552,7 +552,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	scratchStartKey := tc.ScratchRange(t)
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.AddReplicas(scratchStartKey, tc.Target(1))
+		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
 		return err
 	})
 
@@ -561,15 +561,15 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	<-blockUntilSnapshotCh
 
 	// Removes the learner out from under the coordinator running on behalf of
-	// AddReplicas. This simulates the replicate queue running concurrently. The
+	// AddVoters. This simulates the replicate queue running concurrently. The
 	// first thing the replicate queue would do is remove any learners it sees.
-	_, err := tc.RemoveReplicas(scratchStartKey, tc.Target(1))
+	_, err := tc.RemoveVoters(scratchStartKey, tc.Target(1))
 	require.NoError(t, err)
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().Voters(), 1)
 	require.Len(t, desc.Replicas().EphemeralLearners(), 0)
 
-	// Unblock the snapshot, and surprise AddReplicas. It should retry and error
+	// Unblock the snapshot, and surprise AddVoters. It should retry and error
 	// that the descriptor has changed since the AdminChangeReplicas command
 	// started. Alternatively it may fail in sending the snapshot because of a
 	// "raft group deleted" error if the newly added learner attempts to send
@@ -622,7 +622,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 
 	// Start with 2 replicas so the replicate queue can go from 2->3, otherwise it
 	// will refuse to upreplicate to a fragile quorum of 1->2.
-	tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	atomic.StoreInt64(&skipReceiveSnapshotKnobAtomic, 0)
 
 	// Run the replicate queue, this will add a learner to node 3 and start
@@ -655,7 +655,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	// simulates a second replicate queue running concurrently. The first thing
 	// this second replicate queue would do is remove any learners it sees,
 	// leaving the 2 voters.
-	desc, err := tc.RemoveReplicas(scratchStartKey, tc.Target(2))
+	desc, err := tc.RemoveVoters(scratchStartKey, tc.Target(2))
 	require.NoError(t, err)
 	require.Len(t, desc.Replicas().Voters(), 2)
 	require.Len(t, desc.Replicas().EphemeralLearners(), 0)
@@ -684,7 +684,7 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 	// Replica on the Store, but don't promote it to a voter.
 	scratchStartKey := tc.ScratchRange(t)
 	ltk.withStopAfterLearnerAtomic(func() {
-		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -710,7 +710,7 @@ func TestJointConfigLease(t *testing.T) {
 	k := tc.ScratchRange(t)
 	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
 	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
-	desc := tc.AddReplicasOrFatal(t, k, tc.Target(1))
+	desc := tc.AddVotersOrFatal(t, k, tc.Target(1))
 	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
 
 	err := tc.TransferRangeLease(desc, tc.Target(1))
@@ -720,7 +720,7 @@ func TestJointConfigLease(t *testing.T) {
 	// NB: we don't have to transition out of the previous joint config first
 	// because this is done automatically by ChangeReplicas before it does what
 	// it's asked to do.
-	desc = tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
+	desc = tc.RemoveVotersOrFatal(t, k, tc.Target(1))
 	err = tc.TransferRangeLease(desc, tc.Target(1))
 	exp = `cannot transfer lease to replica of type VOTER_DEMOTING`
 	require.True(t, testutils.IsError(err, exp), err)
@@ -749,7 +749,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	scratchStartKey := tc.ScratchRange(t)
 	var scratchDesc roachpb.RangeDescriptor
 	ltk.withStopAfterLearnerAtomic(func() {
-		scratchDesc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+		scratchDesc = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
 	check := func() {
@@ -787,10 +787,10 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
 	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
 
-	scratchDesc = tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	scratchDesc = tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	// Removing a learner doesn't get you into a joint state (no voters changed).
 	require.False(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
-	scratchDesc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	scratchDesc = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 
 	// Re-add the voter and remain in joint config.
 	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
@@ -800,7 +800,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	check()
 
 	// Remove the voter and remain in joint config.
-	scratchDesc = tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	scratchDesc = tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
 	require.Len(t, scratchDesc.Replicas().Filter(predDemoting), 1)
 
@@ -825,8 +825,8 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 
 	scratchStartKey := tc.ScratchRange(t)
 	ltk.withStopAfterLearnerAtomic(func() {
-		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-		_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(2))
+		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
+		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(2))
 	})
 
 	check := func(targets []roachpb.ReplicationTarget) {
@@ -857,7 +857,7 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 	// After: 1 (voter), 2 (voter), 3 (voter)
 	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
 	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
-	desc := tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(3))
+	desc := tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(3))
 	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
 	require.Len(t, desc.Replicas().Filter(predDemoting), 1)
 	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 0)
@@ -891,8 +891,8 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	// the LHS (on desc1).
 	var desc1, desc3 roachpb.RangeDescriptor
 	ltk.withStopAfterLearnerAtomic(func() {
-		desc1 = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
-		desc3 = tc.AddReplicasOrFatal(t, splitKey2, tc.Target(1))
+		desc1 = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
+		desc3 = tc.AddVotersOrFatal(t, splitKey2, tc.Target(1))
 	})
 
 	checkFails := func() {
@@ -913,11 +913,11 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	// Turn the learners on desc1 and desc3 into VOTER_INCOMINGs.
 	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
 	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
-	desc1 = tc.RemoveReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
-	desc1 = tc.AddReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
+	desc1 = tc.RemoveVotersOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
+	desc1 = tc.AddVotersOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc1.Replicas().Filter(predIncoming), 1)
-	desc3 = tc.RemoveReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
-	desc3 = tc.AddReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
+	desc3 = tc.RemoveVotersOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
+	desc3 = tc.AddVotersOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc1.Replicas().Filter(predIncoming), 1)
 
 	// VOTER_INCOMING on the lhs or rhs should fail.
@@ -926,9 +926,9 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 
 	// Turn the incoming voters on desc1 and desc3 into VOTER_DEMOTINGs.
 	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL) (VOTER_FULL, VOTER_DEMOTING)
-	desc1 = tc.RemoveReplicasOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
+	desc1 = tc.RemoveVotersOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc1.Replicas().Filter(predDemoting), 1)
-	desc3 = tc.RemoveReplicasOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
+	desc3 = tc.RemoveVotersOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc3.Replicas().Filter(predDemoting), 1)
 
 	// VOTER_DEMOTING on the lhs or rhs should fail.
@@ -938,14 +938,14 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	// of replicas from merges (rather than really just checking whether the
 	// replica sets are equal).
 	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL, VOTER_DEMOTING)
-	desc2 := tc.AddReplicasOrFatal(t, splitKey1, tc.Target(1))
+	desc2 := tc.AddVotersOrFatal(t, splitKey1, tc.Target(1))
 	require.Len(t, desc2.Replicas().Filter(predIncoming), 1)
 
 	checkFails()
 
 	// Ditto VOTER_DEMOTING.
 	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL, VOTER_DEMOTING)
-	desc2 = tc.RemoveReplicasOrFatal(t, desc2.StartKey.AsRawKey(), tc.Target(1))
+	desc2 = tc.RemoveVotersOrFatal(t, desc2.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc2.Replicas().Filter(predDemoting), 1)
 
 	checkFails()
@@ -982,7 +982,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		splitAndUnsplit()
 
 		ltk.withStopAfterLearnerAtomic(func() {
-			_ = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+			_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 		})
 
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
@@ -1014,7 +1014,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		desc := splitAndUnsplit()
 
 		ltk.withStopAfterJointConfig(func() {
-			desc = tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+			desc = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 		})
 		require.Len(t, desc.Replicas().Filter(predIncoming), 1, desc)
 
@@ -1043,7 +1043,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		// giving the RHS a VOTER_OUTGOING.
 		desc = splitAndUnsplit()
 		ltk.withStopAfterJointConfig(func() {
-			descRight := tc.RemoveReplicasOrFatal(t, desc.EndKey.AsRawKey(), tc.Target(1))
+			descRight := tc.RemoveVotersOrFatal(t, desc.EndKey.AsRawKey(), tc.Target(1))
 			require.Len(t, descRight.Replicas().Filter(predDemoting), 1, desc)
 		})
 

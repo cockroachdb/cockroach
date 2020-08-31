@@ -3853,7 +3853,7 @@ func setupClusterWithSubsumedRange(
 	require.NoError(t, err)
 	add := func(desc *roachpb.RangeDescriptor) {
 		testutils.SucceedsSoon(t, func() error {
-			*desc, err = tc.AddReplicas(desc.StartKey.AsRawKey(), tc.Target(1))
+			*desc, err = tc.AddVoters(desc.StartKey.AsRawKey(), tc.Target(1))
 			if kv.IsExpectedRelocateError(err) {
 				// Retry.
 				return errors.Newf("ChangeReplicas: received error %s", err)

@@ -115,7 +115,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Split the range so that the RHS uses epoch-based leases.
 	startKey := []byte("a")
 	tc.SplitRangeOrFatal(t, startKey)
-	tc.AddReplicasOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+	tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
 	if pErr := tc.WaitForVoters(startKey, tc.Target(1), tc.Target(2)); pErr != nil {
 		t.Fatalf("Unexpected error waiting for replication: %v", pErr)
 	}
@@ -385,7 +385,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		tc.SplitRangeOrFatal(t, startKey)
-		tc.AddReplicasOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+		tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
 		rangeID := store.LookupReplica(startKey).RangeID
 
 		// Write to the RHS of the split and wait for all replicas to process it.
@@ -492,7 +492,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 
 		// Remove the replica from the range.
-		tc.RemoveReplicasOrFatal(t, startKey, tc.Target(removeStore))
+		tc.RemoveVotersOrFatal(t, startKey, tc.Target(removeStore))
 
 		// Check the error.
 		pErr := <-streamErrC
