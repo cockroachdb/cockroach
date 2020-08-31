@@ -52,7 +52,6 @@ require (
 	github.com/docker/distribution v2.7.0+incompatible
 	github.com/docker/docker v17.12.0-ce-rc1.0.20190115172544-0dc531243dd3+incompatible
 	github.com/docker/go-connections v0.4.0
-	github.com/docker/go-units v0.4.0 // indirect
 	github.com/dustin/go-humanize v1.0.0
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/edsrzf/mmap-go v1.0.0
@@ -141,7 +140,7 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
-	github.com/twpayne/go-geom v1.3.2
+	github.com/twpayne/go-geom v1.3.5
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
 	go.etcd.io/etcd v0.0.0-00010101000000-000000000000
@@ -163,6 +162,7 @@ require (
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.5.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
+	gotest.tools v2.2.0+incompatible // indirect
 	honnef.co/go/tools v0.0.0-20190530104931-1f0868a609b7
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
