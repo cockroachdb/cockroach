@@ -400,42 +400,10 @@ var aggregates = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
-	"st_union": makeBuiltin(
-		tree.FunctionProperties{
-			Class:                   tree.AggregateClass,
-			NullableArgs:            true,
-			AvailableOnPublicSchema: true,
-		},
-		makeAggOverload(
-			[]*types.T{types.Geometry},
-			types.Geometry,
-			func(
-				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
-			) tree.AggregateFunc {
-				return &stUnionAgg{}
-			},
-			infoBuilder{
-				info: "Applies a spatial union to the geometries provided.",
-			}.String(),
-			tree.VolatilityImmutable,
-		),
-	),
-	"st_collect": makeBuiltin(
-		tree.FunctionProperties{
-			Class:                   tree.AggregateClass,
-			NullableArgs:            true,
-			AvailableOnPublicSchema: true,
-		},
-		makeAggOverload(
-			[]*types.T{types.Geometry},
-			types.Geometry,
-			newSTCollectAgg,
-			infoBuilder{
-				info: "Collects geometries into a GeometryCollection or multi-type as appropriate.",
-			}.String(),
-			tree.VolatilityImmutable,
-		),
-	),
+	"st_union":      makeSTUnionBuiltin(),
+	"st_memunion":   makeSTUnionBuiltin(),
+	"st_collect":    makeSTCollectBuiltin(),
+	"st_memcollect": makeSTCollectBuiltin(),
 
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
@@ -624,6 +592,48 @@ func makeStdDevBuiltin() builtinDefinition {
 			"Calculates the standard deviation of the selected values.", tree.VolatilityImmutable),
 		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevAggregate,
 			"Calculates the standard deviation of the selected values.", tree.VolatilityImmutable),
+	)
+}
+
+func makeSTCollectBuiltin() builtinDefinition {
+	return makeBuiltin(
+		tree.FunctionProperties{
+			Class:                   tree.AggregateClass,
+			NullableArgs:            true,
+			AvailableOnPublicSchema: true,
+		},
+		makeAggOverload(
+			[]*types.T{types.Geometry},
+			types.Geometry,
+			newSTCollectAgg,
+			infoBuilder{
+				info: "Collects geometries into a GeometryCollection or multi-type as appropriate.",
+			}.String(),
+			tree.VolatilityImmutable,
+		),
+	)
+}
+
+func makeSTUnionBuiltin() builtinDefinition {
+	return makeBuiltin(
+		tree.FunctionProperties{
+			Class:                   tree.AggregateClass,
+			NullableArgs:            true,
+			AvailableOnPublicSchema: true,
+		},
+		makeAggOverload(
+			[]*types.T{types.Geometry},
+			types.Geometry,
+			func(
+				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+			) tree.AggregateFunc {
+				return &stUnionAgg{}
+			},
+			infoBuilder{
+				info: "Applies a spatial union to the geometries provided.",
+			}.String(),
+			tree.VolatilityImmutable,
+		),
 	)
 }
 
