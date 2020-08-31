@@ -838,6 +838,11 @@ const (
 	UnboundedFollowing
 )
 
+// IsOffset returns true if the WindowFrameBoundType is an offset.
+func (ft WindowFrameBoundType) IsOffset() bool {
+	return ft == OffsetPreceding || ft == OffsetFollowing
+}
+
 // WindowFrameBound specifies the offset and the type of boundary.
 type WindowFrameBound struct {
 	BoundType  WindowFrameBoundType
@@ -846,7 +851,7 @@ type WindowFrameBound struct {
 
 // HasOffset returns whether node contains an offset.
 func (node *WindowFrameBound) HasOffset() bool {
-	return node.BoundType == OffsetPreceding || node.BoundType == OffsetFollowing
+	return node.BoundType.IsOffset()
 }
 
 // WindowFrameBounds specifies boundaries of the window frame.
