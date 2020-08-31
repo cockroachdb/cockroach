@@ -92,12 +92,12 @@ func (req runnerRequest) run() {
 	req.resultChan <- res
 }
 
-func (dsp *DistSQLPlanner) initRunners() {
+func (dsp *DistSQLPlanner) initRunners(ctx context.Context) {
 	// This channel has to be unbuffered because we want to only be able to send
 	// requests if a worker is actually there to receive them.
 	dsp.runnerChan = make(chan runnerRequest)
 	for i := 0; i < numRunners; i++ {
-		dsp.stopper.RunWorker(context.TODO(), func(context.Context) {
+		dsp.stopper.RunWorker(ctx, func(context.Context) {
 			runnerChan := dsp.runnerChan
 			stopChan := dsp.stopper.ShouldStop()
 			for {
@@ -915,7 +915,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		var result tree.DTuple
 		for rows.Len() > 0 {
 			row := rows.At(0)
-			rows.PopFirst()
+			rows.PopFirst(ctx)
 			if row.Len() == 1 {
 				// This seems hokey, but if we don't do this then the subquery expands
 				// to a tuple of tuples instead of a tuple of values and an expression

@@ -124,7 +124,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	// Now pop the rows, which shrinks the memory account according to the current
 	// row sizes. If we did not account for the larger rows, this will panic.
 	for mc.Len() > 0 {
-		mc.PopFirst()
+		mc.PopFirst(ctx)
 	}
 }
 

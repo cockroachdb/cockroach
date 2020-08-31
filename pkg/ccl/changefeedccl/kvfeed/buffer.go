@@ -345,7 +345,7 @@ func (b *memBuffer) getRow(ctx context.Context) (tree.Datums, error) {
 		b.mu.Lock()
 		if b.mu.entries.Len() > 0 {
 			row = b.mu.entries.At(0)
-			b.mu.entries.PopFirst()
+			b.mu.entries.PopFirst(ctx)
 		}
 		b.mu.Unlock()
 		if row != nil {

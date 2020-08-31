@@ -314,14 +314,16 @@ func (i *memRowIterator) Close() {}
 // rows as soon as they are iterated over to free up memory eagerly.
 type memRowFinalIterator struct {
 	*MemRowContainer
+
+	ctx context.Context
 }
 
 // NewFinalIterator returns an iterator that can be used to iterate over a
 // MemRowContainer. Note that this iterator doesn't iterate over a snapshot
 // of MemRowContainer and that it deletes rows as soon as they are iterated
 // over.
-func (mc *MemRowContainer) NewFinalIterator(_ context.Context) RowIterator {
-	return memRowFinalIterator{MemRowContainer: mc}
+func (mc *MemRowContainer) NewFinalIterator(ctx context.Context) RowIterator {
+	return memRowFinalIterator{MemRowContainer: mc, ctx: ctx}
 }
 
 // GetRow implements IndexedRowContainer.
@@ -341,7 +343,7 @@ func (i memRowFinalIterator) Valid() (bool, error) {
 
 // Next implements the RowIterator interface.
 func (i memRowFinalIterator) Next() {
-	i.PopFirst()
+	i.PopFirst(i.ctx)
 }
 
 // Row implements the RowIterator interface.
