@@ -327,7 +327,8 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 
 // metrics will print out the prometheus metric values. The command takes an
 // argument as a regular expression over the values. The metrics are printed in
-// lexicographical order.
+// lexicographical order. The command will retry until the output matches to
+// make it more robust to races in metric recording.
 //
 // For example:
 //
@@ -358,6 +359,20 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 //  kv_tenant_rate_limit_write_bytes_admitted{tenant_id="2"} 50
 //
 func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
+	exp := strings.TrimSpace(d.Expected)
+	if err := testutils.SucceedsSoonError(func() error {
+		got := ts.getMetricsText(t, d)
+		if got != exp {
+			return errors.Errorf("got: %q, exp: %q", got, exp)
+		}
+		return nil
+	}); err != nil {
+		d.Fatalf(t, "failed to find expected timers: %v", err)
+	}
+	return d.Expected
+}
+
+func (ts *testState) getMetricsText(t *testing.T, d *datadriven.TestData) string {
 	ex := metric.MakePrometheusExporter()
 	ex.ScrapeRegistry(ts.m, true /* includeChildMetrics */)
 	var in bytes.Buffer
@@ -381,7 +396,8 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 		d.Fatalf(t, "failed to process metrics: %v", err)
 	}
 	sort.Strings(outLines)
-	return strings.Join(outLines, "\n")
+	metricsText := strings.Join(outLines, "\n")
+	return metricsText
 }
 
 // timers waits for the set of open timers to match the expected output.
