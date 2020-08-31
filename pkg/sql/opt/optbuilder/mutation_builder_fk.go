@@ -70,8 +70,9 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 
 	h := &mb.fkCheckHelper
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
-		h.initWithOutboundFK(mb, i)
-		mb.checks = append(mb.checks, h.buildInsertionCheck())
+		if h.initWithOutboundFK(mb, i) {
+			mb.checks = append(mb.checks, h.buildInsertionCheck())
+		}
 	}
 	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
@@ -238,8 +239,9 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
 		// Verify that at least one FK column is actually updated.
 		if mb.outboundFKColsUpdated(i) {
-			h.initWithOutboundFK(mb, i)
-			mb.checks = append(mb.checks, h.buildInsertionCheck())
+			if h.initWithOutboundFK(mb, i) {
+				mb.checks = append(mb.checks, h.buildInsertionCheck())
+			}
 		}
 	}
 
@@ -347,8 +349,9 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 
 	h := &mb.fkCheckHelper
 	for i := 0; i < numOutbound; i++ {
-		h.initWithOutboundFK(mb, i)
-		mb.checks = append(mb.checks, h.buildInsertionCheck())
+		if h.initWithOutboundFK(mb, i) {
+			mb.checks = append(mb.checks, h.buildInsertionCheck())
+		}
 	}
 
 	for i := 0; i < numInbound; i++ {
