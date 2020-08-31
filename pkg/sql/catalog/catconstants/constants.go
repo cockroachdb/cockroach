@@ -80,6 +80,7 @@ const (
 	CrdbInternalTablesTableLastStatsID
 	CrdbInternalTxnStatsTableID
 	CrdbInternalZonesTableID
+	CrdbInternalTransactionStatsTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
