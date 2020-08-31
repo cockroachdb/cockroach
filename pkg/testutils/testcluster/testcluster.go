@@ -539,14 +539,13 @@ func (tc *TestCluster) changeReplicas(
 	return *desc, nil
 }
 
-// AddVoters is part of TestClusterInterface.
-func (tc *TestCluster) AddVoters(
-	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+func (tc *TestCluster) addReplica(
+	startKey roachpb.Key, typ roachpb.ReplicaChangeType, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
 
 	rangeDesc, err := tc.changeReplicas(
-		roachpb.ADD_VOTER, rKey, targets...,
+		typ, rKey, targets...,
 	)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, err
@@ -557,6 +556,20 @@ func (tc *TestCluster) AddVoters(
 	}
 
 	return rangeDesc, nil
+}
+
+// AddVoters is part of TestClusterInterface.
+func (tc *TestCluster) AddVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.addReplica(startKey, roachpb.ADD_VOTER, targets...)
+}
+
+// AddNonVoters is part of TestClusterInterface.
+func (tc *TestCluster) AddNonVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.addReplica(startKey, roachpb.ADD_NON_VOTER, targets...)
 }
 
 // AddVotersMulti is part of TestClusterInterface.
@@ -672,6 +685,13 @@ func (tc *TestCluster) RemoveVotersOrFatal(
 			targets, startKey, err)
 	}
 	return desc
+}
+
+// RemoveNonVoters is part of TestClusterInterface.
+func (tc *TestCluster) RemoveNonVoters(
+	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.changeReplicas(roachpb.REMOVE_NON_VOTER, keys.MustAddr(startKey), targets...)
 }
 
 // TransferRangeLease is part of the TestServerInterface.

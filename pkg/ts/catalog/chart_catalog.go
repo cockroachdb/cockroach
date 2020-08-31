@@ -493,9 +493,9 @@ var charts = []sectionDescription{
 				Title: "Snapshots",
 				Metrics: []string{
 					"range.snapshots.generated",
-					"range.snapshots.normal-applied",
-					"range.snapshots.preemptive-applied",
-					"range.snapshots.learner-applied",
+					"range.snapshots.applied-voter",
+					"range.snapshots.applied-initial",
+					"range.snapshots.applied-non-voter",
 				},
 			},
 		},

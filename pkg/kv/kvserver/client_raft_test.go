@@ -982,7 +982,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		return nil
 	})
 
-	snapsMetric := mtc.stores[partStore].Metrics().RangeSnapshotsNormalApplied
+	snapsMetric := mtc.stores[partStore].Metrics().RangeSnapshotsAppliedByVoters
 	snapsBefore := snapsMetric.Count()
 
 	// Remove the partition. Snapshot should follow.
@@ -1452,8 +1452,8 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	for _, s := range mtc.stores {
 		m := s.Metrics()
 		generated += m.RangeSnapshotsGenerated.Count()
-		learnerApplied += m.RangeSnapshotsLearnerApplied.Count()
-		raftApplied += m.RangeSnapshotsNormalApplied.Count()
+		learnerApplied += m.RangeSnapshotsAppliedForInitialUpreplication.Count()
+		raftApplied += m.RangeSnapshotsAppliedByVoters.Count()
 	}
 	if generated == 0 {
 		t.Fatalf("expected at least 1 snapshot, but found 0")
@@ -1537,7 +1537,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		return nil
 	})
 
-	before := mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+	before := mtc.stores[2].Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 	// Attempt to add replica to the third store with the original descriptor.
 	// This should fail because the descriptor is stale.
 	expectedErr := `change replicas of r1 failed: descriptor changed: \[expected\]`
@@ -1545,7 +1545,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatalf("got unexpected error: %+v", err)
 	}
 
-	after := mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+	after := mtc.stores[2].Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 	// The failed ChangeReplicas call should NOT have applied a learner snapshot.
 	if after != before {
 		t.Fatalf(
@@ -1553,14 +1553,14 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 			before, after)
 	}
 
-	before = mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+	before = mtc.stores[2].Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 	// Add to third store with fresh descriptor.
 	if err := addReplica(2, repl.Desc()); err != nil {
 		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		after := mtc.stores[2].Metrics().RangeSnapshotsLearnerApplied.Count()
+		after := mtc.stores[2].Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 		// The failed ChangeReplicas call should have applied a learner snapshot.
 		if after != before+1 {
 			return errors.Errorf(
