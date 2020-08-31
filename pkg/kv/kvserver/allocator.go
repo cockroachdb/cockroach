@@ -532,9 +532,9 @@ func (a Allocator) simulateRemoveTarget(
 	// but as of October 2017 calls to the Allocator are mostly serialized by the ReplicateQueue
 	// (with the main exceptions being Scatter and the status server's allocator debug endpoint).
 	// Try to make this interfere less with other callers.
-	a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_REPLICA)
+	a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_VOTER)
 	defer func() {
-		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.REMOVE_REPLICA)
+		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.REMOVE_VOTER)
 	}()
 	log.VEventf(ctx, 3, "simulating which replica would be removed after adding s%d", targetStore)
 	return a.RemoveTarget(ctx, zone, candidates, existingReplicas)

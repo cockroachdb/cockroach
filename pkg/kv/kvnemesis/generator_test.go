@@ -156,9 +156,9 @@ func TestRandStep(t *testing.T) {
 			var adds, removes int
 			for _, change := range o.Changes {
 				switch change.ChangeType {
-				case roachpb.ADD_REPLICA:
+				case roachpb.ADD_VOTER:
 					adds++
-				case roachpb.REMOVE_REPLICA:
+				case roachpb.REMOVE_VOTER:
 					removes++
 				}
 			}

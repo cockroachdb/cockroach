@@ -62,7 +62,7 @@ func TestLogGC(t *testing.T) {
 				timestamp,
 				testRangeID,
 				1, // storeID
-				kvserverpb.RangeLogEventType_add.String(),
+				kvserverpb.RangeLogEventType_add_voter.String(),
 			)
 			a.NoError(err)
 		}
@@ -198,7 +198,7 @@ func TestLogGCTrigger(t *testing.T) {
              cast(now() - interval '10s' as timestamp), -- cast from timestamptz
 						 100, 1, $1
           )`,
-		kvserverpb.RangeLogEventType_add.String(),
+		kvserverpb.RangeLogEventType_add_voter.String(),
 	); err != nil {
 		t.Fatal(err)
 	}

@@ -62,6 +62,7 @@ const (
 	replicaGCPriorityRemoved = 2.0
 )
 
+// TODO(aayush): Do we want to track gc queue removals separately for voters and long-lived learners?
 var (
 	metaReplicaGCQueueRemoveReplicaCount = metric.Metadata{
 		Name:        "queue.replicagc.removereplica",
