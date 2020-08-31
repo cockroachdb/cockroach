@@ -1468,65 +1468,76 @@ func (tc *Collection) GetAllDescriptors(
 		if err != nil {
 			return nil, err
 		}
-		// There could be tables with user defined types that need hydrating,
-		// so collect the needed information to set up metadata in those types.
-		dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
-		typDescs := make(map[descpb.ID]*typedesc.Immutable)
-		schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
-		for _, desc := range descs {
-			switch desc := desc.(type) {
-			case *dbdesc.Immutable:
-				dbDescs[desc.GetID()] = desc
-			case *typedesc.Immutable:
-				typDescs[desc.GetID()] = desc
-			case *schemadesc.Immutable:
-				schemaDescs[desc.GetID()] = desc
-			}
-		}
-		// If we found any type descriptors, that means that some of the tables we
-		// scanned might have types that need hydrating.
-		if len(typDescs) > 0 {
-			// Since we just scanned all the descriptors, we already have everything
-			// we need to hydrate our types. Set up an accessor for the type hydration
-			// method to look into the scanned set of descriptors.
-			typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
-				typDesc := typDescs[id]
-				dbDesc := dbDescs[typDesc.ParentID]
-				// We don't use the collection's ResolveSchemaByID method here because
-				// we already have all of the descriptors. User defined types are only
-				// members of the public schema or a user defined schema, so those are
-				// the only cases we have to consider here.
-				var scName string
-				switch typDesc.ParentSchemaID {
-				case keys.PublicSchemaID:
-					scName = tree.PublicSchema
-				default:
-					scName = schemaDescs[typDesc.ParentSchemaID].Name
-				}
-				name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
-				return name, typDesc, nil
-			}
-			// Now hydrate all table descriptors.
-			for i := range descs {
-				desc := descs[i]
-				if tblDesc, ok := desc.(*tabledesc.Immutable); ok {
-					if err := typedesc.HydrateTypesInTableDescriptor(
-						ctx,
-						tblDesc.TableDesc(),
-						typedesc.TypeLookupFunc(typeLookup),
-					); err != nil {
-						// If we ran into an error hydrating the types, that means that we
-						// have some sort of corrupted descriptor state. Rather than disable
-						// uses of GetAllDescriptors, just log the error.
-						log.Errorf(ctx, "%s", err.Error())
-					}
-				}
-			}
+
+		// There could be tables with user defined types that need hydrating.
+		if err := HydrateGivenDescriptors(ctx, descs); err != nil {
+			// If we ran into an error hydrating the types, that means that we
+			// have some sort of corrupted descriptor state. Rather than disable
+			// uses of GetAllDescriptors, just log the error.
+			log.Errorf(ctx, "%s", err.Error())
 		}
 
 		tc.allDescriptors = descs
 	}
 	return tc.allDescriptors, nil
+}
+
+// HydrateGivenDescriptors installs type metadata in the types present for all
+// table descriptors in the slice of descriptors. It is exported so resolution
+// on sets of descriptors can hydrate a set of descriptors (i.e. on BACKUPs).
+func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) error {
+	// Collect the needed information to set up metadata in those types.
+	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
+	typDescs := make(map[descpb.ID]*typedesc.Immutable)
+	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
+	for _, desc := range descs {
+		switch desc := desc.(type) {
+		case *dbdesc.Immutable:
+			dbDescs[desc.GetID()] = desc
+		case *typedesc.Immutable:
+			typDescs[desc.GetID()] = desc
+		case *schemadesc.Immutable:
+			schemaDescs[desc.GetID()] = desc
+		}
+	}
+	// If we found any type descriptors, that means that some of the tables we
+	// scanned might have types that need hydrating.
+	if len(typDescs) > 0 {
+		// Since we just scanned all the descriptors, we already have everything
+		// we need to hydrate our types. Set up an accessor for the type hydration
+		// method to look into the scanned set of descriptors.
+		typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
+			typDesc := typDescs[id]
+			dbDesc := dbDescs[typDesc.ParentID]
+			// We don't use the collection's ResolveSchemaByID method here because
+			// we already have all of the descriptors. User defined types are only
+			// members of the public schema or a user defined schema, so those are
+			// the only cases we have to consider here.
+			var scName string
+			switch typDesc.ParentSchemaID {
+			case keys.PublicSchemaID:
+				scName = tree.PublicSchema
+			default:
+				scName = schemaDescs[typDesc.ParentSchemaID].Name
+			}
+			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
+			return name, typDesc, nil
+		}
+		// Now hydrate all table descriptors.
+		for i := range descs {
+			desc := descs[i]
+			if tblDesc, ok := desc.(*tabledesc.Immutable); ok {
+				if err := typedesc.HydrateTypesInTableDescriptor(
+					ctx,
+					tblDesc.TableDesc(),
+					typedesc.TypeLookupFunc(typeLookup),
+				); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // GetAllDatabaseDescriptors returns all database descriptors visible by the
