@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -54,6 +55,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func getAdminJSONProto(
@@ -1871,4 +1873,33 @@ func TestStatsforSpanOnLocalMax(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestEndpointTelemetryBasic tests that the telemetry collection on the usage of
+// CRDB's endpoints works as expected by recording the call counts of `Admin` &
+// `Status` requests.
+func TestEndpointTelemetryBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	// Check that calls over HTTP are recorded.
+	var details serverpb.LocationsResponse
+	if err := getAdminJSONProto(s, "locations", &details); err != nil {
+		t.Fatal(err)
+	}
+	if count := telemetry.Read(
+		getServerEndpointCounter("/cockroach.server.serverpb.Admin/Locations"),
+	); count < int32(1) {
+		t.Fatalf("expected telemetry count to be greater than or equal to 1; found %d", count)
+	}
+
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(s, "statements", &resp); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, int32(1), telemetry.Read(getServerEndpointCounter(
+		"/cockroach.server.serverpb.Status/Statements",
+	)))
 }
