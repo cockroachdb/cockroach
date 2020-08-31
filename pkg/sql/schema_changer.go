@@ -237,10 +237,6 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		p, cleanup := NewInternalPlanner(desc, txn, security.RootUser, &MemoryMetrics{}, sc.execCfg)
 		defer cleanup()
 		localPlanner := p.(*planner)
-		// TODO (rohany): This is a hack and should be removed once #51865 lands.
-		// In case we used this planner to access any descriptors, we need to
-		// release any leases we might have acquired during planning and execution.
-		defer func() { localPlanner.Descriptors().ReleaseAll(ctx) }()
 		stmt, err := parser.ParseOne(query)
 		if err != nil {
 			return err
