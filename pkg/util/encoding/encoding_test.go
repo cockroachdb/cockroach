@@ -1317,6 +1317,63 @@ func TestEncodeDecodeGeography(t *testing.T) {
 	}
 }
 
+func TestEncodeDecodeGeoInvertedIndex(t *testing.T) {
+	testCases := []struct {
+		shape          string
+		cellID         uint64
+		expectedLength int
+	}{
+		{
+			shape:          "SRID=4326;LINESTRING(0 0, -90 -80)",
+			cellID:         0,
+			expectedLength: 35,
+		},
+		{
+			shape:          "SRID=4326;LINESTRING(0 0, -90 -80)",
+			cellID:         math.MaxUint64,
+			expectedLength: 43,
+		},
+		{
+			shape:          "SRID=4326;POINT(-80 80)",
+			cellID:         0,
+			expectedLength: 19,
+		},
+		{
+			shape:          "SRID=4326;POINT(-80 80)",
+			cellID:         math.MaxUint64,
+			expectedLength: 27,
+		},
+		{
+			shape:          "SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+			cellID:         10000,
+			expectedLength: 37,
+		},
+		{
+			shape:          "SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+			cellID:         math.MaxUint32,
+			expectedLength: 39,
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			parsed, err := geo.ParseGeometry(tc.shape)
+			require.NoError(t, err)
+			var b []byte
+			b = EncodeGeoInvertedAscending(b)
+			b = EncodeUvarintAscending(b, tc.cellID)
+			bbox := parsed.BoundingBoxRef()
+			require.NotNil(t, bbox)
+			b = EncodeGeoInvertedBBox(b, bbox.LoX, bbox.LoY, bbox.HiX, bbox.HiY)
+			require.Equal(t, tc.expectedLength, len(b))
+			var dBBox geopb.BoundingBox
+			dBBox.LoX, dBBox.LoY, dBBox.HiX, dBBox.HiY, b, err = DecodeGeoInvertedKey(b)
+			require.NoError(t, err)
+			require.Equal(t, *bbox, dBBox)
+			require.Equal(t, 0, len(b))
+		})
+	}
+}
+
 type testCaseDuration struct {
 	value  duration.Duration
 	expEnc []byte
