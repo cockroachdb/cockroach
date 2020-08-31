@@ -20,6 +20,7 @@ information_schema  administrable_role_authorizations  table  NULL
 information_schema  applicable_roles                   table  NULL
 information_schema  check_constraints                  table  NULL
 information_schema  column_privileges                  table  NULL
+information_schema  column_udt_usage                   table  NULL
 information_schema  columns                            table  NULL
 information_schema  constraint_column_usage            table  NULL
 information_schema  enabled_roles                      table  NULL
@@ -127,6 +128,7 @@ information_schema  administrable_role_authorizations  table  NULL
 information_schema  applicable_roles                   table  NULL
 information_schema  check_constraints                  table  NULL
 information_schema  column_privileges                  table  NULL
+information_schema  column_udt_usage                   table  NULL
 information_schema  columns                            table  NULL
 information_schema  constraint_column_usage            table  NULL
 information_schema  enabled_roles                      table  NULL
@@ -262,6 +264,7 @@ information_schema  administrable_role_authorizations
 information_schema  applicable_roles
 information_schema  check_constraints
 information_schema  column_privileges
+information_schema  column_udt_usage
 information_schema  columns
 information_schema  constraint_column_usage
 information_schema  enabled_roles
@@ -412,6 +415,7 @@ administrable_role_authorizations
 applicable_roles
 check_constraints
 column_privileges
+column_udt_usage
 columns
 constraint_column_usage
 enabled_roles
@@ -570,6 +574,7 @@ system         information_schema  administrable_role_authorizations  SYSTEM VIE
 system         information_schema  applicable_roles                   SYSTEM VIEW  NO                  1
 system         information_schema  check_constraints                  SYSTEM VIEW  NO                  1
 system         information_schema  column_privileges                  SYSTEM VIEW  NO                  1
+system         information_schema  column_udt_usage                   SYSTEM VIEW  NO                  1
 system         information_schema  columns                            SYSTEM VIEW  NO                  1
 system         information_schema  constraint_column_usage            SYSTEM VIEW  NO                  1
 system         information_schema  enabled_roles                      SYSTEM VIEW  NO                  1
@@ -1675,6 +1680,7 @@ NULL     public   system         information_schema  administrable_role_authoriz
 NULL     public   system         information_schema  applicable_roles                   SELECT          NULL          YES
 NULL     public   system         information_schema  check_constraints                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                  SELECT          NULL          YES
+NULL     public   system         information_schema  column_udt_usage                   SELECT          NULL          YES
 NULL     public   system         information_schema  columns                            SELECT          NULL          YES
 NULL     public   system         information_schema  constraint_column_usage            SELECT          NULL          YES
 NULL     public   system         information_schema  enabled_roles                      SELECT          NULL          YES
@@ -2050,6 +2056,7 @@ NULL     public   system         information_schema  administrable_role_authoriz
 NULL     public   system         information_schema  applicable_roles                   SELECT          NULL          YES
 NULL     public   system         information_schema  check_constraints                  SELECT          NULL          YES
 NULL     public   system         information_schema  column_privileges                  SELECT          NULL          YES
+NULL     public   system         information_schema  column_udt_usage                   SELECT          NULL          YES
 NULL     public   system         information_schema  columns                            SELECT          NULL          YES
 NULL     public   system         information_schema  constraint_column_usage            SELECT          NULL          YES
 NULL     public   system         information_schema  enabled_roles                      SELECT          NULL          YES
@@ -2873,3 +2880,18 @@ WHERE
 
 statement ok
 DROP TABLE ab
+
+subtest column_udt_usage
+
+statement ok
+CREATE TYPE typ1 AS ENUM ('hello');
+CREATE TYPE typ2 AS ENUM ('bye');
+CREATE TABLE tb_enum_cols (x typ1, y INT, z typ2, w typ2)
+
+query TTTTTTT colnames
+SELECT * FROM information_schema.column_udt_usage
+----
+udt_catalog  udt_schema  udt_name  table_catalog  table_schema  table_name    column_name
+test         public      typ1      test           public        tb_enum_cols  x
+test         public      typ2      test           public        tb_enum_cols  z
+test         public      typ2      test           public        tb_enum_cols  w

@@ -128,6 +128,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaCheckConstraints:                  informationSchemaCheckConstraints,
 		catconstants.InformationSchemaColumnPrivilegesID:                informationSchemaColumnPrivileges,
 		catconstants.InformationSchemaColumnsTableID:                    informationSchemaColumnsTable,
+		catconstants.InformationSchemaColumnUDTUsageID:                  informationSchemaColumnUDTUsage,
 		catconstants.InformationSchemaConstraintColumnUsageTableID:      informationSchemaConstraintColumnUsageTable,
 		catconstants.InformationSchemaEnabledRolesID:                    informationSchemaEnabledRoles,
 		catconstants.InformationSchemaKeyColumnUsageTableID:             informationSchemaKeyColumnUsageTable,
@@ -457,6 +458,36 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				)
 			})
 		})
+	},
+}
+
+var informationSchemaColumnUDTUsage = virtualSchemaTable{
+	comment: `columns with user defined types
+` + base.DocsURL("information-schema.html#column_udt_usage") + `
+https://www.postgresql.org/docs/current/infoschema-column-udt-usage.html`,
+	schema: vtable.InformationSchemaColumnUDTUsage,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual,
+			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
+				dbNameStr := tree.NewDString(db.GetName())
+				scNameStr := tree.NewDString(scName)
+				tbNameStr := tree.NewDString(table.GetName())
+				return table.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
+					if !col.Type.UserDefined() {
+						return nil
+					}
+					return addRow(
+						tree.NewDString(col.Type.TypeMeta.Name.Catalog), // UDT_CATALOG
+						tree.NewDString(col.Type.TypeMeta.Name.Schema),  // UDT_SCHEMA
+						tree.NewDString(col.Type.TypeMeta.Name.Name),    // UDT_NAME
+						dbNameStr,                 // TABLE_CATALOG
+						scNameStr,                 // TABLE_SCHEMA
+						tbNameStr,                 // TABLE_NAME
+						tree.NewDString(col.Name), // COLUMN_NAME
+					)
+				})
+			},
+		)
 	},
 }
 

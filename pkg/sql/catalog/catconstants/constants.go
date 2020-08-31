@@ -86,6 +86,7 @@ const (
 	InformationSchemaCheckConstraints
 	InformationSchemaColumnPrivilegesID
 	InformationSchemaColumnsTableID
+	InformationSchemaColumnUDTUsageID
 	InformationSchemaConstraintColumnUsageTableID
 	InformationSchemaEnabledRolesID
 	InformationSchemaKeyColumnUsageTableID
