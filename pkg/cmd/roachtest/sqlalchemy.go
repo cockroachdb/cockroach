@@ -102,7 +102,7 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 
 	t.Status("installing sqlalchemy-cockroachdb")
 	if err := repeatRunE(ctx, c, node, "installing sqlalchemy=cockroachdb", `
-		cd /mnt/data1/sqlalchemy-cockroachdb && sudo python3 setup.py install
+		cd /mnt/data1/sqlalchemy-cockroachdb && sudo pip3 install .
 	`); err != nil {
 		t.Fatal(err)
 	}
