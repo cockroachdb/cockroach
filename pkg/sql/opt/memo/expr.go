@@ -520,6 +520,11 @@ type WindowFrame struct {
 	FrameExclusion tree.WindowFrameExclusion
 }
 
+// HasOffset returns true if the WindowFrame contains a distinct offset.
+func (f *WindowFrame) HasOffset() bool {
+	return f.StartBoundType == tree.OffsetPreceding || f.EndBoundType == tree.OffsetFollowing
+}
+
 func (f *WindowFrame) String() string {
 	var bld strings.Builder
 	switch f.Mode {
