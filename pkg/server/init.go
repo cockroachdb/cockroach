@@ -406,6 +406,39 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 		return nil, errJoinRPCUnsupported
 	}
 
+	// Iterate through all the resolvers at least once to reduce time taken to
+	// cluster convergence. Keep this code block roughly in sync with the one
+	// below.
+	for _, res := range s.config.resolvers {
+		select {
+		case <-ctx.Done():
+			return nil, context.Canceled
+		case <-stopper.ShouldQuiesce():
+			return nil, stop.ErrUnavailable
+		default:
+		}
+
+		addr := res.Addr()
+		state, err := s.attemptJoinTo(ctx, res.Addr())
+		if err == nil {
+			return state, nil
+		}
+
+		if errors.Is(err, errJoinRPCUnsupported) || errors.Is(err, ErrIncompatibleBinaryVersion) {
+			// Propagate upwards; these are error conditions the caller knows to
+			// expect.
+			return nil, err
+		}
+
+		if IsWaitingForInit(err) {
+			log.Warningf(ctx, "%s is itself waiting for init, will retry", addr)
+		} else {
+			log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
+		}
+
+		// Try the next node if unsuccessful.
+	}
+
 	const joinRPCBackoff = time.Second
 	var tickChan <-chan time.Time
 	{
