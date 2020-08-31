@@ -1095,7 +1095,8 @@ func EncodeGeoDescending(b []byte, curveIndex uint64, so *geopb.SpatialObject) (
 }
 
 // DecodeGeoAscending decodes a geopb.SpatialObject value that was encoded
-// in ascending order back into a geopb.SpatialObject.
+// in ascending order back into a geopb.SpatialObject. The so parameter
+// must already be empty/reset.
 func DecodeGeoAscending(b []byte, so *geopb.SpatialObject) ([]byte, error) {
 	if PeekType(b) != Geo {
 		return nil, errors.Errorf("did not find Geo marker")
@@ -1112,12 +1113,15 @@ func DecodeGeoAscending(b []byte, so *geopb.SpatialObject) ([]byte, error) {
 	if err != nil {
 		return b, err
 	}
-	err = protoutil.Unmarshal(pbBytes, so)
+	// Not using protoutil.Unmarshal since the call to so.Reset() will waste the
+	// pre-allocated EWKB.
+	err = so.Unmarshal(pbBytes)
 	return b, err
 }
 
 // DecodeGeoDescending decodes a geopb.SpatialObject value that was encoded
-// in descending order back into a geopb.SpatialObject.
+// in descending order back into a geopb.SpatialObject. The so parameter
+// must already be empty/reset.
 func DecodeGeoDescending(b []byte, so *geopb.SpatialObject) ([]byte, error) {
 	if PeekType(b) != GeoDesc {
 		return nil, errors.Errorf("did not find Geo marker")
@@ -1135,7 +1139,9 @@ func DecodeGeoDescending(b []byte, so *geopb.SpatialObject) ([]byte, error) {
 		return b, err
 	}
 	onesComplement(pbBytes)
-	err = protoutil.Unmarshal(pbBytes, so)
+	// Not using protoutil.Unmarshal since the call to so.Reset() will waste the
+	// pre-allocated EWKB.
+	err = so.Unmarshal(pbBytes)
 	return b, err
 }
 
@@ -2579,14 +2585,17 @@ func DecodeUntaggedBox2DValue(
 }
 
 // DecodeUntaggedGeoValue decodes a value encoded by EncodeUntaggedGeoValue into
-// the provided geopb.SpatialObject reference.
+// the provided geopb.SpatialObject reference. The so parameter must already be
+// empty/reset.
 func DecodeUntaggedGeoValue(b []byte, so *geopb.SpatialObject) (remaining []byte, err error) {
 	var data []byte
 	remaining, data, err = DecodeUntaggedBytesValue(b)
 	if err != nil {
 		return b, err
 	}
-	err = protoutil.Unmarshal(data, so)
+	// Not using protoutil.Unmarshal since the call to so.Reset() will waste the
+	// pre-allocated EWKB.
+	err = so.Unmarshal(data)
 	return remaining, err
 }
 
