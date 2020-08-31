@@ -4718,6 +4718,7 @@ func initGeoBuiltins() {
 		{"st_geomfromtext", "st_geometryfromtext"},
 		{"st_numinteriorring", "st_numinteriorrings"},
 		{"st_makepoint", "st_point"},
+		{"st_symmetricdifference", "st_symdifference"},
 	} {
 		if _, ok := geoBuiltins[alias.builtinName]; !ok {
 			panic("expected builtin definition for alias: " + alias.builtinName)

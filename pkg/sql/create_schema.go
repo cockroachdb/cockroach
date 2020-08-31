@@ -50,8 +50,13 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return pgerror.New(pgcode.InvalidObjectDefinition, "cannot create schemas in the system database")
 	}
 
+	schemaName := n.Schema
+	if n.Schema == "" {
+		schemaName = n.AuthRole
+	}
+
 	// Ensure there aren't any name collisions.
-	exists, err := p.schemaExists(params.ctx, db.ID, n.Schema)
+	exists, err := p.schemaExists(params.ctx, db.ID, schemaName)
 	if err != nil {
 		return err
 	}
@@ -60,11 +65,11 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		if n.IfNotExists {
 			return nil
 		}
-		return pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", n.Schema)
+		return pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", schemaName)
 	}
 
 	// Check validity of the schema name.
-	if err := schemadesc.IsSchemaNameValid(n.Schema); err != nil {
+	if err := schemadesc.IsSchemaNameValid(schemaName); err != nil {
 		return err
 	}
 
@@ -83,12 +88,24 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 
 	// Inherit the parent privileges.
 	privs := db.GetPrivileges()
-	privs.SetOwner(params.SessionData().User)
+
+	if n.AuthRole != "" {
+		exists, err := p.RoleExists(params.ctx, n.AuthRole)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", n.AuthRole)
+		}
+		privs.SetOwner(n.AuthRole)
+	} else {
+		privs.SetOwner(params.SessionData().User)
+	}
 
 	// Create the SchemaDescriptor.
 	desc := schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
 		ParentID:   db.ID,
-		Name:       n.Schema,
+		Name:       schemaName,
 		ID:         id,
 		Privileges: privs,
 		Version:    1,
@@ -113,7 +130,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	// Finally create the schema on disk.
 	return p.createDescriptorWithID(
 		params.ctx,
-		catalogkeys.NewSchemaKey(db.ID, n.Schema).Key(p.ExecCfg().Codec),
+		catalogkeys.NewSchemaKey(db.ID, schemaName).Key(p.ExecCfg().Codec),
 		id,
 		desc,
 		params.ExecCfg().Settings,
