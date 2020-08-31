@@ -1585,6 +1585,12 @@ func confChangeImpl(
 			if err := checkNotExists(rDesc); err != nil {
 				return nil, err
 			}
+		case LEARNER_PERSISTENT:
+			// Like the case above, we must be removing a persistent learner, so the target
+			// should be gone from the descriptor.
+			if err := checkNotExists(rDesc); err != nil {
+				return nil, err
+			}
 		case VOTER_FULL:
 			// A voter can't be in the descriptor if it's being removed.
 			if err := checkNotExists(rDesc); err != nil {
@@ -1618,6 +1624,20 @@ func confChangeImpl(
 			// ChangeReplicas txn that this learner is not currently a voter.
 			// Demotions (i.e. transitioning from voter to learner) are not
 			// represented in `added`; they're handled in `removed` above.
+			changeType = raftpb.ConfChangeAddLearnerNode
+		case LEARNER_PERSISTENT:
+			// We're adding a persistent learner. Like the case above, we're guaranteed that
+			// this learner is not a voter. Promotions of persistent learners to voters and
+			// demotions vice-versa are not currently supported.
+			//
+			// TODO(aayush, andrei): If a draining leaseholder doesn't see any other voters
+			// in its locality, but sees a learner, rather than allowing the lease to the
+			// transferred outside of its current locality (likely violating leaseholder
+			// preferences, at least temporarily), it would be nice to promote the existing
+			// learner to a voter. This could be further extended to cases where we have a
+			// dead voter in a given locality along with a live learner. In such cases, we
+			// would want to promote the live learner to a voter and demote the dead voter to
+			// a learner.
 			changeType = raftpb.ConfChangeAddLearnerNode
 		default:
 			// A voter that is demoting was just removed and re-added in the

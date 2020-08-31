@@ -110,16 +110,22 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	}
 	snapType := SnapshotRequest_RAFT
 
-	// An ephemeral learner replica is either getting a snapshot of type
-	// SnapshotRequest_LEARNER by the node that's adding it or it's been orphaned
-	// and it's about to be cleaned up by the replicate queue. Either way, no
-	// point in also sending it a snapshot of type RAFT.
-	if repDesc.GetType() == roachpb.LEARNER_EPHEMERAL {
+	isEphemeralLearner := repDesc.GetType() == roachpb.LEARNER_EPHEMERAL
+	isLearner := isEphemeralLearner || repDesc.GetType() == roachpb.LEARNER_PERSISTENT
+	if isLearner {
 		if fn := repl.store.cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
 			return nil
 		}
+		// An ephemeral learner replica is either getting a snapshot of type
+		// SnapshotRequest_LEARNER by the node that's adding it or it's been orphaned
+		// and it's about to be cleaned up by the replicate queue. Either way, no
+		// point in also sending it a snapshot of type RAFT.
+		//
+		// Persistent learners, unlike ephemeral learners, rely on the raft snapshot
+		// queue to upreplicate.
 		snapType = SnapshotRequest_LEARNER
-		if index := repl.getAndGCSnapshotLogTruncationConstraints(timeutil.Now(), repDesc.StoreID); index > 0 {
+		if index := repl.getAndGCSnapshotLogTruncationConstraints(timeutil.Now(),
+			repDesc.StoreID); isEphemeralLearner && index > 0 {
 			// There is a snapshot being transferred. It's probably a LEARNER_EPHEMERAL snap, so
 			// bail for now and try again later.
 			err := errors.Errorf(

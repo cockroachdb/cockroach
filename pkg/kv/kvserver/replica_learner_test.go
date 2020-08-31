@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func predIncoming(rDesc roachpb.ReplicaDescriptor) bool {
@@ -190,6 +191,51 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	require.Len(t, desc.Replicas().Voters(), 2)
 	require.Len(t, desc.Replicas().EphemeralLearners(), 0)
 	require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(1), `range.snapshots.learner-applied`))
+}
+
+func TestAddRemovePersistentLearnerBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	knobs, ltk := makeReplicationTestKnobs()
+	blockUntilSnapshotCh := make(chan struct{})
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
+		if h.Type == kvserver.SnapshotRequest_LEARNER {
+			close(blockUntilSnapshotCh)
+		}
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{Knobs: knobs},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchStartKey := tc.ScratchRange(t)
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		_, err := tc.AddPersistentLearners(scratchStartKey, tc.Target(1))
+		return err
+	})
+
+	// When we create a persistent learner, we queue up its range leaseholder into
+	// the raft snapshot queue so that it can receive its LEARNER snapshot and
+	// upreplicate relatively soon (i.e. without having to wait up to a full scanner
+	// cycle).
+	select {
+	case <-blockUntilSnapshotCh:
+	case <-time.After(30 * time.Second):
+		t.Fatal(`test timed out; did not receive LEARNER snapshot as expected`)
+	}
+	require.NoError(t, g.Wait())
+
+	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+	require.Len(t, desc.Replicas().PersistentLearners(), 1)
+
+	_, err := tc.RemovePersistentLearners(scratchStartKey, tc.Target(1))
+	require.NoError(t, err)
+	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+	require.NoError(t, tc.WaitForFullReplication())
+	require.Len(t, desc.Replicas().PersistentLearners(), 0)
 }
 
 func TestLearnerRaftConfState(t *testing.T) {

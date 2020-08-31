@@ -159,6 +159,8 @@ enum ReplicaChangeType {
 
   ADD_VOTER = 0;
   REMOVE_VOTER = 1;
+  ADD_LEARNER_PERSISTENT = 2;
+  REMOVE_LEARNER_PERSISTENT = 3;
 }
 
 // ChangeReplicasTrigger carries out a replication change. The Added() and

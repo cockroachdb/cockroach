@@ -74,6 +74,18 @@ type TestClusterInterface interface {
 		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
+	// AddPersistentLearners adds persistent learner replicas for a range on a set of
+	// stores.
+	// This method blocks until the new learners become a part of the Raft group.
+	AddPersistentLearners(
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) (roachpb.RangeDescriptor, error)
+
+	// RemovePersistentLearners removes one or more learners from a range.
+	RemovePersistentLearners(
+		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) (roachpb.RangeDescriptor, error)
+
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
 	// In particular, it returns one particular node's (the hint, if specified) view
 	// of the current lease.

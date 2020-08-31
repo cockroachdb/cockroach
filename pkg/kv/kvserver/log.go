@@ -176,6 +176,22 @@ func (s *Store) logChange(
 			Reason:         reason,
 			Details:        details,
 		}
+	case roachpb.ADD_LEARNER_PERSISTENT:
+		logType = kvserverpb.RangeLogEventType_add
+		info = kvserverpb.RangeLogEvent_Info{
+			RemovedReplica: &replica,
+			UpdatedDesc:    &desc,
+			Reason:         reason,
+			Details:        details,
+		}
+	case roachpb.REMOVE_LEARNER_PERSISTENT:
+		logType = kvserverpb.RangeLogEventType_remove
+		info = kvserverpb.RangeLogEvent_Info{
+			RemovedReplica: &replica,
+			UpdatedDesc:    &desc,
+			Reason:         reason,
+			Details:        details,
+		}
 	default:
 		return errors.Errorf("unknown replica change type %s", changeType)
 	}

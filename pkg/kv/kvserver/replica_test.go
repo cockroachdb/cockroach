@@ -6432,24 +6432,33 @@ func TestReplicaCorruption(t *testing.T) {
 func TestChangeReplicasDuplicateError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
 
-	// We now allow adding a replica to the same node, to support rebalances
-	// within the same node when replication is 1x, so add another replica to the
-	// range descriptor to avoid this case.
-	if _, err := tc.addBogusReplicaToRangeDesc(context.Background()); err != nil {
-		t.Fatalf("Unexpected error %v", err)
+	test := func(t *testing.T, changeType roachpb.ReplicaChangeType) {
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(context.Background())
+		tc.Start(t, stopper)
+		// We now allow adding a replica to the same node, to support rebalances
+		// within the same node when replication is 1x, so add another replica to the
+		// range descriptor to avoid this case.
+		if _, err := tc.addBogusReplicaToRangeDesc(context.Background()); err != nil {
+			t.Fatalf("Unexpected error %v", err)
+		}
+		chgs := roachpb.MakeReplicationChanges(changeType, roachpb.ReplicationTarget{
+			NodeID:  tc.store.Ident.NodeID,
+			StoreID: 9999,
+		})
+		if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
+			t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
+		}
 	}
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
-		NodeID:  tc.store.Ident.NodeID,
-		StoreID: 9999,
+	t.Run(roachpb.ADD_VOTER.String(), func(t *testing.T) {
+		test(t, roachpb.ADD_VOTER)
+
 	})
-	if _, err := tc.repl.ChangeReplicas(context.Background(), tc.repl.Desc(), SnapshotRequest_REBALANCE, kvserverpb.ReasonRebalance, "", chgs); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
-		t.Fatalf("must not be able to add second replica to same node (err=%+v)", err)
-	}
+	t.Run(roachpb.ADD_LEARNER_PERSISTENT.String(), func(t *testing.T) {
+		test(t, roachpb.ADD_LEARNER_PERSISTENT)
+	})
 }
 
 // TestReplicaDanglingMetaIntent creates a dangling intent on a meta2

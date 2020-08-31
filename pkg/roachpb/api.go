@@ -1432,6 +1432,18 @@ func (rc ReplicationChanges) VoterRemovals() []ReplicationTarget {
 	return rc.byType(REMOVE_VOTER)
 }
 
+// PersistentLearnerAdditions returns a slice of all contained replication
+// changes that add persistent learners.
+func (rc ReplicationChanges) PersistentLearnerAdditions() []ReplicationTarget {
+	return rc.byType(ADD_LEARNER_PERSISTENT)
+}
+
+// PersistentLearnerRemovals returns a slice of all contained replication changes
+// that remove persistent learners.
+func (rc ReplicationChanges) PersistentLearnerRemovals() []ReplicationTarget {
+	return rc.byType(REMOVE_LEARNER_PERSISTENT)
+}
+
 // Changes returns the changes requested by this AdminChangeReplicasRequest, taking
 // the deprecated method of doing so into account.
 func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {

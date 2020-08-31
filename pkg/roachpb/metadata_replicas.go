@@ -105,6 +105,10 @@ func predEphemeralLearner(rDesc ReplicaDescriptor) bool {
 	return rDesc.GetType() == LEARNER_EPHEMERAL
 }
 
+func predPersistentLearner(rDesc ReplicaDescriptor) bool {
+	return rDesc.GetType() == LEARNER_PERSISTENT
+}
+
 // Voters returns the current and future voter replicas in the set. This means
 // that during an atomic replication change, only the replicas that will be
 // voters once the change completes will be returned; "outgoing" voters will not
@@ -122,25 +126,10 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	return d.Filter(predVoterFullOrIncoming)
 }
 
-// EphemeralLearners returns the ephemeral learner replicas in the set. This may
-// allocate, but it also may return the underlying slice as a performance
-// optimization, so it's not safe to modify the returned value.
-//
 // A learner is a participant in a raft group that accepts messages
 // but doesn't vote. This means it doesn't affect raft quorum and thus doesn't
 // affect the fragility of the range, even if it's very far behind or many
 // learners are down.
-//
-// Ephemeral learners are used in CockroachDB as an interim state while adding a
-// replica. An ephemeral learner replica is added to the range via raft
-// ConfChange, a raft snapshot (of type LEARNER) is sent to catch it up, and
-// then a second ConfChange promotes it to a full replica.
-//
-// This means that ephemeral learners are always expected to have a short
-// lifetime, approximately the time it takes to send a snapshot. Ideas have been
-// kicked around to use learners with follower reads, which could be a cheap way
-// to allow many geographies to have local reads without affecting write
-// latencies.
 //
 // For simplicity, CockroachDB treats learner replicas the same as voter
 // replicas as much as possible, but there are a few exceptions:
@@ -152,8 +141,33 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 //   become leaseholders. As a result, DistSender and the various oracles don't
 //   try to send them traffic.
 // - The raft snapshot queue tries to avoid sending snapshots to ephemeral
-//   learners for reasons described below.
-// - Merges won't run while an ephemeral learner replica is present.
+//   learners (but not to persistent learners) for reasons described below.
+// - Merges won't run while a learner replica is present.
+//
+// Learner replicas don't affect quorum but they do affect the system in other
+// ways. The most obvious way is that the leader sends them the raft traffic it
+// would send to any follower, consuming resources. More surprising is that once
+// the learner has received a snapshot, it's considered by the quota pool that
+// prevents the raft leader from getting too far ahead of the followers. This is
+// because, currently, we only support ephemeral learners and they (especially
+// ones that already have a snapshot) are expected to very soon be voters, so we
+// treat them as such. However, it means a slow learner can slow down regular
+// traffic, which is possibly counterintuitive.
+
+// EphemeralLearners returns the ephemeral learner replicas in the set. This may
+// allocate, but it also may return the underlying slice as a performance
+// optimization, so it's not safe to modify the returned value.
+//
+// Ephemeral learners are used in CockroachDB as an interim state while adding a
+// replica. An ephemeral learner replica is added to the range via raft
+// ConfChange, a raft snapshot (of type LEARNER) is sent to catch it up, and
+// then a second ConfChange promotes it to a full replica.
+//
+// This means that ephemeral learners are always expected to have a short
+// lifetime, approximately the time it takes to send a snapshot. Ideas have been
+// kicked around to use learners with follower reads, which could be a cheap way
+// to allow many geographies to have local reads without affecting write
+// latencies.
 //
 // Replicas are now added in two ConfChange transactions. The first creates the
 // ephemeral learner and the second promotes it to a voter. If the node that is
@@ -198,19 +212,23 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // split (the original coordinator will not be able to finish either of them),
 // but the replication queue will eventually clean them up.
 //
-// Learner replicas don't affect quorum but they do affect the system in other
-// ways. The most obvious way is that the leader sends them the raft traffic it
-// would send to any follower, consuming resources. More surprising is that once
-// the learner has received a snapshot, it's considered by the quota pool that
-// prevents the raft leader from getting too far ahead of the followers. This is
-// because, currently, we only support ephemeral learners and they (especially
-// ones that already have a snapshot) are expected to very soon be voters, so we
-// treat them as such. However, it means a slow learner can slow down regular
-// traffic, which is possibly counterintuitive.
-//
 // For some related mega-comments, see Replica.sendSnapshot.
 func (d ReplicaDescriptors) EphemeralLearners() []ReplicaDescriptor {
 	return d.Filter(predEphemeralLearner)
+}
+
+// PersistentLearners returns the persistent (or "long-lived") learners in the
+// set. Persistent learners are different from ephemeral learners in that
+// ephemeral learners are a temporary internal intermediate state used to make
+// atomic replication changes less disruptive to the system, whereas persistent
+// learners are meant to be a user-visible state and are explicitly chosen to be
+// placed in specific localities via zone configs.
+//
+// TODO(aayush): Expand this documentation once `AdminRelocateRange` knows how to
+// deal with such replicas & range merges no longer block due to the presence of
+// persistent learner replicas.
+func (d ReplicaDescriptors) PersistentLearners() []ReplicaDescriptor {
+	return d.Filter(predPersistentLearner)
 }
 
 // Filter returns only the replica descriptors for which the supplied method
@@ -285,7 +303,7 @@ func (d ReplicaDescriptors) InAtomicReplicationChange() bool {
 		switch rDesc.GetType() {
 		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING:
 			return true
-		case VOTER_FULL, LEARNER_EPHEMERAL:
+		case VOTER_FULL, LEARNER_EPHEMERAL, LEARNER_PERSISTENT:
 		default:
 			panic(fmt.Sprintf("unknown replica type %d", rDesc.GetType()))
 		}
@@ -317,6 +335,8 @@ func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 			cs.VotersOutgoing = append(cs.VotersOutgoing, id)
 			cs.LearnersNext = append(cs.LearnersNext, id)
 		case LEARNER_EPHEMERAL:
+			cs.Learners = append(cs.Learners, id)
+		case LEARNER_PERSISTENT:
 			cs.Learners = append(cs.Learners, id)
 		default:
 			panic(fmt.Sprintf("unknown ReplicaType %d", typ))

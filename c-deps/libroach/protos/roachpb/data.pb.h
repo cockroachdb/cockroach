@@ -179,12 +179,14 @@ const int ValueType_ARRAYSIZE = ValueType_MAX + 1;
 enum ReplicaChangeType {
   ADD_VOTER = 0,
   REMOVE_VOTER = 1,
+  ADD_LEARNER_PERSISTENT = 2,
+  REMOVE_LEARNER_PERSISTENT = 3,
   ReplicaChangeType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   ReplicaChangeType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool ReplicaChangeType_IsValid(int value);
 const ReplicaChangeType ReplicaChangeType_MIN = ADD_VOTER;
-const ReplicaChangeType ReplicaChangeType_MAX = REMOVE_VOTER;
+const ReplicaChangeType ReplicaChangeType_MAX = REMOVE_LEARNER_PERSISTENT;
 const int ReplicaChangeType_ARRAYSIZE = ReplicaChangeType_MAX + 1;
 
 enum TransactionStatus {
