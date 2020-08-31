@@ -20,19 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func intToEncodedInvertedVal(v int64) []byte {
-	dint := tree.DInt(v)
-	encoded, err := rowenc.EncodeTableKey(nil, &dint, encoding.Ascending)
-	if err != nil {
-		panic("unable to encode int")
-	}
-	return encoded
+	return encoding.EncodeVarintAscending(nil, v)
 }
 
 func intSpanToEncodedSpan(start, end int64) invertedexpr.SpanExpressionProto_Span {

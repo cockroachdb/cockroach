@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/golang/geo/s2"
 )
 
@@ -114,8 +115,9 @@ var CommuteRelationshipMap = map[RelationshipType]RelationshipType{
 // GeographyIndex is an index over the unit sphere.
 type GeographyIndex interface {
 	// InvertedIndexKeys returns the keys to store this object under when adding
-	// it to the index.
-	InvertedIndexKeys(c context.Context, g geo.Geography) ([]Key, error)
+	// it to the index. Additionally returns a bounding box, which is non-empty
+	// iff the key slice is non-empty.
+	InvertedIndexKeys(c context.Context, g geo.Geography) ([]Key, geopb.BoundingBox, error)
 
 	// Acceleration for topological relationships (see
 	// https://postgis.net/docs/reference.html#Spatial_Relationships). Distance
@@ -153,8 +155,9 @@ type GeographyIndex interface {
 // GeometryIndex is an index over 2D cartesian coordinates.
 type GeometryIndex interface {
 	// InvertedIndexKeys returns the keys to store this object under when adding
-	// it to the index.
-	InvertedIndexKeys(c context.Context, g geo.Geometry) ([]Key, error)
+	// it to the index. Additionally returns a bounding box, which is non-empty
+	// iff the key slice is non-empty.
+	InvertedIndexKeys(c context.Context, g geo.Geometry) ([]Key, geopb.BoundingBox, error)
 
 	// Acceleration for topological relationships (see
 	// https://postgis.net/docs/reference.html#Spatial_Relationships). Distance
@@ -218,9 +221,11 @@ const (
 )
 
 var geoRelationshipTypeStr = map[RelationshipType]string{
-	Covers:     "covers",
-	CoveredBy:  "covered by",
-	Intersects: "intersects",
+	Covers:       "covers",
+	CoveredBy:    "covered by",
+	Intersects:   "intersects",
+	DWithin:      "dwithin",
+	DFullyWithin: "dfullywithin",
 }
 
 func (gr RelationshipType) String() string {

@@ -26,25 +26,25 @@ ALTER TABLE t INJECT STATISTICS '[
       "num_eq":1000,
       "num_range":0,
       "distinct_range":0,
-      "upper_bound":"\\xfd0555555555555555"
+      "upper_bound":"\\x42fd0555555555555555"
     },
     {
       "num_eq":1000,
       "num_range":1000,
       "distinct_range":1,
-      "upper_bound":"\\xfd0fffffff00000000"
+      "upper_bound":"\\x42fd0fffffff00000000"
     },
     {
       "num_eq":1000,
       "num_range":1000,
       "distinct_range":1,
-      "upper_bound":"\\xfd1000000100000000"
+      "upper_bound":"\\x42fd1000000100000000"
     },
     {
       "num_eq":1000,
       "num_range":1000,
       "distinct_range":1,
-      "upper_bound":"\\xfd1aaaaaab00000000"
+      "upper_bound":"\\x42fd1aaaaaab00000000"
     }]
   }
 ]'
@@ -174,13 +174,13 @@ project
       │    │              ├── columns: rowid:3(int!null)
       │    │              ├── inverted expression: /5
       │    │              │    ├── tight: false
-      │    │              │    └── union spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │    │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │              ├── stats: [rows=7e-07]
       │    │              ├── key: (3)
       │    │              └── scan t@secondary
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:5(geometry!null)
       │    │                   ├── inverted constraint: /5/3
-      │    │                   │    └── spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │                   ├── stats: [rows=7e-07, distinct(3)=1.99999931e-07, null(3)=0, distinct(5)=7e-07, null(5)=0]
       │    │                   │   histogram(5)=
       │    │                   ├── key: (3)
@@ -259,25 +259,25 @@ ALTER TABLE t INJECT STATISTICS '[
       "num_eq":1000,
       "num_range":0,
       "distinct_range":0,
-      "upper_bound":"\\xfd0555555555555555"
+      "upper_bound":"\\x42fd0555555555555555"
     },
     {
       "num_eq":1000,
       "num_range":1000,
       "distinct_range":1,
-      "upper_bound":"\\xfd0fffffff00000000"
+      "upper_bound":"\\x42fd0fffffff00000000"
     },
     {
       "num_eq":1000,
       "num_range":1000,
       "distinct_range":1,
-      "upper_bound":"\\xfd1000000100000000"
+      "upper_bound":"\\x42fd1000000100000000"
     },
     {
       "num_eq":1000,
       "num_range":1000,
       "distinct_range":1,
-      "upper_bound":"\\xfd1aaaaaab00000000"
+      "upper_bound":"\\x42fd1aaaaaab00000000"
     }]
   }
 ]'
@@ -394,13 +394,13 @@ project
       │    │              ├── columns: rowid:3(int!null)
       │    │              ├── inverted expression: /5
       │    │              │    ├── tight: false
-      │    │              │    └── union spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │    │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │              ├── stats: [rows=7e-07]
       │    │              ├── key: (3)
       │    │              └── scan t@secondary
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:5(geometry!null)
       │    │                   ├── inverted constraint: /5/3
-      │    │                   │    └── spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │                   ├── stats: [rows=7e-07, distinct(3)=1.99999931e-07, null(3)=0, distinct(5)=7e-07, null(5)=0]
       │    │                   │   histogram(5)=
       │    │                   ├── key: (3)
@@ -430,25 +430,25 @@ ALTER TABLE t INJECT STATISTICS '[
       "num_eq":100,
       "num_range":0,
       "distinct_range":0,
-      "upper_bound":"\\xfd0555555555555555"
+      "upper_bound":"\\x42fd0555555555555555"
     },
     {
       "num_eq":100,
       "num_range":0,
       "distinct_range":0,
-      "upper_bound":"\\xfd0fffffff00000000"
+      "upper_bound":"\\x42fd0fffffff00000000"
     },
     {
       "num_eq":100,
       "num_range":0,
       "distinct_range":0,
-      "upper_bound":"\\xfd1000000100000000"
+      "upper_bound":"\\x42fd1000000100000000"
     },
     {
       "num_eq":100,
       "num_range":0,
       "distinct_range":0,
-      "upper_bound":"\\xfd1aaaaaab00000000"
+      "upper_bound":"\\x42fd1aaaaaab00000000"
     }]
   }
 ]'
@@ -469,21 +469,21 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false
  │         │    └── union spans
- │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
- │         │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── stats: [rows=100]
  │         ├── key: (3)
  │         └── scan t@secondary
  │              ├── columns: rowid:3(int!null) g_inverted_key:5(geometry!null)
  │              ├── inverted constraint: /5/3
  │              │    └── spans
- │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
- │              │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │              ├── stats: [rows=100, distinct(3)=100, null(3)=0, distinct(5)=1, null(5)=0]
- │              │   histogram(5)=  0           100            0            0
- │              │                <--- '\xfd1000000100000000' --- '\xfd1400000000000001'
+ │              │   histogram(5)=  0            100             0             0
+ │              │                <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
  │              ├── key: (3)
  │              └── fd: (3)-->(5)
  └── filters
@@ -509,22 +509,22 @@ project
       │         ├── inverted expression: /5
       │         │    ├── tight: false
       │         │    └── union spans
-      │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │         │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── stats: [rows=100]
       │         ├── key: (3)
       │         └── scan t@secondary
       │              ├── columns: rowid:3(int!null) g_inverted_key:5(geometry!null)
       │              ├── inverted constraint: /5/3
       │              │    └── spans
-      │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
+      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=secondary
       │              ├── stats: [rows=100, distinct(3)=100, null(3)=0, distinct(5)=1, null(5)=0]
-      │              │   histogram(5)=  0           100            0            0
-      │              │                <--- '\xfd1000000100000000' --- '\xfd1400000000000001'
+      │              │   histogram(5)=  0            100             0             0
+      │              │                <--- '\x42fd1000000100000000' --- '\x42fd1400000000000001'
       │              ├── key: (3)
       │              └── fd: (3)-->(5)
       └── filters
