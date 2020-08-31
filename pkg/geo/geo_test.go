@@ -859,3 +859,123 @@ func TestValidateGeomT(t *testing.T) {
 		})
 	}
 }
+
+func TestIsLinearRingCCW(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		ring     *geom.LinearRing
+		expected bool
+	}{
+		{
+			desc: "flat linear ring",
+			ring: geom.NewLinearRingFlat(geom.XY, []float64{
+				0, 0,
+				0, 0,
+				0, 0,
+				0, 0,
+			}),
+			expected: false,
+		},
+		{
+			desc: "invalid linear ring with duplicate points at end deemed CW",
+			ring: geom.NewLinearRingFlat(geom.XY, []float64{
+				0, 0,
+				0, 0,
+				0, 0,
+				0, 0,
+				1, 0,
+				1, 0,
+				1, 0,
+			}),
+			expected: false,
+		},
+		{
+			desc: "invalid linear ring with duplicate points at start deemed CW",
+			ring: geom.NewLinearRingFlat(geom.XY, []float64{
+				0, 0,
+				0, 0,
+				0, 0,
+				0, 0,
+				-1, 1,
+				-1, 1,
+				-1, 1,
+				0, 0,
+			}),
+			expected: false,
+		},
+
+		{
+			desc: "CW linear ring",
+			ring: geom.NewLinearRingFlat(geom.XY, []float64{
+				0, 0,
+				1, 1,
+				1, 0,
+				0, 0,
+			}),
+			expected: false,
+		},
+		{
+			desc: "CW linear ring, first point is bottom right",
+			ring: geom.NewLinearRingFlat(geom.XY, []float64{
+				1, 0,
+				0, 0,
+				1, 1,
+				1, 0,
+			}),
+			expected: false,
+		},
+		{
+			desc: "CW linear ring, duplicate points for bottom right",
+			ring: geom.NewLinearRingFlat(geom.XY, []float64{
+				0, 0,
+				1, 1,
+				1, 0,
+				1, 0,
+				1, 0,
+				0, 0,
+			}),
+			expected: false,
+		},
+		{
+			desc: "CCW linear ring",
+			ring: geom.NewLinearRingFlat(geom.XY, []float64{
+				0, 0,
+				1, 0,
+				1, 1,
+				0, 0,
+			}),
+			expected: true,
+		},
+		{
+			desc: "CCW linear ring, duplicate points for bottom right",
+			ring: geom.NewLinearRingFlat(geom.XY, []float64{
+				0, 0,
+				1, 0,
+				1, 0,
+				1, 0,
+				1, 0,
+				1, 0,
+				1, 1,
+				0, 0,
+			}),
+			expected: true,
+		},
+		{
+			desc: "CCW linear ring, first point is bottom right",
+			ring: geom.NewLinearRingFlat(geom.XY, []float64{
+				1, 0,
+				1, 0,
+				1, 1,
+				0, 0,
+				1, 0,
+			}),
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			require.Equal(t, tc.expected, IsLinearRingCCW(tc.ring))
+		})
+	}
+}
