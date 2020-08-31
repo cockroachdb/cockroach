@@ -1686,8 +1686,8 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 		},
 	}
 	act := crt.String()
-	exp := "ENTER_JOINT(r6 r12 l12 v3) ADD_REPLICA[(n1,s2):3VOTER_INCOMING], " +
-		"REMOVE_REPLICA[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING]: " +
+	exp := "ENTER_JOINT(r6 r12 l12 v3) ADD_VOTER[(n1,s2):3VOTER_INCOMING], " +
+		"REMOVE_VOTER[(n4,s5):6VOTER_OUTGOING (n10,s11):12VOTER_DEMOTING]: " +
 		"after=[(n1,s2):3VOTER_INCOMING (n4,s5):6VOTER_OUTGOING (n7,s8):9LEARNER " +
 		"(n10,s11):12VOTER_DEMOTING] next=10"
 	require.Equal(t, exp, act)
@@ -1853,11 +1853,11 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 
 		// Run a more complex change (necessarily) via the V2 path.
 		{crt: mk(in{
-			add: sl( // Additions.
+			add: sl( // Voter additions.
 				VOTER_INCOMING, 6, LEARNER, 4, VOTER_INCOMING, 3,
 			),
 			del: sl(
-				// Removals.
+				// Voter removals.
 				LEARNER, 2, VOTER_OUTGOING, 8, VOTER_DEMOTING, 9,
 			),
 			repls: sl(

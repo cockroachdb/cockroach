@@ -105,10 +105,10 @@ func TestAtomicReplicationChange(t *testing.T) {
 
 	// Run a fairly general change.
 	desc = runChange(desc, []roachpb.ReplicationChange{
-		{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(3)},
-		{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(5)},
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(2)},
-		{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(4)},
+		{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
+		{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(5)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(2)},
+		{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(4)},
 	})
 
 	// Replicas should now live on all stores except s3.
@@ -119,10 +119,10 @@ func TestAtomicReplicationChange(t *testing.T) {
 
 	// Rebalance back down all the way.
 	desc = runChange(desc, []roachpb.ReplicationChange{
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(0)},
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(1)},
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(3)},
-		{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(5)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(0)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(1)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(3)},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(5)},
 	})
 
 	// Only a lone voter on s5 should be left over.

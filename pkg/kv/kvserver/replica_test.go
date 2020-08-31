@@ -6515,7 +6515,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	if _, err := tc.addBogusReplicaToRangeDesc(context.Background()); err != nil {
 		t.Fatalf("Unexpected error %v", err)
 	}
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
 		NodeID:  tc.store.Ident.NodeID,
 		StoreID: 9999,
 	})
@@ -12945,27 +12945,27 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 	tcs := []testCase{
 		// Simple addition of learner.
 		mk(
-			"SIMPLE(l2) ADD_REPLICA[(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
+			"SIMPLE(l2) ADD_VOTER[(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 		),
 		// Simple addition of voter (necessarily via learner).
 		mk(
-			"SIMPLE(v2) ADD_REPLICA[(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
+			"SIMPLE(v2) ADD_VOTER[(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 		),
 		// Simple removal of voter.
 		mk(
-			"SIMPLE(r2) REMOVE_REPLICA[(n200,s200):2]: after=[(n100,s100):1] next=3",
+			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearnerOrVoter},
 		),
 		// Simple removal of learner.
 		mk(
-			"SIMPLE(r2) REMOVE_REPLICA[(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
+			"SIMPLE(r2) REMOVE_VOTER[(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.LEARNER, internalChangeTypeRemove},
+			typOp{roachpb.LEARNER, internalChangeTypeRemoveLearnerOrVoter},
 		),
 
 		// All other cases below need to go through joint quorums (though some
@@ -12973,15 +12973,15 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Addition of learner and removal of voter at same time.
 		mk(
-			"ENTER_JOINT(r2 l3) ADD_REPLICA[(n200,s200):3LEARNER], REMOVE_REPLICA[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
+			"ENTER_JOINT(r2 l3) ADD_VOTER[(n200,s200):3LEARNER], REMOVE_VOTER[(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearnerOrVoter},
 		),
 
 		// Promotion of two voters.
 		mk(
-			"ENTER_JOINT(v2 v3) ADD_REPLICA[(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
+			"ENTER_JOINT(v2 v3) ADD_VOTER[(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
@@ -12989,18 +12989,18 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 
 		// Removal of two voters.
 		mk(
-			"ENTER_JOINT(r2 r3) REMOVE_REPLICA[(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
+			"ENTER_JOINT(r2 r3) REMOVE_VOTER[(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeRemove},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearnerOrVoter},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearnerOrVoter},
 		),
 
 		// Demoting two voters.
 		mk(
-			"ENTER_JOINT(r2 l2 r3 l3) REMOVE_REPLICA[(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
+			"ENTER_JOINT(r2 l2 r3 l3) REMOVE_VOTER[(n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING (n300,s300):3VOTER_DEMOTING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeDemote},
-			typOp{roachpb.VOTER_FULL, internalChangeTypeDemote},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},
+			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoter},
 		),
 		// Leave joint config entered via demotion.
 		mk(

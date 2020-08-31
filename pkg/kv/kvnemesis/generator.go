@@ -437,7 +437,7 @@ func randMergeIsSplit(g *generator, rng *rand.Rand) Operation {
 func makeRemoveReplicaFn(key string, current []roachpb.ReplicationTarget) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		change := roachpb.ReplicationChange{
-			ChangeType: roachpb.REMOVE_REPLICA,
+			ChangeType: roachpb.REMOVE_VOTER,
 			Target:     current[rng.Intn(len(current))],
 		}
 		return changeReplicas(key, change)
@@ -460,12 +460,12 @@ func makeAddReplicaFn(key string, current []roachpb.ReplicationTarget, atomicSwa
 		}
 		candidate := candidates[rng.Intn(len(candidates))]
 		changes := []roachpb.ReplicationChange{{
-			ChangeType: roachpb.ADD_REPLICA,
+			ChangeType: roachpb.ADD_VOTER,
 			Target:     candidate,
 		}}
 		if atomicSwap {
 			changes = append(changes, roachpb.ReplicationChange{
-				ChangeType: roachpb.REMOVE_REPLICA,
+				ChangeType: roachpb.REMOVE_VOTER,
 				Target:     current[rng.Intn(len(current))],
 			})
 		}
