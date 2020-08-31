@@ -1454,7 +1454,7 @@ func TestReplicaDrainLease(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 2, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
 	rngKey := tc.ScratchRange(t)
-	tc.AddReplicasOrFatal(t, rngKey, tc.Target(1))
+	tc.AddVotersOrFatal(t, rngKey, tc.Target(1))
 
 	s1 := tc.Server(0)
 	s2 := tc.Server(1)

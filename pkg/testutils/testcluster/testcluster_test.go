@@ -76,7 +76,7 @@ func TestManualReplication(t *testing.T) {
 	}
 
 	// Replicate the table's range to all the nodes.
-	tableRangeDesc, err = tc.AddReplicas(
+	tableRangeDesc, err = tc.AddVoters(
 		tableRangeDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2),
 	)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestBasicManualReplication(t *testing.T) {
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
 	defer tc.Stopper().Stop(context.Background())
 
-	desc, err := tc.AddReplicas(keys.MinKey, tc.Target(1), tc.Target(2))
+	desc, err := tc.AddVoters(keys.MinKey, tc.Target(1), tc.Target(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestBasicManualReplication(t *testing.T) {
 	// for the lease to timeout which takes ~9s. Testing leaseholder removal is
 	// not necessary because internal rebalancing avoids ever removing the
 	// leaseholder for the exact reason that it causes performance hiccups.
-	desc, err = tc.RemoveReplicas(desc.StartKey.AsRawKey(), tc.Target(0))
+	desc, err = tc.RemoveVoters(desc.StartKey.AsRawKey(), tc.Target(0))
 	if err != nil {
 		t.Fatal(err)
 	}

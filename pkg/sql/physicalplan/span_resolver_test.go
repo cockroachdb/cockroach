@@ -57,7 +57,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	// Replicate the row ranges on all of the first 3 nodes. Save the 4th node in
 	// a pristine state, with empty caches.
 	for i := 0; i < 3; i++ {
-		rowRanges[i] = tc.AddReplicasOrFatal(
+		rowRanges[i] = tc.AddVotersOrFatal(
 			t, rowRanges[i].StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
 	}
 
