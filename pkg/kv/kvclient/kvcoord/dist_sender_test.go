@@ -2906,6 +2906,11 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 				if !testutils.IsPError(pErr, regexp.QuoteMeta(test.expErr)) {
 					t.Fatalf("expected error %q; found %v", test.expErr, pErr)
 				}
+				expErr := txn.Clone()
+				expErr.Status = roachpb.STAGING
+				if !reflect.DeepEqual(expErr, pErr.GetTxn()) {
+					t.Fatalf("expected txn %v on error, found %v", expErr, pErr.GetTxn())
+				}
 			}
 		})
 	}
