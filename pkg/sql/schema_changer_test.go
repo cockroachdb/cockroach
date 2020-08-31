@@ -33,15 +33,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -1383,15 +1384,20 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	upTableVersion = func() {
 		leaseMgr := s.LeaseManager().(*lease.Manager)
+		ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 		var version descpb.DescriptorVersion
-		if _, err := leaseMgr.Publish(ctx, id, func(desc catalog.MutableDescriptor) error {
-			table := desc.(*tabledesc.Mutable)
-			// Publish nothing; only update the version.
-			version = table.Version
-			return nil
-		}, nil); err != nil {
+		if err := descs.Txn(ctx, s.ClusterSettings(), leaseMgr, ie, kvDB, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		) error {
+			table, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+			if err != nil {
+				return err
+			}
+			return descsCol.WriteDesc(ctx, false /* kvTrace */, table, txn)
+		}); err != nil {
 			t.Error(err)
 		}
+
 		// Grab a lease at the latest version so that we are confident
 		// that all future leases will be taken at the latest version.
 		table, _, err := leaseMgr.TestingAcquireAndAssertMinVersion(ctx, s.Clock().Now(), id, version+1)
