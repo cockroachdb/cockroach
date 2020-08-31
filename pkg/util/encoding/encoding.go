@@ -97,7 +97,8 @@ const (
 	arrayKeyMarker           = geoDescMarker + 1
 	arrayKeyDescendingMarker = arrayKeyMarker + 1
 
-	box2DMarker = arrayKeyDescendingMarker + 1
+	box2DMarker      = arrayKeyDescendingMarker + 1
+	geoInvertedIndex = box2DMarker + 1
 
 	arrayKeyTerminator           byte = 0x00
 	arrayKeyDescendingTerminator byte = 0xFF
@@ -827,6 +828,54 @@ func EncodeNullAscending(b []byte) []byte {
 // supplied buffer and the final buffer is returned.
 func EncodeJSONAscending(b []byte) []byte {
 	return append(b, jsonInvertedIndex)
+}
+
+// Geo inverted keys are formatted as:
+// geoInvertedIndex + EncodeUvaringAscending(cellid) + encoded-bbox
+
+func EncodeGeoInvertedAscending(b []byte) []byte {
+	return append(b, geoInvertedIndex)
+}
+
+// TODO(sumeer): optimize encoding to use fewer bytes.
+func EncodeGeoInvertedBBox(b []byte, loX, loY, hiX, hiY float64) []byte {
+	b = EncodeUntaggedFloatValue(b, loX)
+	b = EncodeUntaggedFloatValue(b, loY)
+	b = EncodeUntaggedFloatValue(b, hiX)
+	b = EncodeUntaggedFloatValue(b, hiY)
+	return b
+}
+
+func DecodeGeoInvertedKey(b []byte) (loX, loY, hiX, hiY float64, err error) {
+	if len(b) < 34 {
+		return 0, 0, 0, 0, errors.Errorf("inverted key length too small")
+	}
+	if b[0] != geoInvertedIndex {
+		return 0, 0, 0, 0, errors.Errorf("marker is not geoInvertedIndex")
+	}
+	b = b[1:]
+	var cellLen int
+	if cellLen, err = getVarintLen(b); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if len(b) != cellLen+32 {
+		return 0, 0, 0, 0,
+			errors.Errorf("unexpected length for bbox in inverted key: %d", len(b)-cellLen)
+	}
+	b = b[cellLen:]
+	if b, loX, err = DecodeUntaggedFloatValue(b); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if b, loY, err = DecodeUntaggedFloatValue(b); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if b, hiX, err = DecodeUntaggedFloatValue(b); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if b, hiY, err = DecodeUntaggedFloatValue(b); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	return loX, loY, hiX, hiY, nil
 }
 
 // EncodeNullDescending is the descending equivalent of EncodeNullAscending.
@@ -1672,6 +1721,8 @@ func PeekLength(b []byte) (int, error) {
 			return 0, err
 		}
 		return 1 + length, nil
+	case geoInvertedIndex:
+		return getGeoInvertedIndexKeyLength(b)
 	case geoMarker:
 		// Expect to reserve at least 8 bytes for int64.
 		if len(b) < 8 {
@@ -2992,6 +3043,15 @@ func getJSONInvertedIndexKeyLength(buf []byte) (int, error) {
 
 		return len + valLen, nil
 	}
+}
+
+func getGeoInvertedIndexKeyLength(buf []byte) (int, error) {
+	var cellLen int
+	var err error
+	if cellLen, err = getVarintLen(buf[1:]); err != nil {
+		return 0, err
+	}
+	return 1 + cellLen + 4*uint64AscendingEncodedLength, nil
 }
 
 // EncodeArrayKeyMarker adds the array key encoding marker to buf and

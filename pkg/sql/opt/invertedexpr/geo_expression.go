@@ -42,6 +42,7 @@ func geoKeyToEncInvertedVal(k geoindex.Key, end bool, b []byte) (EncInvertedVal,
 		}
 	}
 	prev := len(b)
+	b = encoding.EncodeGeoInvertedAscending(b)
 	b = encoding.EncodeUvarintAscending(b, uint64(k))
 	// Set capacity so that the caller appending does not corrupt later keys.
 	enc := b[prev:len(b):len(b)]
@@ -64,7 +65,7 @@ func GeoUnionKeySpansToSpanExpr(ukSpans geoindex.UnionKeySpans) *SpanExpression 
 		return nil
 	}
 	// Avoid per-span heap allocations.
-	b := make([]byte, 0, len(ukSpans)*(2*encoding.MaxVarintLen))
+	b := make([]byte, 0, len(ukSpans)*(2*encoding.MaxVarintLen+2))
 	spans := make([]InvertedSpan, len(ukSpans))
 	for i, ukSpan := range ukSpans {
 		spans[i], b = geoToSpan(ukSpan, b)

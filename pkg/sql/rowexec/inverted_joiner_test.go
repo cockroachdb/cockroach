@@ -76,6 +76,24 @@ func (arrayIntersectionExpr) Convert(
 	return expr.(*invertedexpr.SpanExpression).ToProto(), nil
 }
 
+// TODO(sumeer): test with pre-filtering
+func (arrayIntersectionExpr) CanPreFilter() bool {
+	return false
+}
+func (arrayIntersectionExpr) GetPreFilterStateForLastConvert(
+	ctx context.Context,
+) (interface{}, error) {
+	return nil, errors.Errorf("unsupported")
+}
+func (arrayIntersectionExpr) PreFilter(
+	enc invertedexpr.EncInvertedVal, preFilters []interface{}, result []bool,
+) (bool, error) {
+	return false, errors.Errorf("unsupported")
+}
+func (arrayIntersectionExpr) PreFilterStats() (int, int) {
+	return 0, 0
+}
+
 // This expression converter is similar to the arrayIntersectionExpr, but for
 // JSON. Since the keys "c1" and "c2" distinguish the application of the / and
 // % operator here (unlike the array case), a left side integer d will only
@@ -109,6 +127,24 @@ func (jsonIntersectionExpr) Convert(
 	return expr.(*invertedexpr.SpanExpression).ToProto(), nil
 }
 
+// TODO(sumeer): test with pre-filtering
+func (jsonIntersectionExpr) CanPreFilter() bool {
+	return false
+}
+func (jsonIntersectionExpr) GetPreFilterStateForLastConvert(
+	ctx context.Context,
+) (interface{}, error) {
+	return nil, errors.Errorf("unsupported")
+}
+func (jsonIntersectionExpr) PreFilter(
+	enc invertedexpr.EncInvertedVal, preFilters []interface{}, result []bool,
+) (bool, error) {
+	return false, errors.Errorf("unsupported")
+}
+func (jsonIntersectionExpr) PreFilterStats() (int, int) {
+	return 0, 0
+}
+
 // For each integer d provided by the left side, this expression converter
 // constructs a union of {"c1": d/10} and {"c2": d%10}. So if d = 5, we will
 // find all right side rows containing {"c1": 0} or {"c2": 5}, which is
@@ -140,6 +176,22 @@ func (jsonUnionExpr) Convert(
 	expr := invertedexpr.Or(invertedexpr.ExprForInvertedSpan(d1Span, true),
 		invertedexpr.ExprForInvertedSpan(d2Span, true))
 	return expr.(*invertedexpr.SpanExpression).ToProto(), nil
+}
+
+// TODO(sumeer): test with pre-filtering
+func (jsonUnionExpr) CanPreFilter() bool {
+	return false
+}
+func (jsonUnionExpr) GetPreFilterStateForLastConvert(ctx context.Context) (interface{}, error) {
+	return nil, errors.Errorf("unsupported")
+}
+func (jsonUnionExpr) PreFilter(
+	enc invertedexpr.EncInvertedVal, preFilters []interface{}, result []bool,
+) (bool, error) {
+	return false, errors.Errorf("unsupported")
+}
+func (jsonUnionExpr) PreFilterStats() (int, int) {
+	return 0, 0
 }
 
 func TestInvertedJoiner(t *testing.T) {

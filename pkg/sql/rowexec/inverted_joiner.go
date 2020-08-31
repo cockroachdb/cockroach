@@ -105,6 +105,7 @@ type invertedJoiner struct {
 	input                execinfra.RowSource
 	inputTypes           []*types.T
 	datumsToInvertedExpr invertedexpr.DatumsToInvertedExpr
+	canPreFilter         bool
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSize int
 
@@ -239,6 +240,11 @@ func newInvertedJoiner(
 		if err != nil {
 			return nil, err
 		}
+		ij.canPreFilter = ij.datumsToInvertedExpr.CanPreFilter()
+		if ij.canPreFilter {
+			ij.batchedExprEval.canPreFilter = ij.canPreFilter
+			ij.batchedExprEval.preFilterer = ij.datumsToInvertedExpr
+		}
 	}
 
 	var fetcher row.Fetcher
@@ -365,6 +371,9 @@ func (ij *invertedJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			return outRow, nil
 		}
 	}
+	preFilterCount, preFilterMatchCount := ij.datumsToInvertedExpr.PreFilterStats()
+	// TODO: remove this temporary debugging aid.
+	log.Errorf(ij.Ctx, "prefilter: total: %d, match: %d", preFilterCount, preFilterMatchCount)
 	return nil, ij.DrainHelper()
 }
 
@@ -403,8 +412,19 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 			// The nil serves as a marker that will result in an empty set as the
 			// evaluation result.
 			ij.batchedExprEval.exprs = append(ij.batchedExprEval.exprs, nil)
+			if ij.canPreFilter {
+				ij.batchedExprEval.preFilterState = append(ij.batchedExprEval.preFilterState, nil)
+			}
 		} else {
 			ij.batchedExprEval.exprs = append(ij.batchedExprEval.exprs, expr)
+			if ij.canPreFilter {
+				preFilterState, err := ij.datumsToInvertedExpr.GetPreFilterStateForLastConvert(ij.Ctx)
+				if err != nil {
+					ij.MoveToDraining(err)
+					return ijStateUnknown, ij.DrainHelper()
+				}
+				ij.batchedExprEval.preFilterState = append(ij.batchedExprEval.preFilterState, preFilterState)
+			}
 		}
 	}
 
@@ -460,13 +480,23 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			break
 		}
 		encInvertedVal := scannedRow[ij.colIdxMap[ij.invertedColID]].EncodedBytes()
-		ij.transformToKeyRow(scannedRow)
-		rowIdx, err := ij.keyRows.AddRow(ij.Ctx, ij.keyRow)
+		shouldAdd, err := ij.batchedExprEval.prepareAddIndexRow(encInvertedVal)
 		if err != nil {
 			ij.MoveToDraining(err)
 			return ijStateUnknown, ij.DrainHelper()
 		}
-		ij.batchedExprEval.addIndexRow(encInvertedVal, rowIdx)
+		if shouldAdd {
+			ij.transformToKeyRow(scannedRow)
+			rowIdx, err := ij.keyRows.AddRow(ij.Ctx, ij.keyRow)
+			if err != nil {
+				ij.MoveToDraining(err)
+				return ijStateUnknown, ij.DrainHelper()
+			}
+			if err = ij.batchedExprEval.addIndexRow(encInvertedVal, rowIdx); err != nil {
+				ij.MoveToDraining(err)
+				return ijStateUnknown, ij.DrainHelper()
+			}
+		}
 	}
 	ij.joinedRowIdx = ij.batchedExprEval.evaluate()
 	ij.keyRows.SetupForRead(ij.Ctx, ij.joinedRowIdx)

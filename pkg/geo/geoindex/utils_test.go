@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/golang/geo/s2"
 )
@@ -39,7 +40,7 @@ func s2Config(t *testing.T, d *datadriven.TestData) S2Config {
 	}
 }
 
-func keysToString(keys []Key, err error) string {
+func keysToString(keys []Key, _ geopb.BoundingBox, err error) string {
 	if err != nil {
 		return err.Error()
 	}

@@ -248,7 +248,9 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 		indexRows[i], indexRows[j] = indexRows[j], indexRows[i]
 	})
 	for _, elem := range indexRows {
+		batchEvalUnion.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key))
 		batchEvalUnion.addIndexRow(invertedexpr.EncInvertedVal(elem.key), elem.index)
+		batchEvalIntersection.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key))
 		batchEvalIntersection.addIndexRow(invertedexpr.EncInvertedVal(elem.key), elem.index)
 	}
 	require.Equal(t, expectedUnion, keyIndexesToString(batchEvalUnion.evaluate()))
@@ -260,6 +262,7 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 	batchBoth.exprs = append(batchBoth.exprs, &protoUnion, &protoIntersection)
 	batchBoth.init()
 	for _, elem := range indexRows {
+		batchBoth.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key))
 		batchBoth.addIndexRow(invertedexpr.EncInvertedVal(elem.key), elem.index)
 	}
 	require.Equal(t, "0: 0 3 4 5 6 7 8 \n1: 0 4 6 8 \n",
@@ -304,7 +307,7 @@ func TestFragmentedSpans(t *testing.T) {
 	require.Equal(t,
 		"span: [a, d)  indexes (expr, set): (0, 0) \n"+
 			"span: [d, e)  indexes (expr, set): (0, 0) (1, 0) \n"+
-			"span: [e, f)  indexes (expr, set): (2, 0) (0, 0) (1, 0) \n"+
+			"span: [e, f)  indexes (expr, set): (0, 0) (1, 0) (2, 0) \n"+
 			"span: [f, g)  indexes (expr, set): (0, 0) (1, 0) \n"+
 			"span: [g, i)  indexes (expr, set): (1, 0) \n"+
 			"span: [i, j)  indexes (expr, set): (1, 0) (2, 0) \n"+
