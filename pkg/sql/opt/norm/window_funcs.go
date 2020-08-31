@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // MakeSegmentedOrdering returns an ordering choice which satisfies both
@@ -147,4 +148,16 @@ func (c *CustomFuncs) OrderingSucceeded(result *physical.OrderingChoice) bool {
 // DerefOrderingChoice returns an OrderingChoice from a pointer.
 func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physical.OrderingChoice {
 	return *result
+}
+
+// HasRangeFrameWithOffset returns true if w contains a WindowsItem Frame that
+// has a mode of RANGE and has a specific offset, such as OffsetPreceding or
+// OffsetFollowing.
+func (c *CustomFuncs) HasRangeFrameWithOffset(w memo.WindowsExpr) bool {
+	for i := range w {
+		if w[i].Frame.Mode == tree.RANGE && w[i].Frame.HasOffset() {
+			return true
+		}
+	}
+	return false
 }
