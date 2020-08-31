@@ -27,9 +27,30 @@ import (
 // SpanExpressionProto.SpansToRead to determine which spans to read from the
 // inverted index. Then it computes a set expression on the scanned rows as
 // defined by the SpanExpressionProto.Node.
+// For a subset of expressions, it can additionally perform pre-filtering,
+// which is filtering a row before evaluating the set expression (but after
+// the row is retrieved). This pre-filtering looks at additional state encoded
+// in the inverted column.
 type DatumsToInvertedExpr interface {
-	// Convert uses the lookup column to construct an inverted expression.
-	Convert(context.Context, rowenc.EncDatumRow) (*SpanExpressionProto, error)
+	// CanPreFilter returns true iff this DatumsToInvertedExpr can pre-filter.
+	CanPreFilter() bool
+
+	// Convert uses the lookup column to construct an inverted expression. When
+	// CanPreFilter() is true, and the returned *SpanExpressionProto is non-nil,
+	// the interface{} returned represents an opaque pre-filtering state for
+	// this lookup column.
+	Convert(context.Context, rowenc.EncDatumRow) (*SpanExpressionProto, interface{}, error)
+
+	// PreFilter is used for pre-filtering a looked up row whose inverted column is
+	// represented as enc. The caller has determined the candidate
+	// expressions for whom this row is relevant, and preFilters contains the
+	// pre-filtering state for those expressions. The result slice must be the
+	// same length as preFilters and will contain true when the row is relevant
+	// and false otherwise. It returns true iff there is at least one result
+	// index that has a true value. PreFilter must only be called when CanPreFilter()
+	// is true. This batching of pre-filter application for a looked up row allows
+	// enc to be decoded once.
+	PreFilter(enc EncInvertedVal, preFilters []interface{}, result []bool) (bool, error)
 }
 
 // EncInvertedVal is the encoded form of a value in the inverted column.
