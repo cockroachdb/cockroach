@@ -56,11 +56,11 @@ SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t] WHERE statistics_name = '
 query TIRI colnames
 SHOW HISTOGRAM $hist_id_1
 ----
-upper_bound             range_rows  distinct_range_rows  equal_rows
-'\xfd0555555555555555'  0           0                    1
-'\xfd0fffffff00000000'  0           0                    1
-'\xfd1000000100000000'  0           0                    1
-'\xfd1aaaaaab00000000'  0           0                    1
+upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
+'\x42fd055555555555555500000000000000000000000000000000003ff00000000000003ff0000000000000'  0           0                    1
+'\x42fd0fffffff0000000000000000000000000000000000000000003ff00000000000003ff0000000000000'  0           0                    1
+'\x42fd100000010000000000000000000000000000000000000000003ff00000000000003ff0000000000000'  0           0                    1
+'\x42fd1aaaaaab0000000000000000000000000000000000000000003ff00000000000003ff0000000000000'  0           0                    1
 
 # Regression for #50596.
 statement ok
