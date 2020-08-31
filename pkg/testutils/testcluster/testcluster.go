@@ -487,7 +487,7 @@ func (tc *TestCluster) AddReplicas(
 	rKey := keys.MustAddr(startKey)
 
 	rangeDesc, err := tc.changeReplicas(
-		roachpb.ADD_REPLICA, rKey, targets...,
+		roachpb.ADD_VOTER, rKey, targets...,
 	)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, err
@@ -510,7 +510,7 @@ func (tc *TestCluster) AddReplicasMulti(
 		rKey := keys.MustAddr(kt.StartKey)
 
 		rangeDesc, err := tc.changeReplicas(
-			roachpb.ADD_REPLICA, rKey, kt.Targets...,
+			roachpb.ADD_VOTER, rKey, kt.Targets...,
 		)
 		if err != nil {
 			errs = append(errs, err)
@@ -599,7 +599,7 @@ func (tc *TestCluster) AddReplicasOrFatal(
 func (tc *TestCluster) RemoveReplicas(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
-	return tc.changeReplicas(roachpb.REMOVE_REPLICA, keys.MustAddr(startKey), targets...)
+	return tc.changeReplicas(roachpb.REMOVE_VOTER, keys.MustAddr(startKey), targets...)
 }
 
 // RemoveReplicasOrFatal is part of TestClusterInterface.

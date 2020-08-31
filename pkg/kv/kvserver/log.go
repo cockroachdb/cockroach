@@ -160,7 +160,7 @@ func (s *Store) logChange(
 	var logType kvserverpb.RangeLogEventType
 	var info kvserverpb.RangeLogEvent_Info
 	switch changeType {
-	case roachpb.ADD_REPLICA:
+	case roachpb.ADD_VOTER:
 		logType = kvserverpb.RangeLogEventType_add
 		info = kvserverpb.RangeLogEvent_Info{
 			AddedReplica: &replica,
@@ -168,7 +168,7 @@ func (s *Store) logChange(
 			Reason:       reason,
 			Details:      details,
 		}
-	case roachpb.REMOVE_REPLICA:
+	case roachpb.REMOVE_VOTER:
 		logType = kvserverpb.RangeLogEventType_remove
 		info = kvserverpb.RangeLogEvent_Info{
 			RemovedReplica: &replica,

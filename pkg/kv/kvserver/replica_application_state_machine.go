@@ -551,7 +551,7 @@ func changeRemovesStore(
 	// a new range descriptor. Check first if this is 19.1 or earlier command which
 	// uses DeprecatedChangeType and DeprecatedReplica
 	if change.Desc == nil {
-		return change.DeprecatedChangeType == roachpb.REMOVE_REPLICA && change.DeprecatedReplica.ReplicaID == curReplica.ReplicaID
+		return change.DeprecatedChangeType == roachpb.REMOVE_VOTER && change.DeprecatedReplica.ReplicaID == curReplica.ReplicaID
 	}
 	// In 19.2 and beyond we supply the new range descriptor in the change.
 	// We know we're removed if we do not appear in the new descriptor.

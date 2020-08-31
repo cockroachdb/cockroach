@@ -276,11 +276,11 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("range removes %d != expected %d", a, e)
 		}
 	}
-	logEvent(roachpb.ADD_REPLICA, kvserverpb.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_VOTER, kvserverpb.ReasonRangeUnderReplicated)
 	checkMetrics(1 /*add*/, 0 /*remove*/)
-	logEvent(roachpb.ADD_REPLICA, kvserverpb.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_VOTER, kvserverpb.ReasonRangeUnderReplicated)
 	checkMetrics(2 /*adds*/, 0 /*remove*/)
-	logEvent(roachpb.REMOVE_REPLICA, kvserverpb.ReasonRangeOverReplicated)
+	logEvent(roachpb.REMOVE_VOTER, kvserverpb.ReasonRangeOverReplicated)
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.

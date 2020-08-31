@@ -880,11 +880,12 @@ func IsSnapshotError(err error) bool {
 // In general, ChangeReplicas will carry out the following steps.
 //
 // 1. Run a distributed transaction that adds all new replicas as learner replicas.
-//    Learner replicas receive the log, but do not have voting rights. They are
-//    used to catch up these new replicas before turning them into voters, which
-//    is important for the continued availability of the range throughout the
-//    replication change. EphemeralLearners are added (and removed) one by one due to a
-//    technicality (see https://github.com/cockroachdb/cockroach/pull/40268).
+//    Learner replicas receive the log, but do not have voting rights. If new
+//    voter replicas are being added, we first add "ephemeral" learners, catch
+//    them up, and then promote them to voters. This is important for the
+//    continued availability of the range throughout the replication change.
+//    Learners are added (and removed) one by one due to a technicality
+//    (see https://github.com/cockroachdb/cockroach/pull/40268).
 //
 //    The distributed transaction updates both copies of the range descriptor
 //    (the one on the range and that in the meta ranges) to that effect, and
@@ -1005,7 +1006,7 @@ func (r *Replica) changeReplicasImpl(
 		return nil, err
 	}
 
-	if adds := chgs.Additions(); len(adds) > 0 {
+	if adds := chgs.VoterAdditions(); len(adds) > 0 {
 		// Lock learner snapshots even before we run the ConfChange txn to add them
 		// to prevent a race with the raft snapshot queue trying to send it first.
 		// Note that this lock needs to cover sending the snapshots which happens in
@@ -1045,7 +1046,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 		// Don't leave a learner replica lying around if we didn't succeed in
 		// promoting it to a voter.
-		if targets := chgs.Additions(); len(targets) > 0 {
+		if targets := chgs.VoterAdditions(); len(targets) > 0 {
 			log.Infof(ctx, "could not promote %v to voter, rolling back: %v", targets, err)
 			for _, target := range targets {
 				r.tryRollBackEphemeralLearner(ctx, r.Desc(), target, reason, details)
@@ -1114,7 +1115,7 @@ func maybeLeaveAtomicChangeReplicasAndRemoveEphemeralLearners(
 		var err error
 		desc, err = execChangeReplicasTxn(
 			ctx, store, desc, kvserverpb.ReasonAbandonedEphemeralLearner, "",
-			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
+			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveEphemeralLearner}},
 		)
 		if err != nil {
 			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
@@ -1141,7 +1142,7 @@ func validateReplicationChanges(
 					return fmt.Errorf("changes %+v refer to n%d twice for change %v",
 						chgs, chg.Target.NodeID, chg.ChangeType)
 				}
-				if prevChg.ChangeType != roachpb.ADD_REPLICA {
+				if prevChg.ChangeType != roachpb.ADD_VOTER {
 					return fmt.Errorf("can only add-remove a replica within a node, but got %+v", chgs)
 				}
 			}
@@ -1166,7 +1167,7 @@ func validateReplicationChanges(
 			chg, k := byStoreID[rDesc.StoreID]
 			// We should be removing the replica from the existing store during a
 			// rebalance within the node.
-			if !k || chg.ChangeType != roachpb.REMOVE_REPLICA {
+			if !k || chg.ChangeType != roachpb.REMOVE_VOTER {
 				return errors.Errorf(
 					"Expected replica to be removed from %v during a lateral rebalance %v within the node.", rDesc, chgs)
 			}
@@ -1178,7 +1179,7 @@ func validateReplicationChanges(
 		// (2) add on the node, when we only have one replica.
 		// See https://github.com/cockroachdb/cockroach/issues/40333.
 		if ok {
-			if chg.ChangeType == roachpb.REMOVE_REPLICA {
+			if chg.ChangeType == roachpb.REMOVE_VOTER {
 				continue
 			}
 
@@ -1200,7 +1201,7 @@ func validateReplicationChanges(
 		for _, c := range byStoreID {
 			// We're adding a replica that's already there. This isn't allowed, even
 			// when the newly added one would be on a different store.
-			if c.ChangeType == roachpb.ADD_REPLICA {
+			if c.ChangeType == roachpb.ADD_VOTER {
 				if len(desc.Replicas().All()) > 1 {
 					return errors.Errorf("unable to add replica %v; node already has a replica in %s", c.Target.StoreID, desc)
 				}
@@ -1213,7 +1214,7 @@ func validateReplicationChanges(
 	// Any removals left in the map now refer to nonexisting replicas, and we refuse them.
 	for _, byStoreID := range byNodeAndStoreID {
 		for _, chg := range byStoreID {
-			if chg.ChangeType != roachpb.REMOVE_REPLICA {
+			if chg.ChangeType != roachpb.REMOVE_VOTER {
 				continue
 			}
 			return errors.Errorf("removing %v which is not in %s", chg.Target, desc)
@@ -1314,7 +1315,7 @@ func (r *Replica) atomicReplicationChange(
 
 	iChgs := make([]internalReplicationChange, 0, len(chgs))
 
-	for _, target := range chgs.Additions() {
+	for _, target := range chgs.VoterAdditions() {
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypePromoteEphemeralLearner})
 		// All adds must be present as learners right now, and we send them
 		// snapshots in anticipation of promoting them to voters.
@@ -1351,17 +1352,17 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	if adds := chgs.Additions(); len(adds) > 0 {
+	if adds := chgs.VoterAdditions(); len(adds) > 0 {
 		if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn(adds) {
 			return desc, nil
 		}
 	}
 
 	canUseDemotion := r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionChangeReplicasDemotion)
-	for _, target := range chgs.Removals() {
-		typ := internalChangeTypeRemove
+	for _, target := range chgs.VoterRemovals() {
+		typ := internalChangeTypeRemoveEphemeralLearner
 		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL && canUseDemotion {
-			typ = internalChangeTypeDemote
+			typ = internalChangeTypeDemoteVoter
 		}
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: typ})
 	}
@@ -1408,7 +1409,7 @@ func (r *Replica) tryRollBackEphemeralLearner(
 	rollbackFn := func(ctx context.Context) error {
 		_, err := execChangeReplicasTxn(
 			ctx, r.store, desc, reason, details,
-			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
+			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveEphemeralLearner}},
 		)
 		return err
 	}
@@ -1430,17 +1431,17 @@ const (
 	_ internalChangeType = iota + 1
 	internalChangeTypeAddEphemeralLearner
 	internalChangeTypePromoteEphemeralLearner
-	// internalChangeTypeDemote changes a voter to an ephemeral learner. This will
+	// internalChangeTypeDemoteVoter changes a voter to an ephemeral learner. This will
 	// necessarily go through joint consensus since it requires two individual
 	// changes (only one changes the quorum, so we could allow it in a simple
 	// change too, with some work here and upstream). Demotions are treated like
 	// removals throughout (i.e. they show up in `ChangeReplicasTrigger.Removed()`,
 	// but not in `.Added()`).
-	internalChangeTypeDemote
-	// NB: can't remove multiple learners at once (need to remove at least one
+	internalChangeTypeDemoteVoter
+	// NB: can't remove multiple ephemeral learners at once (need to remove at least one
 	// voter with them), see:
 	// https://github.com/cockroachdb/cockroach/pull/40268
-	internalChangeTypeRemove
+	internalChangeTypeRemoveEphemeralLearner
 )
 
 // internalReplicationChange is a replication target together with an internal
@@ -1458,7 +1459,7 @@ func (c internalReplicationChanges) leaveJoint() bool { return len(c) == 0 }
 func (c internalReplicationChanges) useJoint() bool {
 	// NB: demotions require joint consensus because of limitations in etcd/raft.
 	// These could be lifted, but it doesn't seem worth it.
-	return len(c) > 1 || c[0].typ == internalChangeTypeDemote
+	return len(c) > 1 || c[0].typ == internalChangeTypeDemoteVoter
 }
 
 type storeSettings interface {
@@ -1501,7 +1502,7 @@ func prepareChangeReplicasTrigger(
 					return nil, errors.Errorf("cannot promote target %v which is missing as Learner", chg.target)
 				}
 				added = append(added, rDesc)
-			case internalChangeTypeRemove:
+			case internalChangeTypeRemoveEphemeralLearner:
 				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
 				if !ok {
 					return nil, errors.Errorf("target %s not found", chg.target)
@@ -1518,7 +1519,7 @@ func prepareChangeReplicasTrigger(
 					rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
 				}
 				removed = append(removed, rDesc)
-			case internalChangeTypeDemote:
+			case internalChangeTypeDemoteVoter:
 				// Demotion is similar to removal, except that a demotion
 				// cannot apply to a learner, and that the resulting type is
 				// different when entering a joint config.
@@ -1576,10 +1577,10 @@ func prepareChangeReplicasTrigger(
 		var deprecatedChangeType roachpb.ReplicaChangeType
 		var deprecatedRepDesc roachpb.ReplicaDescriptor
 		if len(added) > 0 {
-			deprecatedChangeType = roachpb.ADD_REPLICA
+			deprecatedChangeType = roachpb.ADD_VOTER
 			deprecatedRepDesc = added[0]
 		} else {
-			deprecatedChangeType = roachpb.REMOVE_REPLICA
+			deprecatedChangeType = roachpb.REMOVE_VOTER
 			deprecatedRepDesc = removed[0]
 		}
 		crt = &roachpb.ChangeReplicasTrigger{
@@ -1677,8 +1678,8 @@ func execChangeReplicasTxn(
 			typ      roachpb.ReplicaChangeType
 			repDescs []roachpb.ReplicaDescriptor
 		}{
-			{roachpb.ADD_REPLICA, crt.Added()},
-			{roachpb.REMOVE_REPLICA, crt.Removed()},
+			{roachpb.ADD_VOTER, crt.Added()},
+			{roachpb.REMOVE_VOTER, crt.Removed()},
 		} {
 			for _, repDesc := range tup.repDescs {
 				if err := store.logChange(
@@ -2303,7 +2304,7 @@ func (s *Store) relocateOne(
 			NodeID:  targetStore.Node.NodeID,
 			StoreID: targetStore.StoreID,
 		}
-		ops = append(ops, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, target)...)
+		ops = append(ops, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, target)...)
 		// Pretend the voter is already there so that the removal logic below will
 		// take it into account when deciding which replica to remove.
 		rangeReplicas = append(rangeReplicas, roachpb.ReplicaDescriptor{
@@ -2378,7 +2379,7 @@ func (s *Store) relocateOne(
 		// illegal).
 		if ok {
 			ops = append(ops, roachpb.MakeReplicationChanges(
-				roachpb.REMOVE_REPLICA,
+				roachpb.REMOVE_VOTER,
 				removalTarget)...)
 		}
 	}

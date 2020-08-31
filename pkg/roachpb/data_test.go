@@ -1853,11 +1853,11 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 
 		// Run a more complex change (necessarily) via the V2 path.
 		{crt: mk(in{
-			add: sl( // Additions.
+			add: sl( // VoterAdditions.
 				VOTER_INCOMING, 6, LEARNER_EPHEMERAL, 4, VOTER_INCOMING, 3,
 			),
 			del: sl(
-				// Removals.
+				// VoterRemovals.
 				LEARNER_EPHEMERAL, 2, VOTER_OUTGOING, 8, VOTER_DEMOTING, 9,
 			),
 			repls: sl(

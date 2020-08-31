@@ -16,6 +16,7 @@ import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
+// TODO DURING REVIEW: Do we want to track persistent learners separately here?
 enum RangeLogEventType {
   // These are lower case to maintain compatibility with how they were
   // originally stored.

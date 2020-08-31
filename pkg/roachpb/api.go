@@ -1422,14 +1422,14 @@ func (rc ReplicationChanges) byType(typ ReplicaChangeType) []ReplicationTarget {
 	return sl
 }
 
-// Additions returns a slice of all contained replication changes that add replicas.
-func (rc ReplicationChanges) Additions() []ReplicationTarget {
-	return rc.byType(ADD_REPLICA)
+// VoterAdditions returns a slice of all contained replication changes that add replicas.
+func (rc ReplicationChanges) VoterAdditions() []ReplicationTarget {
+	return rc.byType(ADD_VOTER)
 }
 
-// Removals returns a slice of all contained replication changes that remove replicas.
-func (rc ReplicationChanges) Removals() []ReplicationTarget {
-	return rc.byType(REMOVE_REPLICA)
+// VoterRemovals returns a slice of all contained replication changes that remove replicas.
+func (rc ReplicationChanges) VoterRemovals() []ReplicationTarget {
+	return rc.byType(REMOVE_VOTER)
 }
 
 // Changes returns the changes requested by this AdminChangeReplicasRequest, taking

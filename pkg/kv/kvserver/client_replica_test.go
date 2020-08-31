@@ -1749,7 +1749,7 @@ func TestDrainRangeRejection(t *testing.T) {
 
 	drainingIdx := 1
 	mtc.stores[drainingIdx].SetDraining(true, nil /* reporter */)
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA,
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER,
 		roachpb.ReplicationTarget{
 			NodeID:  mtc.idents[drainingIdx].NodeID,
 			StoreID: mtc.idents[drainingIdx].StoreID,
@@ -1772,7 +1772,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	}
 
 	oldGeneration := repl.Desc().Generation
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, roachpb.ReplicationTarget{
 		NodeID:  mtc.idents[1].NodeID,
 		StoreID: mtc.idents[1].StoreID,
 	})
@@ -1783,7 +1783,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 
 	oldGeneration = repl.Desc().Generation
 	oldDesc := repl.Desc()
-	chgs[0].ChangeType = roachpb.REMOVE_REPLICA
+	chgs[0].ChangeType = roachpb.REMOVE_VOTER
 	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2158,12 +2158,12 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		res1, err1 = db.AdminChangeReplicas(
-			ctx, key, expects1, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, targets1...))
+			ctx, key, expects1, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, targets1...))
 		wg.Done()
 	}()
 	go func() {
 		res2, err2 = db.AdminChangeReplicas(
-			ctx, key, expects2, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, targets2...))
+			ctx, key, expects2, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, targets2...))
 		wg.Done()
 	}()
 	wg.Wait()
@@ -2239,7 +2239,7 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	addReplicas := func() error {
 		_, err := db.AdminChangeReplicas(
 			ctx, key, rangeInfo.Desc, roachpb.MakeReplicationChanges(
-				roachpb.ADD_REPLICA, pickTargets()...))
+				roachpb.ADD_VOTER, pickTargets()...))
 		return err
 	}
 	wg.Add(actors)
@@ -2708,7 +2708,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	responseFilter := func(ctx context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 		if ba.IsSingleRequest() {
 			changeReplicas, ok := ba.Requests[0].GetInner().(*roachpb.AdminChangeReplicasRequest)
-			if ok && changeReplicas.Changes()[0].ChangeType == roachpb.ADD_REPLICA && useSeenAdd.Load().(bool) {
+			if ok && changeReplicas.Changes()[0].ChangeType == roachpb.ADD_VOTER && useSeenAdd.Load().(bool) {
 				seenAdd <- struct{}{}
 			}
 		}
@@ -2765,7 +2765,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	var changedDesc *roachpb.RangeDescriptor // only populated if changeErr == nil
 	change := func() {
 		<-seenAdd
-		chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, makeReplicationTargets(2)...)
+		chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, makeReplicationTargets(2)...)
 		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, kvserver.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
 	}
 	relocate := func() {
@@ -2884,8 +2884,8 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		db := tc.Servers[0].DB()
 		swapReplicas := func(key roachpb.Key, desc roachpb.RangeDescriptor, add, remove int) (*roachpb.RangeDescriptor, error) {
 			return db.AdminChangeReplicas(ctx, key, desc, []roachpb.ReplicationChange{
-				{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(add)},
-				{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(remove)},
+				{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(add)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(remove)},
 			})
 		}
 
@@ -2915,7 +2915,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err := db.AdminChangeReplicas(
-				ctx, rhs, *rhsDesc, roachpb.MakeReplicationChanges(roachpb.ADD_REPLICA, tc.Target(2)),
+				ctx, rhs, *rhsDesc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
 			)
 			// We'll ultimately fail because we're going to race with the work below.
 			msg := "descriptor changed"

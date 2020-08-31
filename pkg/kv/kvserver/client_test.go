@@ -1187,9 +1187,9 @@ func (m *multiTestContext) changeReplicas(
 
 	var alreadyDoneErr string
 	switch changeType {
-	case roachpb.ADD_REPLICA:
+	case roachpb.ADD_VOTER:
 		alreadyDoneErr = "unable to add replica .* which is already present"
-	case roachpb.REMOVE_REPLICA:
+	case roachpb.REMOVE_VOTER:
 		alreadyDoneErr = "unable to remove replica .* which is not present"
 	}
 
@@ -1261,7 +1261,7 @@ func (m *multiTestContext) replicateRangeNonFatal(rangeID roachpb.RangeID, dests
 	expectedReplicaIDs := make([]roachpb.ReplicaID, len(dests))
 	for i, dest := range dests {
 		var err error
-		expectedReplicaIDs[i], err = m.changeReplicas(startKey, dest, roachpb.ADD_REPLICA)
+		expectedReplicaIDs[i], err = m.changeReplicas(startKey, dest, roachpb.ADD_VOTER)
 		if err != nil {
 			return err
 		}
@@ -1307,7 +1307,7 @@ func (m *multiTestContext) unreplicateRangeNonFatal(rangeID roachpb.RangeID, des
 	startKey := m.findStartKeyLocked(rangeID)
 	m.mu.RUnlock()
 
-	_, err := m.changeReplicas(startKey, dest, roachpb.REMOVE_REPLICA)
+	_, err := m.changeReplicas(startKey, dest, roachpb.REMOVE_VOTER)
 	return err
 }
 

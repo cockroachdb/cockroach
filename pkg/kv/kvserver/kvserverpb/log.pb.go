@@ -27,6 +27,7 @@ var _ = time.Kitchen
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
+// TODO DURING REVIEW: Do we want to track persistent learners separately here?
 type RangeLogEventType int32
 
 const (
@@ -59,7 +60,7 @@ func (x RangeLogEventType) String() string {
 	return proto.EnumName(RangeLogEventType_name, int32(x))
 }
 func (RangeLogEventType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_log_142242c3cd66101c, []int{0}
+	return fileDescriptor_log_49fab7c8facd9e2e, []int{0}
 }
 
 type RangeLogEvent struct {
@@ -75,7 +76,7 @@ func (m *RangeLogEvent) Reset()         { *m = RangeLogEvent{} }
 func (m *RangeLogEvent) String() string { return proto.CompactTextString(m) }
 func (*RangeLogEvent) ProtoMessage()    {}
 func (*RangeLogEvent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_142242c3cd66101c, []int{0}
+	return fileDescriptor_log_49fab7c8facd9e2e, []int{0}
 }
 func (m *RangeLogEvent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -114,7 +115,7 @@ func (m *RangeLogEvent_Info) Reset()         { *m = RangeLogEvent_Info{} }
 func (m *RangeLogEvent_Info) String() string { return proto.CompactTextString(m) }
 func (*RangeLogEvent_Info) ProtoMessage()    {}
 func (*RangeLogEvent_Info) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_142242c3cd66101c, []int{0, 0}
+	return fileDescriptor_log_49fab7c8facd9e2e, []int{0, 0}
 }
 func (m *RangeLogEvent_Info) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -934,10 +935,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/log.proto", fileDescriptor_log_142242c3cd66101c)
+	proto.RegisterFile("kv/kvserver/kvserverpb/log.proto", fileDescriptor_log_49fab7c8facd9e2e)
 }
 
-var fileDescriptor_log_142242c3cd66101c = []byte{
+var fileDescriptor_log_49fab7c8facd9e2e = []byte{
 	// 656 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x94, 0xc1, 0x6e, 0xd3, 0x40,
 	0x10, 0x86, 0xe3, 0x26, 0x6d, 0x9a, 0x6d, 0x5a, 0xd2, 0xa5, 0x45, 0x21, 0x42, 0x76, 0x54, 0x71,
