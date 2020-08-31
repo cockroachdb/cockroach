@@ -37,6 +37,7 @@ INSERT INTO child VALUES (100, 1), (200, 1) ON CONFLICT DO NOTHING
 ----
 insert child
  ├── columns: <none>
+ ├── arbiter indexes: primary
  ├── insert-mapping:
  │    ├── column1:4 => c:1
  │    └── column2:5 => child.p:2

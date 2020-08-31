@@ -587,6 +587,17 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
+		if len(a.Arbiters) > 0 {
+			var sb strings.Builder
+			for i, idx := range a.Arbiters {
+				index := a.Table.Index(idx)
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(string(index.Name()))
+			}
+			ob.Attr("arbiter indexes", sb.String())
+		}
 
 	case insertFastPathOp:
 		a := n.args.(*insertFastPathArgs)
@@ -614,6 +625,17 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		)
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
+		}
+		if len(a.Arbiters) > 0 {
+			var sb strings.Builder
+			for i, idx := range a.Arbiters {
+				index := a.Table.Index(idx)
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(string(index.Name()))
+			}
+			ob.Attr("arbiter indexes", sb.String())
 		}
 
 	case updateOp:

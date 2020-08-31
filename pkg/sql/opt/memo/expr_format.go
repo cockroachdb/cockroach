@@ -496,6 +496,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
+			f.formatArbiters(tp, t.Arbiters, t.Table)
 			f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 			f.formatColList(e, tp, "check columns:", t.CheckCols)
 			f.formatColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
@@ -521,7 +522,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Child("columns: <none>")
 			}
 			if t.CanaryCol != 0 {
-				tp.Childf("canary column: %d", t.CanaryCol)
+				f.formatArbiters(tp, t.Arbiters, t.Table)
+				f.formatColList(e, tp, "canary column:", opt.ColList{t.CanaryCol})
 				f.formatColList(e, tp, "fetch columns:", t.FetchCols)
 				f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 				f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
@@ -1031,6 +1033,26 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	if private != nil {
 		f.Buffer.WriteRune(':')
 		FormatPrivate(f, private, &physical.Required{})
+	}
+}
+
+// formatArbiters constructs a new treeprinter child containing the
+// specified list of arbiter indexes.
+func (f *ExprFmtCtx) formatArbiters(
+	tp treeprinter.Node, arbiters cat.IndexOrdinals, tabID opt.TableID,
+) {
+	md := f.Memo.Metadata()
+	tab := md.Table(tabID)
+
+	if len(arbiters) > 0 {
+		f.Buffer.Reset()
+		f.Buffer.WriteString("arbiter indexes:")
+		for _, idx := range arbiters {
+			name := string(tab.Index(idx).Name())
+			f.space()
+			f.Buffer.WriteString(name)
+		}
+		tp.Child(f.Buffer.String())
 	}
 }
 
