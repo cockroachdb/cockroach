@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1150,10 +1151,6 @@ func restorePlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if err := p.RequireAdminRole(ctx, "RESTORE"); err != nil {
-			return err
-		}
-
 		if !(p.ExtendedEvalContext().TxnImplicit || restoreStmt.Options.Detached) {
 			return errors.Errorf("RESTORE cannot be used inside a transaction without DETACHED option")
 		}
@@ -1183,6 +1180,11 @@ func restorePlanHook(
 				from[0][i] = parsed.String()
 			}
 		}
+
+		if err := checkPrivilegesForRestore(ctx, restoreStmt, p, from); err != nil {
+			return err
+		}
+
 		var endTime hlc.Timestamp
 		if restoreStmt.AsOf.Expr != nil {
 			var err error
@@ -1223,6 +1225,62 @@ func restorePlanHook(
 		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+}
+
+func checkPrivilegesForRestore(
+	ctx context.Context, restoreStmt *tree.Restore, p sql.PlanHookState, from [][]string,
+) error {
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
+	}
+	// Do not allow full cluster restores.
+	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role are allowed to restore full cluster backups")
+	}
+	// Do not allow tenant restores.
+	if restoreStmt.Targets.Tenant != (roachpb.TenantID{}) {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role can perform RESTORE TENANT")
+	}
+	// Database restores require the CREATEDB privileges.
+	if len(restoreStmt.Targets.Databases) > 0 {
+		hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
+		if err != nil {
+			return err
+		}
+		if !hasCreateDB {
+			return pgerror.Newf(
+				pgcode.InsufficientPrivilege,
+				"only users with the CREATEDB privilege can restore databases")
+		}
+	}
+	knobs := p.ExecCfg().BackupRestoreTestingKnobs
+	if knobs == nil || !knobs.AllowImplicitAccess {
+		// Check that none of the sources rely on implicit access.
+		for i := range from {
+			for j := range from[i] {
+				uri := from[i][j]
+				hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(uri)
+				if err != nil {
+					return err
+				}
+				if !hasExplicitAuth {
+					return pgerror.Newf(
+						pgcode.InsufficientPrivilege,
+						"only users with the admin role are allowed to RESTORE from the specified %s URI",
+						uriScheme)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func doRestorePlan(
