@@ -2307,7 +2307,7 @@ func TestReplicaTombstone(t *testing.T) {
 		desc, err := tc.LookupRange(key)
 		require.NoError(t, err)
 		rangeID := desc.RangeID
-		tc.AddReplicasOrFatal(t, key, tc.Target(1))
+		tc.AddVotersOrFatal(t, key, tc.Target(1))
 		// Partition node 2 from receiving responses but not requests.
 		// This will lead to it applying the ChangeReplicasTrigger which removes
 		// it rather than receiving a ReplicaTooOldError.
@@ -2321,7 +2321,7 @@ func TestReplicaTombstone(t *testing.T) {
 			RaftMessageHandler:         store,
 			unreliableRaftHandlerFuncs: funcs,
 		})
-		tc.RemoveReplicasOrFatal(t, key, tc.Target(1))
+		tc.RemoveVotersOrFatal(t, key, tc.Target(1))
 		tombstone := waitForTombstone(t, store.Engine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(3), tombstone.NextReplicaID)
 	})
@@ -2351,7 +2351,7 @@ func TestReplicaTombstone(t *testing.T) {
 		desc, err := tc.LookupRange(key)
 		require.NoError(t, err)
 		rangeID := desc.RangeID
-		tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+		tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 		require.NoError(t,
 			tc.WaitForVoters(key, tc.Target(1), tc.Target(2)))
 		store, repl := getFirstStoreReplica(t, tc.Server(2), key)
@@ -2379,7 +2379,7 @@ func TestReplicaTombstone(t *testing.T) {
 			RaftMessageHandler:         store,
 			unreliableRaftHandlerFuncs: raftFuncs,
 		})
-		tc.RemoveReplicasOrFatal(t, key, tc.Target(2))
+		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		testutils.SucceedsSoon(t, func() error {
 			repl.UnquiesceAndWakeLeader()
 			if len(sawTooOld) == 0 {
@@ -2413,7 +2413,7 @@ func TestReplicaTombstone(t *testing.T) {
 		desc, err := tc.LookupRange(key)
 		require.NoError(t, err)
 		rangeID := desc.RangeID
-		tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+		tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 		// Partition node 2 from receiving any raft messages.
 		// It will never find out it has been removed. We'll remove it
 		// with a manual replica GC.
@@ -2422,7 +2422,7 @@ func TestReplicaTombstone(t *testing.T) {
 			rangeID:            desc.RangeID,
 			RaftMessageHandler: store,
 		})
-		tc.RemoveReplicasOrFatal(t, key, tc.Target(2))
+		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		repl, err := store.GetReplica(desc.RangeID)
 		require.NoError(t, err)
 		require.NoError(t, store.ManualReplicaGC(repl))
@@ -2447,13 +2447,13 @@ func TestReplicaTombstone(t *testing.T) {
 
 		key := tc.ScratchRange(t)
 		require.NoError(t, tc.WaitForSplitAndInitialization(key))
-		tc.AddReplicasOrFatal(t, key, tc.Target(1))
+		tc.AddVotersOrFatal(t, key, tc.Target(1))
 		keyA := append(key[:len(key):len(key)], 'a')
 		_, desc, err := tc.SplitRange(keyA)
 		require.NoError(t, err)
 		require.NoError(t, tc.WaitForSplitAndInitialization(keyA))
-		tc.AddReplicasOrFatal(t, key, tc.Target(3))
-		tc.AddReplicasOrFatal(t, keyA, tc.Target(2))
+		tc.AddVotersOrFatal(t, key, tc.Target(3))
+		tc.AddVotersOrFatal(t, keyA, tc.Target(2))
 		rangeID := desc.RangeID
 		// Partition node 2 from all raft communication.
 		store, _ := getFirstStoreReplica(t, tc.Server(2), keyA)
@@ -2464,8 +2464,8 @@ func TestReplicaTombstone(t *testing.T) {
 
 		// We'll move the range from server 2 to 3 and merge key and keyA.
 		// Server 2 won't hear about any of that.
-		tc.RemoveReplicasOrFatal(t, keyA, tc.Target(2))
-		tc.AddReplicasOrFatal(t, keyA, tc.Target(3))
+		tc.RemoveVotersOrFatal(t, keyA, tc.Target(2))
+		tc.AddVotersOrFatal(t, keyA, tc.Target(3))
 		require.NoError(t, tc.WaitForSplitAndInitialization(keyA))
 		require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, key))
 		// Run replica GC on server 2.
@@ -2505,7 +2505,7 @@ func TestReplicaTombstone(t *testing.T) {
 		desc, err := tc.LookupRange(key)
 		require.NoError(t, err)
 		rangeID := desc.RangeID
-		tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+		tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 		require.NoError(t, tc.WaitForSplitAndInitialization(key))
 		store, repl := getFirstStoreReplica(t, tc.Server(2), key)
 		// Set up a partition for everything but heartbeats on store 2.
@@ -2561,12 +2561,12 @@ func TestReplicaTombstone(t *testing.T) {
 			},
 		})
 		// Remove the current replica from the node, it will not hear about this.
-		tc.RemoveReplicasOrFatal(t, key, tc.Target(2))
+		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		// Try to add it back as a learner. We'll wait until it's heard about
 		// this as a heartbeat. This demonstrates case (4) where a raft message
 		// to a newer replica ID (in this case a heartbeat) removes an initialized
 		// Replica.
-		_, err = tc.AddReplicas(key, tc.Target(2))
+		_, err = tc.AddVoters(key, tc.Target(2))
 		require.Regexp(t, "boom", err)
 		tombstone := waitForTombstone(t, store.Engine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
@@ -2582,7 +2582,7 @@ func TestReplicaTombstone(t *testing.T) {
 		// We could replica GC these replicas without too much extra work but they
 		// also should be rare. Note this is not new with learner replicas.
 		setMinHeartbeat(5)
-		_, err = tc.AddReplicas(key, tc.Target(2))
+		_, err = tc.AddVoters(key, tc.Target(2))
 		require.Regexp(t, "boom", err)
 		// We will start out reading the old tombstone so keep retrying.
 		testutils.SucceedsSoon(t, func() error {
@@ -2622,7 +2622,7 @@ func TestReplicaTombstone(t *testing.T) {
 
 		key := tc.ScratchRange(t)
 		require.NoError(t, tc.WaitForSplitAndInitialization(key))
-		tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+		tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 		keyA := append(key[:len(key):len(key)], 'a')
 		lhsDesc, rhsDesc, err := tc.SplitRange(keyA)
 		require.NoError(t, err)
@@ -2862,7 +2862,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 
 		// Set up a userspace range to mess around with.
 		lhs := tc.ScratchRange(t)
-		_, err := tc.AddReplicas(lhs, tc.Targets(1, 2)...)
+		_, err := tc.AddVoters(lhs, tc.Targets(1, 2)...)
 		require.NoError(t, err)
 
 		// Split it and then we're going to try to up-replicate.
@@ -2935,7 +2935,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		})
 		// Remove the learner replica (left because the joint config was demoting
 		// a voter) which as a side effect exists the joint config.
-		_, err = tc.RemoveReplicas(rhs, tc.Target(2))
+		_, err = tc.RemoveVoters(rhs, tc.Target(2))
 		require.NoError(t, err)
 		// Merge the RHS away.
 		err = db.AdminMerge(ctx, lhs)
@@ -3020,7 +3020,7 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 	makeKey := func() roachpb.Key {
 		return append(scratch[:len(scratch):len(scratch)], uuid.MakeV4().String()...)
 	}
-	desc := tc.AddReplicasOrFatal(t, scratch, tc.Target(1), tc.Target(2))
+	desc := tc.AddVotersOrFatal(t, scratch, tc.Target(1), tc.Target(2))
 	scratchRangeID.Store(desc.RangeID)
 	require.NoError(t, tc.WaitForVoters(scratch, tc.Target(1), tc.Target(2)))
 
@@ -3190,9 +3190,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 		// Setup the initial state to be sure that we'll actually strictly enforce
 		// gc ttls.
 		tc.SplitRangeOrFatal(t, tableKey)
-		_, err := tc.AddReplicas(tableKey, tc.Target(1), tc.Target(2))
+		_, err := tc.AddVoters(tableKey, tc.Target(1), tc.Target(2))
 		require.NoError(t, err)
-		_, err = tc.AddReplicas(keys.SystemConfigSpan.Key, tc.Target(1), tc.Target(2))
+		_, err = tc.AddVoters(keys.SystemConfigSpan.Key, tc.Target(1), tc.Target(2))
 		require.NoError(t, err)
 
 		setTableGCTTL(t, 1)
@@ -3551,7 +3551,7 @@ func TestTenantID(t *testing.T) {
 		// networking handshake timeouts.
 		addReplicaErr := make(chan error)
 		addReplica := func() {
-			_, err := tc.AddReplicas(tenant2Prefix, tc.Target(1))
+			_, err := tc.AddVoters(tenant2Prefix, tc.Target(1))
 			addReplicaErr <- err
 		}
 		go addReplica()
