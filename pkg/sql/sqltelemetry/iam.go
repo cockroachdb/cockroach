@@ -98,13 +98,17 @@ func IncIAMRevokePrivilegesCounter(on string) {
 }
 
 // TurnConnAuditingOnUseCounter counts how many time connection audit logs were enabled.
+// TODO(knz): This is obsolete. See RegisterSettingChange().
 var TurnConnAuditingOnUseCounter = telemetry.GetCounterOnce("auditing.connection.enabled")
 
 // TurnConnAuditingOffUseCounter counts how many time connection audit logs were disabled.
+// TODO(knz): This is obsolete. See RegisterSettingChange().
 var TurnConnAuditingOffUseCounter = telemetry.GetCounterOnce("auditing.connection.disabled")
 
 // TurnAuthAuditingOnUseCounter counts how many time connection audit logs were enabled.
+// TODO(knz): This is obsolete. See RegisterSettingChange().
 var TurnAuthAuditingOnUseCounter = telemetry.GetCounterOnce("auditing.authentication.enabled")
 
 // TurnAuthAuditingOffUseCounter counts how many time connection audit logs were disabled.
+// TODO(knz): This is obsolete. See RegisterSettingChange().
 var TurnAuthAuditingOffUseCounter = telemetry.GetCounterOnce("auditing.authentication.disabled")

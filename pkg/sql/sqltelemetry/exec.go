@@ -10,11 +10,7 @@
 
 package sqltelemetry
 
-import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-)
+import "github.com/cockroachdb/cockroach/pkg/server/telemetry"
 
 // DistSQLExecCounter is to be incremented whenever a query is distributed
 // across multiple nodes.
@@ -24,12 +20,18 @@ var DistSQLExecCounter = telemetry.GetCounterOnce("sql.exec.query.is-distributed
 // execution engine.
 var VecExecCounter = telemetry.GetCounterOnce("sql.exec.query.is-vectorized")
 
-// VecModeCounter is to be incremented every time the vectorized execution mode
-// is changed (including turned off).
-func VecModeCounter(mode string) telemetry.Counter {
-	return telemetry.GetCounter(fmt.Sprintf("sql.exec.vectorized-setting.%s", mode))
-}
-
 // CascadesLimitReached is to be incremented whenever the limit of foreign key
 // cascade for a single query is exceeded.
 var CascadesLimitReached = telemetry.GetCounterOnce("sql.exec.cascade-limit-reached")
+
+// AutoStatsClusterSettingName is the name of the automatic stats collection
+// cluster setting.
+const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
+
+// VectorizeClusterSettingName is the name for the cluster setting that controls
+// the VectorizeClusterMode.
+const VectorizeClusterSettingName = "sql.defaults.vectorize"
+
+// ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
+// the maximum number of joins to reorder.
+const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"

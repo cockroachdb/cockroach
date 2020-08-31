@@ -1,23 +1,37 @@
 # This file contains telemetry tests for sql.exec.* counters.
 
 # Tests for vectorization counters.
+#
+# Note: the bare counters sql.exec.* are obsolete.
+# See ReportSettingChange() in sqltelemetry.
+#
 feature-allowlist
 sql.exec.vectorized-setting.on
 sql.exec.vectorized-setting.off
 sql.exec.vectorized-setting.201auto
+setting-change.*
 ----
 
 feature-usage
 SET CLUSTER SETTING sql.defaults.vectorize='on'
 ----
+setting-change.sql.defaults.vectorize=on
 sql.exec.vectorized-setting.on
 
 feature-usage
 SET CLUSTER SETTING sql.defaults.vectorize='off'
 ----
+setting-change.sql.defaults.vectorize=off
 sql.exec.vectorized-setting.off
 
 feature-usage
 SET CLUSTER SETTING sql.defaults.vectorize='201auto'
 ----
+setting-change.sql.defaults.vectorize=201auto
 sql.exec.vectorized-setting.201auto
+
+# Duration values get quantized. See telemetry.BucketDuration().
+feature-usage
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold='20h10m'
+----
+setting-change.sql.log.slow_query.latency_threshold=20h0m0s

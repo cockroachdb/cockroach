@@ -83,45 +83,62 @@ sql.plan.hints.index
 sql.plan.hints.index.delete
 
 # Tests for tracking important setting changes.
-
+#
+# Note: the bare counters sql.plan.* are obsolete.
+# See ReportSettingChange() in sqltelemetry.
+#
 feature-allowlist
 sql.plan.reorder-joins.*
 sql.plan.automatic-stats.*
+setting-change.sql.defaults.reorder_joins_limit.*
+setting-change.sql.stats.automatic_collection.enabled.*
 ----
 
 feature-usage
 SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 0
 ----
+setting-change.sql.defaults.reorder_joins_limit=0
 sql.plan.reorder-joins.set-limit-0
 
 feature-usage
 SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 3
 ----
+setting-change.sql.defaults.reorder_joins_limit=3
 sql.plan.reorder-joins.set-limit-3
 
 feature-usage
 SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 6
 ----
+setting-change.sql.defaults.reorder_joins_limit=6
 sql.plan.reorder-joins.set-limit-6
 
 feature-usage
-SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 20 
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 12
 ----
-sql.plan.reorder-joins.set-limit-more
+setting-change.sql.defaults.reorder_joins_limit=12
+sql.plan.reorder-joins.set-limit-12
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 60
+----
+setting-change.sql.defaults.reorder_joins_limit=60
 
 feature-usage
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = on
 ----
+setting-change.sql.stats.automatic_collection.enabled=true
 sql.plan.automatic-stats.enabled
 
 feature-usage
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off
 ----
+setting-change.sql.stats.automatic_collection.enabled=false
 sql.plan.automatic-stats.disabled
 
 feature-usage
 RESET CLUSTER SETTING sql.stats.automatic_collection.enabled
 ----
+setting-change.sql.stats.automatic_collection.enabled=true
 sql.plan.automatic-stats.enabled
 
 # Test telemetry for manual statistics creation.

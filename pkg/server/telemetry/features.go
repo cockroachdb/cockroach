@@ -12,6 +12,7 @@ package telemetry
 
 import (
 	"fmt"
+	"math"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -26,17 +27,25 @@ import (
 // feature, such as file sizes, qps, etc, without being as revealing as the
 // raw numbers.
 // The numbers 0-10 are reported unchanged.
+//
+// See BucketDuration() to quantize durations instead of integers.
 func Bucket10(num int64) int64 {
-	if num <= 0 {
-		return 0
+	if num == math.MinInt64 {
+		// This is needed to prevent overflow in the negation below.
+		return -1000000000000000000
+	}
+	sign := int64(1)
+	if num < 0 {
+		sign = -1
+		num = -num
 	}
 	if num < 10 {
-		return num
+		return num * sign
 	}
 	res := int64(10)
-	for ; res < 1000000000000000000 && res*10 < num; res *= 10 {
+	for ; res < 1000000000000000000 && res*10 <= num; res *= 10 {
 	}
-	return res
+	return res * sign
 }
 
 // CountBucketed counts the feature identified by prefix and the value, using

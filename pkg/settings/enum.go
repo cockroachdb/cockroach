@@ -59,6 +59,15 @@ func (e *EnumSetting) ParseEnum(raw string) (int64, bool) {
 	return v, ok
 }
 
+// ValueAsString returns the string representation of the enum value encoded as an integer.
+func (e *EnumSetting) ValueAsString(raw string) string {
+	v, ok := e.ParseEnum(raw)
+	if !ok {
+		return raw
+	}
+	return e.enumValues[v]
+}
+
 // GetAvailableValuesAsHint returns the possible enum settings as a string that
 // can be provided as an error hint to a user.
 func (e *EnumSetting) GetAvailableValuesAsHint() string {

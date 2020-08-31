@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -33,7 +34,7 @@ import (
 
 // AutoStatsClusterSettingName is the name of the automatic stats collection
 // cluster setting.
-const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
+const AutoStatsClusterSettingName = sqltelemetry.AutoStatsClusterSettingName
 
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
