@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -21,9 +22,10 @@ func registerElectionAfterRestart(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "election-after-restart",
 		Owner:   OwnerKV,
-		Skip:    "https://github.com/cockroachdb/cockroach/issues/35047",
 		Cluster: makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			skip.UnderRace(t, "race builds make this test exceed its timeout")
+
 			t.Status("starting up")
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Start(ctx, t)
