@@ -40,6 +40,7 @@ retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/1/crd
 retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/1/crdb_internal.node_runtime_info.txt
 retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/1/crdb_internal.node_sessions.txt
 retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/1/crdb_internal.node_statement_statistics.txt
+retrieving SQL data for crdb_internal.node_transaction_statistics... writing: debug/nodes/1/crdb_internal.node_transaction_statistics.txt
 retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/1/crdb_internal.node_transactions.txt
 retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/1/crdb_internal.node_txn_stats.txt
 requesting data for debug/nodes/1/details... writing: debug/nodes/1/details.json
@@ -104,6 +105,7 @@ retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/3/crd
 retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/3/crdb_internal.node_runtime_info.txt
 retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/3/crdb_internal.node_sessions.txt
 retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/3/crdb_internal.node_statement_statistics.txt
+retrieving SQL data for crdb_internal.node_transaction_statistics... writing: debug/nodes/3/crdb_internal.node_transaction_statistics.txt
 retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/3/crdb_internal.node_transactions.txt
 retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/3/crdb_internal.node_txn_stats.txt
 requesting data for debug/nodes/3/details... writing: debug/nodes/3/details.json

@@ -11,46 +11,47 @@ DROP DATABASE crdb_internal
 query TTTI
 SHOW TABLES FROM crdb_internal
 ----
-crdb_internal  backward_dependencies      table  NULL
-crdb_internal  builtin_functions          table  NULL
-crdb_internal  cluster_queries            table  NULL
-crdb_internal  cluster_sessions           table  NULL
-crdb_internal  cluster_settings           table  NULL
-crdb_internal  cluster_transactions       table  NULL
-crdb_internal  create_statements          table  NULL
-crdb_internal  create_type_statements     table  NULL
-crdb_internal  databases                  table  NULL
-crdb_internal  feature_usage              table  NULL
-crdb_internal  forward_dependencies       table  NULL
-crdb_internal  gossip_alerts              table  NULL
-crdb_internal  gossip_liveness            table  NULL
-crdb_internal  gossip_network             table  NULL
-crdb_internal  gossip_nodes               table  NULL
-crdb_internal  index_columns              table  NULL
-crdb_internal  jobs                       table  NULL
-crdb_internal  kv_node_status             table  NULL
-crdb_internal  kv_store_status            table  NULL
-crdb_internal  leases                     table  NULL
-crdb_internal  node_build_info            table  NULL
-crdb_internal  node_metrics               table  NULL
-crdb_internal  node_queries               table  NULL
-crdb_internal  node_runtime_info          table  NULL
-crdb_internal  node_sessions              table  NULL
-crdb_internal  node_statement_statistics  table  NULL
-crdb_internal  node_transactions          table  NULL
-crdb_internal  node_txn_stats             table  NULL
-crdb_internal  partitions                 table  NULL
-crdb_internal  predefined_comments        table  NULL
-crdb_internal  ranges                     view   NULL
-crdb_internal  ranges_no_leases           table  NULL
-crdb_internal  schema_changes             table  NULL
-crdb_internal  session_trace              table  NULL
-crdb_internal  session_variables          table  NULL
-crdb_internal  table_columns              table  NULL
-crdb_internal  table_indexes              table  NULL
-crdb_internal  table_row_statistics       table  NULL
-crdb_internal  tables                     table  NULL
-crdb_internal  zones                      table  NULL
+crdb_internal  backward_dependencies        table  NULL
+crdb_internal  builtin_functions            table  NULL
+crdb_internal  cluster_queries              table  NULL
+crdb_internal  cluster_sessions             table  NULL
+crdb_internal  cluster_settings             table  NULL
+crdb_internal  cluster_transactions         table  NULL
+crdb_internal  create_statements            table  NULL
+crdb_internal  create_type_statements       table  NULL
+crdb_internal  databases                    table  NULL
+crdb_internal  feature_usage                table  NULL
+crdb_internal  forward_dependencies         table  NULL
+crdb_internal  gossip_alerts                table  NULL
+crdb_internal  gossip_liveness              table  NULL
+crdb_internal  gossip_network               table  NULL
+crdb_internal  gossip_nodes                 table  NULL
+crdb_internal  index_columns                table  NULL
+crdb_internal  jobs                         table  NULL
+crdb_internal  kv_node_status               table  NULL
+crdb_internal  kv_store_status              table  NULL
+crdb_internal  leases                       table  NULL
+crdb_internal  node_build_info              table  NULL
+crdb_internal  node_metrics                 table  NULL
+crdb_internal  node_queries                 table  NULL
+crdb_internal  node_runtime_info            table  NULL
+crdb_internal  node_sessions                table  NULL
+crdb_internal  node_statement_statistics    table  NULL
+crdb_internal  node_transaction_statistics  table  NULL
+crdb_internal  node_transactions            table  NULL
+crdb_internal  node_txn_stats               table  NULL
+crdb_internal  partitions                   table  NULL
+crdb_internal  predefined_comments          table  NULL
+crdb_internal  ranges                       view   NULL
+crdb_internal  ranges_no_leases             table  NULL
+crdb_internal  schema_changes               table  NULL
+crdb_internal  session_trace                table  NULL
+crdb_internal  session_variables            table  NULL
+crdb_internal  table_columns                table  NULL
+crdb_internal  table_indexes                table  NULL
+crdb_internal  table_row_statistics         table  NULL
+crdb_internal  tables                       table  NULL
+crdb_internal  zones                        table  NULL
 
 statement ok
 CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
@@ -132,6 +133,11 @@ query ITTTTIIITFFFFFFFFFFFFFFFFF colnames
 SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
 node_id  application_name  flags  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  implicit_txn
+
+query ITTTIIRRRRRRRR colnames
+SELECT * FROM crdb_internal.node_transaction_statistics WHERE node_id < 0
+----
+node_id  application_name  key  statement_ids  count  max_retries  service_lat_avg  service_lat_var  retry_lat_avg  retry_lat_var  commit_lat_avg  commit_lat_var  rows_read_avg  rows_read_var
 
 query IITTTTTTT colnames
 SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
@@ -636,3 +642,34 @@ SELECT * FROM crdb_internal.create_type_statements
 52  test  public  62  enum2  CREATE TYPE public.enum2 AS ENUM ()              {}
 
 # Test the virtual index as well.
+
+statement ok
+SET application_name = "test_txn_statistics"
+
+statement ok
+CREATE TABLE t_53504()
+
+statement ok
+BEGIN; SELECT * FROM t_53504; SELECT * FROM t_53504; SELECT * FROM t_53504; COMMIT;
+
+statement ok
+BEGIN; SELECT * FROM t_53504; SELECT * FROM t_53504; COMMIT;
+
+statement ok
+BEGIN; SELECT * FROM t_53504; SELECT * FROM t_53504; COMMIT;
+
+statement ok
+BEGIN; SELECT * FROM t_53504; COMMIT;
+
+statement ok
+SELECT * FROM t_53504
+
+query ITTTI colnames
+SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
+----
+node_id  application_name     key                               statement_ids                                                                                         count
+1        test_txn_statistics  02c92b698a5cb4c59708e7de50bdbf53  {7d5470c38539309ff3b933fec35fefad,7d5470c38539309ff3b933fec35fefad,7d5470c38539309ff3b933fec35fefad}  1
+1        test_txn_statistics  5a29a80adae483c4cfa89f5b228682fb  {94a482186de515de23eca3d1b443e033}                                                                    1
+1        test_txn_statistics  8199fcfefafda1121b286c08b21559c3  {7d5470c38539309ff3b933fec35fefad}                                                                    1
+1        test_txn_statistics  cb83bd7423a1016e148d2d9a6d89427d  {7d5470c38539309ff3b933fec35fefad,7d5470c38539309ff3b933fec35fefad}                                   2
+1        test_txn_statistics  cd8858558756fb4a4917ccfface8c12b  {ca672b3b015c5f7ca3b4d8488eb2f528}                                                                    1
