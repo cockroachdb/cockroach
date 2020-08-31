@@ -82,6 +82,7 @@ test           information_schema  administrable_role_authorizations  public   S
 test           information_schema  applicable_roles                   public   SELECT
 test           information_schema  check_constraints                  public   SELECT
 test           information_schema  column_privileges                  public   SELECT
+test           information_schema  column_udt_usage                   public   SELECT
 test           information_schema  columns                            public   SELECT
 test           information_schema  constraint_column_usage            public   SELECT
 test           information_schema  enabled_roles                      public   SELECT

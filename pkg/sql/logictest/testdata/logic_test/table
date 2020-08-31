@@ -576,6 +576,7 @@ administrable_role_authorizations  NULL
 applicable_roles                   NULL
 check_constraints                  NULL
 column_privileges                  NULL
+column_udt_usage                   NULL
 columns                            NULL
 constraint_column_usage            NULL
 enabled_roles                      NULL
