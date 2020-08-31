@@ -128,6 +128,10 @@ type mutationBuilder struct {
 	// an insert; otherwise it's an update.
 	canaryColID opt.ColumnID
 
+	// arbiters stores the ordinals of indexes that are used to detect conflicts
+	// for UPSERT and INSERT ON CONFLICT statements.
+	arbiters cat.IndexOrdinals
+
 	// roundedDecimalCols is the set of columns that have already been rounded.
 	// Keeping this set avoids rounding the same column multiple times.
 	roundedDecimalCols opt.ColSet
@@ -853,6 +857,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		FetchCols:           checkEmptyList(mb.fetchColIDs),
 		UpdateCols:          checkEmptyList(mb.updateColIDs),
 		CanaryCol:           mb.canaryColID,
+		Arbiters:            mb.arbiters,
 		CheckCols:           checkEmptyList(mb.checkColIDs),
 		PartialIndexPutCols: checkEmptyList(mb.partialIndexPutColIDs),
 		PartialIndexDelCols: checkEmptyList(mb.partialIndexDelColIDs),

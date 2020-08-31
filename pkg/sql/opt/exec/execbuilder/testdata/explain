@@ -1121,3 +1121,57 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          t@primary
 ·     spans          [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] … (4 more)
+
+
+# UPSERT and INSERT ON CONFLICT include arbiters.
+
+statement ok
+CREATE TABLE u (
+  k INT PRIMARY KEY,
+  v INT,
+  UNIQUE INDEX (v),
+  FAMILY "primary" (k, v)
+)
+
+query TTT
+EXPLAIN UPSERT INTO u VALUES (1, 1)
+----
+·                             distribution      local
+·                             vectorized        false
+upsert                        ·                 ·
+ │                            into              u(k, v)
+ │                            auto commit       ·
+ │                            arbiter indexes   primary
+ └── cross join (left outer)  ·                 ·
+      ├── values              ·                 ·
+      │                       size              2 columns, 1 row
+      └── scan                ·                 ·
+·                             missing stats     ·
+·                             table             u@primary
+·                             spans             [/1 - /1]
+·                             locking strength  for update
+
+query TTT
+EXPLAIN INSERT INTO u VALUES (1, 1) ON CONFLICT DO NOTHING
+----
+·                                            distribution           local
+·                                            vectorized             false
+insert                                       ·                      ·
+ │                                           into                   u(k, v)
+ │                                           auto commit            ·
+ │                                           arbiter indexes        primary, u_v_key
+ └── filter                                  ·                      ·
+      │                                      filter                 k IS NULL
+      └── lookup join (left outer)           ·                      ·
+           │                                 table                  u@u_v_key
+           │                                 equality               (column2) = (v)
+           │                                 equality cols are key  ·
+           └── filter                        ·                      ·
+                │                            filter                 k IS NULL
+                └── cross join (left outer)  ·                      ·
+                     ├── values              ·                      ·
+                     │                       size                   2 columns, 1 row
+                     └── scan                ·                      ·
+·                                            missing stats          ·
+·                                            table                  u@primary
+·                                            spans                  [/1 - /1]

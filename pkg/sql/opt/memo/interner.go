@@ -527,6 +527,15 @@ func (h *hasher) HashIndexOrdinal(val cat.IndexOrdinal) {
 	h.HashInt(val)
 }
 
+func (h *hasher) HashIndexOrdinals(val cat.IndexOrdinals) {
+	hash := h.hash
+	for _, ord := range val {
+		hash ^= internHash(ord)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
 func (h *hasher) HashViewDeps(val opt.ViewDeps) {
 	// Hash the length and address of the first element.
 	h.HashInt(len(val))
@@ -894,6 +903,18 @@ func (h *hasher) IsScheduleCommandEqual(l, r tree.ScheduleCommand) bool {
 
 func (h *hasher) IsIndexOrdinalEqual(l, r cat.IndexOrdinal) bool {
 	return l == r
+}
+
+func (h *hasher) IsIndexOrdinalsEqual(l, r cat.IndexOrdinals) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i] != r[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {

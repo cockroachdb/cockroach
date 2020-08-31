@@ -90,6 +90,7 @@ upsert                              ·                      ·
  │                                  estimated row count    0 (missing stats)
  │                                  into                   kv(k, v)
  │                                  auto commit            ·
+ │                                  arbiter indexes        primary
  └── lookup join (inner)            ·                      ·
       │                             estimated row count    2 (missing stats)
       │                             table                  kv@primary
@@ -140,6 +141,7 @@ upsert                                  ·                    ·
  │                                      estimated row count  0 (missing stats)
  │                                      into                 indexed(a, b, c, d)
  │                                      auto commit          ·
+ │                                      arbiter indexes      primary
  └── project                            ·                    ·
       └── render                        ·                    ·
            │                            estimated row count  1 (missing stats)
@@ -177,6 +179,7 @@ upsert                                   ·                      ·
  │                                       estimated row count    0 (missing stats)
  │                                       into                   indexed(a, b, c, d)
  │                                       auto commit            ·
+ │                                       arbiter indexes        primary
  └── project                             ·                      ·
       └── render                         ·                      ·
            │                             estimated row count    4 (missing stats)
@@ -450,6 +453,7 @@ EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
 upsert                         ·                      ·                   ()                     ·
  │                             estimated row count    0 (missing stats)   ·                      ·
  │                             into                   table38627(a, b)    ·                      ·
+ │                             arbiter indexes        primary             ·                      ·
  └── project                   ·                      ·                   (a, b, a, b, c, b, a)  ·
       └── lookup join (inner)  ·                      ·                   (a, b, a, b, c)        ·
            │                   estimated row count    1 (missing stats)   ·                      ·
@@ -483,6 +487,7 @@ upsert                                   ·                      ·             
  │                                       estimated row count    0 (missing stats)                            ·                                                  ·
  │                                       into                   tdup(x, y, z)                                ·                                                  ·
  │                                       auto commit            ·                                            ·                                                  ·
+ │                                       arbiter indexes        tdup_y_z_key                                 ·                                                  ·
  └── project                             ·                      ·                                            (column1, column2, column3, x, y, z, upsert_z, x)  ·
       └── render                         ·                      ·                                            (upsert_z, column1, column2, column3, x, y, z)     ·
            │                             estimated row count    2 (missing stats)                            ·                                                  ·
@@ -531,6 +536,7 @@ upsert                                   ·                    ·               
  │                                       estimated row count  0 (missing stats)                      ·                                ·
  │                                       into                 target(a, b, c)                        ·                                ·
  │                                       auto commit          ·                                      ·                                ·
+ │                                       arbiter indexes      target_b_c_key                         ·                                ·
  └── project                             ·                    ·                                      (x, y, z, a, b, c, upsert_b, a)  ·
       └── render                         ·                    ·                                      (upsert_b, x, y, z, a, b, c)     ·
            │                             estimated row count  311 (missing stats)                    ·                                ·

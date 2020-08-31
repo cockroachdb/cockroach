@@ -54,7 +54,8 @@ UPSERT INTO kj VALUES (1, '{"a": 2}')
 ----
 upsert kj
  ├── columns: <none>
- ├── canary column: 7
+ ├── arbiter indexes: primary
+ ├── canary column: k:7
  ├── fetch columns: k:7 j:8
  ├── insert-mapping:
  │    ├── column1:5 => k:1
@@ -86,6 +87,7 @@ INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO NOTHING
 ----
 insert kj
  ├── columns: <none>
+ ├── arbiter indexes: primary
  ├── insert-mapping:
  │    ├── column1:5 => k:1
  │    └── column2:6 => j:2
@@ -116,7 +118,8 @@ INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO UPDATE SET j = '{"a": 3
 ----
 upsert kj
  ├── columns: <none>
- ├── canary column: 7
+ ├── arbiter indexes: primary
+ ├── canary column: k:7
  ├── fetch columns: k:7 j:8
  ├── insert-mapping:
  │    ├── column1:5 => k:1
