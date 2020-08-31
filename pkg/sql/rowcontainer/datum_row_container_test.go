@@ -49,7 +49,7 @@ func TestRowContainer(t *testing.T) {
 				}
 
 				for i := 0; i < numPops; i++ {
-					rc.PopFirst()
+					rc.PopFirst(context.Background())
 				}
 
 				// Given that we just deleted numPops rows, we have numRows -

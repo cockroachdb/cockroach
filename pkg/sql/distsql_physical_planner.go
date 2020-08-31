@@ -155,7 +155,7 @@ func NewDistSQLPlanner(
 		metadataTestTolerance: execinfra.NoExplain,
 	}
 
-	dsp.initRunners()
+	dsp.initRunners(ctx)
 	return dsp
 }
 

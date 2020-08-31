@@ -274,7 +274,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		// Check if there are any rows left to emit from the last input row.
 		if v.run.rows.Len() > 0 {
 			v.run.row = v.run.rows.At(0)
-			v.run.rows.PopFirst()
+			v.run.rows.PopFirst(params.ctx)
 			return true, nil
 		}
 
