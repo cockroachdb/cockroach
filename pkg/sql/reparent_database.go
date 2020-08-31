@@ -52,12 +52,6 @@ func (p *planner) ReparentDatabase(
 			clusterversion.VersionByKey(clusterversion.VersionUserDefinedSchemas))
 	}
 
-	// Check that creation of schemas is enabled.
-	if !p.EvalContext().SessionData.UserDefinedSchemasEnabled {
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-			"session variable experimental_enable_user_defined_schemas is set to false, cannot create a schema")
-	}
-
 	db, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), true /* required */)
 	if err != nil {
 		return nil, err

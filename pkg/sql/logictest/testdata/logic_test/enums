@@ -1128,7 +1128,6 @@ public int        Z|S of int
 public notbad     dup|DUP
 
 statement ok
-SET experimental_enable_user_defined_schemas = true;
 CREATE SCHEMA uds;
 CREATE TYPE uds.typ AS ENUM ('schema')
 

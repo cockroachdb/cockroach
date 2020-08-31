@@ -1729,7 +1729,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 	// failed restore.
 	sqlDB.Exec(t, `CREATE TYPE data.myenum AS ENUM ('hello')`)
 	// Do the same with a user defined schema.
-	sqlDB.Exec(t, `SET experimental_enable_user_defined_schemas = true; USE data; CREATE SCHEMA myschema`)
+	sqlDB.Exec(t, `USE data; CREATE SCHEMA myschema`)
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
 	// Bugger the backup by removing the SST files.
@@ -1823,7 +1823,6 @@ func TestBackupRestoreUserDefinedSchemas(t *testing.T) {
 
 		var ts1, ts2, ts3, ts4, ts5, ts6 string
 		sqlDB.Exec(t, `
-SET experimental_enable_user_defined_schemas = true;
 CREATE DATABASE d;
 USE d;
 
@@ -1911,8 +1910,6 @@ CREATE TABLE sc.t1 (a FLOAT);
 		_, _, sqlDB, dataDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
 		defer cleanupFn()
 		sqlDB.Exec(t, `
-SET experimental_enable_user_defined_schemas = true;
-
 CREATE DATABASE d;
 USE d;
 CREATE SCHEMA unused;
@@ -1948,8 +1945,6 @@ INSERT INTO sc.tb2 VALUES ('hello');
 		defer cleanupFn()
 
 		sqlDB.Exec(t, `
-SET experimental_enable_user_defined_schemas = true;
-
 CREATE DATABASE d;
 USE d;
 CREATE SCHEMA sc;
@@ -1984,8 +1979,6 @@ INSERT INTO sc.tb2 VALUES ('hello');
 		defer cleanupFn()
 
 		sqlDB.Exec(t, `
-SET experimental_enable_user_defined_schemas = true;
-
 CREATE DATABASE d;
 USE d;
 CREATE SCHEMA sc;
@@ -2044,8 +2037,6 @@ INSERT INTO sc.tb2 VALUES (1);
 		kvDB := tc.Server(0).DB()
 
 		sqlDB.Exec(t, `
-SET experimental_enable_user_defined_schemas = true;
-
 CREATE DATABASE d1;
 USE d1;
 CREATE SCHEMA sc1;
@@ -2104,8 +2095,6 @@ INSERT INTO sc4.tb VALUES (4);
 		defer cleanupFn()
 
 		sqlDB.Exec(t, `
-SET experimental_enable_user_defined_schemas = true;
-
 CREATE DATABASE d;
 USE d;
 CREATE SCHEMA sc;

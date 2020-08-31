@@ -27,9 +27,6 @@ ALTER TYPE typ OWNER TO testuser
 user testuser
 
 statement ok
-SET experimental_enable_user_defined_schemas = true
-
-statement ok
 CREATE SCHEMA s
 
 user root
@@ -101,9 +98,6 @@ statement ok
 REVOKE testuser FROM root
 
 user testuser
-
-statement ok
-SET experimental_enable_user_defined_schemas = true
 
 statement ok
 CREATE SCHEMA s2
