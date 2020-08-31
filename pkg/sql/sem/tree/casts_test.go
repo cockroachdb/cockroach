@@ -152,3 +152,54 @@ func TestCastsFromUnknown(t *testing.T) {
 		}
 	}
 }
+
+func TestTupleCastVolatility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		from, to []*types.T
+		exp      string
+	}{
+		{
+			from: nil,
+			to:   nil,
+			exp:  "leak-proof",
+		},
+		{
+			from: nil,
+			to:   []*types.T{types.Int},
+			exp:  "error",
+		},
+		{
+			from: []*types.T{types.Int},
+			to:   []*types.T{types.Int},
+			exp:  "immutable",
+		},
+		{
+			from: []*types.T{types.TimestampTZ},
+			to:   []*types.T{types.Date},
+			exp:  "stable",
+		},
+		{
+			from: []*types.T{types.Int, types.TimestampTZ},
+			to:   []*types.T{types.Int, types.Date},
+			exp:  "stable",
+		},
+	}
+
+	for _, tc := range testCases {
+		from := *types.EmptyTuple
+		from.InternalType.TupleContents = tc.from
+		to := *types.EmptyTuple
+		to.InternalType.TupleContents = tc.to
+		v, ok := LookupCastVolatility(&from, &to)
+		res := "error"
+		if ok {
+			res = v.String()
+		}
+		if res != tc.exp {
+			t.Errorf("from: %s  to: %s  expected: %s  got: %s", &from, &to, tc.exp, res)
+		}
+	}
+}
