@@ -1078,3 +1078,9 @@ b              public       t2          root     ALL
 
 statement error pq: invalid privilege type USAGE for table
 GRANT USAGE ON t TO testuser
+
+statement error pq: cannot GRANT on system object
+GRANT SELECT ON system.lease TO testuser
+
+statement error pq: cannot REVOKE on system object
+REVOKE SELECT ON system.lease FROM testuser

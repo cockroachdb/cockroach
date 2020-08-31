@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -22,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -65,7 +68,8 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
 			privDesc.Grant(grantee, n.Privileges)
 		},
-		grantOn: grantOn,
+		grantOn:   grantOn,
+		operation: "GRANT",
 	}, nil
 }
 
@@ -106,7 +110,8 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
 			privDesc.Revoke(grantee, n.Privileges, grantOn)
 		},
-		grantOn: grantOn,
+		grantOn:   grantOn,
+		operation: "REVOKE",
 	}, nil
 }
 
@@ -116,6 +121,7 @@ type changePrivilegesNode struct {
 	desiredprivs    privilege.List
 	changePrivilege func(*descpb.PrivilegeDescriptor, string)
 	grantOn         privilege.ObjectType
+	operation       string
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -156,6 +162,11 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	// we update them in KV below.
 	b := p.txn.NewBatch()
 	for _, descriptor := range descriptors {
+		// Disallow privilege changes on system objects. For more context, see #43842.
+		if descriptor.GetID() < keys.MinUserDescID {
+			return pgerror.Newf(pgcode.InsufficientPrivilege, "cannot %s on system object", n.operation)
+		}
+
 		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
 			return err
 		}
