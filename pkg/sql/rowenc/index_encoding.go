@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -830,31 +831,36 @@ func EncodeGeoInvertedIndexTableKeys(
 	switch val.ResolvedType().Family() {
 	case types.GeographyFamily:
 		index := geoindex.NewS2GeographyIndex(*index.GeoConfig.S2Geography)
-		intKeys, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeography).Geography)
+		intKeys, bbox, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeography).Geography)
 		if err != nil {
 			return nil, err
 		}
-		return encodeGeoKeys(inKey, intKeys)
+		return encodeGeoKeys(encoding.EncodeGeoInvertedAscending(inKey), intKeys, bbox)
 	case types.GeometryFamily:
 		index := geoindex.NewS2GeometryIndex(*index.GeoConfig.S2Geometry)
-		intKeys, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeometry).Geometry)
+		intKeys, bbox, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeometry).Geometry)
 		if err != nil {
 			return nil, err
 		}
-		return encodeGeoKeys(inKey, intKeys)
+		return encodeGeoKeys(encoding.EncodeGeoInvertedAscending(inKey), intKeys, bbox)
 	default:
 		return nil, errors.Errorf("internal error: unexpected type: %s", val.ResolvedType().Family())
 	}
 }
 
-func encodeGeoKeys(inKey []byte, geoKeys []geoindex.Key) (keys [][]byte, err error) {
+func encodeGeoKeys(
+	inKey []byte, geoKeys []geoindex.Key, bbox geopb.BoundingBox,
+) (keys [][]byte, err error) {
+	encodedBBox := make([]byte, 0, encoding.MaxGeoInvertedBBoxLen)
+	encodedBBox = encoding.EncodeGeoInvertedBBox(encodedBBox, bbox.LoX, bbox.LoY, bbox.HiX, bbox.HiY)
 	// Avoid per-key heap allocations.
-	b := make([]byte, 0, len(geoKeys)*(len(inKey)+encoding.MaxVarintLen))
+	b := make([]byte, 0, len(geoKeys)*(len(inKey)+encoding.MaxVarintLen+len(encodedBBox)))
 	keys = make([][]byte, len(geoKeys))
 	for i, k := range geoKeys {
 		prev := len(b)
 		b = append(b, inKey...)
 		b = encoding.EncodeUvarintAscending(b, uint64(k))
+		b = append(b, encodedBBox...)
 		// Set capacity so that the caller appending does not corrupt later keys.
 		newKey := b[prev:len(b):len(b)]
 		keys[i] = newKey

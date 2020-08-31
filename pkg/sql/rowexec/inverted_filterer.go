@@ -41,6 +41,9 @@ const (
 	ifrEmittingRows
 )
 
+// TODO(sumeer): support pre-filtering, akin to the invertedJoiner, by passing
+// relationship info and parameters in the spec and using it to construct a
+// preFilterer.
 type invertedFilterer struct {
 	execinfra.ProcessorBase
 	runningState   invertedFiltererState
@@ -205,7 +208,14 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		return ifrStateUnknown, ifr.DrainHelper()
 	}
 	// Add to the evaluator.
-	ifr.invertedEval.addIndexRow(row[ifr.invertedColIdx].EncodedBytes(), keyIndex)
+	if _, err = ifr.invertedEval.prepareAddIndexRow(row[ifr.invertedColIdx].EncodedBytes()); err != nil {
+		ifr.MoveToDraining(err)
+		return ifrStateUnknown, ifr.DrainHelper()
+	}
+	if err = ifr.invertedEval.addIndexRow(keyIndex); err != nil {
+		ifr.MoveToDraining(err)
+		return ifrStateUnknown, ifr.DrainHelper()
+	}
 	return ifrReadingInput, nil
 }
 

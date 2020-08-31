@@ -284,6 +284,11 @@ func (g *Geometry) CartesianBoundingBox() *CartesianBoundingBox {
 	return &CartesianBoundingBox{BoundingBox: *g.spatialObject.BoundingBox}
 }
 
+// BoundingBoxRef returns a pointer to the BoundingBox, if any.
+func (g *Geometry) BoundingBoxRef() *geopb.BoundingBox {
+	return g.spatialObject.BoundingBox
+}
+
 // SpaceCurveIndex returns an uint64 index to use representing an index into a space-filling curve.
 // This will return 0 for empty spatial objects, and math.MaxUint64 for any object outside
 // the defined bounds of the given SRID projection.

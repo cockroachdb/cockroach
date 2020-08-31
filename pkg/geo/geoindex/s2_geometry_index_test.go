@@ -140,7 +140,7 @@ func TestNoClippingAtSRIDBounds(t *testing.T) {
 			for i := range xCorners {
 				g, err := geo.MakeGeometryFromPointCoords(xCorners[i], yCorners[i])
 				require.NoError(t, err)
-				keys, err := index.InvertedIndexKeys(context.Background(), g)
+				keys, _, err := index.InvertedIndexKeys(context.Background(), g)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(keys))
 				require.NotEqual(t, Key(exceedsBoundsCellID), keys[0],
