@@ -17,8 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+// SkippableTest is a testing.TB with Skip methods.
+type SkippableTest interface {
+	Skip(...interface{})
+	Skipf(string, ...interface{})
+}
+
 // WithIssue skips this test, logging the given issue ID as the reason.
-func WithIssue(t testing.TB, githubIssueID int, args ...interface{}) {
+func WithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 	t.Skip(append([]interface{}{
 		fmt.Sprintf("https://github.com/cockroachdb/cockroach/issue/%d", githubIssueID)},
 		args...))
@@ -27,31 +33,31 @@ func WithIssue(t testing.TB, githubIssueID int, args ...interface{}) {
 // IgnoreLint skips this test, explicitly marking it as not a test that
 // should be tracked as a "skipped test" by external tools. You should use this
 // if, for example, your test should only be run in Race mode.
-func IgnoreLint(t testing.TB, args ...interface{}) {
+func IgnoreLint(t SkippableTest, args ...interface{}) {
 	t.Skip(args...)
 }
 
 // IgnoreLintf is like IgnoreLint, and it also takes a format string.
-func IgnoreLintf(t testing.TB, format string, args ...interface{}) {
+func IgnoreLintf(t SkippableTest, format string, args ...interface{}) {
 	t.Skipf(format, args...)
 }
 
 // UnderRace skips this test if the race detector is enabled.
-func UnderRace(t testing.TB, args ...interface{}) {
+func UnderRace(t SkippableTest, args ...interface{}) {
 	if util.RaceEnabled {
 		t.Skip(append([]interface{}{"disabled under race"}, args...))
 	}
 }
 
 // UnderShort skips this test if the -short flag is specified.
-func UnderShort(t testing.TB, args ...interface{}) {
+func UnderShort(t SkippableTest, args ...interface{}) {
 	if testing.Short() {
 		t.Skip(append([]interface{}{"disabled under -short"}, args...))
 	}
 }
 
 // UnderStress skips this test when running under stress.
-func UnderStress(t testing.TB, args ...interface{}) {
+func UnderStress(t SkippableTest, args ...interface{}) {
 	if NightlyStress() {
 		t.Skip(append([]interface{}{"disabled under stress"}, args...))
 	}
@@ -59,7 +65,7 @@ func UnderStress(t testing.TB, args ...interface{}) {
 
 // UnderStressRace skips this test during stressrace runs, which are tests
 // run under stress with the -race flag.
-func UnderStressRace(t testing.TB, args ...interface{}) {
+func UnderStressRace(t SkippableTest, args ...interface{}) {
 	if NightlyStress() && util.RaceEnabled {
 		t.Skip(append([]interface{}{"disabled under stressrace"}, args...))
 	}
