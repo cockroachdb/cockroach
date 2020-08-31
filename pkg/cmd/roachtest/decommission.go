@@ -902,8 +902,20 @@ func (h *decommTestHelper) recommission(
 	return execCLI(ctx, h.t, h.c, runNode, args...)
 }
 
+func elideInsecureDeprecationNotice(csvStr string) string {
+	// v20.1 introduces a deprecation notice for --insecure. Skip over it.
+	// TODO(knz): Remove this when --insecure is dropped.
+	// See: https://github.com/cockroachdb/cockroach/issues/53404
+	lines := strings.SplitN(csvStr, "\n", 3)
+	if len(lines) > 0 && strings.HasPrefix(lines[0], "Flag --insecure has been deprecated") {
+		csvStr = lines[2]
+	}
+	return csvStr
+}
+
 // getCsvNumCols returns the number of columns in the given csv string.
 func (h *decommTestHelper) getCsvNumCols(csvStr string) (cols int) {
+	csvStr = elideInsecureDeprecationNotice(csvStr)
 	reader := csv.NewReader(strings.NewReader(csvStr))
 	records, err := reader.Read()
 	if err != nil {
@@ -922,6 +934,7 @@ func (h *decommTestHelper) matchCSV(csvStr string, matchColRow [][]string) (err 
 		}
 	}()
 
+	csvStr = elideInsecureDeprecationNotice(csvStr)
 	reader := csv.NewReader(strings.NewReader(csvStr))
 	reader.FieldsPerRecord = -1
 	records, err := reader.ReadAll()
