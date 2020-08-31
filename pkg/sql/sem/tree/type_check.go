@@ -785,7 +785,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 	if def.UnsupportedWithIssue != 0 {
 		// Note: no need to embed the function name in the message; the
 		// caller will add the function name as prefix.
-		const msg = "this function is not supported"
+		const msg = "this function is not yet supported"
 		if def.UnsupportedWithIssue < 0 {
 			return unimplemented.New(def.Name+"()", msg)
 		}

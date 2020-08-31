@@ -1235,6 +1235,8 @@ Bottom Left.</p>
 </span></td></tr>
 <tr><td><a name="st_force2d"></a><code>st_force2d(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry which only contains X and Y coordinates.</p>
 </span></td></tr>
+<tr><td><a name="st_forcecollection"></a><code>st_forcecollection(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Converts the geometry into a GeometryCollection.</p>
+</span></td></tr>
 <tr><td><a name="st_forcepolygonccw"></a><code>st_forcepolygonccw(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry where all Polygon objects have exterior rings in the counter-clockwise orientation and interior rings in the clockwise orientation. Non-Polygon objects are unchanged.</p>
 </span></td></tr>
 <tr><td><a name="st_forcepolygoncw"></a><code>st_forcepolygoncw(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry where all Polygon objects have exterior rings in the clockwise orientation and interior rings in the counter-clockwise orientation. Non-Polygon objects are unchanged.</p>
