@@ -1525,7 +1525,6 @@ func (ds *DistSender) sendPartialBatch(
 		const slowDistSenderThreshold = time.Minute
 		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && !tBegin.IsZero() {
 			ds.metrics.SlowRPCs.Inc(1)
-			dur := dur // leak dur to heap only when branch taken
 			log.Warningf(ctx, "slow range RPC: %v",
 				slowRangeRPCWarningStr(dur, attempts, routing.Desc(), pErr))
 			defer func(tBegin time.Time, attempts int64) {
