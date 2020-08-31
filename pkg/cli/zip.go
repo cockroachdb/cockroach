@@ -96,6 +96,7 @@ var debugZipTablesPerNode = []string{
 	"crdb_internal.node_runtime_info",
 	"crdb_internal.node_sessions",
 	"crdb_internal.node_statement_statistics",
+	"crdb_internal.node_transaction_statistics",
 	"crdb_internal.node_transactions",
 	"crdb_internal.node_txn_stats",
 }

@@ -261,13 +261,15 @@ func (a *appStats) getStatsForStmtWithKey(
 	return s
 }
 
-func (a *appStats) getStatsForTxnWithKey(key txnKey, stmtIDs []roachpb.StmtID) *txnStats {
+func (a *appStats) getStatsForTxnWithKey(
+	key txnKey, stmtIDs []roachpb.StmtID, createIfNonexistent bool,
+) *txnStats {
 	a.Lock()
 	defer a.Unlock()
 	// Retrieve the per-transaction statistic object, and create it if it doesn't
 	// exist yet.
 	s, ok := a.txns[key]
-	if !ok {
+	if !ok && createIfNonexistent {
 		s = &txnStats{}
 		s.statementIDs = stmtIDs
 		a.txns[key] = s
@@ -325,7 +327,7 @@ func (a *appStats) Add(other *appStats) {
 
 	// Merge the txn stats
 	for k, v := range txnMap {
-		t := a.getStatsForTxnWithKey(k, v.statementIDs)
+		t := a.getStatsForTxnWithKey(k, v.statementIDs, true /* createIfNonExistent */)
 		t.mu.Lock()
 		t.mu.data.Add(&v.mu.data)
 		t.mu.Unlock()
@@ -406,7 +408,7 @@ func (a *appStats) recordTransaction(
 	}
 
 	// Get the statistics object.
-	s := a.getStatsForTxnWithKey(key, statementIDs)
+	s := a.getStatsForTxnWithKey(key, statementIDs, true /* createIfNonexistent */)
 
 	// Collect the per-transaction statistics.
 	s.mu.Lock()

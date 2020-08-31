@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -115,6 +116,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
 		catconstants.CrdbInternalTablesTableLastStatsID:      crdbInternalTablesTableLastStats,
 		catconstants.CrdbInternalTablesTableID:               crdbInternalTablesTable,
+		catconstants.CrdbInternalTransactionStatsTableID:     crdbInternalTransactionStatisticsTable,
 		catconstants.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
 		catconstants.CrdbInternalZonesTableID:                crdbInternalZonesTable,
 	},
@@ -715,6 +717,20 @@ func (s stmtList) Less(i, j int) bool {
 	return s[i].anonymizedStmt < s[j].anonymizedStmt
 }
 
+type txnList []txnKey
+
+func (t txnList) Len() int {
+	return len(t)
+}
+
+func (t txnList) Swap(i, j int) {
+	t[i], t[j] = t[j], t[i]
+}
+
+func (t txnList) Less(i, j int) bool {
+	return t[i] < t[j]
+}
+
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
@@ -748,8 +764,13 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   implicit_txn        BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "access application statistics"); err != nil {
+		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		if err != nil {
 			return err
+		}
+		if !hasViewActivity {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
 		}
 
 		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
@@ -840,6 +861,117 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					return err
 				}
 			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalTransactionStatisticsTable = virtualSchemaTable{
+	comment: `finer-grained transaction statistics (in-memory, not durable; local node only). ` +
+		`This table is wiped periodically (by default, at least every two hours)`,
+	schema: `
+CREATE TABLE crdb_internal.node_transaction_statistics (
+  node_id           INT NOT NULL,
+  application_name  STRING NOT NULL,
+  key               STRING,
+  statement_ids     STRING[],
+  count             INT,
+  max_retries       INT,
+  service_lat_avg   FLOAT NOT NULL,
+  service_lat_var   FLOAT NOT NULL,
+  retry_lat_avg     FLOAT NOT NULL,
+  retry_lat_var     FLOAT NOT NULL,
+  commit_lat_avg    FLOAT NOT NULL,
+  commit_lat_var    FLOAT NOT NULL,
+  rows_read_avg     FLOAT NOT NULL,
+  rows_read_var     FLOAT NOT NULL
+)
+`,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		if err != nil {
+			return err
+		}
+		if !hasViewActivity {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
+		}
+		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
+		if sqlStats == nil {
+			return errors.AssertionFailedf(
+				"cannot access sql statistics from this context")
+		}
+
+		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
+
+		// Retrieve the application names and sort them to ensure the
+		// output is deterministic.
+		var appNames []string
+		sqlStats.Lock()
+
+		for n := range sqlStats.apps {
+			appNames = append(appNames, n)
+		}
+		sqlStats.Unlock()
+		sort.Strings(appNames)
+
+		for _, appName := range appNames {
+			appStats := sqlStats.getStatsForApplication(appName)
+
+			// Retrieve the statement keys and sort them to ensure the
+			// output is deterministic.
+			var txnKeys txnList
+			appStats.Lock()
+			for k := range appStats.txns {
+				txnKeys = append(txnKeys, k)
+			}
+			appStats.Unlock()
+			sort.Sort(txnKeys)
+
+			// Now retrieve the per-txn stats proper.
+			for _, txnKey := range txnKeys {
+				// We don't want to create the key if it doesn't exist, so it's okay to
+				// pass nil for the statementIDs, as they are only set when a key is
+				// constructed.
+				s := appStats.getStatsForTxnWithKey(txnKey, nil, false /* createIfNonexistent */)
+				// If the key is not found (and we expected to find it), the table must
+				// have been cleared between now and the time we read all the keys. In
+				// that case we simply skip this key as there are no metrics to report.
+				if s == nil {
+					continue
+				}
+				stmtIDsDatum := tree.NewDArray(types.String)
+				for _, stmtID := range s.statementIDs {
+					if err := stmtIDsDatum.Append(tree.NewDString(string(stmtID))); err != nil {
+						return err
+					}
+				}
+
+				s.mu.Lock()
+
+				err := addRow(
+					tree.NewDInt(tree.DInt(nodeID)),
+					tree.NewDString(appName),
+					tree.NewDString(string(txnKey)),
+					stmtIDsDatum,
+					tree.NewDInt(tree.DInt(s.mu.data.Count)),
+					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.RetryLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.RetryLat.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.CommitLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.CommitLat.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),
+				)
+
+				s.mu.Unlock()
+				if err != nil {
+					return err
+				}
+			}
+
 		}
 		return nil
 	},
