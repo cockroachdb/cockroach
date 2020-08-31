@@ -391,8 +391,8 @@ type TemporaryObjectCleaner struct {
 	db                               *kv.DB
 	codec                            keys.SQLCodec
 	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory
-	// statusServer gives access to the Status service.
-	statusServer           serverpb.OptionalStatusServer
+	// statusServer gives access to the SQLStatus service.
+	statusServer           serverpb.SQLStatusServer
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc
 	testingKnobs           ExecutorTestingKnobs
 	metrics                *temporaryObjectCleanerMetrics
@@ -419,7 +419,7 @@ func NewTemporaryObjectCleaner(
 	codec keys.SQLCodec,
 	registry *metric.Registry,
 	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory,
-	statusServer serverpb.OptionalStatusServer,
+	statusServer serverpb.SQLStatusServer,
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
 ) *TemporaryObjectCleaner {
@@ -529,16 +529,11 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		return nil
 	}
 
-	statusServer, err := c.statusServer.OptionalErr(47894)
-	if err != nil {
-		return err
-	}
-
 	// Get active sessions.
 	var response *serverpb.ListSessionsResponse
 	if err := retryFunc(ctx, func() error {
 		var err error
-		response, err = statusServer.ListSessions(
+		response, err = c.statusServer.ListSessions(
 			ctx,
 			&serverpb.ListSessionsRequest{},
 		)
