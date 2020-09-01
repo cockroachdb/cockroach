@@ -3463,27 +3463,37 @@ project
  │    │    ├── limit hint: 20.00
  │    │    └── inner-join (cross)
  │    │         ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:17!null tt_name:18!null s_symb:22!null s_name:25!null
- │    │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │         ├── key: (1)
  │    │         ├── fd: ()-->(6,22,25), (1)-->(2,4,5,7,9-11), (17)-->(18), (4)==(17), (17)==(4)
+ │    │         ├── inner-join (merge)
+ │    │         │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:17!null tt_name:18!null
+ │    │         │    ├── left ordering: +17
+ │    │         │    ├── right ordering: +4
+ │    │         │    ├── key: (1)
+ │    │         │    ├── fd: ()-->(6), (1)-->(2,4,5,7,9-11), (17)-->(18), (4)==(17), (17)==(4)
+ │    │         │    ├── scan trade_type
+ │    │         │    │    ├── columns: tt_id:17!null tt_name:18!null
+ │    │         │    │    ├── key: (17)
+ │    │         │    │    ├── fd: (17)-->(18)
+ │    │         │    │    └── ordering: +17
+ │    │         │    ├── sort
+ │    │         │    │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11
+ │    │         │    │    ├── key: (1)
+ │    │         │    │    ├── fd: ()-->(6), (1)-->(2,4,5,7,9-11)
+ │    │         │    │    ├── ordering: +4 opt(6) [actual: +4]
+ │    │         │    │    └── scan trade@secondary
+ │    │         │    │         ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11
+ │    │         │    │         ├── constraint: /6/2/1: [/'SYMB'/'2020-06-15 22:27:42.148484' - /'SYMB'/'2020-06-17 22:27:42.148484']
+ │    │         │    │         ├── key: (1)
+ │    │         │    │         └── fd: ()-->(6), (1)-->(2,4,5,7,9-11)
+ │    │         │    └── filters (true)
  │    │         ├── scan security
  │    │         │    ├── columns: s_symb:22!null s_name:25!null
  │    │         │    ├── constraint: /22: [/'SYMB' - /'SYMB']
  │    │         │    ├── cardinality: [0 - 1]
  │    │         │    ├── key: ()
  │    │         │    └── fd: ()-->(22,25)
- │    │         ├── inner-join (lookup trade_type)
- │    │         │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11 tt_id:17!null tt_name:18!null
- │    │         │    ├── key columns: [4] = [17]
- │    │         │    ├── lookup columns are key
- │    │         │    ├── key: (1)
- │    │         │    ├── fd: ()-->(6), (1)-->(2,4,5,7,9-11), (17)-->(18), (4)==(17), (17)==(4)
- │    │         │    ├── scan trade@secondary
- │    │         │    │    ├── columns: t_id:1!null t_dts:2!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_trade_price:11
- │    │         │    │    ├── constraint: /6/2/1: [/'SYMB'/'2020-06-15 22:27:42.148484' - /'SYMB'/'2020-06-17 22:27:42.148484']
- │    │         │    │    ├── key: (1)
- │    │         │    │    └── fd: ()-->(6), (1)-->(2,4,5,7,9-11)
- │    │         │    └── filters (true)
  │    │         └── filters (true)
  │    └── 20
  └── projections

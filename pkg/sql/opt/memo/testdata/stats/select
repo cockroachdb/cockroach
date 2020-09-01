@@ -1190,11 +1190,11 @@ SELECT * FROM nulls WHERE x = y
 ----
 project
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=9.9e-10]
+ ├── stats: [rows=1e-09]
  ├── fd: (1)==(2), (2)==(1)
  └── select
       ├── columns: x:1(int!null) y:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
-      ├── stats: [rows=9.9e-10, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0]
+      ├── stats: [rows=1e-09, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0]
       ├── key: (3)
       ├── fd: (3)-->(1,2,4), (1)==(2), (2)==(1)
       ├── scan nulls
@@ -2003,3 +2003,450 @@ project
       │    └── fd: (3)-->(1,2,4)
       └── filters
            └── (x:1 = 1) AND (z:2 = 2) [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; tight), fd=()-->(1,2)]
+
+exec-ddl
+CREATE TABLE t (
+  c1 INT, c2 INT, c3 INT, c4 INT, c5 INT, c6 INT, c7 INT, c8 INT, c9 INT, c10 INT,
+  c11 INT, c12 INT, c13 INT, c14 INT, c15 INT, c16 INT, c17 INT, c18 INT, c19 INT, c20 INT,
+  c21 INT, c22 INT, c23 INT, c24 INT, c25 INT, c26 INT, c27 INT, c28 INT, c29 INT, c30 INT,
+  c31 INT, c32 INT, c33 INT
+)
+----
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "columns": [
+            "rowid"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "586287403267325953"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c1"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c2"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c3"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c4"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c5"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c6"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c7"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c8"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c9"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c10"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c11"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c12"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c13"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c14"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c15"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c16"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c17"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c18"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c19"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c20"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c21"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c22"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c23"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c24"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c25"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c26"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c27"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c28"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c29"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c30"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c31"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c32"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    },
+    {
+        "columns": [
+            "c33"
+        ],
+        "created_at": "2020-09-01 20:12:24.169784+00:00",
+        "distinct_count": 1,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 1,
+        "row_count": 1
+    }
+]'
+----
+
+# Regression test for #53311.
+norm
+SELECT * FROM t
+WHERE c1 = 1 AND c2 = 1 AND c3 = 1 AND c4 = 1 AND c5 = 1 AND c6 = 1 AND c7 = 1
+AND c8 = 1 AND c9 = 1 AND c10 = 1 AND c11 = 1 AND c12 = 1 AND c13 = 1 AND c14 = 1
+AND c15 = 1 AND c16 = 1 AND c17 = 1 AND c18 = 1 AND c19 = 1 AND c20 = 1 AND c21 = 1
+AND c22 = 1 AND c23 = 1 AND c24 = 1 AND c25 = 1 AND c26 = 1 AND c27 = 1 AND c28 = 1
+AND c29 = 1 AND c30 = 1 AND c31 = 1 AND c32 = 1 AND c33 = 1
+----
+select
+ ├── columns: c1:1(int!null) c2:2(int!null) c3:3(int!null) c4:4(int!null) c5:5(int!null) c6:6(int!null) c7:7(int!null) c8:8(int!null) c9:9(int!null) c10:10(int!null) c11:11(int!null) c12:12(int!null) c13:13(int!null) c14:14(int!null) c15:15(int!null) c16:16(int!null) c17:17(int!null) c18:18(int!null) c19:19(int!null) c20:20(int!null) c21:21(int!null) c22:22(int!null) c23:23(int!null) c24:24(int!null) c25:25(int!null) c26:26(int!null) c27:27(int!null) c28:28(int!null) c29:29(int!null) c30:30(int!null) c31:31(int!null) c32:32(int!null) c33:33(int!null)
+ ├── stats: [rows=9e-11, distinct(1)=9e-11, null(1)=0, distinct(2)=9e-11, null(2)=0, distinct(3)=9e-11, null(3)=0, distinct(4)=9e-11, null(4)=0, distinct(5)=9e-11, null(5)=0, distinct(6)=9e-11, null(6)=0, distinct(7)=9e-11, null(7)=0, distinct(8)=9e-11, null(8)=0, distinct(9)=9e-11, null(9)=0, distinct(10)=9e-11, null(10)=0, distinct(11)=9e-11, null(11)=0, distinct(12)=9e-11, null(12)=0, distinct(13)=9e-11, null(13)=0, distinct(14)=9e-11, null(14)=0, distinct(15)=9e-11, null(15)=0, distinct(16)=9e-11, null(16)=0, distinct(17)=9e-11, null(17)=0, distinct(18)=9e-11, null(18)=0, distinct(19)=9e-11, null(19)=0, distinct(20)=9e-11, null(20)=0, distinct(21)=9e-11, null(21)=0, distinct(22)=9e-11, null(22)=0, distinct(23)=9e-11, null(23)=0, distinct(24)=9e-11, null(24)=0, distinct(25)=9e-11, null(25)=0, distinct(26)=9e-11, null(26)=0, distinct(27)=9e-11, null(27)=0, distinct(28)=9e-11, null(28)=0, distinct(29)=9e-11, null(29)=0, distinct(30)=9e-11, null(30)=0, distinct(31)=9e-11, null(31)=0, distinct(32)=9e-11, null(32)=0, distinct(33)=9e-11, null(33)=0, distinct(1-33)=9e-11, null(1-33)=0]
+ ├── fd: ()-->(1-33)
+ ├── scan t
+ │    ├── columns: c1:1(int) c2:2(int) c3:3(int) c4:4(int) c5:5(int) c6:6(int) c7:7(int) c8:8(int) c9:9(int) c10:10(int) c11:11(int) c12:12(int) c13:13(int) c14:14(int) c15:15(int) c16:16(int) c17:17(int) c18:18(int) c19:19(int) c20:20(int) c21:21(int) c22:22(int) c23:23(int) c24:24(int) c25:25(int) c26:26(int) c27:27(int) c28:28(int) c29:29(int) c30:30(int) c31:31(int) c32:32(int) c33:33(int)
+ │    └── stats: [rows=1, distinct(1)=1, null(1)=1, distinct(2)=1, null(2)=1, distinct(3)=1, null(3)=1, distinct(4)=1, null(4)=1, distinct(5)=1, null(5)=1, distinct(6)=1, null(6)=1, distinct(7)=1, null(7)=1, distinct(8)=1, null(8)=1, distinct(9)=1, null(9)=1, distinct(10)=1, null(10)=1, distinct(11)=1, null(11)=1, distinct(12)=1, null(12)=1, distinct(13)=1, null(13)=1, distinct(14)=1, null(14)=1, distinct(15)=1, null(15)=1, distinct(16)=1, null(16)=1, distinct(17)=1, null(17)=1, distinct(18)=1, null(18)=1, distinct(19)=1, null(19)=1, distinct(20)=1, null(20)=1, distinct(21)=1, null(21)=1, distinct(22)=1, null(22)=1, distinct(23)=1, null(23)=1, distinct(24)=1, null(24)=1, distinct(25)=1, null(25)=1, distinct(26)=1, null(26)=1, distinct(27)=1, null(27)=1, distinct(28)=1, null(28)=1, distinct(29)=1, null(29)=1, distinct(30)=1, null(30)=1, distinct(31)=1, null(31)=1, distinct(32)=1, null(32)=1, distinct(33)=1, null(33)=1, distinct(1-33)=1, null(1-33)=1]
+ └── filters
+      ├── c1:1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      ├── c2:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      ├── c3:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+      ├── c4:4 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+      ├── c5:5 = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+      ├── c6:6 = 1 [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      ├── c7:7 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      ├── c8:8 = 1 [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+      ├── c9:9 = 1 [type=bool, outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+      ├── c10:10 = 1 [type=bool, outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+      ├── c11:11 = 1 [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      ├── c12:12 = 1 [type=bool, outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
+      ├── c13:13 = 1 [type=bool, outer=(13), constraints=(/13: [/1 - /1]; tight), fd=()-->(13)]
+      ├── c14:14 = 1 [type=bool, outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
+      ├── c15:15 = 1 [type=bool, outer=(15), constraints=(/15: [/1 - /1]; tight), fd=()-->(15)]
+      ├── c16:16 = 1 [type=bool, outer=(16), constraints=(/16: [/1 - /1]; tight), fd=()-->(16)]
+      ├── c17:17 = 1 [type=bool, outer=(17), constraints=(/17: [/1 - /1]; tight), fd=()-->(17)]
+      ├── c18:18 = 1 [type=bool, outer=(18), constraints=(/18: [/1 - /1]; tight), fd=()-->(18)]
+      ├── c19:19 = 1 [type=bool, outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
+      ├── c20:20 = 1 [type=bool, outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
+      ├── c21:21 = 1 [type=bool, outer=(21), constraints=(/21: [/1 - /1]; tight), fd=()-->(21)]
+      ├── c22:22 = 1 [type=bool, outer=(22), constraints=(/22: [/1 - /1]; tight), fd=()-->(22)]
+      ├── c23:23 = 1 [type=bool, outer=(23), constraints=(/23: [/1 - /1]; tight), fd=()-->(23)]
+      ├── c24:24 = 1 [type=bool, outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
+      ├── c25:25 = 1 [type=bool, outer=(25), constraints=(/25: [/1 - /1]; tight), fd=()-->(25)]
+      ├── c26:26 = 1 [type=bool, outer=(26), constraints=(/26: [/1 - /1]; tight), fd=()-->(26)]
+      ├── c27:27 = 1 [type=bool, outer=(27), constraints=(/27: [/1 - /1]; tight), fd=()-->(27)]
+      ├── c28:28 = 1 [type=bool, outer=(28), constraints=(/28: [/1 - /1]; tight), fd=()-->(28)]
+      ├── c29:29 = 1 [type=bool, outer=(29), constraints=(/29: [/1 - /1]; tight), fd=()-->(29)]
+      ├── c30:30 = 1 [type=bool, outer=(30), constraints=(/30: [/1 - /1]; tight), fd=()-->(30)]
+      ├── c31:31 = 1 [type=bool, outer=(31), constraints=(/31: [/1 - /1]; tight), fd=()-->(31)]
+      ├── c32:32 = 1 [type=bool, outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
+      └── c33:33 = 1 [type=bool, outer=(33), constraints=(/33: [/1 - /1]; tight), fd=()-->(33)]
