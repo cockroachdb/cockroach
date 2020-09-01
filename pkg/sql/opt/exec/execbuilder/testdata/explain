@@ -198,7 +198,7 @@ sort                                              ·             ·
                      └── hash join (left outer)   ·             ·
                           │                       equality      (oid) = (objoid)
                           ├── filter              ·             ·
-                          │    │                  filter        relkind IN ('S', 'r', 'v')
+                          │    │                  filter        relkind IN ('S', 'm', 'r', 'v')
                           │    └── virtual table  ·             ·
                           │                       table         pg_class@primary
                           └── filter              ·             ·
@@ -229,7 +229,7 @@ sort                                              ·             ·
                      └── hash join (left outer)   ·             ·
                           │                       equality      (oid) = (objoid)
                           ├── filter              ·             ·
-                          │    │                  filter        relkind IN ('S', 'r', 'v')
+                          │    │                  filter        relkind IN ('S', 'm', 'r', 'v')
                           │    └── virtual table  ·             ·
                           │                       table         pg_class@primary
                           └── filter              ·             ·
