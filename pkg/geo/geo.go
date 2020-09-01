@@ -621,17 +621,36 @@ func IsLinearRingCCW(linearRing *geom.LinearRing) bool {
 		}
 	}
 
-	// prevIdx is the previous point. If we are at the 0th point, the last coordinate
-	// is also the 0th point, so take the second last point.
-	// Note we don't have to apply this for "nextIdx" as we cap the search above at the
-	// second last vertex.
+	// Find the previous point in the ring that is not the same as smallest.
 	prevIdx := smallestIdx - 1
-	if smallestIdx == 0 {
-		prevIdx = linearRing.NumCoords() - 2
+	if prevIdx < 0 {
+		prevIdx = linearRing.NumCoords() - 1
 	}
-	a := linearRing.Coord(prevIdx)
-	b := smallest
-	c := linearRing.Coord(smallestIdx + 1)
+	for prevIdx != smallestIdx {
+		a := linearRing.Coord(prevIdx)
+		if a.X() != smallest.X() || a.Y() != smallest.Y() {
+			break
+		}
+		prevIdx--
+		if prevIdx < 0 {
+			prevIdx = linearRing.NumCoords() - 1
+		}
+	}
+	// Find the next point in the ring that is not the same as smallest.
+	nextIdx := smallestIdx + 1
+	if nextIdx >= linearRing.NumCoords() {
+		nextIdx = 0
+	}
+	for nextIdx != smallestIdx {
+		c := linearRing.Coord(nextIdx)
+		if c.X() != smallest.X() || c.Y() != smallest.Y() {
+			break
+		}
+		nextIdx++
+		if nextIdx >= linearRing.NumCoords() {
+			nextIdx = 0
+		}
+	}
 
 	// We could do the cross product, but we are only interested in the sign.
 	// To find the sign, reorganize into the orientation matrix:
@@ -640,6 +659,10 @@ func IsLinearRingCCW(linearRing *geom.LinearRing) bool {
 	//  1 x_c y_c
 	// and find the determinant.
 	// https://en.wikipedia.org/wiki/Curve_orientation#Orientation_of_a_simple_polygon
+	a := linearRing.Coord(prevIdx)
+	b := smallest
+	c := linearRing.Coord(nextIdx)
+
 	areaSign := a.X()*b.Y() - a.Y()*b.X() +
 		a.Y()*c.X() - a.X()*c.Y() +
 		b.X()*c.Y() - c.X()*b.Y()
