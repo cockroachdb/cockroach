@@ -1550,7 +1550,7 @@ func TestParse(t *testing.T) {
 		{`CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO 'bar' RECURRING '@daily' FULL BACKUP ALWAYS`},
 		{`CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO 'bar' RECURRING '@daily' FULL BACKUP '@weekly'`},
 		{`CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly'`},
-		{`CREATE SCHEDULE FOR BACKUP INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly' WITH EXPERIMENTAL SCHEDULE OPTIONS foo = 'bar'`},
+		{`CREATE SCHEDULE FOR BACKUP INTO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly' WITH SCHEDULE OPTIONS foo = 'bar'`},
 		{`EXPLAIN BACKUP TABLE foo TO 'bar'`},
 		{`BACKUP TABLE foo.foo, baz.baz TO 'bar'`},
 
