@@ -234,7 +234,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum + int(offset)
 			lastPeerGroupNum := wfr.PeerHelper.GetLastPeerGroupNum()
-			if peerGroupNum > lastPeerGroupNum {
+			if peerGroupNum > lastPeerGroupNum || peerGroupNum < 0 {
 				// peerGroupNum is out of bounds, so we return the index of the first
 				// row after the partition.
 				return wfr.unboundedFollowing(), nil
@@ -413,7 +413,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum + int(offset)
 			lastPeerGroupNum := wfr.PeerHelper.GetLastPeerGroupNum()
-			if peerGroupNum > lastPeerGroupNum {
+			if peerGroupNum > lastPeerGroupNum || peerGroupNum < 0 {
 				// peerGroupNum is out of bounds, so we return the index of the first
 				// row after the partition.
 				return wfr.unboundedFollowing(), nil
