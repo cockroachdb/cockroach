@@ -973,7 +973,7 @@ func (tc *Collection) getDescriptorVersionByID(
 func (tc *Collection) GetMutableTableVersionByID(
 	ctx context.Context, tableID descpb.ID, txn *kv.Txn,
 ) (*tabledesc.Mutable, error) {
-	desc, err := tc.getMutableDescriptorByID(ctx, tableID, txn)
+	desc, err := tc.GetMutableDescriptorByID(ctx, tableID, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -985,7 +985,9 @@ func (tc *Collection) GetMutableTableVersionByID(
 	return hydrated.(*tabledesc.Mutable), nil
 }
 
-func (tc *Collection) getMutableDescriptorByID(
+// GetMutableDescriptorByID returns a mutable implementation of the descriptor
+// with the requested id. An error is returned if no descriptor exists.
+func (tc *Collection) GetMutableDescriptorByID(
 	ctx context.Context, id descpb.ID, txn *kv.Txn,
 ) (catalog.MutableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting mutable descriptor for id %d", id)
@@ -1308,7 +1310,7 @@ func (tc *Collection) GetMutableTypeDescriptor(
 func (tc *Collection) GetMutableTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID,
 ) (*typedesc.Mutable, error) {
-	desc, err := tc.getMutableDescriptorByID(ctx, typeID, txn)
+	desc, err := tc.GetMutableDescriptorByID(ctx, typeID, txn)
 	if err != nil {
 		return nil, err
 	}
