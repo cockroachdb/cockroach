@@ -1066,10 +1066,6 @@ func prepareExistingTableDescForIngestion(
 	importing.State = descpb.DescriptorState_OFFLINE
 	importing.OfflineReason = "importing"
 
-	if err := backupccl.VerifyDescriptorVersion(ctx, txn, execCfg.Codec, existing); err != nil {
-		return nil, errors.Wrap(err, "another operation is currently operating on the table")
-	}
-
 	// TODO(dt): de-validate all the FKs.
 	if err := descriptors.WriteDesc(
 		ctx, false /* kvTrace */, importing, txn,
@@ -1320,7 +1316,6 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 	}
 	log.Event(ctx, "making tables live")
 
-	// Needed to trigger the schema change manager.
 	lm, ie, db := execCfg.LeaseManager, execCfg.InternalExecutor, execCfg.DB
 	err := descs.Txn(ctx, execCfg.Settings, lm, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -1357,14 +1352,11 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 			}
 
 			// TODO(dt): re-validate any FKs?
-			if err := backupccl.VerifyDescriptorVersion(ctx, txn, execCfg.Codec, prevTableDesc); err != nil {
-				return errors.Wrap(err, "publishing tables")
-			}
-
 			if err := descriptors.WriteDescToBatch(
 				ctx, false /* kvTrace */, newTableDesc, b,
 			); err != nil {
 				return errors.Wrapf(err, "publishing table %d", newTableDesc.ID)
+			}
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			return errors.Wrap(err, "publishing tables")
@@ -1516,9 +1508,6 @@ func (r *importResumer) dropTables(
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
 			newTableDesc.State = descpb.DescriptorState_PUBLIC
-		}
-		if err := backupccl.VerifyDescriptorVersion(ctx, txn, execCfg.Codec, prevTableDesc); err != nil {
-			return errors.Wrap(err, "rolling back tables")
 		}
 		if err := descriptors.WriteDescToBatch(
 			ctx, false /* kvTrace */, newTableDesc, b,
