@@ -2850,6 +2850,24 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			},
 		),
 	),
+	"st_normalize": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.Normalize(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns the geometry in its normalized form.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_intersects": makeBuiltin(
 		defProps(),
 		geometryOverload2BinaryPredicate(
@@ -4453,7 +4471,6 @@ Bottom Left.`,
 	"st_minimumclearance":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48989}),
 	"st_minimumclearanceline":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48990}),
 	"st_node":                     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
-	"st_normalize":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48994}),
 	"st_orderingequals":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49002}),
 	"st_orientedenvelope":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
 	"st_pointinsidecircle":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49007}),

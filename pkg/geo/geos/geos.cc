@@ -94,6 +94,7 @@ typedef CR_GEOS_Geometry (*CR_GEOS_MakeValid_r)(CR_GEOS_Handle, CR_GEOS_Geometry
 
 typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
+typedef int (*CR_GEOS_Normalize_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
 typedef CR_GEOS_Geometry (*CR_GEOS_Centroid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_ConvexHull_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
@@ -181,6 +182,7 @@ struct CR_GEOS {
 
   CR_GEOS_Area_r GEOSArea_r;
   CR_GEOS_Length_r GEOSLength_r;
+  CR_GEOS_Normalize_r GEOSNormalize_r;
 
   CR_GEOS_Centroid_r GEOSGetCentroid_r;
   CR_GEOS_ConvexHull_r GEOSConvexHull_r;
@@ -263,6 +265,7 @@ struct CR_GEOS {
     INIT(GEOSMakeValid_r);
     INIT(GEOSArea_r);
     INIT(GEOSLength_r);
+    INIT(GEOSNormalize_r);
     INIT(GEOSisSimple_r);
     INIT(GEOSGetCentroid_r);
     INIT(GEOSConvexHull_r);
@@ -522,6 +525,28 @@ CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
 
 CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
   return CR_GEOS_UnaryOperator(lib, lib->GEOSLength_r, a, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Normalize(CR_GEOS* lib, CR_GEOS_Slice a,
+                                 CR_GEOS_String* normalizedEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  *normalizedEWKB = {.data = NULL, .len = 0};
+
+  auto geomA = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  if (geomA != nullptr) {
+    auto exceptionStatus = lib->GEOSNormalize_r(handle, geomA);
+    if (exceptionStatus != -1) {
+      auto srid = lib->GEOSGetSRID_r(handle, geomA);
+      CR_GEOS_writeGeomToEWKB(lib, handle, geomA, normalizedEWKB, srid);
+    } else {
+      error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+    }
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
 }
 
 //
