@@ -501,6 +501,54 @@ func TestJobSchedulerToleratesBadSchedules(t *testing.T) {
 	require.Equal(t, numJobs, ex.numCalls)
 }
 
+func TestJobSchedulerRetriesFailed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	const executorName = "return_error"
+	ex := &returnErrorExecutor{}
+	defer registerScopedScheduledJobExecutor(executorName, ex)()
+
+	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
+
+	schedule := h.newScheduledJobForExecutor("schedule", executorName, nil)
+	require.NoError(t, schedule.Create(ctx, h.cfg.InternalExecutor, nil))
+
+	startTime := h.env.Now()
+	execTime := startTime.Add(time.Hour).Add(time.Second)
+
+	cron := cronexpr.MustParse("@hourly")
+
+	for _, tc := range []struct {
+		onError jobspb.ScheduleDetails_ErrorHandlingBehavior
+		nextRun time.Time
+	}{
+		{jobspb.ScheduleDetails_PAUSE_SCHED, time.Time{}},
+		{jobspb.ScheduleDetails_RETRY_SOON, execTime.Add(retryFailedJobAfter).Round(time.Microsecond)},
+		{jobspb.ScheduleDetails_RETRY_SCHED, cron.Next(execTime).Round(time.Microsecond)},
+	} {
+		t.Run(tc.onError.String(), func(t *testing.T) {
+			h.env.SetTime(startTime)
+			schedule.SetScheduleDetails(jobspb.ScheduleDetails{OnError: tc.onError})
+			require.NoError(t, schedule.SetSchedule("@hourly"))
+			require.NoError(t, schedule.Update(ctx, h.cfg.InternalExecutor, nil))
+
+			h.env.SetTime(execTime)
+			require.NoError(t,
+				h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+					return daemon.executeSchedules(ctx, 1, txn)
+				}))
+
+			loaded := h.loadSchedule(t, schedule.ScheduleID())
+			require.EqualValues(t, tc.nextRun, loaded.NextRun())
+		})
+	}
+}
+
 func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

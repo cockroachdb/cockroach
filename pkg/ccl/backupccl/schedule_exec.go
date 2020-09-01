@@ -153,8 +153,7 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 		"backup job %d scheduled by %d failed with status %s",
 		jobID, schedule.ScheduleID(), jobStatus)
 	log.Errorf(ctx, "backup error: %v	", err)
-	jobs.DefaultHandleFailedRun(schedule, jobID, err)
-
+	jobs.DefaultHandleFailedRun(schedule, "backup job %d failed with err=%v", jobID, err)
 	return nil
 }
 
