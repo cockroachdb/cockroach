@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -284,26 +283,13 @@ func (p *planner) writeTableDescToBatch(
 		); err != nil {
 			return err
 		}
-	} else {
-		// Only increment the table descriptor version once in this transaction.
-		tableDesc.MaybeIncrementVersion()
 	}
 
 	if err := tableDesc.ValidateTable(); err != nil {
 		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 
-	if err := p.Descriptors().AddUncommittedDescriptor(tableDesc); err != nil {
-		return err
-	}
-
-	return catalogkv.WriteDescToBatch(
-		ctx,
-		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.ExecCfg().Settings,
-		b,
-		p.ExecCfg().Codec,
-		tableDesc.GetID(),
-		tableDesc,
+	return p.Descriptors().WriteDescToBatch(
+		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), tableDesc, b,
 	)
 }
