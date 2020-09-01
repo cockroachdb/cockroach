@@ -74,17 +74,16 @@ func NewScheduledJobExecutor(name string) (ScheduledJobExecutor, error) {
 
 // DefaultHandleFailedRun is a default implementation for handling failed run
 // (either system.job failure, or perhaps error processing the schedule itself).
-func DefaultHandleFailedRun(schedule *ScheduledJob, jobID int64, err error) {
+func DefaultHandleFailedRun(schedule *ScheduledJob, fmtOrMsg string, args ...interface{}) {
 	switch schedule.ScheduleDetails().OnError {
 	case jobspb.ScheduleDetails_RETRY_SOON:
-		schedule.SetScheduleStatus("retrying job %d due to failure: %v", jobID, err)
+		schedule.SetScheduleStatus("retrying: "+fmtOrMsg, args...)
 		schedule.SetNextRun(schedule.env.Now().Add(retryFailedJobAfter)) // TODO(yevgeniy): backoff
 	case jobspb.ScheduleDetails_PAUSE_SCHED:
 		schedule.Pause()
-		schedule.SetScheduleStatus("schedule paused due job %d failure: %v", jobID, err)
-	default:
-		// Nothing: ScheduleDetails_RETRY_SCHED already handled since
-		// the next run was set when we started running scheduled job.
+		schedule.SetScheduleStatus("schedule paused: "+fmtOrMsg, args...)
+	case jobspb.ScheduleDetails_RETRY_SCHED:
+		schedule.SetScheduleStatus("reschedule: "+fmtOrMsg, args...)
 	}
 }
 
