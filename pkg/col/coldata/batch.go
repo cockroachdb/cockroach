@@ -41,8 +41,8 @@ type Batch interface {
 	// ColVecs returns all of the underlying Vecs in this batch.
 	ColVecs() []Vec
 	// Selection, if not nil, returns the selection vector on this batch: a
-	// densely-packed list of the indices in each column that have not been
-	// filtered out by a previous step.
+	// densely-packed list of the *increasing* indices in each column that have
+	// not been filtered out by a previous step.
 	Selection() []int
 	// SetSelection sets whether this batch is using its selection vector or not.
 	SetSelection(bool)
