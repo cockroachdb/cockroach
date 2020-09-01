@@ -30,6 +30,7 @@ const (
 	maxVecMemoryBytesTagSuffix = "mem.vectorized.max"
 	maxVecDiskBytesTagSuffix   = "disk.vectorized.max"
 	bytesReadTagSuffix         = "bytes.read"
+	rowsReadTagSuffix          = "rows.read"
 )
 
 // Stats is part of SpanStats interface.
@@ -50,6 +51,9 @@ func (vs *VectorizedStats) Stats() map[string]string {
 	if vs.BytesRead != 0 {
 		stats[bytesReadTagSuffix] = humanizeutil.IBytes(vs.BytesRead)
 	}
+	if vs.RowsRead != 0 {
+		stats[rowsReadTagSuffix] = fmt.Sprintf("%d", vs.RowsRead)
+	}
 	return stats
 }
 
@@ -61,6 +65,7 @@ const (
 	maxVecMemoryBytesQueryPlanSuffix = "max vectorized memory allocated"
 	maxVecDiskBytesQueryPlanSuffix   = "max vectorized disk allocated"
 	bytesReadQueryPlanSuffix         = "bytes read"
+	rowsReadQueryPlanSuffix          = "rows read"
 )
 
 // StatsForQueryPlan is part of DistSQLSpanStats interface.
@@ -87,6 +92,9 @@ func (vs *VectorizedStats) StatsForQueryPlan() []string {
 	if vs.BytesRead != 0 {
 		stats = append(stats,
 			fmt.Sprintf("%s: %s", bytesReadQueryPlanSuffix, humanizeutil.IBytes(vs.BytesRead)))
+	}
+	if vs.RowsRead != 0 {
+		stats = append(stats, fmt.Sprintf("%s: %d", rowsReadQueryPlanSuffix, vs.RowsRead))
 	}
 	return stats
 }

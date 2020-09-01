@@ -312,6 +312,11 @@ func (tr *tableReader) GetBytesRead() int64 {
 	return tr.fetcher.GetBytesRead()
 }
 
+// GetRowsRead is part of the execinfra.IOReader interface.
+func (tr *tableReader) GetRowsRead() int64 {
+	return tr.rowsRead
+}
+
 func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
@@ -329,7 +334,7 @@ func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
-	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.fetcher.GetBytesRead(), tr.rowsRead
+	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.GetBytesRead(), tr.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
 }
