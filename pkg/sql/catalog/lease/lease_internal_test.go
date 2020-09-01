@@ -184,13 +184,6 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 
-	// Verifies that ErrDidntUpdateDescriptor doesn't leak from Publish().
-	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
-		return ErrDidntUpdateDescriptor
-	}, nil); err != nil {
-		t.Fatal(err)
-	}
-
 	// Publish a new version for the table
 	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
 		return nil
