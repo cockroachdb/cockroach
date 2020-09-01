@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // invariantsChecker is a helper Operator that will check that invariants that
@@ -48,6 +50,16 @@ func (i invariantsChecker) Next(ctx context.Context) coldata.Batch {
 		v := b.ColVec(colIdx)
 		if v.CanonicalTypeFamily() == types.BytesFamily {
 			v.Bytes().AssertOffsetsAreNonDecreasing(n)
+		}
+	}
+	if sel := b.Selection(); sel != nil {
+		for i := 1; i < n; i++ {
+			if sel[i] <= sel[i-1] {
+				colexecerror.InternalError(errors.AssertionFailedf(
+					"unexpectedly selection vector is not an increasing sequence "+
+						"at position %d: %v", i, sel[:n],
+				))
+			}
 		}
 	}
 	return b
