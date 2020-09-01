@@ -114,6 +114,10 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 			eventRemoveColumn{
 				CanRemoveColumnAfter: fsm.False,
 			}: 5,
+
+			// eventCreateEnum creates a new enum type.
+			// TODO(ssd): Renable createEnum after cockroachdb/cockroach#65136 is fixed
+			eventCreateEnum{}: 0,
 		},
 	}
 
@@ -240,6 +244,8 @@ type nemeses struct {
 	openTxnType            openTxnType
 	openTxnID              int
 	openTxnTs              string
+
+	enumCount int
 }
 
 // nextEvent selects the next state transition.
@@ -319,6 +325,7 @@ type eventAddColumn struct {
 type eventRemoveColumn struct {
 	CanRemoveColumnAfter fsm.Bool
 }
+type eventCreateEnum struct{}
 type eventFinished struct{}
 
 func (eventOpenTxn) Event()      {}
@@ -332,6 +339,7 @@ func (eventRollback) Event()     {}
 func (eventSplit) Event()        {}
 func (eventAddColumn) Event()    {}
 func (eventRemoveColumn) Event() {}
+func (eventCreateEnum) Event()   {}
 func (eventFinished) Event()     {}
 
 var stateTransitions = fsm.Pattern{
@@ -416,6 +424,15 @@ var stateTransitions = fsm.Pattern{
 				CanAddColumn:    fsm.Var("CanAddColumn"),
 				CanRemoveColumn: fsm.Var("CanRemoveColumn")},
 			Action: logEvent(openTxn),
+		},
+		eventCreateEnum{}: {
+			Next: stateRunning{
+				FeedPaused:      fsm.Var("FeedPaused"),
+				TxnOpen:         fsm.False,
+				CanAddColumn:    fsm.Var("CanAddColumn"),
+				CanRemoveColumn: fsm.Var("CanRemoveColumn"),
+			},
+			Action: logEvent(createEnum),
 		},
 	},
 	stateRunning{
@@ -574,6 +591,16 @@ func rollback(a fsm.Args) error {
 	return ns.txn.Rollback()
 }
 
+func createEnum(a fsm.Args) error {
+	ns := a.Extended.(*nemeses)
+
+	if _, err := ns.db.Exec(fmt.Sprintf(`CREATE TYPE enum%d AS ENUM ('hello')`, ns.enumCount)); err != nil {
+		return err
+	}
+	ns.enumCount++
+	return nil
+}
+
 func addColumn(a fsm.Args) error {
 	ns := a.Extended.(*nemeses)
 
@@ -582,10 +609,22 @@ func addColumn(a fsm.Args) error {
 			`there are less than %d columns.`, ns.maxTestColumnCount)
 	}
 
-	if _, err := ns.db.Exec(fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d STRING DEFAULT 'x'`,
-		ns.currentTestColumnCount)); err != nil {
-		return err
+	// Some of the time, add a column of an enum type.
+	if ns.enumCount > 0 && rand.Intn(4) < 1 {
+		// Pick a random enum to add.
+		enum := rand.Intn(ns.enumCount)
+		if _, err := ns.db.Exec(fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d enum%d DEFAULT 'hello'`,
+			ns.currentTestColumnCount, enum)); err != nil {
+			return err
+		}
+	} else {
+		// Otherwise, just add a normal string column.
+		if _, err := ns.db.Exec(fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d STRING DEFAULT 'x'`,
+			ns.currentTestColumnCount)); err != nil {
+			return err
+		}
 	}
+
 	ns.currentTestColumnCount++
 	var rows int
 	// Adding a column should trigger a full table scan.
