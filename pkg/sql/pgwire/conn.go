@@ -321,6 +321,52 @@ Loop:
 		typ, n, err = c.readBuf.ReadTypedMsg(&c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
+			if pgwirebase.IsMessageTooBigError(err) {
+				log.VEventf(ctx, 1, "pgwire: found big size message; attempting to slurp bytes and return error: %s", err)
+
+				// Slurp the remaining bytes.
+				slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
+				c.metrics.BytesInCount.Inc(int64(slurpN))
+				if slurpErr != nil {
+					log.VEventf(ctx, 1, "pgwire: error slurping remaining bytes: %s", slurpErr)
+					break Loop
+				}
+
+				// If we are on a terminate, exit anyway but log the error.
+				if typ == pgwirebase.ClientMsgTerminate {
+					log.VEventf(ctx, 1, "pgwire: found protocol violation on a terminate: %s", err)
+					break Loop
+				}
+
+				if err := writeErr(
+					ctx,
+					&sqlServer.GetExecutorConfig().Settings.SV,
+					errors.WithHintf(
+						err,
+						"the maximum message size can be configured using the %s CLUSTER SETTING",
+						pgwirebase.ReadBufferMaxMessageSizeClusterSettingName,
+					),
+					&c.msgBuilder,
+					&c.writerState.buf,
+				); err != nil {
+					log.VEventf(ctx, 1, "pgwire: error writing too big error message to the client")
+					break Loop
+				}
+
+				switch typ {
+				case pgwirebase.ClientMsgSimpleQuery, pgwirebase.ClientMsgSync:
+					// We have to send the sync message back for anything expecting a sync afterwards.
+					if err = c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
+						log.VEventf(ctx, 1, "pgwire: error writing sync to the client whilst message is too big")
+						break Loop
+					}
+				}
+
+				// We cannot break here, as more messages may come in that results in the clear
+				// error message not being seen.
+				continue Loop
+			}
+			log.VEventf(ctx, 1, "pgwire: error reading input: %s", err)
 			break Loop
 		}
 		timeReceived := timeutil.Now()

@@ -924,3 +924,164 @@ func (f *dynamicRequestFilter) filter(
 func noopRequestFilter(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 	return nil
 }
+
+func TestBigClientMessage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params, _ := tests.CreateTestServerParams()
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	// Form a 1MB string.
+	longStr := "a"
+	for len(longStr) < 1<<20 {
+		longStr += longStr
+	}
+	shortStr := "b"
+
+	pgURL, cleanup := sqlutils.PGUrl(
+		t,
+		s.ServingSQLAddr(),
+		"TestBigClientMessage",
+		url.User(security.RootUser),
+	)
+	defer cleanup()
+
+	testCases := []struct {
+		desc                           string
+		shortStrAction                 func(*pgx.Conn) error
+		longStrAction                  func(*pgx.Conn) error
+		expectedBigMessageErrorStrings []string
+	}{
+		{
+			desc: "simple query",
+			shortStrAction: func(c *pgx.Conn) error {
+				_, err := c.Exec(fmt.Sprintf(`SELECT '%s'`, shortStr))
+				return err
+			},
+			longStrAction: func(c *pgx.Conn) error {
+				_, err := c.Exec(fmt.Sprintf(`SELECT '%s'`, longStr))
+				return err
+			},
+			expectedBigMessageErrorStrings: []string{
+				"ERROR: message size 1.0 MiB bigger than maximum allowed message size 32 KiB (SQLSTATE 08P01)",
+			},
+		},
+		{
+			desc: "prepared statement has string",
+			shortStrAction: func(c *pgx.Conn) error {
+				_, err := c.Prepare("short_statement", fmt.Sprintf("SELECT $1::string, '%s'", shortStr))
+				if err != nil {
+					return err
+				}
+				r := c.QueryRow("short_statement", shortStr)
+				var str string
+				return r.Scan(&str, &str)
+			},
+			longStrAction: func(c *pgx.Conn) error {
+				_, err := c.Prepare("long_statement", fmt.Sprintf("SELECT $1::string, '%s'", longStr))
+				if err != nil {
+					return err
+				}
+				r := c.QueryRow("long_statement", shortStr)
+				var str string
+				return r.Scan(&str, &str)
+			},
+			// TODO(jordanlewis): if we do the ignoring of errors in pgwire until a sync statement, we should
+			// only see the 32KiB message below.
+			expectedBigMessageErrorStrings: []string{
+				`ERROR: unknown prepared statement "long_statement" (SQLSTATE 26000)`,
+				"ERROR: message size 1.0 MiB bigger than maximum allowed message size 32 KiB (SQLSTATE 08P01)",
+			},
+		},
+		{
+			desc: "prepared statement with argument",
+			shortStrAction: func(c *pgx.Conn) error {
+				_, err := c.Prepare("short_arg", "SELECT $1::string")
+				if err != nil {
+					return err
+				}
+				r := c.QueryRow("short_arg", shortStr)
+				var str string
+				return r.Scan(&str)
+			},
+			longStrAction: func(c *pgx.Conn) error {
+				_, err := c.Prepare("long_arg", "SELECT $1::string")
+				if err != nil {
+					return err
+				}
+				r := c.QueryRow("long_arg", longStr)
+				var str string
+				return r.Scan(&str)
+			},
+			// TODO(jordanlewis): if we do the ignoring of errors in pgwire until a sync statement, we should
+			// only see the 32KiB message below.
+			expectedBigMessageErrorStrings: []string{
+				`ERROR: unknown portal "" (SQLSTATE 34000)`,
+				"ERROR: message size 1.0 MiB bigger than maximum allowed message size 32 KiB (SQLSTATE 08P01)",
+			},
+		},
+	}
+
+	t.Run("allow big messages", func(t *testing.T) {
+		for _, tc := range testCases {
+			t.Run(tc.desc, func(t *testing.T) {
+				conf, err := pgx.ParseConnectionString(pgURL.String())
+				require.NoError(t, err)
+
+				t.Run("short string", func(t *testing.T) {
+					c, err := pgx.Connect(conf)
+					require.NoError(t, err)
+					defer func() { _ = c.Close() }()
+					require.NoError(t, tc.shortStrAction(c))
+				})
+
+				t.Run("long string", func(t *testing.T) {
+					c, err := pgx.Connect(conf)
+					require.NoError(t, err)
+					defer func() { _ = c.Close() }()
+					require.NoError(t, tc.longStrAction(c))
+				})
+			})
+		}
+	})
+
+	// Set the cluster setting to be less than 1MB.
+	_, err := mainDB.Exec(`SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '32 KiB'`)
+	require.NoError(t, err)
+
+	t.Run("disallow big messages", func(t *testing.T) {
+		for _, tc := range testCases {
+			t.Run(tc.desc, func(t *testing.T) {
+				conf, err := pgx.ParseConnectionString(pgURL.String())
+				require.NoError(t, err)
+
+				t.Run("short string", func(t *testing.T) {
+					c, err := pgx.Connect(conf)
+					require.NoError(t, err)
+					defer func() { _ = c.Close() }()
+					require.NoError(t, tc.shortStrAction(c))
+				})
+
+				t.Run("long string", func(t *testing.T) {
+					var gotErr error
+					// Allow the cluster setting to propagate.
+					testutils.SucceedsSoon(t, func() error {
+						c, err := pgx.Connect(conf)
+						require.NoError(t, err)
+						defer func() { _ = c.Close() }()
+
+						err = tc.longStrAction(c)
+						if err != nil {
+							gotErr = err
+							return nil
+						}
+						return errors.Newf("expected error")
+					})
+					require.Error(t, gotErr)
+					require.Contains(t, tc.expectedBigMessageErrorStrings, gotErr.Error())
+				})
+			})
+		}
+	})
+}
