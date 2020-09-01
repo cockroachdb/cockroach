@@ -11,6 +11,7 @@
 package geomfn
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -178,6 +179,28 @@ func TestPoints(t *testing.T) {
 			require.NoError(t, err)
 			require.EqualValues(t, tc.expected, wkt)
 			require.EqualValues(t, srid, result.SRID())
+		})
+	}
+}
+
+func TestNormalize(t *testing.T) {
+	testCases := []struct {
+		a        geo.Geometry
+		expected geo.Geometry
+	}{
+		{rightRect, geo.MustParseGeometry("POLYGON((0 0, 0 1, 1 1, 1 0, 0 0))")},
+		{emptyRect, emptyRect},
+		{rightRectPoint, rightRectPoint},
+		{middleLine, middleLine},
+		{geo.MustParseGeometry(`GEOMETRYCOLLECTION(POINT(2 3),MULTILINESTRING((0 0, 1 1),(2 2, 3 3)),POLYGON((0 10,0 0,10 0,10 10,0 10),(4 2,2 2,2 4,4 4,4 2),(6 8,8 8,8 6,6 6,6 8)))`),
+			geo.MustParseGeometry(`GEOMETRYCOLLECTION(POLYGON((0 0,0 10,10 10,10 0,0 0),(6 6,8 6,8 8,6 8,6 6),(2 2,4 2,4 4,2 4,2 2)),MULTILINESTRING((2 2,3 3),(0 0,1 1)),POINT(2 3))`)},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
+			g, err := Normalize(tc.a)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, g)
 		})
 	}
 }

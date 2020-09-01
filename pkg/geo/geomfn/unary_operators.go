@@ -206,3 +206,12 @@ func pushCoord(points *geom.MultiPoint, coord geom.Coord) error {
 	}
 	return points.Push(point)
 }
+
+// Normalize returns the geometry in its normalized form.
+func Normalize(g geo.Geometry) (geo.Geometry, error) {
+	retEWKB, err := geos.Normalize(g.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.ParseGeometryFromEWKB(retEWKB)
+}
