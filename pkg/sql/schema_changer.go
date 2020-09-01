@@ -941,9 +941,9 @@ func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID des
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
-		InitialBackoff: 20 * time.Millisecond,
-		MaxBackoff:     200 * time.Millisecond,
-		Multiplier:     2,
+		InitialBackoff: 5 * time.Millisecond,
+		MaxBackoff:     time.Second,
+		Multiplier:     1.5,
 	}
 	log.Infof(ctx, "waiting for a single version...")
 	version, err := leaseMgr.WaitForOneVersion(ctx, descID, retryOpts)
@@ -1960,7 +1960,7 @@ func (r schemaChangeResumer) Resume(
 			},
 		}
 		opts := retry.Options{
-			InitialBackoff: 100 * time.Millisecond,
+			InitialBackoff: 20 * time.Millisecond,
 			MaxBackoff:     20 * time.Second,
 			Multiplier:     1.5,
 		}

@@ -4021,10 +4021,7 @@ func TestImportControlJob(t *testing.T) {
 
 	skip.WithIssue(t, 51792, "TODO(dt): add knob to force faster progress checks.")
 
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
 	var serverArgs base.TestServerArgs
 	// Disable external processing of mutations so that the final check of
@@ -4286,10 +4283,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	// node down are detected and retried.
 	skip.WithIssue(t, 51793, "flaky due to undetected kinds of failures when the node is shutdown")
 
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
@@ -4367,11 +4361,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	skip.WithIssue(t, 51794, "TODO(dt): this relies on chunking done by prior version of IMPORT."+
 		"Rework this test, or replace it with resume-tests + jobs infra tests.")
 
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
-	jobs.DefaultCancelInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)
@@ -4502,11 +4492,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
-	jobs.DefaultCancelInterval = 100 * time.Millisecond
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
 	const nodes = 1
 	nl := jobs.NewFakeNodeLiveness(nodes)

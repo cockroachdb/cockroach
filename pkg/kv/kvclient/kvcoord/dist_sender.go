@@ -960,7 +960,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 			// to intent resolution and can be safely ignored.
 			ignoreMissing, err = ds.detectIntentMissingDueToIntentResolution(ctx, br.Txn)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, roachpb.NewErrorWithTxn(err, br.Txn)
 			}
 		}
 		if !ignoreMissing {

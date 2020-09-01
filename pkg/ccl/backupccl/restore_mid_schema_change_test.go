@@ -126,10 +126,9 @@ func restoreMidSchemaChange(backupDir, schemaChangeName string) func(t *testing.
 
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
-		defer func(oldInterval time.Duration) {
-			jobs.DefaultAdoptInterval = oldInterval
-		}(jobs.DefaultAdoptInterval)
-		jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+
 		const numAccounts = 1000
 		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 			InitNone, base.TestClusterArgs{ServerArgs: params})

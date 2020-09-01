@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -47,7 +48,7 @@ WHERE claim_session_id IS NULL ORDER BY created DESC LIMIT $3 RETURNING id`,
 // processClaimedJobs processes all jobs currently claimed by the registry.
 func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
 	rows, err := r.ex.QueryEx(
-		ctx, "select-running/reverting-jobs", nil,
+		ctx, "select-running/get-claimed-jobs", nil,
 		sessiondata.InternalExecutorOverride{User: security.NodeUser}, `
 SELECT id FROM system.jobs
 WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance_id = $4)`,
@@ -58,20 +59,54 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 	}
 
 	// This map will eventually contain the job ids that must be resumed.
-	claimedToResume := make(map[int64]bool, len(rows))
+	claimedToResume := make(map[int64]struct{}, len(rows))
 	// Initially all claimed jobs are supposed to be resumed but some may be
 	// running on this registry already so we will filter them out later.
 	for _, row := range rows {
 		id := int64(*row[0].(*tree.DInt))
-		claimedToResume[id] = true
+		claimedToResume[id] = struct{}{}
 	}
 
+	r.filterAlreadyRunningAndCancelFromPreviousSessions(ctx, s, claimedToResume)
+	r.resumeClaimedJobs(ctx, s, claimedToResume)
+	return nil
+}
+
+// resumeClaimedJobs invokes r.resumeJob for each job in claimedToResume. It
+// does so concurrently.
+func (r *Registry) resumeClaimedJobs(
+	ctx context.Context, s sqlliveness.Session, claimedToResume map[int64]struct{},
+) {
+	const resumeConcurrency = 64
+	sem := make(chan struct{}, resumeConcurrency)
+	var wg sync.WaitGroup
+	add := func() { sem <- struct{}{}; wg.Add(1) }
+	done := func() { <-sem; wg.Done() }
+	for id := range claimedToResume {
+		add()
+		go func(id int64) {
+			defer done()
+			if err := r.resumeJob(ctx, id, s); err != nil && ctx.Err() == nil {
+				log.Errorf(ctx, "could not run claimed job %d: %v", id, err)
+			}
+		}(id)
+	}
+	wg.Wait()
+}
+
+// filterAlreadyRunningAndCancelFromPreviousSessions will lock the registry and
+// inspect the set of currently running jobs, removing those entries from
+// claimedToResume. Additionally it verifies that the session associated with the
+// running job matches the current session, canceling the job if not.
+func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
+	ctx context.Context, s sqlliveness.Session, claimedToResume map[int64]struct{},
+) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Process all current adopted jobs in our in-memory jobs map.
 	for id, aj := range r.mu.adoptedJobs {
 		if aj.sid != s.ID() {
-			log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
+			log.Warningf(ctx, "job %d: running without having a live claim; canceling", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
 		} else {
@@ -82,15 +117,9 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 			}
 		}
 	}
-
-	for id := range claimedToResume {
-		if err := r.resumeJob(ctx, id, s); err != nil {
-			log.Errorf(ctx, "could not run claimed job: %v", err)
-		}
-	}
-	return nil
 }
 
+// resumeJob resumes a claimed job.
 func (r *Registry) resumeJob(ctx context.Context, jobID int64, s sqlliveness.Session) error {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 	row, err := r.ex.QueryRowEx(
@@ -146,11 +175,12 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	resultsCh := make(chan tree.Datums)
 
 	errCh := make(chan error, 1)
-	r.mu.adoptedJobs[jobID] = &adoptedJob{sid: s.ID(), cancel: cancel}
+	aj := &adoptedJob{sid: s.ID(), cancel: cancel}
+	r.addAdoptedJob(jobID, aj)
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
 		r.runJob(resumeCtx, resumer, resultsCh, errCh, job, status, job.taskName(), nil)
 	}); err != nil {
-		delete(r.mu.adoptedJobs, jobID)
+		r.removeAdoptedJob(jobID)
 		return err
 	}
 	go func() {
@@ -165,6 +195,18 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 		close(resultsCh)
 	}()
 	return nil
+}
+
+func (r *Registry) removeAdoptedJob(jobID int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.mu.adoptedJobs, jobID)
+}
+
+func (r *Registry) addAdoptedJob(jobID int64, aj *adoptedJob) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.adoptedJobs[jobID] = aj
 }
 
 func (r *Registry) runJob(
