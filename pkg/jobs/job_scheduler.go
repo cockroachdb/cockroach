@@ -313,8 +313,22 @@ func (s *jobScheduler) executeSchedules(
 
 			// Try updating schedule record to indicate schedule execution error.
 			if err := withSavePoint(ctx, txn, func() error {
-				schedule.ClearDirty() // Make sure we only update status field.
-				schedule.SetScheduleStatus("failed to create job: %s", processErr)
+				// Discard changes already made to the schedule, and treat schedule
+				// execution failure the same way we treat job failure.
+				schedule.ClearDirty()
+				DefaultHandleFailedRun(schedule,
+					"failed to create job for schedule %d: err=%s",
+					schedule.ScheduleID(), processErr)
+
+				// DefaultHandleFailedRun assumes schedule already had its next run set.
+				// So, if the policy is to reschedule based on regular recurring schedule,
+				// we need to set next run again..
+				if schedule.HasRecurringSchedule() &&
+					schedule.ScheduleDetails().OnError == jobspb.ScheduleDetails_RETRY_SCHED {
+					if err := schedule.ScheduleNextRun(); err != nil {
+						return err
+					}
+				}
 				return schedule.Update(ctx, s.InternalExecutor, txn)
 			}); err != nil {
 				if errors.HasType(err, (*savePointError)(nil)) {
