@@ -117,7 +117,7 @@ func completeDroppedIndex(
 	indexID descpb.IndexID,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
-	if err := updateDescriptorGCMutations(ctx, execCfg, table, indexID); err != nil {
+	if err := updateDescriptorGCMutations(ctx, execCfg, table.ID, indexID); err != nil {
 		return errors.Wrapf(err, "updating GC mutations")
 	}
 
