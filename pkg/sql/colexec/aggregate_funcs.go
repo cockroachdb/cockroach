@@ -14,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -188,7 +189,7 @@ func newAggregateFuncsAlloc(
 	outputTypes []*types.T,
 	allocSize int64,
 	isHashAgg bool,
-) (*aggregateFuncsAlloc, *vecToDatumConverter, Closers, error) {
+) (*aggregateFuncsAlloc, *colconv.VecToDatumConverter, Closers, error) {
 	funcAllocs := make([]aggregateFuncAlloc, len(spec.Aggregations))
 	var toClose Closers
 	var vecIdxsToConvert []int
@@ -208,7 +209,7 @@ func newAggregateFuncsAlloc(
 			}
 		}
 	}
-	inputArgsConverter := newVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
+	inputArgsConverter := colconv.NewVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
 	for i, aggFn := range spec.Aggregations {
 		var err error
 		switch aggFn.Func {

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,7 +35,7 @@ func NewTupleProjOp(
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	return &tupleProjOp{
 		OneInputNode:      NewOneInputNode(input),
-		converter:         newVecToDatumConverter(len(inputTypes), tupleContentsIdxs),
+		converter:         colconv.NewVecToDatumConverter(len(inputTypes), tupleContentsIdxs),
 		tupleContentsIdxs: tupleContentsIdxs,
 		outputType:        outputType,
 		outputIdx:         outputIdx,
@@ -44,7 +45,7 @@ func NewTupleProjOp(
 type tupleProjOp struct {
 	OneInputNode
 
-	converter         *vecToDatumConverter
+	converter         *colconv.VecToDatumConverter
 	tupleContentsIdxs []int
 	outputType        *types.T
 	outputIdx         int
@@ -62,7 +63,7 @@ func (t *tupleProjOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	t.converter.convertBatchAndDeselect(batch)
+	t.converter.ConvertBatchAndDeselect(batch)
 	projVec := batch.ColVec(t.outputIdx)
 	if projVec.MaybeHasNulls() {
 		// We need to make sure that there are no left over null values in the
@@ -85,7 +86,7 @@ func (t *tupleProjOp) Next(ctx context.Context) coldata.Batch {
 func (t *tupleProjOp) createTuple(convertedIdx int) tree.Datum {
 	tuple := tree.NewDTupleWithLen(t.outputType, len(t.tupleContentsIdxs))
 	for i, columnIdx := range t.tupleContentsIdxs {
-		tuple.D[i] = t.converter.getDatumColumn(columnIdx)[convertedIdx]
+		tuple.D[i] = t.converter.GetDatumColumn(columnIdx)[convertedIdx]
 	}
 	return tuple
 }

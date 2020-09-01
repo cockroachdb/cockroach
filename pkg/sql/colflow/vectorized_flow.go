@@ -339,6 +339,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // must have already been wrapped).
 func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
 	op colexecbase.Operator,
+	ioReader execinfra.IOReader,
 	inputs []colexecbase.Operator,
 	id int32,
 	idTagKey string,
@@ -362,8 +363,8 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
 		inputStatsCollectors[i] = sc
 	}
 	vsc := colexec.NewVectorizedStatsCollector(
-		op, id, idTagKey, len(inputs) == 0, inputWatch, memMonitors, diskMonitors,
-		inputStatsCollectors,
+		op, ioReader, id, idTagKey, inputWatch,
+		memMonitors, diskMonitors, inputStatsCollectors,
 	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
 	return vsc, nil
@@ -688,8 +689,8 @@ func (s *vectorizedFlowCreator) setupRouter(
 				// information (e.g. output stall time).
 				var err error
 				localOp, err = s.wrapWithVectorizedStatsCollector(
-					op, nil /* inputs */, int32(stream.StreamID),
-					execinfrapb.StreamIDTagKey, mons,
+					op, nil /* ioReadingOp */, nil, /* inputs */
+					int32(stream.StreamID), execinfrapb.StreamIDTagKey, mons,
 				)
 				if err != nil {
 					return err
@@ -761,7 +762,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			op := colexecbase.Operator(inbox)
 			if s.recordingStats {
 				op, err = s.wrapWithVectorizedStatsCollector(
-					inbox, nil /* inputs */, int32(inputStream.StreamID),
+					inbox, nil /* ioReadingOp */, nil /* inputs */, int32(inputStream.StreamID),
 					execinfrapb.StreamIDTagKey, nil, /* monitors */
 				)
 				if err != nil {
@@ -819,7 +820,8 @@ func (s *vectorizedFlowCreator) setupInput(
 			// this stats collector to display stats.
 			var err error
 			op, err = s.wrapWithVectorizedStatsCollector(
-				op, statsInputsAsOps, -1 /* id */, "" /* idTagKey */, nil, /* monitors */
+				op, nil /* ioReadingOp */, statsInputsAsOps, -1, /* id */
+				"" /* idTagKey */, nil, /* monitors */
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -892,8 +894,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 				},
 			)
 		}
-		outbox, err :=
-			s.setupRemoteOutputStream(ctx, flowCtx, op, opOutputTypes, outputStream, metadataSourcesQueue, toClose, factory)
+		outbox, err := s.setupRemoteOutputStream(
+			ctx, flowCtx, op, opOutputTypes, outputStream, metadataSourcesQueue, toClose, factory,
+		)
 		if err != nil {
 			return err
 		}
@@ -1057,7 +1060,8 @@ func (s *vectorizedFlowCreator) setupFlow(
 		op := result.Op
 		if s.recordingStats {
 			op, err = s.wrapWithVectorizedStatsCollector(
-				op, inputs, pspec.ProcessorID, execinfrapb.ProcessorIDTagKey, result.OpMonitors,
+				op, result.IOReader, inputs, pspec.ProcessorID,
+				execinfrapb.ProcessorIDTagKey, result.OpMonitors,
 			)
 			if err != nil {
 				return nil, err

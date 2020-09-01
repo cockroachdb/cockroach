@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -34,6 +35,8 @@ type VectorizedStatsCollector struct {
 	NonExplainable
 	execpb.VectorizedStats
 	idTagKey string
+
+	ioReader execinfra.IOReader
 
 	// stopwatch keeps track of the amount of time the wrapped operator spent
 	// doing work. Note that this will include all of the time that the operator's
@@ -53,13 +56,14 @@ var _ colexecbase.Operator = &VectorizedStatsCollector{}
 
 // NewVectorizedStatsCollector creates a new VectorizedStatsCollector which
 // wraps 'op' that corresponds to a component with either ProcessorID or
-// StreamID 'id' (with 'idTagKey' distinguishing between the two). 'ioTime'
-// indicates whether IO time is being measured.
+// StreamID 'id' (with 'idTagKey' distinguishing between the two). 'ioReader'
+// is a component (either an operator or a wrapped processor) that performs
+// IO reads that is present in the chain of operators rooted at 'op'.
 func NewVectorizedStatsCollector(
 	op colexecbase.Operator,
+	ioReader execinfra.IOReader,
 	id int32,
 	idTagKey string,
-	ioTime bool,
 	inputWatch *timeutil.StopWatch,
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
@@ -68,10 +72,25 @@ func NewVectorizedStatsCollector(
 	if inputWatch == nil {
 		colexecerror.InternalError("input watch for VectorizedStatsCollector is nil")
 	}
+	// ioTime indicates whether the time should be displayed as "IO time" on
+	// the diagram.
+	var ioTime bool
+	if ioReader != nil {
+		ioTime = true
+		if _, isProcessor := ioReader.(execinfra.Processor); isProcessor {
+			// We have a wrapped processor that performs IO reads. Most likely
+			// it is a rowexec.joinReader, so we want to display "execution
+			// time" and not "IO time". In the less likely case that it is a
+			// wrapped rowexec.tableReader showing "execution time" is also
+			// acceptable.
+			ioTime = false
+		}
+	}
 	return &VectorizedStatsCollector{
 		Operator:             op,
 		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioTime},
 		idTagKey:             idTagKey,
+		ioReader:             ioReader,
 		stopwatch:            inputWatch,
 		memMonitors:          memMonitors,
 		diskMonitors:         diskMonitors,
@@ -108,6 +127,9 @@ func (vsc *VectorizedStatsCollector) finalizeStats() {
 	for _, diskMon := range vsc.diskMonitors {
 		vsc.MaxAllocatedDisk += diskMon.MaximumBytes()
 	}
+	if vsc.IO {
+		vsc.BytesRead = vsc.ioReader.GetBytesRead()
+	}
 }
 
 // OutputStats outputs the vectorized stats collected by vsc into ctx.
@@ -132,6 +154,7 @@ func (vsc *VectorizedStatsCollector) OutputStats(
 		vsc.MaxAllocatedMem = 0
 		vsc.MaxAllocatedDisk = 0
 		vsc.NumBatches = 0
+		vsc.BytesRead = 0
 	}
 	tracing.SetSpanStats(span, &vsc.VectorizedStats)
 	span.Finish()

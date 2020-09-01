@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,7 +40,7 @@ type defaultCmp_KINDProjOp struct {
 	// {{end}}
 
 	adapter             comparisonExprAdapter
-	toDatumConverter    *vecToDatumConverter
+	toDatumConverter    *colconv.VecToDatumConverter
 	datumToVecConverter func(tree.Datum) interface{}
 }
 
@@ -58,12 +59,12 @@ func (d *defaultCmp_KINDProjOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	output := batch.ColVec(d.outputIdx)
 	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
-		d.toDatumConverter.convertBatchAndDeselect(batch)
+		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		// {{if .IsRightConst}}
-		nonConstColumn := d.toDatumConverter.getDatumColumn(d.colIdx)
+		nonConstColumn := d.toDatumConverter.GetDatumColumn(d.colIdx)
 		// {{else}}
-		leftColumn := d.toDatumConverter.getDatumColumn(d.col1Idx)
-		rightColumn := d.toDatumConverter.getDatumColumn(d.col2Idx)
+		leftColumn := d.toDatumConverter.GetDatumColumn(d.col1Idx)
+		rightColumn := d.toDatumConverter.GetDatumColumn(d.col2Idx)
 		// {{end}}
 		for i := 0; i < n; i++ {
 			// Note that we performed a conversion with deselection, so there

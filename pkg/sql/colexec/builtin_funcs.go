@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -30,7 +31,7 @@ type defaultBuiltinFuncOperator struct {
 	argumentCols        []int
 	outputIdx           int
 	outputType          *types.T
-	toDatumConverter    *vecToDatumConverter
+	toDatumConverter    *colconv.VecToDatumConverter
 	datumToVecConverter func(tree.Datum) interface{}
 
 	row tree.Datums
@@ -59,14 +60,14 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	b.allocator.PerformOperation(
 		[]coldata.Vec{output},
 		func() {
-			b.toDatumConverter.convertBatchAndDeselect(batch)
+			b.toDatumConverter.ConvertBatchAndDeselect(batch)
 			for i := 0; i < n; i++ {
 				hasNulls := false
 
 				for j, argumentCol := range b.argumentCols {
 					// Note that we don't need to apply sel to index i because
 					// vecToDatumConverter returns a "dense" datum column.
-					b.row[j] = b.toDatumConverter.getDatumColumn(argumentCol)[i]
+					b.row[j] = b.toDatumConverter.GetDatumColumn(argumentCol)[i]
 					hasNulls = hasNulls || b.row[j] == tree.DNull
 				}
 
@@ -132,7 +133,7 @@ func NewBuiltinFunctionOperator(
 			outputIdx:           outputIdx,
 			columnTypes:         columnTypes,
 			outputType:          outputType,
-			toDatumConverter:    newVecToDatumConverter(len(columnTypes), argumentCols),
+			toDatumConverter:    colconv.NewVecToDatumConverter(len(columnTypes), argumentCols),
 			datumToVecConverter: GetDatumToPhysicalFn(outputType),
 			row:                 make(tree.Datums, len(argumentCols)),
 			argumentCols:        argumentCols,

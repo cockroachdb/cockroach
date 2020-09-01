@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -333,7 +334,7 @@ func GetProjection_CONST_SIDEConstOperator(
 			projConstOpBase:     projConstOpBase,
 			adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
 			constArg:            constArg,
-			toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}),
 			datumToVecConverter: GetDatumToPhysicalFn(outputType),
 		}, nil
 		// {{end}}
