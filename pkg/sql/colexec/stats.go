@@ -127,8 +127,15 @@ func (vsc *VectorizedStatsCollector) finalizeStats() {
 	for _, diskMon := range vsc.diskMonitors {
 		vsc.MaxAllocatedDisk += diskMon.MaximumBytes()
 	}
-	if vsc.IO {
+	if vsc.ioReader != nil {
 		vsc.BytesRead = vsc.ioReader.GetBytesRead()
+	}
+	if vsc.IO {
+		// Note that vsc.IO is true only for ColBatchScans, and this is the
+		// only case when we want to add the number of rows read (because the
+		// wrapped joinReaders and tableReaders will add that statistic
+		// themselves).
+		vsc.RowsRead = vsc.ioReader.GetRowsRead()
 	}
 }
 
@@ -155,6 +162,7 @@ func (vsc *VectorizedStatsCollector) OutputStats(
 		vsc.MaxAllocatedDisk = 0
 		vsc.NumBatches = 0
 		vsc.BytesRead = 0
+		vsc.RowsRead = 0
 	}
 	tracing.SetSpanStats(span, &vsc.VectorizedStats)
 	span.Finish()

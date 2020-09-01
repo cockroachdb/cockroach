@@ -33,4 +33,7 @@ message VectorizedStats {
   // bytes_read is the number of bytes read from the disk. It is set only when
   // io is true.
   int64 bytes_read = 8;
+  // rows_read is the number of rows read from the disk. It is set only when
+  // io is true.
+  int64 rows_read = 9;
 }

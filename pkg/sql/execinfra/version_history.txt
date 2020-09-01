@@ -136,3 +136,5 @@
 - Version: 36 (MinAcceptedVersion: 35)
     - Added an aggregator for ST_Collect. The change is backwards compatible
       (mixed versions will prevent parallelization).
+- Version: 37 (MinAcceptedVersion: 37)
+    - Added new fields to vectorized statistics.
