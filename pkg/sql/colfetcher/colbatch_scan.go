@@ -60,6 +60,7 @@ type ColBatchScan struct {
 	ResultTypes []*types.T
 }
 
+var _ colexecbase.Operator = &ColBatchScan{}
 var _ execinfra.IOReader = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
