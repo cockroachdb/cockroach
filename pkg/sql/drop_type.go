@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -55,13 +56,16 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 		if _, ok := node.td[typeDesc.ID]; ok {
 			continue
 		}
-		// The implicit array types are not directly droppable.
-		if typeDesc.Kind == descpb.TypeDescriptor_ALIAS {
+		switch typeDesc.Kind {
+		case descpb.TypeDescriptor_ALIAS:
+			// The implicit array types are not directly droppable.
 			return nil, pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
 				"%q is an implicit array type and cannot be modified",
 				name,
 			)
+		case descpb.TypeDescriptor_ENUM:
+			sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumDrop)
 		}
 
 		// Check if we can drop the type.

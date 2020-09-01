@@ -1957,6 +1957,16 @@ func newTableDesc(
 		)
 	})
 
+	// See if any user defined types were used in this table.
+	if err := ret.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
+		if col.Type.Family() == types.EnumFamily {
+			sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumInTable)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
 	return ret, err
 }
 
