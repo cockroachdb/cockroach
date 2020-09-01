@@ -33,10 +33,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// CustomFuncs contains all the custom match and replace functions used by
-// the exploration rules. The unnamed xfunc.CustomFuncs allows
-// CustomFuncs to provide a clean interface for calling functions from both the
-// xform and xfunc packages using the same struct.
+// CustomFuncs contains all the custom match and replace functions used by the
+// exploration rules. The unnamed norm.CustomFuncs allows CustomFuncs to provide
+// a clean interface for calling functions from both the xform and norm packages
+// using the same struct.
 type CustomFuncs struct {
 	norm.CustomFuncs
 	e  *explorer

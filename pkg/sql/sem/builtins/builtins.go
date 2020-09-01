@@ -91,7 +91,7 @@ const (
 	categoryDateAndTime   = "Date and time"
 	categoryEnum          = "Enum"
 	categoryGenerator     = "Set-returning"
-	categoryGeospatial    = "Geospatial"
+	categorySpatial       = "Spatial"
 	categoryIDGeneration  = "ID generation"
 	categoryJSON          = "JSONB"
 	categoryMultiTenancy  = "Multi-tenancy"

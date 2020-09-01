@@ -12,7 +12,6 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -360,19 +359,20 @@ func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 		return in
 	}
 
-	switch t := in.(type) {
-	case *memo.ScanExpr:
-		// Add primary key columns if this is a non-virtual table.
+	// If the the input is a non-virtual table scan, construct a new scan that
+	// outputs the primary key.
+	if t, ok := in.(*memo.ScanExpr); ok {
 		private := t.ScanPrivate
 		tableID := private.Table
 		table := c.f.Metadata().Table(tableID)
 		if !table.IsVirtualTable() {
-			keyCols := c.f.Metadata().TableMeta(tableID).IndexKeyColumns(cat.PrimaryIndex)
+			keyCols := c.PrimaryKeyCols(tableID)
 			private.Cols = private.Cols.Union(keyCols)
 			return c.f.ConstructScan(&private)
 		}
 	}
 
+	// Otherwise, wrap the input in an Ordinality operator.
 	colID := c.f.Metadata().AddColumn("rownum", types.Int)
 	private := memo.OrdinalityPrivate{ColID: colID}
 	return c.f.ConstructOrdinality(in, &private)

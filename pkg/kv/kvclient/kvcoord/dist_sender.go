@@ -1370,9 +1370,21 @@ func (ds *DistSender) sendPartialBatchAsync(
 }
 
 func slowRangeRPCWarningStr(
-	dur time.Duration, attempts int64, desc *roachpb.RangeDescriptor, pErr *roachpb.Error,
+	ba roachpb.BatchRequest,
+	dur time.Duration,
+	attempts int64,
+	desc *roachpb.RangeDescriptor,
+	err error,
+	br *roachpb.BatchResponse,
 ) string {
-	return fmt.Sprintf("have been waiting %.2fs (%d attempts) for RPC to %s: %s", dur.Seconds(), attempts, desc, pErr)
+	var resp string
+	if err != nil {
+		resp = err.Error()
+	} else {
+		resp = br.String()
+	}
+	return fmt.Sprintf("have been waiting %.2fs (%d attempts) for RPC %s to %s; resp: %s",
+		dur.Seconds(), attempts, ba, desc, resp)
 }
 
 func slowRangeRPCReturnWarningStr(dur time.Duration, attempts int64) string {
@@ -1475,6 +1487,24 @@ func (ds *DistSender) sendPartialBatch(
 		}
 
 		reply, err = ds.sendToReplicas(ctx, ba, routing, withCommit)
+
+		const slowDistSenderThreshold = time.Minute
+		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && !tBegin.IsZero() {
+			log.Warningf(ctx, "slow range RPC: %v",
+				slowRangeRPCWarningStr(ba, dur, attempts, routing.Desc(), err, reply))
+			// If the RPC wasn't successful, defer the logging of a message once the
+			// RPC is not retried any more.
+			if err != nil || reply.Error != nil {
+				ds.metrics.SlowRPCs.Inc(1)
+				defer func(tBegin time.Time, attempts int64) {
+					ds.metrics.SlowRPCs.Dec(1)
+					log.Warningf(ctx, "slow RPC response: %v",
+						slowRangeRPCReturnWarningStr(timeutil.Since(tBegin), attempts))
+				}(tBegin, attempts)
+			}
+			tBegin = time.Time{} // prevent reentering branch for this RPC
+		}
+
 		if err != nil {
 			// Set pErr so that, if we don't perform any more retries, the
 			// deduceRetryEarlyExitError() call below the loop is inhibited.
@@ -1522,19 +1552,6 @@ func (ds *DistSender) sendPartialBatch(
 			pErr.Index.Index = int32(positions[pErr.Index.Index])
 		}
 
-		const slowDistSenderThreshold = time.Minute
-		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && !tBegin.IsZero() {
-			ds.metrics.SlowRPCs.Inc(1)
-			dur := dur // leak dur to heap only when branch taken
-			log.Warningf(ctx, "slow range RPC: %v",
-				slowRangeRPCWarningStr(dur, attempts, routing.Desc(), pErr))
-			defer func(tBegin time.Time, attempts int64) {
-				ds.metrics.SlowRPCs.Dec(1)
-				log.Warningf(ctx, "slow RPC response: %v",
-					slowRangeRPCReturnWarningStr(timeutil.Since(tBegin), attempts))
-			}(tBegin, attempts)
-			tBegin = time.Time{} // prevent reentering branch for this RPC
-		}
 		log.VErrEventf(ctx, 2, "reply error %s: %s", ba, pErr)
 
 		// Error handling: If the error indicates that our range

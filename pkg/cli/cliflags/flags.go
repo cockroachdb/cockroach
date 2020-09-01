@@ -1093,9 +1093,9 @@ the demo shell.`,
 	}
 
 	GeoLibsDir = FlagInfo{
-		Name: "geo-libs",
+		Name: "spatial-libs",
 		Description: `
-The location where all libraries for Geospatial operations is located.`,
+The location where all libraries for spatial operations is located.`,
 	}
 
 	Global = FlagInfo{
