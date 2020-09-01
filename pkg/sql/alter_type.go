@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,13 +45,16 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 		return nil, err
 	}
 
-	// The implicit array types are not modifiable.
-	if desc.Kind == descpb.TypeDescriptor_ALIAS {
+	switch desc.Kind {
+	case descpb.TypeDescriptor_ALIAS:
+		// The implicit array types are not modifiable.
 		return nil, pgerror.Newf(
 			pgcode.WrongObjectType,
 			"%q is an implicit array type and cannot be modified",
 			tree.AsStringWithFQNames(n.Type, &p.semaCtx.Annotations),
 		)
+	case descpb.TypeDescriptor_ENUM:
+		sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumAlter)
 	}
 
 	return &alterTypeNode{
