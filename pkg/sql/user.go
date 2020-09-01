@@ -174,7 +174,7 @@ func retrieveUserAndPassword(
 	if err != nil {
 		// Failed to retrieve the user account. Report in logs for later investigation.
 		log.Warningf(ctx, "user lookup for %q failed: %v", normalizedUsername, err)
-		err = errors.HandledWithMessage(err, "internal error while retrieving user account")
+		err = errors.HandledWithMessage(err, "internal error while retrieving user account: "+err.Error())
 	}
 	return exists, canLogin, hashedPassword, validUntil, err
 }
