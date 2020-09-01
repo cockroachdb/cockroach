@@ -3606,8 +3606,8 @@ The paths themselves are given in the direction of the first geometry.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				g := args[0].(*tree.DGeometry)
-				rotRadians := float64(*args[1].(*tree.DFloat))
+				g := tree.MustBeDGeometry(args[0])
+				rotRadians := float64(tree.MustBeDFloat(args[1]))
 
 				ret, err := geomfn.Rotate(g.Geometry, rotRadians)
 				if err != nil {

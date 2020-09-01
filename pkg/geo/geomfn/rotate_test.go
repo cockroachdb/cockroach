@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -82,7 +83,7 @@ func TestRotateGeom(t *testing.T) {
 			require.NoError(t, err)
 
 			require.InEpsilonSlice(t, tc.expected, actual.FlatCoords(), 0.00001)
-			require.IsType(t, tc.input, actual)
+			require.EqualValues(t, reflect.TypeOf(tc.input), reflect.TypeOf(actual))
 			require.EqualValues(t, tc.input.SRID(), actual.SRID())
 		})
 	}
