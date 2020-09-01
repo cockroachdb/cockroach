@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -280,6 +281,7 @@ rangeLoop:
 func WriteDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
+	descriptors *descs.Collection,
 	databases []catalog.DatabaseDescriptor,
 	schemas []catalog.SchemaDescriptor,
 	tables []catalog.TableDescriptor,
@@ -307,7 +309,9 @@ func WriteDescriptors(
 				}
 			}
 			wroteDBs[desc.GetID()] = desc
-			if err := catalogkv.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, desc.GetID(), desc); err != nil {
+			if err := descriptors.WriteDescToBatch(
+				ctx, false /* kvTrace */, desc.(catalog.MutableDescriptor), b,
+			); err != nil {
 				return err
 			}
 			// Depending on which cluster version we are restoring to, we decide which
@@ -320,14 +324,8 @@ func WriteDescriptors(
 		// Write namespace and descriptor entries for each schema.
 		for i := range schemas {
 			sc := schemas[i]
-			if err := catalogkv.WriteNewDescToBatch(
-				ctx,
-				false, /* kvTrace */
-				settings,
-				b,
-				keys.SystemSQLCodec,
-				sc.GetID(),
-				schemas[i],
+			if err := descriptors.WriteDescToBatch(
+				ctx, false /* kvTrace */, sc.(catalog.MutableDescriptor), b,
 			); err != nil {
 				return err
 			}
@@ -346,7 +344,12 @@ func WriteDescriptors(
 					updatedPrivileges = wrote.GetPrivileges()
 				}
 			} else {
-				parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, table.GetParentID())
+				parentDB, err := descriptors.GetDatabaseVersionByID(ctx, txn,
+					table.GetParentID(), tree.DatabaseLookupFlags{
+						CommonLookupFlags: tree.CommonLookupFlags{
+							Required: true,
+						},
+					})
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(table.GetParentID()))
@@ -368,8 +371,8 @@ func WriteDescriptors(
 						table.GetID(), table)
 				}
 			}
-			if err := catalogkv.WriteNewDescToBatch(
-				ctx, false /* kvTrace */, settings, b, keys.SystemSQLCodec, table.GetID(), tables[i],
+			if err := descriptors.WriteDescToBatch(
+				ctx, false /* kvTrace */, tables[i].(catalog.MutableDescriptor), b,
 			); err != nil {
 				return err
 			}
@@ -389,20 +392,14 @@ func WriteDescriptors(
 		// Write all type descriptors -- create namespace entries and write to
 		// the system.descriptor table.
 		for i := range types {
-			typ := types[i].TypeDesc()
-			if err := catalogkv.WriteNewDescToBatch(
-				ctx,
-				false, /* kvTrace */
-				settings,
-				b,
-				keys.SystemSQLCodec,
-				typ.ID,
-				types[i],
+			typ := types[i]
+			if err := descriptors.WriteDescToBatch(
+				ctx, false /* kvTrace */, typ.(catalog.MutableDescriptor), b,
 			); err != nil {
 				return err
 			}
 			tkey := catalogkv.MakeObjectNameKey(ctx, settings, typ.GetParentID(), typ.GetParentSchemaID(), typ.GetName())
-			b.CPut(tkey.Key(keys.SystemSQLCodec), typ.ID, nil)
+			b.CPut(tkey.Key(keys.SystemSQLCodec), typ.GetID(), nil)
 		}
 
 		for _, kv := range extra {
@@ -414,6 +411,8 @@ func WriteDescriptors(
 			}
 			return err
 		}
+		// TODO(ajwerner): Utilize validation inside of the descs.Collection
+		// rather than reaching into the store.
 		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, keys.SystemSQLCodec)
 		for _, table := range tables {
 			if err := table.Validate(ctx, dg); err != nil {
@@ -808,19 +807,25 @@ func createImportingDescriptors(
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
 			mut := tabledesc.NewCreatedMutable(*desc.TableDesc())
+			mut.Version = 1
 			tables = append(tables, mut)
 			mutableTables = append(mutableTables, mut)
 			oldTableIDs = append(oldTableIDs, mut.GetID())
 		case catalog.DatabaseDescriptor:
 			if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
 				mut := dbdesc.NewCreatedMutable(*desc.DatabaseDesc())
+				mut.Version = 1
 				databases = append(databases, mut)
 				mutableDatabases = append(mutableDatabases, mut)
 			}
 		case catalog.SchemaDescriptor:
-			schemas = append(schemas, schemadesc.NewCreatedMutable(*desc.SchemaDesc()))
+			mut := schemadesc.NewCreatedMutable(*desc.SchemaDesc())
+			mut.Version = 1
+			schemas = append(schemas, mut)
 		case catalog.TypeDescriptor:
-			types = append(types, typedesc.NewCreatedMutable(*desc.TypeDesc()))
+			mut := typedesc.NewCreatedMutable(*desc.TypeDesc())
+			mut.Version = 1
+			types = append(types, mut)
 		}
 	}
 	tempSystemDBID := keys.MinNonPredefinedUserDescID
@@ -897,7 +902,6 @@ func createImportingDescriptors(
 	}
 
 	for _, desc := range tableDescs {
-		desc.Version++
 		desc.State = descpb.DescriptorState_OFFLINE
 		desc.OfflineReason = "restoring"
 	}
@@ -909,138 +913,115 @@ func createImportingDescriptors(
 	}
 
 	if !details.PrepareCompleted {
-		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if len(details.Tenants) > 0 {
-				// TODO(dt): we need to set the system config trigger as the loop below
-				// will make a batch that anchors the txn at '/Table/...', and setting the trigger
-				// later (as we will have to) would fail.
-				if err := txn.SetSystemConfigTrigger(p.ExecCfg().Codec.ForSystemTenant()); err != nil {
-					return err
-				}
-			}
-			// Write the new TableDescriptors which are set in the OFFLINE state.
-			if err := WriteDescriptors(ctx, txn, databases, writtenSchemas, tables, writtenTypes, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
-				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
-			}
-
-			b := txn.NewBatch()
-
-			// For new schemas with existing parent databases, the schema map on the
-			// database descriptor needs to be updated.
-			existingDBsWithNewSchemas := make(map[descpb.ID][]catalog.SchemaDescriptor)
-			for _, sc := range writtenSchemas {
-				parentID := sc.GetParentID()
-				if _, ok := details.DescriptorRewrites[parentID]; !ok {
-					existingDBsWithNewSchemas[parentID] = append(existingDBsWithNewSchemas[parentID], sc)
-				}
-			}
-			// Write the updated databases.
-			for dbID, schemas := range existingDBsWithNewSchemas {
-				log.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
-				// TODO (lucy): Replace these direct descriptor reads from the store
-				// with some interface backed by a descs.Collection.
-				desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec,
-					dbID, catalogkv.Mutable, catalogkv.DatabaseDescriptorKind, true /* required */)
-				if err != nil {
-					return err
-				}
-				db := desc.(*dbdesc.Mutable)
-				if db.Schemas == nil {
-					db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-				}
-				for _, sc := range schemas {
-					db.Schemas[sc.GetName()] = descpb.DatabaseDescriptor_SchemaInfo{ID: sc.GetID()}
-				}
-				// Note that since we're reading and writing these descriptors straight
-				// from/to the store every time, MaybeIncrementVersion doesn't provide
-				// any guarantees about incrementing the version exactly once in the
-				// transaction.
-				db.MaybeIncrementVersion()
-				if err := catalogkv.WriteDescToBatch(
-					ctx,
-					false, /* kvTrace */
-					p.ExecCfg().Settings,
-					b,
-					keys.SystemSQLCodec,
-					db.ID,
-					db,
+		err := descs.Txn(
+			ctx, p.ExecCfg().Settings, p.ExecCfg().LeaseManager,
+			p.ExecCfg().InternalExecutor, p.ExecCfg().DB, func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			) error {
+				// Write the new TableDescriptors which are set in the OFFLINE state.
+				if err := WriteDescriptors(
+					ctx, txn, descriptors, databases, writtenSchemas, tables, writtenTypes,
+					details.DescriptorCoverage, r.settings, nil, /* extra */
 				); err != nil {
-					return err
+					return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 				}
-			}
 
-			// We could be restoring tables that point to existing types. We need to
-			// ensure that those existing types are updated with back references pointing
-			// to the new tables being restored.
-			for _, table := range mutableTables {
-				// Collect all types used by this table.
-				typeIDs, err := table.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-					return typesByID[id], nil
-				})
-				if err != nil {
-					return err
-				}
-				for _, id := range typeIDs {
-					// If the type was restored as part of the backup, then the backreference
-					// already exists.
-					_, ok := existingTypeIDs[id]
-					if !ok {
-						continue
+				b := txn.NewBatch()
+
+				// For new schemas with existing parent databases, the schema map on the
+				// database descriptor needs to be updated.
+				existingDBsWithNewSchemas := make(map[descpb.ID][]catalog.SchemaDescriptor)
+				for _, sc := range writtenSchemas {
+					parentID := sc.GetParentID()
+					if _, ok := details.DescriptorRewrites[parentID]; !ok {
+						existingDBsWithNewSchemas[parentID] = append(existingDBsWithNewSchemas[parentID], sc)
 					}
-					// Otherwise, add a backreference to this table.
-					desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec,
-						id, catalogkv.Mutable, catalogkv.TypeDescriptorKind, true /* required */)
+				}
+				// Write the updated databases.
+				for dbID, schemas := range existingDBsWithNewSchemas {
+					log.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
+					desc, err := descriptors.GetMutableDescriptorByID(ctx, dbID, txn)
 					if err != nil {
 						return err
 					}
-					typDesc := desc.(*typedesc.Mutable)
-					typDesc.AddReferencingDescriptorID(table.GetID())
-					// TODO (lucy): I think we should be incrementing the version for the
-					// types, but first we have to ensure that it only happens once per
-					// transaction since we're going outside the normal mutable descriptor
-					// resolution path. Also see the comment above in the case of
-					// updated databases.
-					if err := catalogkv.WriteDescToBatch(
-						ctx,
-						false, /* kvTrace */
-						p.ExecCfg().Settings,
-						b,
-						keys.SystemSQLCodec,
-						typDesc.ID,
-						typDesc,
+					db := desc.(*dbdesc.Mutable)
+					if db.Schemas == nil {
+						db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+					}
+					for _, sc := range schemas {
+						db.Schemas[sc.GetName()] = descpb.DatabaseDescriptor_SchemaInfo{ID: sc.GetID()}
+					}
+					if err := descriptors.WriteDescToBatch(
+						ctx, false /* kvTrace */, db, b,
 					); err != nil {
 						return err
 					}
 				}
-			}
-			if err := txn.Run(ctx, b); err != nil {
-				return err
-			}
 
-			for _, tenant := range details.Tenants {
-				const inactive = false
-				if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, tenant.ID, inactive, tenant.Info); err != nil {
+				// We could be restoring tables that point to existing types. We need to
+				// ensure that those existing types are updated with back references pointing
+				// to the new tables being restored.
+				for _, table := range mutableTables {
+					// Collect all types used by this table.
+					typeIDs, err := table.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
+						return typesByID[id], nil
+					})
+					if err != nil {
+						return err
+					}
+					for _, id := range typeIDs {
+						// If the type was restored as part of the backup, then the backreference
+						// already exists.
+						_, ok := existingTypeIDs[id]
+						if !ok {
+							continue
+						}
+						// Otherwise, add a backreference to this table.
+						typDesc, err := descriptors.GetMutableTypeVersionByID(ctx, txn, id)
+						if err != nil {
+							return err
+						}
+						typDesc.AddReferencingDescriptorID(table.GetID())
+						// TODO (lucy): I think we should be incrementing the version for the
+						// types, but first we have to ensure that it only happens once per
+						// transaction since we're going outside the normal mutable descriptor
+						// resolution path. Also see the comment above in the case of
+						// updated databases.
+						if err := descriptors.WriteDescToBatch(
+							ctx, false /* kvTrace */, typDesc, b,
+						); err != nil {
+							return err
+						}
+					}
+				}
+				if err := txn.Run(ctx, b); err != nil {
 					return err
 				}
-			}
 
-			details.PrepareCompleted = true
-			details.DatabaseDescs = databaseDescs
-			details.TableDescs = tableDescs
-			details.TypeDescs = make([]*descpb.TypeDescriptor, len(typesToWrite))
-			for i := range typesToWrite {
-				details.TypeDescs[i] = typesToWrite[i].TypeDesc()
-			}
-			details.SchemaDescs = make([]*descpb.SchemaDescriptor, len(schemasToWrite))
-			for i := range schemasToWrite {
-				details.SchemaDescs[i] = schemasToWrite[i].SchemaDesc()
-			}
+				for _, tenant := range details.Tenants {
+					const inactive = false
+					if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, tenant.ID, inactive, tenant.Info); err != nil {
+						return err
+					}
+				}
 
-			// Update the job once all descs have been prepared for ingestion.
-			err := r.job.WithTxn(txn).SetDetails(ctx, details)
+				details.PrepareCompleted = true
+				details.DatabaseDescs = databaseDescs
+				details.TableDescs = tableDescs
+				details.TypeDescs = make([]*descpb.TypeDescriptor, len(typesToWrite))
+				for i := range typesToWrite {
+					details.TypeDescs[i] = typesToWrite[i].TypeDesc()
+				}
+				details.SchemaDescs = make([]*descpb.SchemaDescriptor, len(schemasToWrite))
+				for i := range schemasToWrite {
+					details.SchemaDescs[i] = schemasToWrite[i].SchemaDesc()
+				}
 
-			return err
-		})
+				// Update the job once all descs have been prepared for ingestion.
+				err := r.job.WithTxn(txn).SetDetails(ctx, details)
+
+				return err
+			})
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1134,10 +1115,26 @@ func (r *restoreResumer) Resume(
 	if err := insertStats(ctx, r.job, p.ExecCfg(), latestStats); err != nil {
 		return errors.Wrap(err, "inserting table statistics")
 	}
-
-	if err := r.publishDescriptors(ctx); err != nil {
+	var newDescriptorChangeJobs []*jobs.StartableJob
+	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
+		newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descriptors)
 		return err
 	}
+	if err := descs.Txn(
+		ctx, r.execCfg.Settings, r.execCfg.LeaseManager, r.execCfg.InternalExecutor,
+		r.execCfg.DB, publishDescriptors,
+	); err != nil {
+		return err
+	}
+
+	// Start the schema change jobs we created.
+	for _, newJob := range newDescriptorChangeJobs {
+		if _, err := newJob.Start(ctx); err != nil {
+			return err
+		}
+	}
+
+	r.notifyStatsRefresherOfNewTables()
 
 	// TODO(pbardea): This was part of the original design where full cluster
 	// restores were a special case, but really we should be making only the
@@ -1180,6 +1177,16 @@ func (r *restoreResumer) Resume(
 	return nil
 }
 
+// Initiate a run of CREATE STATISTICS. We don't know the actual number of
+// rows affected per table, so we use a large number because we want to make
+// sure that stats always get created/refreshed here.
+func (r *restoreResumer) notifyStatsRefresherOfNewTables() {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	for i := range details.TableDescs {
+		r.execCfg.StatsRefresher.NotifyMutation(details.TableDescs[i].GetID(), math.MaxInt32 /* rowsAffected */)
+	}
+}
+
 // Insert stats re-inserts the table statistics stored in the backup manifest.
 func insertStats(
 	ctx context.Context,
@@ -1209,109 +1216,90 @@ func insertStats(
 }
 
 // publishDescriptors updates the RESTORED tables status from OFFLINE to PUBLIC.
-func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
+func (r *restoreResumer) publishDescriptors(
+	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+) ([]*jobs.StartableJob, error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if details.TablesPublished {
-		return nil
+		return nil, nil
 	}
 	log.Event(ctx, "making tables live")
 
 	newDescriptorChangeJobs := make([]*jobs.StartableJob, 0)
-	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if len(details.Tenants) > 0 {
-			// TODO(dt): we need to set the system config trigger as the loop below
-			// will make a batch that anchors the txn at '/Table/...', and setting the trigger
-			// later (as we will have to) would fail.
-			if err := txn.SetSystemConfigTrigger(r.execCfg.Codec.ForSystemTenant()); err != nil {
-				return err
-			}
+
+	// Write the new TableDescriptors and flip state over to public so they can be
+	// accessed.
+	b := txn.NewBatch()
+	newTables := make([]*descpb.TableDescriptor, 0, len(details.TableDescs))
+	for _, tbl := range details.TableDescs {
+		newTableDesc, err := descriptors.GetMutableTableVersionByID(ctx, tbl.GetID(), txn)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to find restored descriptor %d", tbl.GetID())
 		}
-		// Write the new TableDescriptors and flip state over to public so they can be
-		// accessed.
-		b := txn.NewBatch()
-		newTables := make([]*descpb.TableDescriptor, 0, len(details.TableDescs))
-		for _, tbl := range details.TableDescs {
-			existingTable := tabledesc.NewImmutable(*tbl)
-			newTableDesc := tabledesc.NewExistingMutable(*tbl)
-			newTableDesc.Version++
-			newTableDesc.State = descpb.DescriptorState_PUBLIC
-			newTableDesc.OfflineReason = ""
-			// Convert any mutations that were in progress on the table descriptor
-			// when the backup was taken, and convert them to schema change jobs.
-			newJobs, err := createSchemaChangeJobsFromMutations(ctx,
-				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, newTableDesc)
+		// Verify that the version has not changed and return an error if we
+		// discover that it has.
+		//
+		// TODO(ajwerner): rethink this behavior.
+		if got, exp := newTableDesc.Version, tbl.GetVersion(); got != exp {
+			return nil, errors.Errorf("version for descriptor %d does not match"+
+				" expectation from restore: got version %d, found %d", newTableDesc.GetID(),
+				got, exp)
+		}
+		newTableDesc.State = descpb.DescriptorState_PUBLIC
+		newTableDesc.OfflineReason = ""
+		// Convert any mutations that were in progress on the table descriptor
+		// when the backup was taken, and convert them to schema change jobs.
+		newJobs, err := createSchemaChangeJobsFromMutations(ctx,
+			r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, newTableDesc)
+		if err != nil {
+			return nil, err
+		}
+		newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
+		if err := descriptors.WriteDescToBatch(
+			ctx, false /* kvTrace */, newTableDesc, b,
+		); err != nil {
+			return nil, err
+		}
+		newTables = append(newTables, newTableDesc.TableDesc())
+	}
+
+	if err := txn.Run(ctx, b); err != nil {
+		return nil, errors.Wrap(err, "publishing tables")
+	}
+
+	// For all of the newly created types, make type schema change jobs for any
+	// type descriptors that were backed up in the middle of a type schema change.
+	for _, typDesc := range details.TypeDescs {
+		typ := typedesc.NewExistingMutable(*typDesc)
+		if typ.HasPendingSchemaChanges() {
+			typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, typ)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
-			existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, existingTable)
-			if err != nil {
-				return errors.Wrap(err, "validating table descriptor has not changed")
-			}
-			b.CPut(
-				catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, newTableDesc.ID),
-				newTableDesc.DescriptorProto(),
-				existingDescVal,
-			)
-			newTables = append(newTables, newTableDesc.TableDesc())
-		}
-
-		if err := txn.Run(ctx, b); err != nil {
-			return errors.Wrap(err, "publishing tables")
-		}
-
-		// For all of the newly created types, make type schema change jobs for any
-		// type descriptors that were backed up in the middle of a type schema change.
-		for _, typDesc := range details.TypeDescs {
-			typ := typedesc.NewExistingMutable(*typDesc)
-			if typ.HasPendingSchemaChanges() {
-				typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, typ)
-				if err != nil {
-					return err
-				}
-				newDescriptorChangeJobs = append(newDescriptorChangeJobs, typJob)
-			}
-		}
-
-		for _, tenant := range details.Tenants {
-			if err := sql.ActivateTenant(ctx, r.execCfg, txn, tenant.ID); err != nil {
-				return err
-			}
-		}
-
-		// Update and persist the state of the job.
-		details.TablesPublished = true
-		details.TableDescs = newTables
-		if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
-			for _, newJob := range newDescriptorChangeJobs {
-				if cleanupErr := newJob.CleanupOnRollback(ctx); cleanupErr != nil {
-					log.Warningf(ctx, "failed to clean up job %d: %v", newJob.ID(), cleanupErr)
-				}
-			}
-			return errors.Wrap(err, "updating job details after publishing tables")
-		}
-
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	// Start the schema change jobs we created.
-	for _, newJob := range newDescriptorChangeJobs {
-		if _, err := newJob.Start(ctx); err != nil {
-			return err
+			newDescriptorChangeJobs = append(newDescriptorChangeJobs, typJob)
 		}
 	}
 
-	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
-	// rows affected per table, so we use a large number because we want to make
-	// sure that stats always get created/refreshed here.
-	for i := range details.TableDescs {
-		r.execCfg.StatsRefresher.NotifyMutation(details.TableDescs[i].GetID(), math.MaxInt32 /* rowsAffected */)
+	for _, tenant := range details.Tenants {
+		if err := sql.ActivateTenant(ctx, r.execCfg, txn, tenant.ID); err != nil {
+			return nil, err
+		}
 	}
 
-	return nil
+	// Update and persist the state of the job.
+	details.TablesPublished = true
+	details.TableDescs = newTables
+	if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+		for _, newJob := range newDescriptorChangeJobs {
+			if cleanupErr := newJob.CleanupOnRollback(ctx); cleanupErr != nil {
+				log.Warningf(ctx, "failed to clean up job %d: %v", newJob.ID(), cleanupErr)
+			}
+		}
+		return nil, errors.Wrap(err, "updating job details after publishing tables")
+	}
+	r.job.WithTxn(nil)
+
+	return newDescriptorChangeJobs, nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface. Removes KV data that
@@ -1326,21 +1314,22 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	execCfg := phs.(sql.PlanHookState).ExecCfg()
-	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		for _, tenant := range details.Tenants {
-			// TODO(dt): this is a noop since the tenant is already active=false but
-			// that should be fixed in DestroyTenant.
-			if err := sql.DestroyTenant(ctx, execCfg, txn, tenant.ID); err != nil {
-				return err
+	return descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
+		execCfg.DB, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			for _, tenant := range details.Tenants {
+				// TODO(dt): this is a noop since the tenant is already active=false but
+				// that should be fixed in DestroyTenant.
+				if err := sql.DestroyTenant(ctx, execCfg, txn, tenant.ID); err != nil {
+					return err
+				}
 			}
-		}
-		return r.dropDescriptors(ctx, execCfg.JobRegistry, txn)
-	})
+			return r.dropDescriptors(ctx, execCfg.JobRegistry, txn, descriptors)
+		})
 }
 
 // dropDescriptors implements the OnFailOrCancel logic.
 func (r *restoreResumer) dropDescriptors(
-	ctx context.Context, jr *jobs.Registry, txn *kv.Txn,
+	ctx context.Context, jr *jobs.Registry, txn *kv.Txn, descriptors *descs.Collection,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
@@ -1350,21 +1339,28 @@ func (r *restoreResumer) dropDescriptors(
 		return nil
 	}
 
-	// Needed to trigger the schema change manager.
-	if err := txn.SetSystemConfigTrigger(r.execCfg.Codec.ForSystemTenant()); err != nil {
-		return err
-	}
-
 	b := txn.NewBatch()
 
 	// Collect the tables into mutable versions.
 	mutableTables := make([]*tabledesc.Mutable, len(details.TableDescs))
 	for i := range details.TableDescs {
-		mutableTables[i] = tabledesc.NewExistingMutable(*details.TableDescs[i])
+		var err error
+		mutableTables[i], err = descriptors.GetMutableTableVersionByID(ctx, details.TableDescs[i].ID, txn)
+		if err != nil {
+			return err
+		}
+		// Ensure that the version matches we expect. In the case that it doesn't,
+		// it's not really clear what to do. Just log and carry on.
+		if got, exp := mutableTables[i].Version, details.TableDescs[i].Version; got != exp {
+			log.Errorf(ctx, "version changed for restored descriptor before "+
+				"drop: got %d, expected %d", got, exp)
+		}
 	}
 
 	// Remove any back references installed from existing types to tables being restored.
-	if err := r.removeExistingTypeBackReferences(ctx, txn, b, mutableTables, &details); err != nil {
+	if err := r.removeExistingTypeBackReferences(
+		ctx, txn, descriptors, b, mutableTables, &details,
+	); err != nil {
 		return err
 	}
 
@@ -1373,22 +1369,19 @@ func (r *restoreResumer) dropDescriptors(
 	for i := range mutableTables {
 		tableToDrop := mutableTables[i]
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
-		prev := tableToDrop.ImmutableCopy().(catalog.TableDescriptor)
-		tableToDrop.Version++
 		tableToDrop.State = descpb.DescriptorState_DROP
-		err := catalogkv.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tableToDrop.ParentID, tableToDrop.Name)
-		if err != nil {
-			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")
-		}
-		existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, prev)
-		if err != nil {
-			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
-		}
-		b.CPut(
-			catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableToDrop.ID),
-			tableToDrop.DescriptorProto(),
-			existingDescVal,
+		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
+			ctx,
+			b,
+			keys.SystemSQLCodec,
+			tableToDrop.ParentID,
+			tableToDrop.GetParentSchemaID(),
+			tableToDrop.Name,
+			false, /* kvTrace */
 		)
+		if err := descriptors.WriteDescToBatch(ctx, false /* kvTrace */, tableToDrop, b); err != nil {
+			return errors.Wrap(err, "writing dropping table to batch")
+		}
 	}
 
 	// Drop the type descriptors that this restore created.
@@ -1396,17 +1389,15 @@ func (r *restoreResumer) dropDescriptors(
 		// TypeDescriptors don't have a GC job process, so we can just write them
 		// as dropped here.
 		typDesc := details.TypeDescs[i]
-		if err := catalogkv.RemoveObjectNamespaceEntry(
+		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
 			ctx,
-			txn,
+			b,
 			keys.SystemSQLCodec,
 			typDesc.ParentID,
 			typDesc.ParentSchemaID,
 			typDesc.Name,
 			false, /* kvTrace */
-		); err != nil {
-			return err
-		}
+		)
 		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
 	}
 
@@ -1415,17 +1406,15 @@ func (r *restoreResumer) dropDescriptors(
 	dbsWithDeletedSchemas := make(map[descpb.ID][]*descpb.SchemaDescriptor)
 	for i := range details.SchemaDescs {
 		sc := details.SchemaDescs[i]
-		if err := catalogkv.RemoveObjectNamespaceEntry(
+		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
 			ctx,
-			txn,
+			b,
 			keys.SystemSQLCodec,
 			sc.ParentID,
 			keys.RootNamespaceID,
 			sc.Name,
 			false, /* kvTrace */
-		); err != nil {
-			return err
-		}
+		)
 		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
 		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
 	}
@@ -1484,10 +1473,7 @@ func (r *restoreResumer) dropDescriptors(
 	// delete the now-deleted child schema from its schema map.
 	for dbID, schemas := range dbsWithDeletedSchemas {
 		log.Infof(ctx, "deleting %d schema entries from database %d", len(schemas), dbID)
-		// TODO (lucy): Replace these direct descriptor reads from the store
-		// with some interface backed by a descs.Collection.
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec,
-			dbID, catalogkv.Mutable, catalogkv.DatabaseDescriptorKind, true /* required */)
+		desc, err := descriptors.GetMutableDescriptorByID(ctx, dbID, txn)
 		if err != nil {
 			return err
 		}
@@ -1503,15 +1489,8 @@ func (r *restoreResumer) dropDescriptors(
 				delete(db.Schemas, sc.GetName())
 			}
 		}
-		db.MaybeIncrementVersion()
-		if err := catalogkv.WriteDescToBatch(
-			ctx,
-			false, /* kvTrace */
-			r.settings,
-			b,
-			keys.SystemSQLCodec,
-			db.ID,
-			db,
+		if err := descriptors.WriteDescToBatch(
+			ctx, false /* kvTrace */, db, b,
 		); err != nil {
 			return err
 		}
@@ -1530,6 +1509,7 @@ func (r *restoreResumer) dropDescriptors(
 func (r *restoreResumer) removeExistingTypeBackReferences(
 	ctx context.Context,
 	txn *kv.Txn,
+	descriptors *descs.Collection,
 	b *kv.Batch,
 	restoredTables []*tabledesc.Mutable,
 	details *jobspb.RestoreDetails,
@@ -1548,25 +1528,11 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 			if ok {
 				return restored, nil
 			}
-			// See if we have the type cached.
-			cached, ok := existingTypes[id]
-			if ok {
-				return cached, nil
-			}
 			// Finally, look it up using the transaction.
-			desc, err := catalogkv.GetDescriptorByID(
-				ctx,
-				txn,
-				keys.SystemSQLCodec,
-				id,
-				catalogkv.Mutable,
-				catalogkv.TypeDescriptorKind,
-				true, /* required */
-			)
+			typ, err := descriptors.GetMutableTypeVersionByID(ctx, txn, id)
 			if err != nil {
 				return nil, err
 			}
-			typ := desc.(*typedesc.Mutable)
 			existingTypes[typ.GetID()] = typ
 			return typ, nil
 		}
@@ -1586,8 +1552,6 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 					return err
 				}
 				existing := desc.(*typedesc.Mutable)
-				// Since we cache the lookups to existing types, we are guaranteed
-				// that the version is incremented only once in this transaction.
 				existing.MaybeIncrementVersion()
 				existing.RemoveReferencingDescriptorID(tbl.ID)
 			}
@@ -1596,15 +1560,9 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 
 	// Now write any changed existing types.
 	for _, typ := range existingTypes {
-		if typ.OriginalVersion() != typ.GetVersion() {
-			if err := catalogkv.WriteDescToBatch(
-				ctx,
-				false, /* kvTrace */
-				r.settings,
-				b,
-				keys.SystemSQLCodec,
-				typ.ID,
-				typ,
+		if typ.IsUncommittedVersion() {
+			if err := descriptors.WriteDescToBatch(
+				ctx, false /* kvTrace */, typ, b,
 			); err != nil {
 				return err
 			}
