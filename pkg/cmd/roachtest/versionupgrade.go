@@ -325,7 +325,11 @@ func uploadAndStartFromCheckpointFixture(nodes nodeListOption, v string) version
 func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		c := u.c
-		args := u.uploadVersion(ctx, t, nodes, newVersion)
+
+		// NB: We could technically stage the binary on all nodes before
+		// restarting each one, but on Unix it's invalid to write to an
+		// executable file while it is currently running. So we do the
+		// simple thing and upload it serially instead.
 
 		// Restart nodes in a random order; otherwise node 1 would be running all
 		// the migrations and it probably also has all the leases.
@@ -335,6 +339,7 @@ func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
 		for _, node := range nodes {
 			t.l.Printf("restarting node %d", node)
 			c.Stop(ctx, c.Node(node))
+			args := u.uploadVersion(ctx, t, c.Node(node), newVersion)
 			c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
 			t.l.Printf("node %d now running binary version %s", node, u.binaryVersion(ctx, t, node))
 
