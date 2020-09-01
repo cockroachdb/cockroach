@@ -521,14 +521,14 @@ func TestBackupRestoreAppend(t *testing.T) {
 	// Find the backup times in the collection and try RESTORE'ing to each, and
 	// within each also check if we can restore to individual times captured with
 	// incremental backups that were appended to that backup.
-	full1, full2 := findFullBackupPaths(tmpDir, path.Join(tmpDir, "*/*/*/BACKUP"))
+	full1, full2 := findFullBackupPaths(tmpDir, path.Join(tmpDir, "*/*/*/"+backupManifestName))
 	runRestores(collections, full1, full2)
 
 	// Find the full-backups written to the specified subdirectories, and within
 	// each also check if we can restore to individual times captured with
 	// incremental backups that were appended to that backup.
 	full1, full2 = findFullBackupPaths(path.Join(tmpDir, "foo"),
-		path.Join(tmpDir, "foo", fmt.Sprintf("%s*", specifiedSubdir), "BACKUP"))
+		path.Join(tmpDir, "foo", fmt.Sprintf("%s*", specifiedSubdir), backupManifestName))
 	runRestores(collectionsWithSubdir, full1, full2)
 
 	// TODO(dt): test restoring to other backups via AOST.
@@ -563,7 +563,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
 
 	// Find the subdirectory created by the full BACKUP INTO statement.
-	matches, err := filepath.Glob(path.Join(tmpDir, "*/*/*/BACKUP"))
+	matches, err := filepath.Glob(path.Join(tmpDir, "*/*/*/"+backupManifestName))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 	for i := range matches {
