@@ -1,14 +1,6 @@
 groups:
 - name: rules/alerts.rules
   rules:
-  # Alert for any instance that is unreachable for >5 minutes.
-  - alert: InstanceDown
-    expr: up{job="cockroachdb"} == 0
-    for: 5m
-    annotations:
-      description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
-        down for more than 5 minutes.'
-      summary: Instance {{ $labels.instance }} down
   # Alert for any instance that is unreachable for >15 minutes.
   - alert: InstanceDead
     expr: up{job="cockroachdb"} == 0
@@ -17,39 +9,46 @@ groups:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
         down for more than 15 minutes.'
       summary: Instance {{ $labels.instance }} dead
+  # Alert for any instance that is not ready for a while.
+  - alert: InstanceNotReady
+    # This alert applies only to Kubernetes deployments and requires that you run kube-state-metrics: https://github.com/kubernetes/kube-state-metrics
+    expr: kube_statefulset_status_replicas_ready{statefulset="cockroachdb"} != kube_statefulset_status_replicas{statefulset="cockroachdb"}
+    for: 45m
+    annotations:
+      description: 'there has been an unready replica for cluster {{ $labels.cluster }}
+        for more than 15 minutes.'
+      summary: Instance not ready
   # Alert on instance restarts.
   - alert: InstanceRestart
-    expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 0 and resets(sys_uptime{job="cockroachdb"}[10m])
-      < 5
+    expr: resets(sys_uptime{job="cockroachdb"}[24h]) > 1
     annotations:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
-        {{ $value }} time(s) in 10m'
+        {{ $value }} time(s) in 24h'
       summary: Instance {{ $labels.instance }} restarted
   # Alert on flapping instances (frequent restarts).
+  - alert: InstancesFlapping
+    # Aggregated.
+    # This alert assumes that rolling restarts or rolling upgrades leave at least 3 minutes between each node being updated or restarted.
+    expr: sum by (cluster)(resets(sys_uptime{job="cockroachdb"}[5m])) > 2
+    annotations:
+      description: 'instances in cluster {{ $labels.cluster }} restarted
+        {{ $value }} time(s) in 5m'
+      summary: Instances in {{ $labels.cluster }} flapping
+  # Alert on flapping instances (frequent restarts).
   - alert: InstanceFlapping
-    expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 5
+    # Un-aggregated.
+    expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 1
     annotations:
       description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
         {{ $value }} time(s) in 10m'
       summary: Instance {{ $labels.instance }} flapping
-  # Alert on mismatching "up" (from prometheus) vs "liveness" (from cockroach). We do this at the node level.
-  # This compares per-instance "liveness_livenodes" against the per-cluster count(up == 1).
-  - alert: LivenessMismatch
-    expr: (liveness_livenodes{job="cockroachdb"}) != ignoring(instance) group_left()
-      (count by(cluster, job) (up{job="cockroachdb"} == 1))
-    for: 5m
-    labels:
-      severity: testing
-    annotations:
-      description: Prometheus and {{ $labels.instance }} disagree on liveness
-      summary: Liveness mismatch for {{ $labels.instance }}
   # Alert on version mismatch.
-  # This alert is intentionally loose (30 minutes) to allow for rolling upgrades.
+  # This alert is intentionally loose (4 hours) to allow for rolling upgrades.
   # This may need to be adjusted for large clusters.
   - alert: VersionMismatch
     expr: count by(cluster) (count_values by(tag, cluster) ("version", build_timestamp{job="cockroachdb"}))
       > 1
-    for: 30m
+    for: 4h
     annotations:
       description: Cluster {{ $labels.cluster }} running {{ $value }} different versions
       summary: Binary version mismatch on {{ $labels.cluster }}
@@ -63,31 +62,18 @@ groups:
     expr: cluster:capacity_available:ratio{job="cockroachdb"} < 0.2
     annotations:
       summary: Cluster {{ $labels.cluster }} at {{ $value }} available disk fraction
-  # Zero SQL qps.
-  - alert: ZeroSQLQps
-    expr: sql_conns{job="cockroachdb"} > 0 and rate(sql_query_count{job="cockroachdb"}[5m])
-      == 0
-    for: 10m
-    annotations:
-      summary: Instance {{ $labels.instance }} has SQL connections but no queries
   # Unavailable ranges.
   - alert: UnavailableRanges
     expr: (sum by(instance, cluster) (ranges_unavailable{job="cockroachdb"})) > 0
     for: 10m
-    labels:
-      severity: testing
     annotations:
       summary: Instance {{ $labels.instance }} has {{ $value }} unavailable ranges
-  # Leader-not-leaseholder ranges.
-  - alert: NoLeaseRanges
-    expr: (sum by(instance, cluster) (replicas_leaders_not_leaseholders{job="cockroachdb"}))
-      > 0
-    for: 10m
-    labels:
-      severity: testing
+  # Cockroach-measured clock offset nearing limit (by default, servers kill themselves at 400ms from the mean, so alert at 300ms)
+  - alert: ClockOffsetNearMax
+    expr: clock_offset_meannanos{job="cockroachdb"} > 300 * 1000 * 1000
+    for: 5m
     annotations:
-      summary: Instance {{ $labels.instance }} has {{ $value }} ranges without leases
-  # Certificate expiration. Alerts are per node.
+      summary: Clock on {{ $labels.instance }} as measured by cockroach is offset by {{ $value }} nanoseconds from the cluster mean  # Certificate expiration. Alerts are per node.
   - alert: CACertificateExpiresSoon
     expr: (security_certificate_expiration_ca{job="cockroachdb"} > 0) and (security_certificate_expiration_ca{job="cockroachdb"}
       - time()) < 86400 * 366
@@ -125,17 +111,47 @@ groups:
       summary: Client certificate for {{ $labels.instance }} expires in less than six months
   - alert: UICertificateExpiresSoon
     expr: (security_certificate_expiration_ui{job="cockroachdb"} > 0) and (security_certificate_expiration_ui{job="cockroachdb"}
-      - time()) < 86400 * 30
+      - time()) < 86400 * 20
     labels:
       frequency: daily
     annotations:
-      summary: UI certificate for {{ $labels.instance }} expires in less than 30 days
+      summary: UI certificate for {{ $labels.instance }} expires in less than 20 days
+  # Slow Latch/Lease/Raft requests.
+  - alert: SlowLatchRequest
+    expr: requests_slow_latch{job="cockroachdb"} > 0
+    for: 5m
+    labels:
+      severity: testing
+    annotations:
+      summary: '{{ $value }} slow latch requests on {{ $labels.instance }}'
+  - alert: SlowLeaseRequest
+    expr: requests_slow_lease{job="cockroachdb"} > 0
+    for: 5m
+    labels:
+      severity: testing
+    annotations:
+      summary: '{{ $value }} slow lease requests on {{ $labels.instance }}'
+  - alert: SlowRaftRequest
+    expr: requests_slow_raft{job="cockroachdb"} > 0
+    for: 5m
+    labels:
+      severity: testing
+    annotations:
+      summary: '{{ $value }} slow raft requests on {{ $labels.instance }}'
   # Getting close to open file descriptor limit.
   - alert: HighOpenFDCount
     expr: sys_fd_open{job="cockroachdb"} / sys_fd_softlimit{job="cockroachdb"} > 0.8
     for: 10m
-    labels:
-      severity: testing
     annotations:
       summary: 'Too many open file descriptors on {{ $labels.instance }}: {{ $value
         }} fraction used'
+  # Prometheus disk getting full.
+  - alert: PrometheusDiskLow
+    expr: node_filesystem_free{cluster="prometheus",job="node_exporter_prometheus",mountpoint="/data"}
+      / node_filesystem_size{cluster="prometheus",job="node_exporter_prometheus",mountpoint="/data"}
+      < 0.2
+    for: 10m
+    labels:
+      severity: testing
+    annotations:
+      summary: 'Prometheus storage is almost full: {{ $value }} fraction free'

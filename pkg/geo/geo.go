@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/r1"
@@ -853,8 +854,10 @@ func spatialObjectFromGeomT(t geom.T, soType geopb.SpatialObjectType) (geopb.Spa
 		if gc, ok := t.(*geom.GeometryCollection); !ok || !gc.Empty() {
 			return geopb.SpatialObject{}, errors.Newf("no layout found on object")
 		}
+	case geom.XYM, geom.XYZ, geom.XYZM:
+		return geopb.SpatialObject{}, unimplemented.NewWithIssueDetailf(53091, t.Layout().String()+"_datum", "dimension %s is not currently supported", t.Layout())
 	default:
-		return geopb.SpatialObject{}, errors.Newf("only 2D objects are currently supported")
+		return geopb.SpatialObject{}, errors.Newf("unexpected layout: %s", geom.XY)
 	}
 	bbox, err := boundingBoxFromGeomT(t, soType)
 	if err != nil {

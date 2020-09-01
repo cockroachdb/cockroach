@@ -183,10 +183,22 @@ func (ex *connExecutor) recordStatementSummary(
 		parseLat, planLat, runLat, svcLat, execOverhead, stats,
 	)
 
-	// Save the statementID as part of the statements executed in the current txn
-	// as well.
-	ex.extraTxnState.transactionStatementIDs = append(
-		ex.extraTxnState.transactionStatementIDs, stmtID)
+	// Do some transaction level accounting for the transaction this statement is
+	// a part of.
+
+	// We limit the number of statementIDs stored for a transaction, as dictated
+	// by the TxnStatsNumStmtIDsToRecord cluster setting.
+	maxStmtIDsLen := TxnStatsNumStmtIDsToRecord.Get(&ex.server.cfg.Settings.SV)
+	if int64(len(ex.extraTxnState.transactionStatementIDs)) < maxStmtIDsLen {
+		ex.extraTxnState.transactionStatementIDs = append(
+			ex.extraTxnState.transactionStatementIDs, stmtID)
+	}
+	// Add the current statement's ID to the hash. We don't track queries issued
+	// by the internal executor, in which case the hash function may be nil, and
+	// can therefore be safely ignored.
+	if ex.extraTxnState.transactionStatementsHash != nil {
+		ex.extraTxnState.transactionStatementsHash.Write([]byte(stmtID))
+	}
 	ex.extraTxnState.numRows += rowsAffected
 
 	if log.V(2) {

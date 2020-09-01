@@ -422,7 +422,7 @@ func (h *hashJoiner) readProbeSide() (
 	// First process the rows that were already buffered.
 	if h.rows[side].Len() > 0 {
 		row = h.rows[side].EncRow(0)
-		h.rows[side].PopFirst()
+		h.rows[side].PopFirst(h.Ctx)
 	} else {
 		var meta *execinfrapb.ProducerMetadata
 		var emitDirectly bool
