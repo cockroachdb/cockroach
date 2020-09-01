@@ -44,19 +44,9 @@ func (p *planner) schemaExists(
 }
 
 func (p *planner) writeSchemaDesc(ctx context.Context, desc *schemadesc.Mutable) error {
-	desc.MaybeIncrementVersion()
-	if err := p.Descriptors().AddUncommittedDescriptor(desc); err != nil {
-		return err
-	}
 	b := p.txn.NewBatch()
-	if err := catalogkv.WriteDescToBatch(
-		ctx,
-		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.ExecCfg().Settings,
-		b,
-		p.ExecCfg().Codec,
-		desc.ID,
-		desc,
+	if err := p.Descriptors().WriteDescToBatch(
+		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), desc, b,
 	); err != nil {
 		return err
 	}

@@ -1240,6 +1240,30 @@ func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) e
 	return nil
 }
 
+// WriteDescToBatch calls MaybeIncrementVersion, adds the descriptor to the
+// collection as an uncommitted descriptor, and writes it into b.
+func (tc *Collection) WriteDescToBatch(
+	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
+) error {
+	desc.MaybeIncrementVersion()
+	// TODO(ajwerner): Add validation here.
+	if err := tc.AddUncommittedDescriptor(desc); err != nil {
+		return err
+	}
+	return catalogkv.WriteDescToBatch(ctx, kvTrace, tc.settings, b, tc.codec(), desc.GetID(), desc)
+}
+
+// WriteDesc constructs a new Batch, calls WriteDescToBatch and runs it.
+func (tc *Collection) WriteDesc(
+	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, txn *kv.Txn,
+) error {
+	b := txn.NewBatch()
+	if err := tc.WriteDescToBatch(ctx, kvTrace, desc, b); err != nil {
+		return err
+	}
+	return txn.Run(ctx, b)
+}
+
 // GetDescriptorsWithNewVersion returns all the IDVersion pairs that have
 // undergone a schema change. Returns nil for no schema changes. The version
 // returned for each schema change is ClusterVersion - 1, because that's the one
