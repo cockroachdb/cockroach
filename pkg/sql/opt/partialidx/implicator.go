@@ -37,7 +37,8 @@ import (
 // We use the same logic as Postgres's predtest library to prove implication.
 // Note that this "proof" is not mathematically formal or rigorous. For the sake
 // of efficiency and reduced complexity this proof is a best-effort attempt and
-// false-negatives are possible.
+// false negatives are possible (see the false-negative test file for known
+// false negatives).
 //
 // The logic is as follows, where "=>" means "implies" and an "atom" is any
 // expression that is not a logical conjunction or disjunction.
