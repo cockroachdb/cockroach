@@ -3300,6 +3300,16 @@ func AsDTuple(e Expr) (*DTuple, bool) {
 	return nil, false
 }
 
+// MustBeDTuple attempts to retrieve a *DTuple from an Expr, panicking if the
+// assertion fails.
+func MustBeDTuple(e Expr) *DTuple {
+	i, ok := AsDTuple(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DTuple, found %T", e))
+	}
+	return i
+}
+
 // maybePopulateType populates the tuple's type if it hasn't yet been
 // populated.
 func (d *DTuple) maybePopulateType() {

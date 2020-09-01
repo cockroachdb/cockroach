@@ -1675,7 +1675,7 @@ func PeekLength(b []byte) (int, error) {
 	case geoMarker:
 		// Expect to reserve at least 8 bytes for int64.
 		if len(b) < 8 {
-			return 0, errors.Errorf("slice too short for geospatial (%d)", len(b))
+			return 0, errors.Errorf("slice too short for spatial object (%d)", len(b))
 		}
 		ret, err := getBytesLength(b[8:], ascendingGeoEscapes)
 		if err != nil {
@@ -1689,7 +1689,7 @@ func PeekLength(b []byte) (int, error) {
 	case geoDescMarker:
 		// Expect to reserve at least 8 bytes for int64.
 		if len(b) < 8 {
-			return 0, errors.Errorf("slice too short for geospatial (%d)", len(b))
+			return 0, errors.Errorf("slice too short for spatial object (%d)", len(b))
 		}
 		ret, err := getBytesLength(b[8:], descendingGeoEscapes)
 		if err != nil {
