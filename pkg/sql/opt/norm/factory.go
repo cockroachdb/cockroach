@@ -67,9 +67,7 @@ type Factory struct {
 	mem *memo.Memo
 
 	// funcs is the struct used to call all custom match and replace functions
-	// used by the normalization rules. It wraps an unnamed xfunc.CustomFuncs,
-	// so it provides a clean interface for calling functions from both the norm
-	// and xfunc packages using the same prefix.
+	// used by the normalization rules.
 	funcs CustomFuncs
 
 	// matchedRule is the callback function that is invoked each time a normalize

@@ -86,9 +86,9 @@ type explorer struct {
 	mem     *memo.Memo
 
 	// funcs is the struct used to call all custom match and replace functions
-	// used by the exploration rules. It wraps an unnamed xfunc.CustomFuncs,
-	// so it provides a clean interface for calling functions from both the xform
-	// and xfunc packages using the same prefix.
+	// used by the exploration rules. It wraps an unnamed norm.CustomFuncs, so
+	// it provides a clean interface for calling functions from both the xform
+	// and norm packages using the same prefix.
 	funcs CustomFuncs
 }
 
