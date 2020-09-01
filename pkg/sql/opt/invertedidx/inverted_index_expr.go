@@ -26,7 +26,7 @@ func NewDatumsToInvertedExpr(
 	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, desc *descpb.IndexDescriptor,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	if geoindex.IsEmptyConfig(&desc.GeoConfig) {
-		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")
+		return nil, fmt.Errorf("inverted joins are currently only supported for spatial indexes")
 	}
 
 	return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, &desc.GeoConfig)
