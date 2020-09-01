@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -61,7 +62,7 @@ type hashAggregator struct {
 	aggHelper          aggregatorHelper
 	inputTypes         []*types.T
 	outputTypes        []*types.T
-	inputArgsConverter *vecToDatumConverter
+	inputArgsConverter *colconv.VecToDatumConverter
 
 	// buckets contains all aggregation groups that we have so far. There is
 	// 1-to-1 mapping between buckets[i] and ht.vals[i]. Once the output from
@@ -187,7 +188,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			// TODO(yuzefovich): benchmark whether it is beneficial to buffer
 			// up several batches from the input before proceeding to online
 			// aggregation.
-			op.inputArgsConverter.convertBatch(b)
+			op.inputArgsConverter.ConvertBatch(b)
 			op.onlineAgg(ctx, b)
 		case hashAggregatorOutputting:
 			op.output.ResetInternalBatch()

@@ -29,6 +29,7 @@ const (
 	executionTimeTagSuffix     = "time.execution"
 	maxVecMemoryBytesTagSuffix = "mem.vectorized.max"
 	maxVecDiskBytesTagSuffix   = "disk.vectorized.max"
+	bytesReadTagSuffix         = "bytes.read"
 )
 
 // Stats is part of SpanStats interface.
@@ -39,13 +40,17 @@ func (vs *VectorizedStats) Stats() map[string]string {
 	} else {
 		timeSuffix = executionTimeTagSuffix
 	}
-	return map[string]string{
+	stats := map[string]string{
 		batchesOutputTagSuffix:     fmt.Sprintf("%d", vs.NumBatches),
 		tuplesOutputTagSuffix:      fmt.Sprintf("%d", vs.NumTuples),
 		timeSuffix:                 fmt.Sprintf("%v", vs.Time.Round(time.Microsecond)),
 		maxVecMemoryBytesTagSuffix: fmt.Sprintf("%d", vs.MaxAllocatedMem),
 		maxVecDiskBytesTagSuffix:   fmt.Sprintf("%d", vs.MaxAllocatedDisk),
 	}
+	if vs.BytesRead != 0 {
+		stats[bytesReadTagSuffix] = humanizeutil.IBytes(vs.BytesRead)
+	}
+	return stats
 }
 
 const (
@@ -55,6 +60,7 @@ const (
 	executionTimeQueryPlanSuffix     = "execution time"
 	maxVecMemoryBytesQueryPlanSuffix = "max vectorized memory allocated"
 	maxVecDiskBytesQueryPlanSuffix   = "max vectorized disk allocated"
+	bytesReadQueryPlanSuffix         = "bytes read"
 )
 
 // StatsForQueryPlan is part of DistSQLSpanStats interface.
@@ -77,6 +83,10 @@ func (vs *VectorizedStats) StatsForQueryPlan() []string {
 	if vs.MaxAllocatedDisk != 0 {
 		stats = append(stats,
 			fmt.Sprintf("%s: %s", maxVecDiskBytesQueryPlanSuffix, humanizeutil.IBytes(vs.MaxAllocatedDisk)))
+	}
+	if vs.BytesRead != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %s", bytesReadQueryPlanSuffix, humanizeutil.IBytes(vs.BytesRead)))
 	}
 	return stats
 }

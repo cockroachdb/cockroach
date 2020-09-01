@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -305,7 +306,7 @@ func GetProjectionOperator(
 		return &defaultCmpProjOp{
 			projOpBase:          projOpBase,
 			adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
-			toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
 			datumToVecConverter: GetDatumToPhysicalFn(outputType),
 		}, nil
 	}
