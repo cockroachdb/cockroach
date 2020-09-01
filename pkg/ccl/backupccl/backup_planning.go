@@ -768,7 +768,7 @@ func backupPlanHook(
 				},
 			)
 			if err != nil {
-				return errors.Wrapf(err, "invalid previous backups (a new full backup may be required if a table has been created, dropped or truncated)")
+				return errors.Wrap(err, "invalid previous backups")
 			}
 			if coveredTime != startTime {
 				return errors.Wrapf(err, "expected previous backups to cover until time %v, got %v", startTime, coveredTime)
