@@ -277,7 +277,7 @@ func (c *RowContainer) Swap(i, j int) {
 }
 
 // PopFirst discards the first row in the RowContainer.
-func (c *RowContainer) PopFirst() {
+func (c *RowContainer) PopFirst(ctx context.Context) {
 	if c.numRows == 0 {
 		panic("no rows added to container, nothing to pop")
 	}
@@ -295,10 +295,7 @@ func (c *RowContainer) PopFirst() {
 			c.chunks[0] = nil
 			c.deletedRows = 0
 			c.chunks = c.chunks[1:]
-
-			// We don't have a context plumbed here, but that's ok: it's not actually
-			// used in the shrink paths.
-			c.memAcc.Shrink(context.TODO(), size)
+			c.memAcc.Shrink(ctx, size)
 		}
 	}
 }

@@ -64,9 +64,7 @@ var _ execinfra.IOReader = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
 func (s *ColBatchScan) Init() {
-	s.ctx = context.Background()
 	s.init = true
-
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
 		s.ctx, s.flowCtx.Txn, s.spans,
@@ -125,6 +123,7 @@ func (s *ColBatchScan) GetBytesRead() int64 {
 
 // NewColBatchScan creates a new ColBatchScan operator.
 func NewColBatchScan(
+	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.TableReaderSpec,
@@ -199,6 +198,7 @@ func NewColBatchScan(
 		spans[i] = spec.Spans[i].Span
 	}
 	return &ColBatchScan{
+		ctx:       ctx,
 		spans:     spans,
 		flowCtx:   flowCtx,
 		rf:        &fetcher,

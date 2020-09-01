@@ -26,6 +26,7 @@ import (
 func TestRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	for _, numCols := range []int{0, 1, 2, 3, 5, 10, 15} {
 		for _, numRows := range []int{5, 10, 100} {
 			for _, numPops := range []int{0, 1, 2, numRows / 3, numRows / 2} {
@@ -35,7 +36,7 @@ func TestRowContainer(t *testing.T) {
 				}
 				st := cluster.MakeTestingClusterSettings()
 				m := mon.NewUnlimitedMonitor(
-					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
+					ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 				)
 				rc := NewRowContainer(m.MakeBoundAccount(), colinfo.ColTypeInfoFromResCols(resCol))
 				row := make(tree.Datums, numCols)
@@ -43,13 +44,13 @@ func TestRowContainer(t *testing.T) {
 					for j := range row {
 						row[j] = tree.NewDInt(tree.DInt(i*numCols + j))
 					}
-					if _, err := rc.AddRow(context.Background(), row); err != nil {
+					if _, err := rc.AddRow(ctx, row); err != nil {
 						t.Fatal(err)
 					}
 				}
 
 				for i := 0; i < numPops; i++ {
-					rc.PopFirst()
+					rc.PopFirst(ctx)
 				}
 
 				// Given that we just deleted numPops rows, we have numRows -
@@ -68,8 +69,8 @@ func TestRowContainer(t *testing.T) {
 						}
 					}
 				}
-				rc.Close(context.Background())
-				m.Stop(context.Background())
+				rc.Close(ctx)
+				m.Stop(ctx)
 			}
 		}
 	}
@@ -115,7 +116,7 @@ func TestRowContainerZeroCols(t *testing.T) {
 
 	const numRows = 10
 	for i := 0; i < numRows; i++ {
-		if _, err := rc.AddRow(context.Background(), nil); err != nil {
+		if _, err := rc.AddRow(ctx, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -131,11 +132,11 @@ func TestRowContainerZeroCols(t *testing.T) {
 	}
 
 	// Clear and try again.
-	rc.Clear(context.Background())
+	rc.Clear(ctx)
 
 	const numRowsAfterClear = 5
 	for i := 0; i < numRowsAfterClear; i++ {
-		if _, err := rc.AddRow(context.Background(), nil); err != nil {
+		if _, err := rc.AddRow(ctx, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -155,11 +156,12 @@ func BenchmarkRowContainerAt(b *testing.B) {
 	const numCols = 3
 	const numRows = 1024
 
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	m := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
+		ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 	)
-	defer m.Stop(context.Background())
+	defer m.Stop(ctx)
 
 	resCol := make(colinfo.ResultColumns, numCols)
 	for i := range resCol {
@@ -167,14 +169,14 @@ func BenchmarkRowContainerAt(b *testing.B) {
 	}
 
 	rc := NewRowContainer(m.MakeBoundAccount(), colinfo.ColTypeInfoFromResCols(resCol))
-	defer rc.Close(context.Background())
+	defer rc.Close(ctx)
 
 	row := make(tree.Datums, numCols)
 	for i := 0; i < numRows; i++ {
 		for j := range row {
 			row[j] = tree.NewDInt(tree.DInt(i*numCols + j))
 		}
-		if _, err := rc.AddRow(context.Background(), row); err != nil {
+		if _, err := rc.AddRow(ctx, row); err != nil {
 			b.Fatal(err)
 		}
 	}

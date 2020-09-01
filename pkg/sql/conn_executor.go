@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"hash"
 	"io"
 	"math"
 	"strings"
@@ -1041,8 +1042,18 @@ type connExecutor struct {
 		savepointsAtTxnRewindPos savepointStack
 
 		// transactionStatementIDs tracks all statement IDs that make up the current
-		// transaction.
+		// transaction. It's length is bound by the TxnStatsNumStmtIDsToRecord
+		// cluster setting.
 		transactionStatementIDs []roachpb.StmtID
+
+		// transactionStatementsHash is the hashed accumulation of all statementIDs
+		// that comprise the transaction. It is used to construct the key when
+		// recording transaction statistics. It's important to accumulate this hash
+		// as we go along in addition to the transactionStatementIDs as
+		// transactionStatementIDs are capped to prevent unbound expansion, but we
+		// still need the statementID hash to disambiguate beyond the capped
+		// statements.
+		transactionStatementsHash hash.Hash
 	}
 
 	// sessionData contains the user-configurable connection variables.

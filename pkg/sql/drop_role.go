@@ -151,7 +151,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		return err
 	}
 
-	lCtx := newInternalLookupCtx(descs, nil /*prefix - we want all descriptors */)
+	lCtx := newInternalLookupCtx(params.ctx, descs, nil /*prefix - we want all descriptors */)
 	// TODO(richardjcai): Also need to add privilege checking for types and
 	// user defined schemas when they are added.
 	// privileges are added.

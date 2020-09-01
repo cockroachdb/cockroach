@@ -1488,16 +1488,18 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.phaseTimes[sessionTransactionReceived] = ex.phaseTimes[sessionQueryReceived]
 	ex.phaseTimes[sessionFirstStartExecTransaction] = timeutil.Now()
 	ex.phaseTimes[sessionMostRecentStartExecTransaction] = ex.phaseTimes[sessionFirstStartExecTransaction]
+	ex.extraTxnState.transactionStatementsHash = fnv.New128()
+	ex.extraTxnState.transactionStatementIDs = nil
+	ex.extraTxnState.numRows = 0
 
 	onTxnFinish = func(ev txnEvent) {
 		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
 		ex.recordTransaction(ev, implicit, txnStart)
-		ex.extraTxnState.transactionStatementIDs = nil
-		ex.extraTxnState.numRows = 0
 	}
 	onTxnRestart = func() {
 		ex.phaseTimes[sessionMostRecentStartExecTransaction] = timeutil.Now()
 		ex.extraTxnState.transactionStatementIDs = nil
+		ex.extraTxnState.transactionStatementsHash = fnv.New128()
 		ex.extraTxnState.numRows = 0
 	}
 	return onTxnFinish, onTxnRestart
@@ -1508,19 +1510,11 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 	txnTime := txnEnd.Sub(txnStart)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
-	// First we go through all the statements in the transaction and hash their
-	// queries to get their IDs.
-	h := fnv.New128()
-	for _, stmtID := range ex.extraTxnState.transactionStatementIDs {
-		// Add the current statementID to the running hash state we've been
-		// accumulating.
-		h.Write([]byte(stmtID))
-	}
-	key := txnKey(fmt.Sprintf("%x", h.Sum(nil)))
-
 	txnServiceLat := ex.phaseTimes.getTransactionServiceLatency()
 	txnRetryLat := ex.phaseTimes.getTransactionRetryLatency()
 	commitLat := ex.phaseTimes.getCommitLatency()
+
+	key := txnKey(fmt.Sprintf("%x", ex.extraTxnState.transactionStatementsHash.Sum(nil)))
 
 	ex.statsCollector.recordTransaction(
 		key,

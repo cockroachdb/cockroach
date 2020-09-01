@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -649,36 +650,43 @@ type internalLookupCtx struct {
 type tableLookupFn = *internalLookupCtx
 
 // newInternalLookupCtxFromDescriptors "unwraps" the descriptors into the
-// appropriate implementation of Descriptor before constructing a
-// new internalLookupCtx. It is intended only for use when dealing with backups.
+// appropriate implementation of Descriptor before constructing a new
+// internalLookupCtx. It also hydrates any table descriptors with enum
+// information. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptors(
-	rawDescs []descpb.Descriptor, prefix *dbdesc.Immutable,
-) *internalLookupCtx {
-	descs := make([]catalog.Descriptor, len(rawDescs))
+	ctx context.Context, rawDescs []descpb.Descriptor, prefix *dbdesc.Immutable,
+) (*internalLookupCtx, error) {
+	descriptors := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
 		desc := &rawDescs[i]
 		switch t := desc.Union.(type) {
 		case *descpb.Descriptor_Database:
-			descs[i] = dbdesc.NewImmutable(*t.Database)
+			descriptors[i] = dbdesc.NewImmutable(*t.Database)
 		case *descpb.Descriptor_Table:
-			descs[i] = tabledesc.NewImmutable(*t.Table)
+			descriptors[i] = tabledesc.NewImmutable(*t.Table)
 		case *descpb.Descriptor_Type:
-			descs[i] = typedesc.NewImmutable(*t.Type)
+			descriptors[i] = typedesc.NewImmutable(*t.Type)
 		case *descpb.Descriptor_Schema:
-			descs[i] = schemadesc.NewImmutable(*t.Schema)
+			descriptors[i] = schemadesc.NewImmutable(*t.Schema)
 		}
 	}
-	return newInternalLookupCtx(descs, prefix)
+	lCtx := newInternalLookupCtx(ctx, descriptors, prefix)
+	if err := descs.HydrateGivenDescriptors(ctx, descriptors); err != nil {
+		return nil, err
+	}
+	return lCtx, nil
 }
 
-func newInternalLookupCtx(descs []catalog.Descriptor, prefix *dbdesc.Immutable) *internalLookupCtx {
+func newInternalLookupCtx(
+	ctx context.Context, descs []catalog.Descriptor, prefix *dbdesc.Immutable,
+) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
 	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
 	tbDescs := make(map[descpb.ID]*tabledesc.Immutable)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
 	var tbIDs, typIDs, dbIDs []descpb.ID
-	// Record database descriptors for name lookups.
+	// Record descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
 		case *dbdesc.Immutable:
@@ -703,6 +711,7 @@ func newInternalLookupCtx(descs []catalog.Descriptor, prefix *dbdesc.Immutable) 
 			schemaDescs[desc.GetID()] = desc
 		}
 	}
+
 	return &internalLookupCtx{
 		dbNames:     dbNames,
 		dbDescs:     dbDescs,
