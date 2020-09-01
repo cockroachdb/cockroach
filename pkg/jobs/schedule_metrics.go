@@ -117,7 +117,7 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 		NumFailed: metric.NewCounter(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.failed", name),
 			Help:        fmt.Sprintf("Number of %s jobs failed", name),
-			Measurement: "Entries",
+			Measurement: "Jobs",
 			Unit:        metric.Unit_COUNT,
 		}),
 	}

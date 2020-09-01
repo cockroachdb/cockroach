@@ -70,7 +70,7 @@ func TestScheduledJobExecutorRegistration(t *testing.T) {
 	instance := newStatusTrackingExecutor()
 	defer registerScopedScheduledJobExecutor(executorName, instance)()
 
-	registered, err := NewScheduledJobExecutor(executorName)
+	registered, err := newScheduledJobExecutor(executorName)
 	require.NoError(t, err)
 	require.Equal(t, instance, registered)
 }
