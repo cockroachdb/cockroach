@@ -245,9 +245,10 @@ func TestParseEWKT(t *testing.T) {
 		wkt         geopb.EWKT
 		expectedErr string
 	}{
-		{"POINT Z (1 2 3)", "only 2D objects are currently supported"},
-		{"POINT M (1 2 3)", "only 2D objects are currently supported"},
-		{"POINT ZM (1 2 3)", "only 2D objects are currently supported"},
+		{"POINT Z (1 2 3)", "unimplemented: dimension XYZ is not currently supported"},
+		// GEOS assumes all M coordinates as Z coordinates, so the error message is not great here.
+		{"POINT M (1 2 3)", "unimplemented: dimension XYZ is not currently supported"},
+		{"POINT ZM (1 2 3 4)", "unimplemented: dimension XYZ is not currently supported"},
 	}
 	for _, tc := range errorTestCases {
 		t.Run(string(tc.wkt), func(t *testing.T) {
