@@ -949,7 +949,7 @@ type importResumer struct {
 func prepareNewTableDescsForIngestion(
 	ctx context.Context,
 	txn *kv.Txn,
-	descriptors *descs.Collection,
+	descsCol *descs.Collection,
 	p sql.PlanHookState,
 	importTables []jobspb.ImportDetails_Table,
 	parentID descpb.ID,
@@ -1022,7 +1022,7 @@ func prepareNewTableDescsForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := backupccl.WriteDescriptors(ctx, txn, descriptors,
+	if err := backupccl.WriteDescriptors(ctx, txn, descsCol,
 		nil /* databases */, nil, /* schemas */
 		tableDescs, nil, tree.RequestedDescriptors,
 		p.ExecCfg().Settings, seqValKVs); err != nil {
@@ -1039,18 +1039,14 @@ func prepareNewTableDescsForIngestion(
 
 // Prepares descriptors for existing tables being imported into.
 func prepareExistingTableDescForIngestion(
-	ctx context.Context,
-	txn *kv.Txn,
-	descriptors *descs.Collection,
-	execCfg *sql.ExecutorConfig,
-	desc *descpb.TableDescriptor,
+	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, desc *descpb.TableDescriptor,
 ) (*descpb.TableDescriptor, error) {
 	if len(desc.Mutations) > 0 {
 		return nil, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
 	}
 
 	// Note that desc is just used to verify that the version matches.
-	importing, err := descriptors.GetMutableTableVersionByID(ctx, desc.ID, txn)
+	importing, err := descsCol.GetMutableTableVersionByID(ctx, desc.ID, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -1066,12 +1062,8 @@ func prepareExistingTableDescForIngestion(
 	importing.State = descpb.DescriptorState_OFFLINE
 	importing.OfflineReason = "importing"
 
-	if err := backupccl.VerifyDescriptorVersion(ctx, txn, execCfg.Codec, existing); err != nil {
-		return nil, errors.Wrap(err, "another operation is currently operating on the table")
-	}
-
 	// TODO(dt): de-validate all the FKs.
-	if err := descriptors.WriteDesc(
+	if err := descsCol.WriteDesc(
 		ctx, false /* kvTrace */, importing, txn,
 	); err != nil {
 		return nil, err
@@ -1088,7 +1080,7 @@ func (r *importResumer) prepareTableDescsForIngestion(
 ) error {
 	err := descs.Txn(ctx, p.ExecCfg().Settings, p.ExecCfg().LeaseManager,
 		p.ExecCfg().InternalExecutor, p.ExecCfg().DB, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
 
 			importDetails := details
@@ -1101,7 +1093,7 @@ func (r *importResumer) prepareTableDescsForIngestion(
 			var desc *descpb.TableDescriptor
 			for i, table := range details.Tables {
 				if !table.IsNew {
-					desc, err = prepareExistingTableDescForIngestion(ctx, txn, descriptors, p.ExecCfg(), table.Desc)
+					desc, err = prepareExistingTableDescForIngestion(ctx, txn, descsCol, table.Desc)
 					if err != nil {
 						return err
 					}
@@ -1127,7 +1119,7 @@ func (r *importResumer) prepareTableDescsForIngestion(
 			// misbehave when I tried to write the desc one at a time.
 			if len(newTableDescs) != 0 {
 				res, err := prepareNewTableDescsForIngestion(
-					ctx, txn, descriptors, p, newTableDescs, importDetails.ParentID)
+					ctx, txn, descsCol, p, newTableDescs, importDetails.ParentID)
 				if err != nil {
 					return err
 				}
@@ -1320,14 +1312,13 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 	}
 	log.Event(ctx, "making tables live")
 
-	// Needed to trigger the schema change manager.
 	lm, ie, db := execCfg.LeaseManager, execCfg.InternalExecutor, execCfg.DB
 	err := descs.Txn(ctx, execCfg.Settings, lm, ie, db, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		b := txn.NewBatch()
 		for _, tbl := range details.Tables {
-			newTableDesc, err := descriptors.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+			newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
 			if err != nil {
 				return err
 			}
@@ -1357,14 +1348,11 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 			}
 
 			// TODO(dt): re-validate any FKs?
-			if err := backupccl.VerifyDescriptorVersion(ctx, txn, execCfg.Codec, prevTableDesc); err != nil {
-				return errors.Wrap(err, "publishing tables")
-			}
-
-			if err := descriptors.WriteDescToBatch(
+			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, newTableDesc, b,
 			); err != nil {
 				return errors.Wrapf(err, "publishing table %d", newTableDesc.ID)
+			}
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			return errors.Wrap(err, "publishing tables")
@@ -1403,9 +1391,9 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 	cfg := phs.(sql.PlanHookState).ExecCfg()
 	lm, ie, db := cfg.LeaseManager, cfg.InternalExecutor, cfg.DB
 	return descs.Txn(ctx, cfg.Settings, lm, ie, db, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		if err := r.dropTables(ctx, txn, descriptors, cfg); err != nil {
+		if err := r.dropTables(ctx, txn, descsCol, cfg); err != nil {
 			return err
 		}
 		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
@@ -1433,7 +1421,7 @@ func (r *importResumer) releaseProtectedTimestamp(
 
 // dropTables implements the OnFailOrCancel logic.
 func (r *importResumer) dropTables(
-	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, execCfg *sql.ExecutorConfig,
+	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 
@@ -1448,7 +1436,7 @@ func (r *importResumer) dropTables(
 	var empty []*tabledesc.Immutable
 	for _, tbl := range details.Tables {
 		if !tbl.IsNew {
-			desc, err := descriptors.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+			desc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
 			if err != nil {
 				return err
 			}
@@ -1490,7 +1478,7 @@ func (r *importResumer) dropTables(
 	dropTime := int64(1)
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
-		newTableDesc, err := descriptors.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+		newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
 		if err != nil {
 			return err
 		}
@@ -1517,10 +1505,7 @@ func (r *importResumer) dropTables(
 			// IMPORT did not create this table, so we should not drop it.
 			newTableDesc.State = descpb.DescriptorState_PUBLIC
 		}
-		if err := backupccl.VerifyDescriptorVersion(ctx, txn, execCfg.Codec, prevTableDesc); err != nil {
-			return errors.Wrap(err, "rolling back tables")
-		}
-		if err := descriptors.WriteDescToBatch(
+		if err := descsCol.WriteDescToBatch(
 			ctx, false /* kvTrace */, newTableDesc, b,
 		); err != nil {
 			return err
