@@ -108,14 +108,6 @@ func RemoveObjectNamespaceEntry(
 	return txn.Run(ctx, b)
 }
 
-// RemovePublicTableNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
-// for public tables.
-func RemovePublicTableNamespaceEntry(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, name string,
-) error {
-	return RemoveObjectNamespaceEntry(ctx, txn, codec, parentID, keys.PublicSchemaID, name, false /* KVTrace */)
-}
-
 // RemoveSchemaNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
 // for schemas.
 func RemoveSchemaNamespaceEntry(
