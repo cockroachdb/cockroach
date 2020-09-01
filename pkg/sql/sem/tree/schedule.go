@@ -70,7 +70,7 @@ func (node *ScheduledBackup) Format(ctx *FmtCtx) {
 	}
 
 	if node.ScheduleOptions != nil {
-		ctx.WriteString(" WITH EXPERIMENTAL SCHEDULE OPTIONS ")
+		ctx.WriteString(" WITH SCHEDULE OPTIONS ")
 		node.ScheduleOptions.Format(ctx)
 	}
 }
