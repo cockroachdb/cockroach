@@ -11,6 +11,7 @@ groups:
       summary: Instance {{ $labels.instance }} dead
   # Alert for any instance that is not ready for a while.
   - alert: InstanceNotReady
+    # This alert applies only to Kubernetes deployments and requires that you run kube-state-metrics: https://github.com/kubernetes/kube-state-metrics
     expr: kube_statefulset_status_replicas_ready{statefulset="cockroachdb"} != kube_statefulset_status_replicas{statefulset="cockroachdb"}
     for: 45m
     annotations:
