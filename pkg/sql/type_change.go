@@ -74,24 +74,10 @@ func (p *planner) writeTypeSchemaChange(
 }
 
 func (p *planner) writeTypeDesc(ctx context.Context, typeDesc *typedesc.Mutable) error {
-	// Maybe increment the type's version.
-	typeDesc.MaybeIncrementVersion()
-
-	// Add the modified descriptor to the descriptor collection.
-	if err := p.Descriptors().AddUncommittedDescriptor(typeDesc); err != nil {
-		return err
-	}
-
 	// Write the type out to a batch.
 	b := p.txn.NewBatch()
-	if err := catalogkv.WriteDescToBatch(
-		ctx,
-		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.ExecCfg().Settings,
-		b,
-		p.ExecCfg().Codec,
-		typeDesc.ID,
-		typeDesc,
+	if err := p.Descriptors().WriteDescToBatch(
+		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), typeDesc, b,
 	); err != nil {
 		return err
 	}
