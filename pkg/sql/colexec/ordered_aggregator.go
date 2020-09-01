@@ -163,7 +163,7 @@ func NewOrderedAggregator(
 		inputArgsConverter: inputArgsConverter,
 		toClose:            toClose,
 	}
-	a.aggHelper = newAggregatorHelper(allocator, memAccount, inputTypes, spec, &a.datumAlloc, false /* isHashAgg */)
+	a.aggHelper = newAggregatorHelper(allocator, memAccount, inputTypes, spec, &a.datumAlloc, false /* isHashAgg */, coldata.BatchSize())
 	return a, nil
 }
 
