@@ -3950,16 +3950,17 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 		dur      = 8158 * time.Millisecond
 		attempts = 120
 	)
+	var ba roachpb.BatchRequest
+	get := &roachpb.GetRequest{}
+	get.Key = roachpb.Key("a")
+	ba.Add(get)
+	br := &roachpb.BatchResponse{}
+	br.Error = roachpb.NewError(errors.New("boom"))
 	desc := &roachpb.RangeDescriptor{RangeID: 9, StartKey: roachpb.RKey("x")}
 	{
-		exp := `have been waiting 8.16s (120 attempts) for RPC to` +
-			` r9:{-} [<no replicas>, next=0, gen=0]: boom`
-		act := slowRangeRPCWarningStr(
-			dur,
-			120,
-			desc,
-			roachpb.NewError(errors.New("boom")))
-
+		exp := `have been waiting 8.16s (120 attempts) for RPC Get ["a",/Min) to` +
+			` r9:{-} [<no replicas>, next=0, gen=0]; resp: (err: boom)`
+		act := slowRangeRPCWarningStr(ba, dur, attempts, desc, nil /* err */, br)
 		require.Equal(t, exp, act)
 	}
 

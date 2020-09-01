@@ -272,7 +272,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 
 	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
 	if err != nil {
-		log.Infof(ctx, "could not initialize GEOS - geospatial functions may not be available: %v", err)
+		log.Infof(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
 	} else {
 		log.Infof(ctx, "GEOS loaded from directory %s", loc)
 	}
