@@ -596,7 +596,7 @@ func (*RenameDatabase) StatementTag() string { return "RENAME DATABASE" }
 func (*ReparentDatabase) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ReparentDatabase) StatementTag() string { return "TODO (rohany): Implement" }
+func (*ReparentDatabase) StatementTag() string { return "CONVERT TO SCHEMA" }
 
 // StatementType implements the Statement interface.
 func (*RenameIndex) StatementType() StatementType { return DDL }

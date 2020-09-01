@@ -81,7 +81,7 @@ func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 ) error {
 	// For now, only interested in failed status.
 	if jobStatus == StatusFailed {
-		DefaultHandleFailedRun(schedule, jobID, nil)
+		DefaultHandleFailedRun(schedule, "job %d failed", jobID)
 	}
 	return nil
 }
