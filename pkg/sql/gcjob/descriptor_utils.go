@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -27,34 +27,34 @@ import (
 func updateDescriptorGCMutations(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	table *tabledesc.Immutable,
+	tableID descpb.ID,
 	garbageCollectedIndexID descpb.IndexID,
 ) error {
-	log.Infof(ctx, "updating GCMutations for table %d after removing index %d", table.ID, garbageCollectedIndexID)
+	log.Infof(ctx, "updating GCMutations for table %d after removing index %d",
+		tableID, garbageCollectedIndexID)
 	// Remove the mutation from the table descriptor.
-	updateTableMutations := func(desc catalog.MutableDescriptor) error {
-		tbl := desc.(*tabledesc.Mutable)
-		for i := 0; i < len(tbl.GCMutations); i++ {
-			other := tbl.GCMutations[i]
-			if other.IndexID == garbageCollectedIndexID {
-				tbl.GCMutations = append(tbl.GCMutations[:i], tbl.GCMutations[i+1:]...)
-				break
+	return descs.Txn(
+		ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
+		execCfg.DB, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		) error {
+			tbl, err := descsCol.GetMutableTableVersionByID(ctx, tableID, txn)
+			if err != nil {
+				return err
 			}
-		}
-
-		return nil
-	}
-
-	_, err := execCfg.LeaseManager.Publish(
-		ctx,
-		table.ID,
-		updateTableMutations,
-		nil, /* logEvent */
-	)
-	if err != nil {
-		return err
-	}
-	return nil
+			for i := 0; i < len(tbl.GCMutations); i++ {
+				other := tbl.GCMutations[i]
+				if other.IndexID == garbageCollectedIndexID {
+					tbl.GCMutations = append(tbl.GCMutations[:i], tbl.GCMutations[i+1:]...)
+					break
+				}
+			}
+			b := txn.NewBatch()
+			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tbl, b); err != nil {
+				return err
+			}
+			return txn.Run(ctx, b)
+		})
 }
 
 // dropTableDesc removes a descriptor from the KV database.
