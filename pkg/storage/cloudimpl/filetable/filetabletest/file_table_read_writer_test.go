@@ -71,13 +71,18 @@ func uploadFile(
 func checkNumberOfPayloadChunks(
 	ctx context.Context,
 	t *testing.T,
-	payloadTableName, filename string,
+	fileTableName, payloadTableName, filename string,
 	expectedNumChunks int,
 	sqlDB *gosql.DB,
 ) {
+	var fileID []uint8
+	err := sqlDB.QueryRowContext(ctx, fmt.Sprintf(`SELECT file_id FROM %s WHERE filename=$1`,
+		fileTableName), filename).Scan(&fileID)
+	require.NoError(t, err)
+
 	var count int
-	err := sqlDB.QueryRowContext(ctx, fmt.Sprintf(`SELECT count(*) FROM %s WHERE filename='%s'`,
-		payloadTableName, filename)).Scan(&count)
+	err = sqlDB.QueryRowContext(ctx, fmt.Sprintf(`SELECT count(*) FROM %s WHERE file_id=$1`,
+		payloadTableName), fileID).Scan(&count)
 	require.NoError(t, err)
 	require.Equal(t, expectedNumChunks, count)
 }
@@ -198,8 +203,8 @@ func TestReadWriteFile(t *testing.T) {
 			sqlDB)
 		expectedNumChunks := (testCase.fileSize / testCase.chunkSize) +
 			(testCase.fileSize % testCase.chunkSize)
-		checkNumberOfPayloadChunks(ctx, t, fileTableReadWriter.GetFQPayloadTableName(), testFileName,
-			expectedNumChunks, sqlDB)
+		checkNumberOfPayloadChunks(ctx, t, fileTableReadWriter.GetFQFileTableName(),
+			fileTableReadWriter.GetFQPayloadTableName(), testFileName, expectedNumChunks, sqlDB)
 
 		// Delete file.
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
@@ -266,8 +271,8 @@ func TestReadWriteFile(t *testing.T) {
 		checkMetadataEntryExists(ctx, t, fileTableReadWriter.GetFQFileTableName(), testFileName, sqlDB)
 		expectedNumChunks := (expectedFileSize / chunkSize) +
 			(expectedFileSize % chunkSize)
-		checkNumberOfPayloadChunks(ctx, t, fileTableReadWriter.GetFQPayloadTableName(), testFileName,
-			expectedNumChunks, sqlDB)
+		checkNumberOfPayloadChunks(ctx, t, fileTableReadWriter.GetFQFileTableName(),
+			fileTableReadWriter.GetFQPayloadTableName(), testFileName, expectedNumChunks, sqlDB)
 
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
 	})
