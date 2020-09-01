@@ -5,6 +5,12 @@ INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
 statement ok
 CREATE MATERIALIZED VIEW v AS SELECT x, y FROM t
 
+# Ensure that materialized views show up in SHOW TABLES.
+query T
+SELECT table_name FROM [SHOW TABLES] WHERE type = 'materialized view'
+----
+v
+
 query II rowsort
 SELECT * FROM v
 ----
