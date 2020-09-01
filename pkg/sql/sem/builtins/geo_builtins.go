@@ -3602,7 +3602,7 @@ The paths themselves are given in the direction of the first geometry.`,
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"g", types.Geometry},
-				{"rotRadians", types.Float},
+				{"rot_radians", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -3617,7 +3617,7 @@ The paths themselves are given in the direction of the first geometry.`,
 				return tree.NewDGeometry(ret), nil
 			},
 			Info: infoBuilder{
-				info: `returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle`,
+				info: `Returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle.`,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},

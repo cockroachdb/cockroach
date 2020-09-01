@@ -1591,7 +1591,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td></tr>
 <tr><td><a name="st_reverse"></a><code>st_reverse(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified geometry by reversing the order of its vertices.</p>
 </span></td></tr>
-<tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, rotRadians: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle</p>
+<tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, rot_radians: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle.</p>
 </span></td></tr>
 <tr><td><a name="st_scale"></a><code>st_scale(g: geometry, factor: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry scaled by taking in a Geometry as the factor</p>
 </span></td></tr>
@@ -2636,4 +2636,3 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
 </span></td></tr></tbody>
 </table>
-

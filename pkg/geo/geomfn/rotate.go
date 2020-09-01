@@ -17,14 +17,15 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
-// Rotate returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle 
+// Rotate returns a modified Geometry whose coordinates are rotated
+// around the origin by a rotation angle.
 func Rotate(geometry geo.Geometry, rotRadians float64) (geo.Geometry, error) {
 	g, err := geometry.AsGeomT()
 	if err != nil {
 		return geo.Geometry{}, err
 	}
 
-	g, err = RotateGeom(g, rotRadians)
+	g, err = rotateGeomT(g, rotRadians)
 	if err != nil {
 		return geo.Geometry{}, err
 	}
@@ -32,8 +33,9 @@ func Rotate(geometry geo.Geometry, rotRadians float64) (geo.Geometry, error) {
 	return geo.MakeGeometryFromGeomT(g)
 }
 
-// RotateGeom returns a modified geom.T whose coordinates are rotated around the origin by a rotation angle 
-func RotateGeom(g geom.T, rotRadians float64) (geom.T, error){
+// rotateGeomT returns a modified geom.T whose coordinates are
+// rotated around the origin by a rotation angle.
+func rotateGeomT(g geom.T, rotRadians float64) (geom.T, error) {
 	if geomCollection, ok := g.(*geom.GeometryCollection); ok {
 		return rotateCollection(geomCollection, rotRadians)
 	}
@@ -63,8 +65,9 @@ func RotateGeom(g geom.T, rotRadians float64) (geom.T, error){
 	return g, nil
 }
 
-// rotateCoords rotates the coordinates around the origin by a rotation angle 
-func rotateCoords(g geom.T, rotRadians float64) ([]float64, error){
+// rotateCoords rotates the coordinates around the origin by
+// a rotation angle.
+func rotateCoords(g geom.T, rotRadians float64) ([]float64, error) {
 	stride := g.Stride()
 	coords := g.FlatCoords()
 	layout := g.Layout()
@@ -90,13 +93,14 @@ func rotateCoords(g geom.T, rotRadians float64) ([]float64, error){
 	return newCoords, nil
 }
 
-// rotateCollection iterates through a GeometryCollection and calls RotateGeom() on each item.
+// rotateCollection iterates through a GeometryCollection and
+// calls rotateGeomT() on each item.
 func rotateCollection(
 	geomCollection *geom.GeometryCollection, rotRadians float64,
 ) (*geom.GeometryCollection, error) {
 	res := geom.NewGeometryCollection()
 	for _, subG := range geomCollection.Geoms() {
-		subGeom, err := RotateGeom(subG, rotRadians)
+		subGeom, err := rotateGeomT(subG, rotRadians)
 		if err != nil {
 			return nil, err
 		}
