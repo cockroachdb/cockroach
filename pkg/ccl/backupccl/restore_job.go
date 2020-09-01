@@ -1232,7 +1232,18 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 		b := txn.NewBatch()
 		newTables := make([]*descpb.TableDescriptor, 0, len(details.TableDescs))
 		for _, tbl := range r.tables {
-			newTableDesc := tabledesc.NewExistingMutable(*tbl.TableDesc())
+			// The table descriptor may have been updated elsewhere during the
+			// restore, e.g. by a new proto field if the job is being run during a
+			// cluster upgrade.
+			table, err := catalogkv.MustGetTableDescByID(ctx, txn, r.execCfg.Codec, tbl.GetID())
+			if err != nil {
+				return errors.Wrap(err, "fetching latest version of table")
+			}
+			if table.GetState() != descpb.DescriptorState_OFFLINE {
+				return errors.Newf("table %s (%d) is no longer offline during restore",
+					tbl.GetName(), tbl.GetID())
+			}
+			newTableDesc := tabledesc.NewExistingMutable(table.TableDescriptor)
 			newTableDesc.Version++
 			newTableDesc.State = descpb.DescriptorState_PUBLIC
 			newTableDesc.OfflineReason = ""
@@ -1244,14 +1255,16 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 				return err
 			}
 			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
-			existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, tbl)
+			// Get the bytes for this descriptor.
+			key := catalogkeys.MakeDescMetadataKey(r.execCfg.Codec, table.GetID())
+			existingKV, err := txn.Get(ctx, key)
 			if err != nil {
-				return errors.Wrap(err, "validating table descriptor has not changed")
+				return errors.Wrapf(err, "fetching kv for table %d", table.GetID())
 			}
 			b.CPut(
 				catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, newTableDesc.ID),
 				newTableDesc.DescriptorProto(),
-				existingDescVal,
+				existingKV.Value.TagAndDataBytes(),
 			)
 			newTables = append(newTables, newTableDesc.TableDesc())
 		}
