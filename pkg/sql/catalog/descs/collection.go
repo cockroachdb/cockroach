@@ -365,7 +365,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 //
 // If flags.required is false, GetMutableTableDescriptor() will gracefully
 // return a nil descriptor and no error if the table does not exist.
-//
+// If flags.RequireMutable is false, nil will be returned.
 func (tc *Collection) GetMutableTableDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
 ) (*tabledesc.Mutable, error) {
@@ -1244,7 +1244,8 @@ func (tc *Collection) HasUncommittedTypes() bool {
 var _ = (*Collection).HasUncommittedTypes
 
 // AddUncommittedDescriptor adds an uncommitted descriptor modified in the
-// transaction to the Collection.
+// transaction to the Collection. The descriptor must either be a new descriptor
+// or carry the subsequent version to the original version.
 func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) error {
 	if desc.GetVersion() != desc.OriginalVersion()+1 {
 		return errors.AssertionFailedf(
@@ -1264,6 +1265,30 @@ func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) e
 	tc.uncommittedDescriptors = append(tc.uncommittedDescriptors, tbl)
 	tc.releaseAllDescriptors()
 	return nil
+}
+
+// WriteDescToBatch calls MaybeIncrementVersion, adds the descriptor to the
+// collection as an uncommitted descriptor, and writes it into b.
+func (tc *Collection) WriteDescToBatch(
+	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
+) error {
+	desc.MaybeIncrementVersion()
+	// TODO(ajwerner): Add validation here.
+	if err := tc.AddUncommittedDescriptor(desc); err != nil {
+		return err
+	}
+	return catalogkv.WriteDescToBatch(ctx, kvTrace, tc.settings, b, tc.codec(), desc.GetID(), desc)
+}
+
+// WriteDesc constructs a new Batch, calls WriteDescToBatch and runs it.
+func (tc *Collection) WriteDesc(
+	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, txn *kv.Txn,
+) error {
+	b := txn.NewBatch()
+	if err := tc.WriteDescToBatch(ctx, kvTrace, desc, b); err != nil {
+		return err
+	}
+	return txn.Run(ctx, b)
 }
 
 // GetDescriptorsWithNewVersion returns all the IDVersion pairs that have
