@@ -52,9 +52,15 @@ func registerBackup(r *testRegistry) {
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 		time.Sleep(time.Second) // wait for csv server to open listener
 
-		c.Run(ctx, c.Node(1), "./workload", "fixtures", "import", "bank",
+		importArgs := []string{
+			"./workload", "fixtures", "import", "bank",
 			"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
-			fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}")
+			fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
+		}
+		if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+			importArgs = append(importArgs, "--deprecated-fk-indexes")
+		}
+		c.Run(ctx, c.Node(1), importArgs...)
 
 		return dest
 	}
