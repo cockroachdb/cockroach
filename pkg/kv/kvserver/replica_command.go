@@ -2068,23 +2068,7 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 }
 
 func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescriptor) bool {
-	// TODO(jeffreyxiao): This hacky fix ensures that we don't fail the
-	// conditional get because of the ordering of InternalReplicas. Calling
-	// Replicas() will sort the list of InternalReplicas as a side-effect. The
-	// invariant of having InternalReplicas sorted is not maintained in 19.1.
-	// Additionally, in 19.2, it's possible for the in-memory copy of
-	// RangeDescriptor to become sorted from a call to Replicas() without
-	// updating the copy in kv. These two factors makes it possible for the
-	// in-memory copy to be out of sync from the copy in kv. The sorted invariant
-	// of InternalReplicas is used by ReplicaDescriptors.Voters() and
-	// ReplicaDescriptors.Learners().
-	if desc != nil {
-		desc.Replicas() // for sorting side-effect
-	}
 	return func(desc2 *roachpb.RangeDescriptor) bool {
-		if desc2 != nil {
-			desc2.Replicas() // for sorting side-effect
-		}
 		return desc.Equal(desc2)
 	}
 }
