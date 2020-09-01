@@ -298,13 +298,23 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 	}
 	log.Infof(ctx, "scheduled jobs %+v", jobs)
 	buf := bytes.Buffer{}
+	usingSQLLiveness := r.startUsingSQLLivenessAdoption(ctx)
 	for i, id := range jobs {
-		select {
-		case r.adoptionCh <- struct{}{}:
-		case <-ctx.Done():
-			return ctx.Err()
+		// In the pre-20.2 and mixed-version state, the adoption loop needs to be
+		// notified once per job (in the worst case) in order to ensure that all
+		// newly created jobs get adopted in a timely manner. In the sqlliveness
+		// world of 20.2 and later, we only need to notify the loop once as the
+		// newly created jobs are already claimed. The adoption loop will merely
+		// start all previously claimed jobs.
+		if !usingSQLLiveness || i == 0 {
+			select {
+			case r.adoptionCh <- struct{}{}:
+			case <-r.stopper.ShouldQuiesce():
+				return stop.ErrUnavailable
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
-
 		if i > 0 {
 			buf.WriteString(",")
 		}
@@ -318,9 +328,9 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
        AND (status != 'succeeded' AND status != 'failed' AND status != 'canceled')`,
 		buf.String())
 	for r := retry.StartWithCtx(ctx, retry.Options{
-		InitialBackoff: 10 * time.Millisecond,
+		InitialBackoff: 5 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
-		Multiplier:     2,
+		Multiplier:     1.5,
 	}); r.Next(); {
 		// We poll the number of queued jobs that aren't finished. As with SHOW JOBS
 		// WHEN COMPLETE, if one of the jobs is missing from the jobs table for
@@ -534,7 +544,7 @@ func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *kv.Txn)
 
 // DefaultCancelInterval is a reasonable interval at which to poll this node
 // for liveness failures and cancel running jobs.
-var DefaultCancelInterval = base.DefaultTxnHeartbeatInterval
+var DefaultCancelInterval = 10 * time.Second
 
 // DefaultAdoptInterval is a reasonable interval at which to poll system.jobs
 // for jobs with expired leases.
@@ -543,11 +553,24 @@ var DefaultCancelInterval = base.DefaultTxnHeartbeatInterval
 // Registry.Start has been called will not have any effect.
 var DefaultAdoptInterval = 30 * time.Second
 
+// TestingSetAdoptAndCancelIntervals can be used to accelerate job adoption and
+// state changes.
+func TestingSetAdoptAndCancelIntervals(adopt, cancel time.Duration) (cleanup func()) {
+	prevAdopt := DefaultAdoptInterval
+	prevCancel := DefaultCancelInterval
+	DefaultAdoptInterval = adopt
+	DefaultCancelInterval = cancel
+	return func() {
+		DefaultAdoptInterval = prevAdopt
+		DefaultCancelInterval = prevCancel
+	}
+}
+
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
 
-// gcInterval is how often we check for and delete job records older than the
-// retention limit.
-const gcInterval = 1 * time.Hour
+// maxGCInterval is the maximum duration for how often we check for and delete job
+// records older than the retention limit.
+const maxGCInterval = 1 * time.Hour
 
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
@@ -556,35 +579,65 @@ func (r *Registry) Start(
 	ctx context.Context, stopper *stop.Stopper, cancelInterval, adoptInterval time.Duration,
 ) error {
 
-	stopper.RunWorker(context.Background(), func(ctx context.Context) {
-		// Calling maybeCancelJobs once at the start ensures we have an up-to-date
-		// liveness epoch before we wait out the first cancelInterval.
-		r.maybeCancelJobs(ctx, r.nl)
-		for {
-			select {
-			case <-stopper.ShouldStop():
+	every := log.Every(time.Second)
+	withSession := func(
+		f func(ctx context.Context, s sqlliveness.Session),
+	) func(ctx context.Context) {
+		return func(ctx context.Context) {
+			if !r.startUsingSQLLivenessAdoption(ctx) {
 				return
-			case <-time.After(cancelInterval):
-				r.maybeCancelJobs(ctx, r.nl)
 			}
-		}
-	})
-
-	stopper.RunWorker(context.Background(), func(ctx context.Context) {
-		for {
-			select {
-			case <-stopper.ShouldStop():
-				return
-			case <-time.After(gcInterval):
-				old := timeutil.Now().Add(-1 * gcSetting.Get(&r.settings.SV))
-				if err := r.cleanupOldJobs(ctx, old); err != nil {
-					log.Warningf(ctx, "error cleaning up old job records: %v", err)
+			s, err := r.sqlInstance.Session(ctx)
+			if err != nil {
+				if log.ExpensiveLogEnabled(ctx, 2) || (ctx.Err() == nil && every.ShouldLog()) {
+					log.Errorf(ctx, "error getting live session: %s", err)
 				}
+				return
 			}
+
+			log.VEventf(ctx, 1, "registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
+			f(ctx, s)
+		}
+	}
+
+	removeClaimsFromDeadSessions := func(ctx context.Context, s sqlliveness.Session) {
+		if _, err := r.ex.QueryRowEx(
+			ctx, "expire-sessions", nil,
+			sessiondata.InternalExecutorOverride{User: security.RootUser}, `
+UPDATE system.jobs
+   SET claim_session_id = NULL
+ WHERE claim_session_id <> $1
+   AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)`,
+			s.ID().UnsafeBytes()); err != nil {
+			log.Errorf(ctx, "error expiring job sessions: %s", err)
+		}
+	}
+	servePauseAndCancelRequests := func(ctx context.Context, s sqlliveness.Session) {
+		if err := r.servePauseAndCancelRequests(ctx, s); err != nil {
+			log.Errorf(ctx, "failed to serve pause and cancel requests: %v", err)
+		}
+	}
+	cancelLoopTask := withSession(func(ctx context.Context, s sqlliveness.Session) {
+		removeClaimsFromDeadSessions(ctx, s)
+		r.maybeCancelJobs(ctx, s)
+		servePauseAndCancelRequests(ctx, s)
+	})
+	claimJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
+		if err := r.claimJobs(ctx, s); err != nil {
+			log.Errorf(ctx, "error claiming jobs: %s", err)
 		}
 	})
-
-	maybeAdoptJobs := func(ctx context.Context, randomizeJobOrder bool) {
+	processClaimedJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
+		if r.adoptionDisabled(ctx) {
+			log.Warningf(ctx, "canceling all adopted jobs due to liveness failure")
+			r.cancelAllAdoptedJobs()
+			return
+		}
+		if err := r.processClaimedJobs(ctx, s); err != nil {
+			log.Errorf(ctx, "error processing claimed jobs: %s", err)
+		}
+	})
+	maybeAdoptJobsDeprecated := func(ctx context.Context, randomizeJobOrder bool) {
 		if r.adoptionDisabled(ctx) {
 			r.deprecatedCancelAll(ctx)
 			return
@@ -594,137 +647,149 @@ func (r *Registry) Start(
 		}
 	}
 
-	claimAndProcessJobs := func(ctx context.Context) {
-		if r.adoptionDisabled(ctx) {
-			log.Warningf(ctx, "canceling all adopted jobs due to liveness failure")
-			r.cancelAllAdoptedJobs()
-			return
-		}
-		s, err := r.sqlInstance.Session(ctx)
-		if err != nil {
-			log.Errorf(ctx, "error getting live session: %s", err)
-			return
-		}
-		log.VEventf(ctx, 1, "registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
-
-		if _, err := r.ex.QueryRowEx(
-			ctx, "expire-sessions", nil,
-			sessiondata.InternalExecutorOverride{User: security.RootUser}, `
-UPDATE system.jobs SET claim_session_id = NULL
-WHERE NOT(crdb_internal.sql_liveness_is_alive(claim_session_id))`,
-		); err != nil {
-			log.Errorf(ctx, "error expiring job sessions: %s", err)
-			return
-		}
-
-		if err := r.claimJobs(ctx, s); err != nil {
-			log.Errorf(ctx, "error claiming jobs: %s", err)
-		}
-
-		if err := r.servePauseAndCancelRequests(ctx, s); err != nil {
-			log.Errorf(ctx, "error processing cancel/pause requests: %s", err)
-		}
-
-		if err := r.processClaimedJobs(ctx, s); err != nil {
-			log.Errorf(ctx, "error processing claimed jobs: %s", err)
-		}
-	}
-
-	stopper.RunWorker(context.Background(), func(ctx context.Context) {
+	if err := stopper.RunAsyncTask(context.Background(), "jobs/cancel", func(ctx context.Context) {
+		// Calling maybeCancelJobs once at the start ensures we have an up-to-date
+		// liveness epoch before we wait out the first cancelInterval.
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+		r.maybeCancelJobsDeprecated(ctx, r.nl)
+		cancelLoopTask(ctx)
 		for {
 			select {
-			case <-stopper.ShouldStop():
+			case <-r.stopper.ShouldQuiesce():
+				log.Warningf(ctx, "canceling all adopted jobs due to stopper quiescing")
+				r.deprecatedCancelAll(ctx)
+				r.cancelAllAdoptedJobs()
+				return
+			case <-time.After(cancelInterval):
+				r.maybeCancelJobsDeprecated(ctx, r.nl)
+				cancelLoopTask(ctx)
+			}
+		}
+	}); err != nil {
+		return err
+	}
+	if err := stopper.RunAsyncTask(context.Background(), "jobs/gc", func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		settingChanged := make(chan struct{}, 1)
+		gcSetting.SetOnChange(&r.settings.SV, func() {
+			select {
+			case settingChanged <- struct{}{}:
+			default:
+			}
+		})
+		gcInterval := func() time.Duration {
+			if setting := gcSetting.Get(&r.settings.SV); setting < maxGCInterval {
+				return setting
+			}
+			return maxGCInterval
+		}
+		timer := timeutil.NewTimer()
+		lastGC := timeutil.Now()
+		timer.Reset(gcInterval())
+		defer cancel()
+		for {
+			select {
+			case <-settingChanged:
+				timer.Reset(timeutil.Until(lastGC.Add(gcInterval())))
+			case <-stopper.ShouldQuiesce():
+				return
+			case <-timer.C:
+				timer.Read = true
+				old := timeutil.Now().Add(-1 * gcSetting.Get(&r.settings.SV))
+				if err := r.cleanupOldJobs(ctx, old); err != nil {
+					log.Warningf(ctx, "error cleaning up old job records: %v", err)
+				}
+				lastGC = timeutil.Now()
+				timer.Reset(gcInterval())
+			}
+		}
+	}); err != nil {
+		return err
+	}
+	return stopper.RunAsyncTask(context.Background(), "jobs/adopt", func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		timer.Reset(adoptInterval)
+		for {
+			select {
+			case <-stopper.ShouldQuiesce():
 				return
 			case <-r.adoptionCh:
 				// Try to adopt the most recently created job.
 				if r.startUsingSQLLivenessAdoption(ctx) {
-					claimAndProcessJobs(ctx)
+					processClaimedJobs(ctx)
 				} else {
 					// TODO(spaskob): remove in 20.2 as this code path is only needed while
 					// migrating to 20.2 cluster.
-					maybeAdoptJobs(ctx, false /* randomizeJobOrder */)
+					maybeAdoptJobsDeprecated(ctx, false /* randomizeJobOrder */)
 				}
-			case <-time.After(adoptInterval):
+			case <-timer.C:
+				timer.Read = true
 				if r.startUsingSQLLivenessAdoption(ctx) {
-					claimAndProcessJobs(ctx)
+					claimJobs(ctx)
+					processClaimedJobs(ctx)
 				} else {
 					// TODO(spaskob): remove in 20.2 as this code path is only needed while
 					// migrating to 20.2 cluster.
-					maybeAdoptJobs(ctx, true /* randomizeJobOrder */)
+					maybeAdoptJobsDeprecated(ctx, true /* randomizeJobOrder */)
 				}
+				timer.Reset(adoptInterval)
 			}
 		}
 	})
-
-	return nil
 }
 
-func (r *Registry) maybeCancelJobs(ctx context.Context, nlw optionalnodeliveness.Container) {
-	// Cancel all jobs if the stopper is quiescing.
-	select {
-	case <-r.stopper.ShouldQuiesce():
-		r.deprecatedCancelAll(ctx)
-		log.Warningf(ctx, "canceling all adopted jobs due to stopper quiescing")
-		r.cancelAllAdoptedJobs()
+func (r *Registry) maybeCancelJobs(ctx context.Context, s sqlliveness.Session) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// If the cluster is finalized, kill any remaining legacy jobs. They will be
+	// re-adopted with the new epoch based leasing.
+	r.deprecatedCancelAllLocked(ctx)
+
+	for id, aj := range r.mu.adoptedJobs {
+		if aj.sid != s.ID() {
+			log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
+			aj.cancel()
+			delete(r.mu.adoptedJobs, id)
+		}
+	}
+}
+
+// TODO(spaskob): remove in 20.2 as this code path is only needed while
+// migrating to 20.2 cluster.
+func (r *Registry) maybeCancelJobsDeprecated(
+	ctx context.Context, nlw optionalnodeliveness.Container,
+) {
+	nl, ok := nlw.Optional(47892)
+	if !ok {
+		// At most one container is running on behalf of a SQL tenant, so it must be
+		// this one, and there's no point canceling anything.
+		//
+		// TODO(ajwerner): don't rely on this. Instead fix this issue:
+		// https://github.com/cockroachdb/cockroach/issues/47892
 		return
-	default:
+	}
+	liveness, err := nl.Self()
+	if err != nil {
+		if nodeLivenessLogLimiter.ShouldLog() {
+			log.Warningf(ctx, "unable to get node liveness: %s", err)
+		}
+		// Conservatively assume our lease has expired. Abort all jobs.
+		r.deprecatedCancelAll(ctx)
+		return
 	}
 
-	if r.startUsingSQLLivenessAdoption(ctx) {
+	// If we haven't persisted a liveness record within the leniency
+	// interval, we'll cancel all of our jobs.
+	if !liveness.IsLive(r.lenientNow()) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		// If the cluster is finalized, kill any remaining legacy jobs. They will be
-		// re-adopted with the new epoch based leasing.
 		r.deprecatedCancelAllLocked(ctx)
-
-		// This gets the current live epoch and pushes forward its expiration. If
-		// another regitry has bumped it, we don;t need to know - as it suffices to
-		// cancel all jobs with lower epoch from than the one returned.
-		s, err := r.sqlInstance.Session(ctx)
-		if err != nil {
-			// We may be failing due to a partition, it odes not make sense to
-			// preemptively kill the jobs because when we egt online again we will
-			// query the new epoch and will cancel jobs with older epochs after that.
-			return
-		}
-		for id, aj := range r.mu.adoptedJobs {
-			if aj.sid != s.ID() {
-				log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
-				aj.cancel()
-				delete(r.mu.adoptedJobs, id)
-			}
-		}
-	} else {
-		// TODO(spaskob): remove in 20.2 as this code path is only needed while
-		// migrating to 20.2 cluster.
-		nl, ok := nlw.Optional(47892)
-		if !ok {
-			// At most one container is running on behalf of a SQL tenant, so it must be
-			// this one, and there's no point canceling anything.
-			//
-			// TODO(ajwerner): don't rely on this. Instead fix this issue:
-			// https://github.com/cockroachdb/cockroach/issues/47892
-			return
-		}
-		liveness, err := nl.Self()
-		if err != nil {
-			if nodeLivenessLogLimiter.ShouldLog() {
-				log.Warningf(ctx, "unable to get node liveness: %s", err)
-			}
-			// Conservatively assume our lease has expired. Abort all jobs.
-			r.deprecatedCancelAll(ctx)
-			return
-		}
-
-		// If we haven't persisted a liveness record within the leniency
-		// interval, we'll cancel all of our jobs.
-		if !liveness.IsLive(r.lenientNow()) {
-			r.mu.Lock()
-			defer r.mu.Unlock()
-			r.deprecatedCancelAllLocked(ctx)
-			r.mu.deprecatedEpoch = liveness.Epoch
-			return
-		}
+		r.mu.deprecatedEpoch = liveness.Epoch
+		return
 	}
 }
 

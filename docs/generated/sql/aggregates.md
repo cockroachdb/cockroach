@@ -197,6 +197,10 @@
 </span></td></tr>
 <tr><td><a name="st_makeline"></a><code>st_makeline(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Forms a LineString from Point, MultiPoint or LineStrings. Other shapes will be ignored.</p>
 </span></td></tr>
+<tr><td><a name="st_memcollect"></a><code>st_memcollect(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Collects geometries into a GeometryCollection or multi-type as appropriate.</p>
+</span></td></tr>
+<tr><td><a name="st_memunion"></a><code>st_memunion(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Applies a spatial union to the geometries provided.</p>
+</span></td></tr>
 <tr><td><a name="st_union"></a><code>st_union(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Applies a spatial union to the geometries provided.</p>
 </span></td></tr>
 <tr><td><a name="stddev"></a><code>stddev(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the standard deviation of the selected values.</p>
