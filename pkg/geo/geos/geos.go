@@ -339,6 +339,19 @@ func Length(ewkb geopb.EWKB) (float64, error) {
 	return float64(length), nil
 }
 
+// Normalize returns the geometry in its normalized form.
+func Normalize(a geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_Normalize(g, goToCSlice(a), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
 // IsSimple returns whether the EWKB is simple.
 func IsSimple(ewkb geopb.EWKB) (bool, error) {
 	g, err := ensureInitInternal()

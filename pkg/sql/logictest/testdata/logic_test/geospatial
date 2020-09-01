@@ -3189,6 +3189,28 @@ Square (left)                             1.23087783614695e+10  1.23640317985177
 Square (right)                            1.23087783614695e+10  1.23640317985177e+10  1.23087783614695e+10  0                 0                 0                 443770.917248302  444763.382959477  443770.917248302
 Square overlapping left and right square  1.35397288423019e+10  1.36005074605892e+10  1.35397288423019e+10  0                 0                 0                 466033.131162169  467000.705209206  466033.131162169
 
+query TTTB
+SELECT
+  a.dsc,
+  ST_AsEWKT(a.geom),
+  ST_AsEWKT(ST_Normalize(a.geom)),
+  ST_AsEWKT(a.geom) = ST_AsEWKT(ST_Normalize(a.geom))
+FROM geom_operators_test a
+ORDER BY a.dsc
+----
+Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY                               true
+Empty LineString                          LINESTRING EMPTY                                       LINESTRING EMPTY                                       true
+Empty Point                               POINT EMPTY                                            POINT EMPTY                                            true
+Faraway point                             POINT (5 5)                                            POINT (5 5)                                            true
+Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (-0.5 0.5, 0.5 0.5)                         true
+NULL                                      NULL                                                   NULL                                                   NULL
+Nested Geometry Collection                GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  true
+Point middle of Left Square               POINT (-0.5 0.5)                                       POINT (-0.5 0.5)                                       true
+Point middle of Right Square              POINT (0.5 0.5)                                        POINT (0.5 0.5)                                        true
+Square (left)                             POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))                 false
+Square (right)                            POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                    false
+Square overlapping left and right square  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))           false
+
 # Binary operators
 query TTRRR
 SELECT
