@@ -495,12 +495,12 @@ func showBackupsInCollectionPlanHook(
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer store.Close()
-		res, err := store.ListFiles(ctx, "/*/*/*/BACKUP")
+		res, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName)
 		if err != nil {
 			return err
 		}
 		for _, i := range res {
-			resultsCh <- tree.Datums{tree.NewDString(strings.TrimSuffix(i, "/BACKUP"))}
+			resultsCh <- tree.Datums{tree.NewDString(strings.TrimSuffix(i, "/"+backupManifestName))}
 		}
 		return nil
 	}

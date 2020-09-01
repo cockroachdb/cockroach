@@ -42,10 +42,10 @@ import (
 const (
 	// backupManifestName is the file name used for serialized BackupManifest
 	// protos.
-	backupManifestName = "BACKUP"
-	// backupNewManifestName is a future name for the serialized BackupManifest
-	// proto.
-	backupNewManifestName = "BACKUP_MANIFEST"
+	backupManifestName = "BACKUP_MANIFEST"
+	// backupOldManifestName is an old name for the serialized BackupManifest
+	// proto. It is used by 20.1 nodes and earlier.
+	backupOldManifestName = "BACKUP"
 	// backupManifestChecksumSuffix indicates where the checksum for the manifest
 	// is stored if present. It can be found in the name of the backup manifest +
 	// this suffix.
@@ -118,16 +118,15 @@ func readBackupManifestFromStore(
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, error) {
-
 	backupManifest, err := readBackupManifest(ctx, exportStore, backupManifestName,
 		encryption)
 	if err != nil {
-		newManifest, newErr := readBackupManifest(ctx, exportStore, backupNewManifestName,
+		oldManifest, newErr := readBackupManifest(ctx, exportStore, backupOldManifestName,
 			encryption)
 		if newErr != nil {
 			return BackupManifest{}, err
 		}
-		backupManifest = newManifest
+		backupManifest = oldManifest
 	}
 	backupManifest.Dir = exportStore.Conf()
 	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime,
