@@ -1700,25 +1700,26 @@ COMMIT;
 
 # Test that deleting an index on a table that gets dropped in the same
 # transaction is allowed.
-subtest delete_index_and_table_in_txn
-
-statement ok
-CREATE TABLE people (id INT PRIMARY KEY, name STRING);
-
-statement ok
-CREATE INDEX people_name_index ON people (name);
-
-statement ok
-BEGIN;
-
-statement ok
-DROP INDEX people@people_name_index;
-
-statement ok
-DROP TABLE people;
-
-statement ok
-COMMIT;
+# Skipped due to #53724.
+#subtest delete_index_and_table_in_txn
+#
+#statement ok
+#CREATE TABLE people (id INT PRIMARY KEY, name STRING);
+#
+#statement ok
+#CREATE INDEX people_name_index ON people (name);
+#
+#statement ok
+#BEGIN;
+#
+#statement ok
+#DROP INDEX people@people_name_index;
+#
+#statement ok
+#DROP TABLE people;
+#
+#statement ok
+#COMMIT;
 
 subtest add_column_default_sequence_op
 
