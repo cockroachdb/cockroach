@@ -23,6 +23,16 @@ import (
 // Simple normalization is applied to the expression in order to facilitate
 // implication logic. See Factory.NormalizePartialIndexPredicate for more
 // details.
+//
+// Note: This function should only be used to build partial index predicate
+// expressions that have only a table's columns in scope and that are not part
+// of the relational expression tree. For example, this is used to populate the
+// TableMeta.PartialIndexPredicates cache and for determining arbiter indexes in
+// UPSERT and INSERT ON CONFLICT mutations. But it is not used for building
+// synthesized mutation columns that determine whether or not to PUT or DEL a
+// partial index entry for a row; these synthesized columns are projected as
+// part of the opt expression tree and they reference columns beyond a table's
+// base scope.
 func (b *Builder) buildPartialIndexPredicate(tableScope *scope, expr tree.Expr) memo.FiltersExpr {
 	texpr := tableScope.resolveAndRequireType(expr, types.Bool)
 
