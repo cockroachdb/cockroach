@@ -37,17 +37,16 @@ func WorkloadCmd(userFacing bool) *cobra.Command {
 		for _, m := range workload.Registered() {
 			allowlist[m.Name] = struct{}{}
 		}
-		var addExperimental func(c *cobra.Command)
-		addExperimental = func(c *cobra.Command) {
-			c.Short = `[experimental] ` + c.Short
+		var hideNonPublic func(c *cobra.Command)
+		hideNonPublic = func(c *cobra.Command) {
 			if _, ok := allowlist[c.Name()]; !ok {
 				c.Hidden = true
 			}
 			for _, sub := range c.Commands() {
-				addExperimental(sub)
+				hideNonPublic(sub)
 			}
 		}
-		addExperimental(rootCmd)
+		hideNonPublic(rootCmd)
 	}
 	return rootCmd
 }
