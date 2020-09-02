@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -227,6 +228,8 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"not all nodes are the correct version for ENUM type creation")
 	}
+
+	sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumCreate)
 
 	// Ensure there are no duplicates in the input enum values.
 	seenVals := make(map[string]struct{})

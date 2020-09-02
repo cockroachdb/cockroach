@@ -70,7 +70,8 @@ func main() {
 	case 1:
 		testName = splitArg[0]
 	case 2:
-		pkgName = splitArg[1]
+		pkgName = splitArg[0]
+		testName = splitArg[1]
 	default:
 		log.Fatalf("expected test to be of format `TestName` or `pkg/to/test:TestName`, found %s", arg)
 	}
