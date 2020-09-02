@@ -130,6 +130,7 @@ var oldFriendsMap = map[string]string{
 	"benesch":      "nvanbenschoten",
 	"georgeutsin":  "yuzefovich",
 	"tamird":       "tbg",
+	"rohany":       "solongordon",
 	"vivekmenezes": "",
 }
 
