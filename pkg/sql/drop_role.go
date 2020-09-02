@@ -227,6 +227,24 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				pgcode.InvalidParameterValue, "cannot drop special user %s", normalizedUsername)
 		}
 
+		// Check if user owns any scheduled jobs.
+		numSchedulesRow, err := params.ExecCfg().InternalExecutor.QueryRow(
+			params.ctx,
+			"check-user-schedules",
+			params.p.txn,
+			"SELECT count(*) FROM system.scheduled_jobs WHERE owner=$1",
+			normalizedUsername,
+		)
+		if err != nil {
+			return err
+		}
+		numSchedules := int64(tree.MustBeDInt(numSchedulesRow[0]))
+		if numSchedules > 0 {
+			return pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"cannot drop role/user %s; it owns %d scheduled jobs.",
+				normalizedUsername, numSchedules)
+		}
+
 		numUsersDeleted, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
 			opName,
