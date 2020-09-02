@@ -64,12 +64,13 @@ func (p *planner) addColumnImpl(
 		}
 	}
 	d = newDef
-	incTelemetryForNewColumn(d)
 
 	col, idx, expr, err := tabledesc.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext())
 	if err != nil {
 		return err
 	}
+	incTelemetryForNewColumn(d, col)
+
 	// If the new column has a DEFAULT expression that uses a sequence, add references between
 	// its descriptor and this column descriptor.
 	if d.HasDefaultExpr() {

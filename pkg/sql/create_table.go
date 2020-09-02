@@ -1409,6 +1409,11 @@ func NewTableDesc(
 				return nil, err
 			}
 
+			// Do not include virtual tables in these statistics.
+			if !descpb.IsVirtualTable(id) {
+				incTelemetryForNewColumn(d, col)
+			}
+
 			desc.AddColumn(col)
 			if d.HasDefaultExpr() {
 				// This resolution must be delayed until ColumnIDs have been populated.
@@ -1904,10 +1909,6 @@ func newTableDesc(
 		if !ok {
 			continue
 		}
-		// Do not include virtual tables in these statistics.
-		if !descpb.IsVirtualTable(id) {
-			incTelemetryForNewColumn(d)
-		}
 		newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, &n.Table)
 		if err != nil {
 			return nil, err
@@ -2202,17 +2203,20 @@ func makeShardCheckConstraintDef(
 
 // incTelemetryForNewColumn increments relevant telemetry every time a new column
 // is added to a table.
-func incTelemetryForNewColumn(d *tree.ColumnTableDef) {
-	if typ, ok := tree.GetStaticallyKnownType(d.Type); ok {
-		telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(typ.TelemetryName()))
+func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescriptor) {
+	switch desc.Type.Family() {
+	case types.EnumFamily:
+		sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumInTable)
+	default:
+		telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(desc.Type.TelemetryName()))
 	}
-	if d.IsComputed() {
+	if desc.IsComputed() {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("computed"))
 	}
-	if d.HasDefaultExpr() {
+	if desc.HasDefault() {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("default_expr"))
 	}
-	if d.Unique {
+	if def.Unique {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
 	}
 }

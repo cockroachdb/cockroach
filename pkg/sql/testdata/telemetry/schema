@@ -44,7 +44,8 @@ feature-usage
 CREATE TABLE y (a SERIAL2)
 ----
 sql.schema.create_table
-sql.schema.new_column_type.int2
+sql.schema.new_column.qualification.default_expr
+sql.schema.new_column_type.int8
 sql.schema.serial.rowid.int2
 
 schema
