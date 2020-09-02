@@ -82,13 +82,13 @@ func NewRankOperator(
 // _UPDATE_RANK is the template function for updating the state of rank
 // operators.
 func _UPDATE_RANK() {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // _UPDATE_RANK_INCREMENT is the template function for updating the state of
 // rank operators.
 func _UPDATE_RANK_INCREMENT() {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}

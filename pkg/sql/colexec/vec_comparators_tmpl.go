@@ -20,13 +20,12 @@
 package colexec
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // {{/*
@@ -45,7 +44,7 @@ const _TYPE_WIDTH = 0
 // _COMPARE is the template equality function for assigning the first input
 // to the result of comparing second and third inputs.
 func _COMPARE(_, _, _, _, _ string) bool {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}
@@ -136,7 +135,7 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		}
 		// {{end}}
 	}
-	colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
+	colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

@@ -21,7 +21,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -136,7 +135,7 @@ func (o *_OP_LOWERProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	case 2:
 		return o.rightProjOpChain
 	default:
-		colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+		colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}

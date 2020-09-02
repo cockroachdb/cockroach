@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 var hashOverloads []*oneArgOverload
@@ -28,7 +29,7 @@ func populateHashOverloads() {
 	for _, family := range supportedCanonicalTypeFamilies {
 		widths, found := supportedWidthsByCanonicalTypeFamily[family]
 		if !found {
-			colexecerror.InternalError(fmt.Sprintf("didn't find supported widths for %s", family))
+			colexecerror.InternalError(errors.AssertionFailedf("didn't find supported widths for %s", family))
 		}
 		ov := newLastArgTypeOverload(hashOverloadBase, family)
 		for _, width := range widths {

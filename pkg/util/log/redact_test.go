@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
@@ -62,6 +63,19 @@ func TestRedactedLogOutput(t *testing.T) {
 	if !contains("test3 "+startRedactable+"hello"+endRedactable+" end", t) {
 		t.Errorf("expected marked data, got %q", contents())
 	}
+
+	// Verify that safe parts of errors don't get enclosed in redaction markers
+	mainLog.newBuffers()
+	Errorf(context.Background(), "test3e %v end",
+		errors.AssertionFailedf("hello %v",
+			errors.Newf("error-in-error %s", "world")))
+	if !contains(redactableIndicator+" test3e", t) {
+		t.Errorf("expected marker indicator, got %q", contents())
+	}
+	if !contains("test3e hello error-in-error "+startRedactable+"world"+endRedactable+" end", t) {
+		t.Errorf("expected marked data, got %q", contents())
+	}
+
 	// When redactable logs are enabled, the markers are always quoted.
 	mainLog.newBuffers()
 	const specialString = "x" + startRedactable + "hello" + endRedactable + "y"
@@ -117,9 +131,9 @@ func TestRedactedDecodeFile(t *testing.T) {
 		{false, WithMarkedSensitiveData, true, "‹marker: this is safe, stray marks ??, this is not safe›"},
 		{false, WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ‹›, this is not safe"},
 		{false, WithoutSensitiveData, true, "‹×›"},
-		{true, WithMarkedSensitiveData, true, "marker: this is safe, stray marks ‹›, ‹this is not safe›"},
-		{true, WithFlattenedSensitiveData, false, "marker: this is safe, stray marks , this is not safe"},
-		{true, WithoutSensitiveData, true, "marker: this is safe, stray marks ‹×›, ‹×›"},
+		{true, WithMarkedSensitiveData, true, "marker: this is safe, stray marks ??, ‹this is not safe›"},
+		{true, WithFlattenedSensitiveData, false, "marker: this is safe, stray marks ??, this is not safe"},
+		{true, WithoutSensitiveData, true, "marker: this is safe, stray marks ??, ‹×›"},
 	}
 
 	for _, tc := range testData {

@@ -239,7 +239,7 @@ func TypedTuples(count int, typs []*types.T, fn func(int) []interface{}) Batched
 				case time.Time:
 					col.Bytes().Set(0, []byte(d.Round(time.Microsecond).UTC().Format(timestampOutputFormat)))
 				default:
-					panic(fmt.Sprintf(`unhandled datum type %T`, d))
+					panic(errors.AssertionFailedf(`unhandled datum type %T`, d))
 				}
 			}
 		}
@@ -458,6 +458,6 @@ func ApproxDatumSize(x interface{}) int64 {
 	case time.Time:
 		return 12
 	default:
-		panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+		panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
 	}
 }

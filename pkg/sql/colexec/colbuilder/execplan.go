@@ -531,7 +531,7 @@ func NewColOperator(
 			result.OpMonitors = result.OpMonitors[:0]
 		}
 		if panicErr != nil {
-			colexecerror.InternalError(panicErr)
+			colexecerror.InternalError(log.PanicAsError(0, panicErr))
 		}
 	}()
 	spec := args.Spec
@@ -2008,7 +2008,7 @@ func planLogicalProjectionOp(
 		typedLeft = t.TypedLeft()
 		typedRight = t.TypedRight()
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unexpected logical expression type %s", t.String()))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected logical expression type %s", t.String()))
 	}
 	leftProjOpChain, leftIdx, typs, internalMemUsedLeft, err = planProjectionOperators(
 		ctx, evalCtx, typedLeft, typs, leftFeedOp, acc, factory,

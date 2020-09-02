@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // Materializer converts an Operator input into a execinfra.RowSource.
@@ -86,7 +86,7 @@ func newDrainHelper(sources execinfrapb.MetadataSources) *drainHelper {
 
 // OutputTypes implements the RowSource interface.
 func (d *drainHelper) OutputTypes() []*types.T {
-	colexecerror.InternalError("unimplemented")
+	colexecerror.InternalError(errors.AssertionFailedf("unimplemented"))
 	// Unreachable code.
 	return nil
 }
@@ -196,7 +196,7 @@ func (m *Materializer) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return m.input
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

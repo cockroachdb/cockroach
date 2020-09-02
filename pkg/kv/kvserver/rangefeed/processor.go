@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -561,7 +562,7 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 			// No updates to publish.
 
 		default:
-			panic(fmt.Sprintf("unknown logical op %T", t))
+			panic(errors.AssertionFailedf("unknown logical op %T", t))
 		}
 
 		// Determine whether the operation caused the resolved timestamp to

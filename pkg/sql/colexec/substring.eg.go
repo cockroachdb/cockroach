@@ -11,7 +11,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -37,10 +36,10 @@ func newSubstringOperator(
 		outputIdx:    outputIdx,
 	}
 	if startType.Family() != types.IntFamily {
-		colexecerror.InternalError(fmt.Sprintf("non-int start argument type %s", startType))
+		colexecerror.InternalError(errors.AssertionFailedf("non-int start argument type %s", startType))
 	}
 	if lengthType.Family() != types.IntFamily {
-		colexecerror.InternalError(fmt.Sprintf("non-int length argument type %s", lengthType))
+		colexecerror.InternalError(errors.AssertionFailedf("non-int length argument type %s", lengthType))
 	}
 	switch startType.Width() {
 	case -1:

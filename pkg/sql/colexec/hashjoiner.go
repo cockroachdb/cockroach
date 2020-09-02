@@ -299,7 +299,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 		case hjDone:
 			return coldata.ZeroBatch
 		default:
-			colexecerror.InternalError("hash joiner in unhandled state")
+			colexecerror.InternalError(errors.AssertionFailedf("hash joiner in unhandled state"))
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}

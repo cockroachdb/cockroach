@@ -44,25 +44,25 @@ func populateTwoArgsOverloads(
 	case castOverload:
 		combinableCanonicalTypeFamilies = castableCanonicalTypeFamilies
 	default:
-		colexecerror.InternalError("unexpectedly overload is neither binary, comparison, nor cast")
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly overload is neither binary, comparison, nor cast"))
 	}
 	for _, leftFamily := range supportedCanonicalTypeFamilies {
 		leftWidths, found := supportedWidthsByCanonicalTypeFamily[leftFamily]
 		if !found {
-			colexecerror.InternalError(fmt.Sprintf("didn't find supported widths for %s", leftFamily))
+			colexecerror.InternalError(errors.AssertionFailedf("didn't find supported widths for %s", leftFamily))
 		}
 		leftFamilyStr := toString(leftFamily)
 		for _, rightFamily := range combinableCanonicalTypeFamilies[leftFamily] {
 			rightWidths, found := supportedWidthsByCanonicalTypeFamily[rightFamily]
 			if !found {
-				colexecerror.InternalError(fmt.Sprintf("didn't find supported widths for %s", rightFamily))
+				colexecerror.InternalError(errors.AssertionFailedf("didn't find supported widths for %s", rightFamily))
 			}
 			rightFamilyStr := toString(rightFamily)
 			for _, leftWidth := range leftWidths {
 				for _, rightWidth := range rightWidths {
 					customizer, ok := customizers[typePair{leftFamily, leftWidth, rightFamily, rightWidth}]
 					if !ok {
-						colexecerror.InternalError("unexpectedly didn't find a type customizer")
+						colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find a type customizer"))
 					}
 					// Skip overloads that don't have associated output types.
 					retType, ok := opOutputTypes[typePair{leftFamily, leftWidth, rightFamily, rightWidth}]

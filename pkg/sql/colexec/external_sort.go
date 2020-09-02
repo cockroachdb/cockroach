@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -358,7 +357,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			return coldata.ZeroBatch
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected externalSorterState %d", s.state))
+			colexecerror.InternalError(errors.AssertionFailedf("unexpected externalSorterState %d", s.state))
 		}
 	}
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // {{/*
@@ -42,7 +43,7 @@ const _RIGHT_TYPE_WIDTH = 0
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.
 func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // This is a code snippet that is the main body of checkCol* functions. It
@@ -459,7 +460,7 @@ func (ht *hashTable) check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 			_CHECK_BODY(false, true)
 		}
 	default:
-		colexecerror.InternalError("unsupported hash table probe mode")
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported hash table probe mode"))
 	}
 	return nDiffers
 }

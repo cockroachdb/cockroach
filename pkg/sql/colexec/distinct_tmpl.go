@@ -55,7 +55,7 @@ func OrderedDistinctColsToOperators(
 		}
 	}
 	if r, ok = input.(ResettableOperator); !ok {
-		colexecerror.InternalError("unexpectedly an ordered distinct is not a resetter")
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly an ordered distinct is not a resetter"))
 	}
 	distinctChain := &distinctChainOps{
 		ResettableOperator: r,
@@ -97,7 +97,7 @@ type _GOTYPESLICE interface{}
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
 func _ASSIGN_NE(_ bool, _, _, _, _, _ _GOTYPE) bool {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // _CANONICAL_TYPE_FAMILY is the template variable.

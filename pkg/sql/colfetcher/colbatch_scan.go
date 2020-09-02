@@ -81,7 +81,7 @@ func (s *ColBatchScan) Next(ctx context.Context) coldata.Batch {
 		colexecerror.InternalError(err)
 	}
 	if bat.Selection() != nil {
-		colexecerror.InternalError("unexpectedly a selection vector is set on the batch coming from CFetcher")
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly a selection vector is set on the batch coming from CFetcher"))
 	}
 	s.rowsRead += bat.Length()
 	return bat

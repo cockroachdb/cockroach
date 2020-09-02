@@ -12,7 +12,6 @@ package tree
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -127,9 +126,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 	default:
 		convErr = errors.WithSafeDetails(
 			errors.Errorf("expected timestamp, decimal, or interval, got %s", d.ResolvedType()),
-			// TODO(knz): Simplify this to %T.
-			// See https://github.com/cockroachdb/cockroach/issues/53207
-			"go type: %s", errors.Safe(fmt.Sprintf("%T", d)))
+			"go type: %T", d)
 	}
 	if convErr != nil {
 		return ts, convErr

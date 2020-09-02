@@ -305,7 +305,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 
 	if f.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
 		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
-			colexecerror.InternalError(fmt.Sprintf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
+			colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
 		}
 	}
 
@@ -1123,7 +1123,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	}
 
 	if len(s.vectorizedStatsCollectorsQueue) > 0 {
-		colexecerror.InternalError("not all vectorized stats collectors have been processed")
+		colexecerror.InternalError(errors.AssertionFailedf("not all vectorized stats collectors have been processed"))
 	}
 	return s.leaves, nil
 }

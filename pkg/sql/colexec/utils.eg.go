@@ -10,13 +10,12 @@
 package colexec
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
@@ -160,7 +159,7 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
 			}
 		}
 	}
-	colexecerror.InternalError(fmt.Sprintf("unexpectedly unhandled type %s", ct.DebugString()))
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly unhandled type %s", ct.DebugString()))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

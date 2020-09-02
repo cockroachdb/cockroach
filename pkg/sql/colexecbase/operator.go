@@ -12,12 +12,12 @@ package colexecbase
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/errors"
 )
 
 // Operator is a column vector operator that produces a Batch as output.
@@ -64,7 +64,7 @@ func (ZeroInputNode) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (ZeroInputNode) Child(nth int, verbose bool) execinfra.OpNode {
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

@@ -174,7 +174,7 @@ func init() {
 // caught and returned as internal error to the client with the corresponding
 // stack trace. This method should be called to propagate errors that resulted
 // in the vectorized engine being in an *unexpected* state.
-func InternalError(err interface{}) {
+func InternalError(err error) {
 	panic(err)
 }
 

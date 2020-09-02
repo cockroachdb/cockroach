@@ -48,8 +48,8 @@ type transactionRestartError interface {
 
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
 // a roachpb.BatchResponse) unexpectedly has Error set in its response header.
-func ErrorUnexpectedlySet(culprit, response interface{}) string {
-	return fmt.Sprintf("error is unexpectedly set, culprit is %T:\n%+v", culprit, response)
+func ErrorUnexpectedlySet(culprit, response interface{}) error {
+	return errors.AssertionFailedf("error is unexpectedly set, culprit is %T:\n%+v", culprit, response)
 }
 
 // ErrorPriority is used to rank errors such that the "best" one is chosen to be
@@ -271,7 +271,7 @@ func (e *Error) SetDetail(err error) {
 		if !e.Detail.SetInner(err) {
 			_, isInternalError := err.(*internalError)
 			if !isInternalError && e.TransactionRestart != TransactionRestart_NONE {
-				panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
+				panic(errors.AssertionFailedf("transactionRestartError %T must be an ErrorDetail", err))
 			}
 		}
 		e.checkTxnStatusValid()
