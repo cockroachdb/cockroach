@@ -57,6 +57,9 @@ query I
 SELECT * FROM a
 ----
 
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
 user testuser
 
 statement ok
