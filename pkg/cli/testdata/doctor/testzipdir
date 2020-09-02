@@ -9,4 +9,6 @@ Examining 38 descriptors and 43 namespace entries...
    Table  57: ParentID  52, ParentSchemaID 29, Name 'promo_codes': parentID 52 does not exist
    Table  58: ParentID  52, ParentSchemaID 29, Name 'user_promo_codes': parentID 52 does not exist
 Descriptor 52: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:movr}] but no descriptor
+Examining 1 running jobs...
+job 587337426984566785: schema change GC refers to missing table descriptor(s) [59]
 ERROR: validation failed
