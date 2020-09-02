@@ -85,6 +85,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 				return nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
 					"schema %q is not empty and CASCADE was not specified", scName)
 			}
+			sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaDrop)
 		default:
 			return nil, errors.AssertionFailedf("unknown schema kind %d", sc.Kind)
 		}
