@@ -383,8 +383,10 @@ func readPostgresStmt(
 			case *tree.AlterTableSetDefault:
 				for i, def := range create.Defs {
 					def, ok := def.(*tree.ColumnTableDef)
+					// If it's not a column definition, or the column name doesn't match,
+					// we're not interested in this column.
 					if !ok || def.Name != cmd.Column {
-						return errors.Errorf("unsupported %T definition: %s", def, def)
+						continue
 					}
 					def.DefaultExpr.Expr = cmd.Default
 					create.Defs[i] = def
@@ -397,8 +399,10 @@ func readPostgresStmt(
 			case *tree.AlterTableSetNotNull:
 				for i, def := range create.Defs {
 					def, ok := def.(*tree.ColumnTableDef)
+					// If it's not a column definition, or the column name doesn't match,
+					// we're not interested in this column.
 					if !ok || def.Name != cmd.Column {
-						return errors.Errorf("unsupported %T definition: %s", def, def)
+						continue
 					}
 					def.Nullable.Nullability = tree.NotNull
 					create.Defs[i] = def
