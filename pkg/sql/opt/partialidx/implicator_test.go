@@ -199,6 +199,12 @@ func BenchmarkImplicator(b *testing.B) {
 			pred:     "@1 > 0 OR @2 IN ('foo', 'bar')",
 		},
 		{
+			name:     "in-implies-or",
+			varTypes: "int",
+			filters:  "@1 IN (1, 2, 3)",
+			pred:     "@1 = 2 OR @1 IN (1, 3)",
+		},
+		{
 			name:     "and-filters-do-not-imply-pred",
 			varTypes: "int, int, int, int, string",
 			filters:  "@1 < 0 AND @2 > 10 AND @3 >= 10 AND @4 = 4 AND @5 = 'foo'",
