@@ -163,6 +163,10 @@ type appendOnlyBufferedBatch struct {
 	length      int
 	colVecs     []coldata.Vec
 	colsToStore []int
+	// sel is the selection vector on this batch. Note that it is stored
+	// separately from embedded coldata.Batch because we need to be able to
+	// support a vector of an arbitrary length.
+	sel []int
 }
 
 var _ coldata.Batch = &appendOnlyBufferedBatch{}
@@ -181,6 +185,25 @@ func (b *appendOnlyBufferedBatch) ColVec(i int) coldata.Vec {
 
 func (b *appendOnlyBufferedBatch) ColVecs() []coldata.Vec {
 	return b.colVecs
+}
+
+func (b *appendOnlyBufferedBatch) Selection() []int {
+	if b.Batch.Selection() != nil {
+		return b.sel
+	}
+	return nil
+}
+
+func (b *appendOnlyBufferedBatch) SetSelection(useSel bool) {
+	b.Batch.SetSelection(useSel)
+	if useSel {
+		// Make sure that selection vector is of the appropriate length.
+		if cap(b.sel) < b.length {
+			b.sel = make([]int, b.length)
+		} else {
+			b.sel = b.sel[:b.length]
+		}
+	}
 }
 
 func (b *appendOnlyBufferedBatch) AppendCol(coldata.Vec) {
