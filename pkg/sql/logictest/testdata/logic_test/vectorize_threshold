@@ -126,3 +126,26 @@ group (scalar)  ·                    ·
 ·               estimated row count  100000
 ·               table                large@primary
 ·               spans                FULL SCAN
+
+statement ok
+SET vectorize_row_count_threshold = 1000
+
+# Check that we estimate the row count correctly when multiple tables are
+# scanned.
+query TTT
+EXPLAIN SELECT * FROM small INNER MERGE JOIN large ON small.a = large.a
+----
+·           distribution         full
+·           vectorized           true
+merge join  ·                    ·
+ │          equality             (a) = (a)
+ │          left cols are key    ·
+ │          right cols are key   ·
+ ├── scan   ·                    ·
+ │          estimated row count  100
+ │          table                small@primary
+ │          spans                FULL SCAN
+ └── scan   ·                    ·
+·           estimated row count  100000
+·           table                large@primary
+·           spans                FULL SCAN
