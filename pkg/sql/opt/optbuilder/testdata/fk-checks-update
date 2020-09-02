@@ -526,3 +526,33 @@ update fam
                 └── filters
                      ├── c:16 = two.a:18
                      └── d_new:17 = two.b:19
+
+# Verify that the join hint is set.
+build prefer-lookup-joins-for-fks
+UPDATE child SET p = 4
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: c:4 child.p:5
+ ├── update-mapping:
+ │    └── p_new:7 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:7!null c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
+ │    ├── scan child
+ │    │    └── columns: c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
+ │    └── projections
+ │         └── 4 [as=p_new:7]
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p_new:8!null
+                ├── flags: prefer lookup join (into right side)
+                ├── with-scan &1
+                │    ├── columns: p_new:8!null
+                │    └── mapping:
+                │         └──  p_new:7 => p_new:8
+                ├── scan parent
+                │    └── columns: parent.p:10!null
+                └── filters
+                     └── p_new:8 = parent.p:10

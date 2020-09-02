@@ -360,8 +360,11 @@ func (sf *ScanFlags) Empty() bool {
 
 // JoinFlags stores restrictions on the join execution method, derived from
 // hints for a join specified in the query (see tree.JoinTableExpr).  It is a
-// bitfield where each bit indicates if a certain type of join is disallowed.
-// The zero value indicates that any join is allowed.
+// bitfield where each bit indicates if a certain type of join is disallowed or
+// preferred.
+//
+// The zero value indicates that any join is allowed and there are no special
+// preferences.
 type JoinFlags uint8
 
 // Each flag indicates if a certain type of join is disallowed.
@@ -386,6 +389,14 @@ const (
 	// DisallowLookupJoinIntoRight corresponds to a lookup join where the lookup
 	// table is on the right side.
 	DisallowLookupJoinIntoRight
+
+	// PreferLookupJoinIntoLeft reduces the cost of a lookup join where the lookup
+	// table is on the left side.
+	PreferLookupJoinIntoLeft
+
+	// PreferLookupJoinIntoRight reduces the cost of a lookup join where the
+	// lookup table is on the right side.
+	PreferLookupJoinIntoRight
 )
 
 const (
@@ -414,6 +425,9 @@ var joinFlagStr = map[JoinFlags]string{
 	DisallowMergeJoin:           "merge join",
 	DisallowLookupJoinIntoLeft:  "lookup join (into left side)",
 	DisallowLookupJoinIntoRight: "lookup join (into right side)",
+
+	PreferLookupJoinIntoLeft:  "lookup join (into left side)",
+	PreferLookupJoinIntoRight: "lookup join (into right side)",
 }
 
 // Empty returns true if this is the default value (where all join types are
@@ -432,26 +446,40 @@ func (jf JoinFlags) String() string {
 		return "no flags"
 	}
 
-	// Special cases for prettier results in common cases.
-	switch jf {
+	prefer := jf & (PreferLookupJoinIntoLeft | PreferLookupJoinIntoRight)
+	disallow := jf ^ prefer
+
+	// Special cases with prettier results for common cases.
+	var b strings.Builder
+	switch disallow {
 	case AllowOnlyHashJoinStoreRight:
-		return "force hash join (store right side)"
+		b.WriteString("force hash join (store right side)")
 	case AllowOnlyLookupJoinIntoRight:
-		return "force lookup join (into right side)"
+		b.WriteString("force lookup join (into right side)")
 	case AllowOnlyMergeJoin:
-		return "force merge join"
+		b.WriteString("force merge join")
+
+	default:
+		for disallow != 0 {
+			flag := JoinFlags(1 << uint8(bits.TrailingZeros8(uint8(disallow))))
+			if b.Len() == 0 {
+				b.WriteString("disallow ")
+			} else {
+				b.WriteString(" and ")
+			}
+			b.WriteString(joinFlagStr[flag])
+			disallow ^= flag
+		}
 	}
 
-	var b strings.Builder
-	for jf != 0 {
-		flag := JoinFlags(1 << uint8(bits.TrailingZeros8(uint8(jf))))
-		if b.Len() == 0 {
-			b.WriteString("disallow ")
-		} else {
-			b.WriteString(" and ")
+	for prefer != 0 {
+		flag := JoinFlags(1 << uint8(bits.TrailingZeros8(uint8(prefer))))
+		if b.Len() > 0 {
+			b.WriteString("; ")
 		}
+		b.WriteString("prefer ")
 		b.WriteString(joinFlagStr[flag])
-		jf ^= flag
+		prefer ^= flag
 	}
 	return b.String()
 }
