@@ -133,6 +133,10 @@ const (
 	// If the final expression has this cost or larger, it means that there was no
 	// plan that could satisfy the hints.
 	hugeCost memo.Cost = 1e100
+
+	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
+	// we have a hint for preferring a lookup join.
+	preferLookupJoinFactor = 1e-6
 )
 
 // fnCost maps some functions to an execution cost. Currently this list
@@ -752,6 +756,11 @@ func (c *coster) computeLookupJoinCost(
 		c.rowScanCost(join.Table, join.Index, numLookupCols)
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
+
+	if join.Flags.Has(memo.PreferLookupJoinIntoRight) {
+		// If we prefer a lookup join, make the cost much smaller.
+		cost *= preferLookupJoinFactor
+	}
 	return cost
 }
 

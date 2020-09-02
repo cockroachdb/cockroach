@@ -696,3 +696,89 @@ project
       │         ├── w:1 = 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
       │         └── x:2 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(2), constraints=(/2: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(2)]
       └── 10
+
+exec-ddl
+CREATE TABLE p (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE c (c INT PRIMARY KEY, c INT REFERENCES p(p));
+----
+
+opt
+INSERT INTO c VALUES (1,1), (2,2)
+----
+insert c
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => c:1
+ │    └── column2:5 => c:2
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 12.12
+ ├── values
+ │    ├── columns: column1:4!null column2:5!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2, distinct(4)=2, null(4)=0]
+ │    ├── cost: 0.03
+ │    ├── (1, 1)
+ │    └── (2, 2)
+ └── f-k-checks
+      └── f-k-checks-item: c(c) -> p(p)
+           └── anti-join (lookup p)
+                ├── columns: column1:6!null
+                ├── key columns: [6] = [7]
+                ├── lookup columns are key
+                ├── cardinality: [0 - 2]
+                ├── stats: [rows=1e-10]
+                ├── cost: 12.08
+                ├── with-scan &1
+                │    ├── columns: column1:6!null
+                │    ├── mapping:
+                │    │    └──  column1:4 => column1:6
+                │    ├── cardinality: [2 - 2]
+                │    ├── stats: [rows=2, distinct(6)=2, null(6)=0]
+                │    └── cost: 0.01
+                └── filters (true)
+
+# The cost should be much smaller with this hint.
+opt prefer-lookup-joins-for-fks
+INSERT INTO c VALUES (1,1), (2,2)
+----
+insert c
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => c:1
+ │    └── column2:5 => c:2
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.06001206
+ ├── values
+ │    ├── columns: column1:4!null column2:5!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2, distinct(4)=2, null(4)=0]
+ │    ├── cost: 0.03
+ │    ├── (1, 1)
+ │    └── (2, 2)
+ └── f-k-checks
+      └── f-k-checks-item: c(c) -> p(p)
+           └── anti-join (lookup p)
+                ├── columns: column1:6!null
+                ├── flags: prefer lookup join (into right side)
+                ├── key columns: [6] = [7]
+                ├── lookup columns are key
+                ├── cardinality: [0 - 2]
+                ├── stats: [rows=1e-10]
+                ├── cost: 0.02001206
+                ├── with-scan &1
+                │    ├── columns: column1:6!null
+                │    ├── mapping:
+                │    │    └──  column1:4 => column1:6
+                │    ├── cardinality: [2 - 2]
+                │    ├── stats: [rows=2, distinct(6)=2, null(6)=0]
+                │    └── cost: 0.01
+                └── filters (true)
