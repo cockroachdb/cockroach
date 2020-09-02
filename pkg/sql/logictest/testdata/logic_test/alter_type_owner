@@ -24,6 +24,9 @@ GRANT testuser TO root
 statement ok
 ALTER TYPE typ OWNER TO testuser
 
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
 user testuser
 
 statement ok

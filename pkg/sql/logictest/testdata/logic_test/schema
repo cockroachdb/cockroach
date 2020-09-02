@@ -382,3 +382,33 @@ WHERE
 ----
 user1         user1
 user1_schema  user1
+
+# Ensure that we need CREATE on a database to create a schema.
+statement ok
+CREATE DATABASE perms
+
+user testuser
+
+statement ok
+USE perms
+
+statement error pq: user testuser does not have CREATE privilege on database perms
+CREATE SCHEMA test
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE perms TO testuser
+
+user testuser
+
+statement ok
+USE perms
+
+statement ok
+CREATE SCHEMA test
+
+user root
+
+statement ok
+USE defaultdb
