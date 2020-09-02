@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -64,12 +65,36 @@ func RegisterScheduledJobExecutorFactory(name string, factory ScheduledJobExecut
 	registeredExecutorFactories[name] = factory
 }
 
-// NewScheduledJobExecutor creates new ScheduledJobExecutor.
-func NewScheduledJobExecutor(name string) (ScheduledJobExecutor, error) {
+// newScheduledJobExecutor creates new instance of ScheduledJobExecutor.
+func newScheduledJobExecutor(name string) (ScheduledJobExecutor, error) {
 	if factory, ok := registeredExecutorFactories[name]; ok {
 		return factory()
 	}
 	return nil, errors.Newf("executor %q is not registered", name)
+}
+
+var executorRegistry struct {
+	syncutil.Mutex
+	executors map[string]ScheduledJobExecutor
+}
+
+// GetScheduledJobExecutor returns a singleton instance of
+// ScheduledJobExecutor and a flag indicating if that instance was just created.
+func GetScheduledJobExecutor(name string) (ScheduledJobExecutor, bool, error) {
+	executorRegistry.Lock()
+	defer executorRegistry.Unlock()
+	if executorRegistry.executors == nil {
+		executorRegistry.executors = make(map[string]ScheduledJobExecutor)
+	}
+	if ex, ok := executorRegistry.executors[name]; ok {
+		return ex, false, nil
+	}
+	ex, err := newScheduledJobExecutor(name)
+	if err != nil {
+		return nil, false, err
+	}
+	executorRegistry.executors[name] = ex
+	return ex, true, nil
 }
 
 // DefaultHandleFailedRun is a default implementation for handling failed run
@@ -111,7 +136,7 @@ func NotifyJobTermination(
 	if err != nil {
 		return err
 	}
-	executor, err := NewScheduledJobExecutor(schedule.ExecutorType())
+	executor, _, err := GetScheduledJobExecutor(schedule.ExecutorType())
 	if err != nil {
 		return err
 	}

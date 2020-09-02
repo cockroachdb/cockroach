@@ -41,10 +41,9 @@ const CreatedByScheduledJobs = "crdb_schedule"
 // jobs that need to be executed.
 type jobScheduler struct {
 	*scheduledjobs.JobExecutionConfig
-	env       scheduledjobs.JobSchedulerEnv
-	registry  *metric.Registry
-	metrics   SchedulerMetrics
-	executors map[string]ScheduledJobExecutor
+	env      scheduledjobs.JobSchedulerEnv
+	registry *metric.Registry
+	metrics  SchedulerMetrics
 }
 
 func newJobScheduler(
@@ -64,7 +63,6 @@ func newJobScheduler(
 		env:                env,
 		registry:           registry,
 		metrics:            stats,
-		executors:          make(map[string]ScheduledJobExecutor),
 	}
 }
 
@@ -189,14 +187,11 @@ func (s *jobScheduler) processSchedule(
 }
 
 func (s *jobScheduler) lookupExecutor(name string) (ScheduledJobExecutor, error) {
-	if ex, ok := s.executors[name]; ok {
-		return ex, nil
-	}
-	ex, err := NewScheduledJobExecutor(name)
+	ex, wasCreated, err := GetScheduledJobExecutor(name)
 	if err != nil {
 		return nil, err
 	}
-	if m := ex.Metrics(); m != nil {
+	if m := ex.Metrics(); wasCreated && m != nil {
 		s.registry.AddMetricStruct(m)
 	}
 	return ex, nil
