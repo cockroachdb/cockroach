@@ -692,6 +692,13 @@ func StartTenant(
 		mux := http.NewServeMux()
 		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
 		mux.Handle("/", debugServer)
+		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
+			// Return Bad Request if called with arguments.
+			if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+				return
+			}
+		})
 		f := varsHandler{metricSource: args.recorder}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
 		_ = http.Serve(httpL, mux)
