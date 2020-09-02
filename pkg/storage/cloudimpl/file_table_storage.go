@@ -72,9 +72,12 @@ func makeFileTableStorage(
 	// but this is not the case since FileTableStorage does not offer file system
 	// semantics.
 	if path.Clean(cfg.Path) != cfg.Path {
+		// Userfile upload writes files with a .tmp prefix. For better error
+		// messages we trim this suffix before bubbling the error up.
+		trimmedPath := strings.TrimSuffix(cfg.Path, ".tmp")
 		return nil, errors.Newf("path %s changes after normalization to %s. "+
 			"userfile upload does not permit such path constructs",
-			cfg.Path, path.Clean(cfg.Path))
+			trimmedPath, path.Clean(trimmedPath))
 	}
 
 	executor := filetable.MakeInternalFileToTableExecutor(ie, db)

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -53,6 +54,27 @@ type noopReadSeeker struct {
 
 func (n *noopReadSeeker) Seek(int64, int) (int64, error) {
 	return 0, errors.New("illegal seek")
+}
+
+func checkIfFileExists(ctx context.Context, c *copyMachine, dest, copyTargetTable string) error {
+	if copyTargetTable == UserFileUploadTable {
+		dest = strings.TrimSuffix(dest, ".tmp")
+	}
+	store, err := c.p.execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest, c.p.User())
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	_, err = store.ReadFile(ctx, "")
+	if err == nil {
+		// Can ignore this parse error as it would have been caught when creating a
+		// new ExternalStorage above and so we never expect it to non-nil.
+		uri, _ := url.Parse(dest)
+		return errors.Newf("destination file already exists for %s", uri.Path)
+	}
+
+	return nil
 }
 
 func newFileUploadMachine(
@@ -107,13 +129,9 @@ func newFileUploadMachine(
 		return nil, err
 	}
 
-	// Check that the file does not already exist
-	_, err = store.ReadFile(ctx, "")
-	if err == nil {
-		// Can ignore this parse error as it would have been caught when creating a
-		// new ExternalStorage above and so we never expect it to non-nil.
-		uri, _ := url.Parse(dest)
-		return nil, errors.Newf("destination file already exists for %s", uri.Path)
+	err = checkIfFileExists(ctx, c, dest, n.Table.Table())
+	if err != nil {
+		return nil, err
 	}
 
 	f.wg.Add(1)

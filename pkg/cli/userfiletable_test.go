@@ -76,7 +76,7 @@ func Example_userfile_upload() {
 	// userfile upload test.csv userfile://defaultdb.public.foo/test/file1.csv
 	// successfully uploaded to userfile://defaultdb.public.foo/test/file1.csv
 	// userfile upload test.csv userfile:///test/file3.csv
-	// successfully uploaded to userfile:///test/file3.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/test/file3.csv
 }
 
 func checkUserFileContent(
