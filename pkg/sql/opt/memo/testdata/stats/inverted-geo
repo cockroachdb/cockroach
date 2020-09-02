@@ -94,45 +94,45 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 4258.50
+ │         └── cost: 4262.50
  ├── G2: (limit G4 G5 ordering=+1)
  │    └── []
  │         ├── best: (limit G4="[ordering: +1] [limit hint: 1.00]" G5 ordering=+1)
- │         └── cost: 4258.48
+ │         └── cost: 4262.48
  ├── G3: (projections)
  ├── G4: (select G6 G7) (select G8 G7)
  │    ├── [ordering: +1] [limit hint: 1.00]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 4258.46
+ │    │    └── cost: 4262.46
  │    └── []
  │         ├── best: (select G6 G7)
- │         └── cost: 4120.04
+ │         └── cost: 4124.04
  ├── G5: (const 1)
  ├── G6: (scan t,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 3.00]
  │    │    ├── best: (sort G6)
- │    │    └── cost: 2578.66
+ │    │    └── cost: 2582.66
  │    └── []
  │         ├── best: (scan t,cols=(1,2))
- │         └── cost: 2100.02
+ │         └── cost: 2104.02
  ├── G7: (filters G9)
  ├── G8: (index-join G10 t,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 4.50]
  │    │    ├── best: (sort G8)
- │    │    └── cost: 16083.08
+ │    │    └── cost: 16095.08
  │    └── []
  │         ├── best: (index-join G10 t,cols=(1,2))
- │         └── cost: 15330.03
+ │         └── cost: 15342.03
  ├── G9: (function G11 st_intersects)
  ├── G10: (inverted-filter G12 g_inverted_key)
  │    └── []
  │         ├── best: (inverted-filter G12 g_inverted_key)
- │         └── cost: 3150.02
+ │         └── cost: 3162.02
  ├── G11: (scalar-list G13 G14)
  ├── G12: (scan t@secondary,cols=(3,5),constrained inverted)
  │    └── []
  │         ├── best: (scan t@secondary,cols=(3,5),constrained inverted)
- │         └── cost: 3120.01
+ │         └── cost: 3132.01
  ├── G13: (const '010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F')
  └── G14: (variable g)
 
@@ -196,45 +196,45 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 0.10
+ │         └── cost: 4.10
  ├── G2: (limit G4 G5 ordering=+1)
  │    └── []
  │         ├── best: (limit G4="[ordering: +1] [limit hint: 1.00]" G5 ordering=+1)
- │         └── cost: 0.08
+ │         └── cost: 4.08
  ├── G3: (projections)
  ├── G4: (select G6 G7) (select G8 G7)
  │    ├── [ordering: +1] [limit hint: 1.00]
  │    │    ├── best: (select G8="[ordering: +1] [limit hint: 0.00]" G7)
- │    │    └── cost: 0.06
+ │    │    └── cost: 4.06
  │    └── []
  │         ├── best: (select G8 G7)
- │         └── cost: 0.05
+ │         └── cost: 4.05
  ├── G5: (const 1)
  ├── G6: (scan t,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 3.00]
  │    │    ├── best: (sort G6)
- │    │    └── cost: 2578.66
+ │    │    └── cost: 2582.66
  │    └── []
  │         ├── best: (scan t,cols=(1,2))
- │         └── cost: 2100.02
+ │         └── cost: 2104.02
  ├── G7: (filters G9)
  ├── G8: (index-join G10 t,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 0.00]
  │    │    ├── best: (sort G8)
- │    │    └── cost: 0.04
+ │    │    └── cost: 4.04
  │    └── []
  │         ├── best: (index-join G10 t,cols=(1,2))
- │         └── cost: 0.03
+ │         └── cost: 4.03
  ├── G9: (function G11 st_intersects)
  ├── G10: (inverted-filter G12 g_inverted_key)
  │    └── []
  │         ├── best: (inverted-filter G12 g_inverted_key)
- │         └── cost: 0.02
+ │         └── cost: 4.02
  ├── G11: (scalar-list G13 G14)
  ├── G12: (scan t@secondary,cols=(3,5),constrained inverted)
  │    └── []
  │         ├── best: (scan t@secondary,cols=(3,5),constrained inverted)
- │         └── cost: 0.01
+ │         └── cost: 4.01
  ├── G13: (const '010200000002000000000000000000594000000000000059400000000000C062400000000000C06240')
  └── G14: (variable g)
 
@@ -304,11 +304,11 @@ memo (optimized, ~4KB, required=[presentation: i:1,g:2])
  ├── G1: (select G2 G3)
  │    └── [presentation: i:1,g:2]
  │         ├── best: (select G2 G3)
- │         └── cost: 2120.04
+ │         └── cost: 2124.04
  ├── G2: (scan t,cols=(1,2))
  │    └── []
  │         ├── best: (scan t,cols=(1,2))
- │         └── cost: 2100.02
+ │         └── cost: 2104.02
  ├── G3: (filters G4)
  ├── G4: (or G5 G6)
  ├── G5: (is G7 G8)

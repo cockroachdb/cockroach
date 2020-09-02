@@ -40,7 +40,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1060.02
+ ├── cost: 1064.02
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
@@ -54,7 +54,7 @@ scan t.public.abc@bc1
  ├── columns: a:1(int!null) b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 11.21
+ ├── cost: 15.21
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  ├── prune: (1,3)
@@ -68,7 +68,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -82,7 +82,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -96,7 +96,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -110,7 +110,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 11.01
+ ├── cost: 15.01
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -140,7 +140,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1060.02
+ ├── cost: 1064.02
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
@@ -154,7 +154,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.76
+ ├── cost: 14.76
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -168,7 +168,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -183,7 +183,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -210,7 +210,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -225,7 +225,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -251,7 +251,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -265,7 +265,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -280,7 +280,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -295,7 +295,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.76
+ ├── cost: 14.76
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -317,7 +317,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -331,7 +331,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -367,7 +367,7 @@ inner-join (lookup xy@y2)
  ├── flags: force lookup join (into right side)
  ├── key columns: [2] = [6]
  ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(6)=1, null(6)=0]
- ├── cost: 413.58
+ ├── cost: 417.58
  ├── key: (1,5)
  ├── fd: ()-->(2,6), (1)-->(3), (2,3)~~>(1), (2)==(6), (6)==(2)
  ├── prune: (1,3,5)
@@ -376,7 +376,7 @@ inner-join (lookup xy@y2)
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
  │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0]
- │    ├── cost: 10.61
+ │    ├── cost: 14.61
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  │    ├── prune: (1,3)
@@ -405,7 +405,7 @@ inner-join (lookup xy@y1)
  ├── flags: force lookup join (into right side)
  ├── key columns: [2] = [6]
  ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(6)=1, null(6)=0]
- ├── cost: 413.58
+ ├── cost: 417.58
  ├── key: (1,5)
  ├── fd: ()-->(2,6), (1)-->(3), (2,3)~~>(1), (2)==(6), (6)==(2)
  ├── prune: (1,3,5)
@@ -414,7 +414,7 @@ inner-join (lookup xy@y1)
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
  │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0]
- │    ├── cost: 10.61
+ │    ├── cost: 14.61
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  │    ├── prune: (1,3)
@@ -447,7 +447,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1100.02
+ ├── cost: 1104.02
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
@@ -461,7 +461,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 11.01
+ ├── cost: 15.01
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -475,7 +475,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.8433333
+ ├── cost: 14.8433333
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -489,7 +489,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.8433333
+ ├── cost: 14.8433333
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -518,7 +518,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1100.02
+ ├── cost: 1104.02
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
@@ -532,7 +532,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.9266667
+ ├── cost: 14.9266667
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -546,7 +546,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.8433333
+ ├── cost: 14.8433333
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -560,7 +560,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.8433333
+ ├── cost: 14.8433333
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -592,7 +592,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1080.02
+ ├── cost: 1084.02
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
@@ -606,7 +606,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.76
+ ├── cost: 14.76
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -620,7 +620,7 @@ scan t.public.abc@bc1
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.6766667
+ ├── cost: 14.6766667
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -634,7 +634,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.6766667
+ ├── cost: 14.6766667
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -663,7 +663,7 @@ scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 10.51
+ ├── cost: 14.51
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
