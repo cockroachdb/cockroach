@@ -1591,6 +1591,13 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	for i := 0; i < tab.ColumnCount(); i++ {
 		allCols.Add(tabID.ColumnID(i))
 	}
+	var excludeColumn opt.ColumnID
+	if tab.IsVirtualTable() {
+		// Don't advertise any functional dependencies for virtual table primary
+		// keys, since they are composed of a fake, unusable column.
+		dummyPKOrd := tab.Index(cat.PrimaryIndex).Column(0).Ordinal()
+		excludeColumn = tabID.ColumnID(dummyPKOrd)
+	}
 
 	fd = &props.FuncDepSet{}
 	for i := 0; i < tab.IndexCount(); i++ {
@@ -1601,11 +1608,6 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 			// Skip inverted indexes for now.
 			continue
 		}
-		if tab.IsVirtualTable() && i == cat.PrimaryIndex {
-			// Don't advertise any functional dependencies for virtual table primary
-			// keys, since they are composed of a fake, unusable column.
-			continue
-		}
 
 		// If index has a separate lax key, add a lax key FD. Otherwise, add a
 		// strict key. See the comment for cat.Index.LaxKeyColumnCount.
@@ -1613,6 +1615,12 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 			ord := index.Column(col).Ordinal()
 			keyCols.Add(tabID.ColumnID(ord))
 		}
+
+		if excludeColumn != 0 && keyCols.Contains(excludeColumn) {
+			// See comment above where excludeColumn is set.
+			continue
+		}
+
 		if index.LaxKeyColumnCount() < index.KeyColumnCount() {
 			// This case only occurs for a UNIQUE index having a NULL-able column.
 			fd.AddLaxKey(keyCols, allCols)
