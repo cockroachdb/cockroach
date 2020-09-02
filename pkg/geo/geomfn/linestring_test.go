@@ -50,6 +50,12 @@ func TestSetPoint(t *testing.T) {
 			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
 			expected:   geom.NewLineStringFlat(geom.XY, []float64{0, 0, 2, 2}),
 		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      0,
+			point:      geom.NewPointEmpty(geom.XY),
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{0, 0, 2, 2}),
+		},
 	}
 
 	for i, tc := range testCases {
