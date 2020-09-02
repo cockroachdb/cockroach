@@ -336,7 +336,7 @@ func (r Recording) String() string {
 	}
 
 	var buf strings.Builder
-	var start time.Time
+	start := r[0].StartTime
 	writeLogs := func(logs []traceLogData) {
 		for _, entry := range logs {
 			fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
