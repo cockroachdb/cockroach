@@ -2280,12 +2280,6 @@ backup_options:
 //     "@daily": run daily, at midnight
 //   See https://en.wikipedia.org/wiki/Cron
 //
-//   RECURRING NEVER indicates that the schedule is non recurring.
-//   If, in addition to 'NEVER', the 'first_run' schedule option is specified,
-//   then the schedule will execute once at that time (that is: it's a one-off execution).
-//   If the 'first_run' is not specified, then the created scheduled will be in 'PAUSED' state,
-//   and will need to be unpaused before it can execute.
-//
 // FULL BACKUP <crontab|ALWAYS>:
 //   The optional FULL BACKUP '<cron expr>' clause specifies when we'll start a new full backup,
 //   which becomes the "current" backup when complete.
@@ -2297,7 +2291,7 @@ backup_options:
 //      * RECURRING <= 1 day:  we default to FULL BACKUP '@weekly';
 //      * Otherwise: we default to FULL BACKUP ALWAYS.
 //
-// EXPERIMENTAL SCHEDULE OPTIONS:
+//  SCHEDULE OPTIONS:
 //   The schedule can be modified by specifying the following options (which are considered
 //   to be experimental at this time):
 //   * first_run=TIMESTAMPTZ:
@@ -2384,13 +2378,13 @@ opt_full_backup_clause:
   }
 
 opt_with_schedule_options:
-  WITH EXPERIMENTAL SCHEDULE OPTIONS kv_option_list
+  WITH SCHEDULE OPTIONS kv_option_list
+  {
+    $$.val = $4.kvOptions()
+  }
+| WITH SCHEDULE OPTIONS '(' kv_option_list ')'
   {
     $$.val = $5.kvOptions()
-  }
-| WITH EXPERIMENTAL SCHEDULE OPTIONS '(' kv_option_list ')'
-  {
-    $$.val = $6.kvOptions()
   }
 | /* EMPTY */
   {

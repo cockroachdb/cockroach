@@ -1287,8 +1287,8 @@ opt_full_backup_clause ::=
 	| 
 
 opt_with_schedule_options ::=
-	'WITH' 'EXPERIMENTAL' 'SCHEDULE' 'OPTIONS' kv_option_list
-	| 'WITH' 'EXPERIMENTAL' 'SCHEDULE' 'OPTIONS' '(' kv_option_list ')'
+	'WITH' 'SCHEDULE' 'OPTIONS' kv_option_list
+	| 'WITH' 'SCHEDULE' 'OPTIONS' '(' kv_option_list ')'
 	| 
 
 with_clause ::=

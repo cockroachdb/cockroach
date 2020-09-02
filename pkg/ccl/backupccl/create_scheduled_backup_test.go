@@ -341,7 +341,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		WITH revision_history
     RECURRING '1 2 * * *'
     FULL BACKUP ALWAYS
-		WITH EXPERIMENTAL SCHEDULE OPTIONS first_run=$1
+		WITH SCHEDULE OPTIONS first_run=$1
 		`,
 			queryArgs: []interface{}{th.env.Now().Add(time.Minute)},
 			expectedSchedules: []expectedSchedule{
@@ -606,7 +606,7 @@ func TestCreateBackupScheduleCollectionOverwrite(t *testing.T) {
 	// Expect that we can override this option with the ignore_existing_backups
 	// flag.
 	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' "+
-		"RECURRING '@daily' WITH EXPERIMENTAL SCHEDULE OPTIONS ignore_existing_backups;")
+		"RECURRING '@daily' WITH SCHEDULE OPTIONS ignore_existing_backups;")
 }
 
 func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
