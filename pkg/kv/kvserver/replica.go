@@ -1124,21 +1124,22 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 // they will end up checking for a pending merge at some later time.
 func (r *Replica) checkExecutionCanProceed(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, st *kvserverpb.LeaseStatus,
-) error {
+) (bool, error) {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
-		return err
+		return false, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	mergeInProgress := r.mergeInProgressRLocked()
 	if _, err := r.isDestroyedRLocked(); err != nil {
-		return err
+		return mergeInProgress, err
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
-		return err
+		return mergeInProgress, err
 	} else if err := r.checkTSAboveGCThresholdRLocked(
 		ba.EarliestActiveTimestamp(), st, ba.IsAdmin(),
 	); err != nil {
-		return err
+		return mergeInProgress, err
 	} else if g.HoldingLatches() {
 		// Only check for a pending merge if latches are held.
 		//
@@ -1146,9 +1147,9 @@ func (r *Replica) checkExecutionCanProceed(
 		// concurrency.shouldAcquireLatches() == false (e.g. RequestLeaseRequests)
 		// will not check for a pending merge before executing and, as such, can
 		// execute while a range is in a merge's critical phase.
-		return r.checkForPendingMergeRLocked(ba)
+		return mergeInProgress, r.checkForPendingMergeRLocked(ba)
 	}
-	return nil
+	return mergeInProgress, nil
 }
 
 // checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request
