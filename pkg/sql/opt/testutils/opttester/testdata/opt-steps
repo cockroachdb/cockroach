@@ -55,7 +55,7 @@ SELECT * FROM ab WHERE b=1
 ----
 ================================================================================
 Initial expression
-  Cost: 1060.15
+  Cost: 1064.15
 ================================================================================
   project
    ├── columns: a:1(int!null) b:2(int!null)
@@ -75,7 +75,7 @@ Initial expression
                   └── const: 1 [type=int]
 ================================================================================
 PruneSelectCols
-  Cost: 1050.15
+  Cost: 1054.15
 ================================================================================
    project
     ├── columns: a:1(int!null) b:2(int!null)
@@ -99,7 +99,7 @@ PruneSelectCols
                    └── const: 1 [type=int]
 ================================================================================
 EliminateProject
-  Cost: 1050.04
+  Cost: 1054.04
 ================================================================================
   -project
   +select
@@ -150,7 +150,7 @@ GeneratePartialIndexScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 GenerateConstrainedScans
-  Cost: 10.41
+  Cost: 14.41
 ================================================================================
   -select
   +scan ab@secondary
@@ -169,7 +169,7 @@ GenerateConstrainedScans
   + └── fd: ()-->(2)
 ================================================================================
 Final best expression
-  Cost: 10.41
+  Cost: 14.41
 ================================================================================
   scan ab@secondary
    ├── columns: a:1(int!null) b:2(int!null)
@@ -208,7 +208,7 @@ SELECT * FROM orders LEFT JOIN customers ON customer_id = customers.id
 ----
 ================================================================================
 Initial expression
-  Cost: 2190.07
+  Cost: 2198.07
 ================================================================================
   project
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
@@ -240,7 +240,7 @@ Initial expression
                   └── variable: customers.id:5 [type=int]
 ================================================================================
 NormalizeInConst
-  Cost: 2190.07
+  Cost: 2198.07
 ================================================================================
    project
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
@@ -274,7 +274,7 @@ NormalizeInConst
                    └── variable: customers.id:5 [type=int]
 ================================================================================
 PruneJoinLeftCols
-  Cost: 2180.07
+  Cost: 2188.07
 ================================================================================
    project
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
@@ -310,7 +310,7 @@ PruneJoinLeftCols
                    └── variable: customers.id:5 [type=int]
 ================================================================================
 PruneJoinRightCols
-  Cost: 2170.07
+  Cost: 2178.07
 ================================================================================
    project
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
@@ -346,7 +346,7 @@ PruneJoinRightCols
                    └── variable: customers.id:5 [type=int]
 ================================================================================
 EliminateProject
-  Cost: 2160.06
+  Cost: 2168.06
 ================================================================================
   -project
   +left-join (hash)
@@ -517,7 +517,7 @@ GenerateMergeJoins (higher cost)
     └── filters (true)
 ================================================================================
 Final best expression
-  Cost: 2160.06
+  Cost: 2168.06
 ================================================================================
   left-join (hash)
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
@@ -560,7 +560,7 @@ SELECT * FROM comp WHERE k=1
 ----
 ================================================================================
 Initial expression
-  Cost: 1080.15
+  Cost: 1084.15
 ================================================================================
   project
    ├── columns: k:1(int!null) c:2(bool)
@@ -587,7 +587,7 @@ Initial expression
                   └── const: 1 [type=int]
 ================================================================================
 NormalizeInConst
-  Cost: 1080.15
+  Cost: 1084.15
 ================================================================================
    project
     ├── columns: k:1(int!null) c:2(bool)
@@ -616,7 +616,7 @@ NormalizeInConst
                    └── const: 1 [type=int]
 ================================================================================
 PruneSelectCols
-  Cost: 1060.15
+  Cost: 1064.15
 ================================================================================
    project
     ├── columns: k:1(int!null) c:2(bool)
@@ -654,7 +654,7 @@ PruneSelectCols
                    └── const: 1 [type=int]
 ================================================================================
 EliminateProject
-  Cost: 1060.04
+  Cost: 1064.04
 ================================================================================
   -project
   +select
@@ -724,7 +724,7 @@ GenerateConstrainedScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 FoldComparison
-  Cost: 10.51
+  Cost: 14.51
 ================================================================================
   -select
   +scan comp@secondary
@@ -748,7 +748,7 @@ FoldComparison
   + └── fd: ()-->(1)
 ================================================================================
 Final best expression
-  Cost: 10.51
+  Cost: 14.51
 ================================================================================
   scan comp@secondary
    ├── columns: k:1(int!null) c:2(bool)

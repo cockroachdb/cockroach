@@ -240,27 +240,19 @@ project
       │         │    │    │    ├── key columns: [48] = [43]
       │         │    │    │    ├── key: (40)
       │         │    │    │    ├── fd: ()-->(54), (40)-->(43), (48)-->(50), (50)==(53), (53)==(50), (43)==(48), (48)==(43)
-      │         │    │    │    ├── inner-join (merge)
+      │         │    │    │    ├── inner-join (lookup nation@n_rk)
       │         │    │    │    │    ├── columns: n_nationkey:48!null n_regionkey:50!null r_regionkey:53!null r_name:54!null
-      │         │    │    │    │    ├── left ordering: +50
-      │         │    │    │    │    ├── right ordering: +53
+      │         │    │    │    │    ├── key columns: [53] = [50]
       │         │    │    │    │    ├── key: (48)
       │         │    │    │    │    ├── fd: ()-->(54), (48)-->(50), (50)==(53), (53)==(50)
-      │         │    │    │    │    ├── scan nation@n_rk
-      │         │    │    │    │    │    ├── columns: n_nationkey:48!null n_regionkey:50!null
-      │         │    │    │    │    │    ├── key: (48)
-      │         │    │    │    │    │    ├── fd: (48)-->(50)
-      │         │    │    │    │    │    └── ordering: +50
       │         │    │    │    │    ├── select
       │         │    │    │    │    │    ├── columns: r_regionkey:53!null r_name:54!null
       │         │    │    │    │    │    ├── key: (53)
       │         │    │    │    │    │    ├── fd: ()-->(54)
-      │         │    │    │    │    │    ├── ordering: +53 opt(54) [actual: +53]
       │         │    │    │    │    │    ├── scan region
       │         │    │    │    │    │    │    ├── columns: r_regionkey:53!null r_name:54!null
       │         │    │    │    │    │    │    ├── key: (53)
-      │         │    │    │    │    │    │    ├── fd: (53)-->(54)
-      │         │    │    │    │    │    │    └── ordering: +53 opt(54) [actual: +53]
+      │         │    │    │    │    │    │    └── fd: (53)-->(54)
       │         │    │    │    │    │    └── filters
       │         │    │    │    │    │         └── r_name:54 = 'EUROPE' [outer=(54), constraints=(/54: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(54)]
       │         │    │    │    │    └── filters (true)
@@ -852,27 +844,19 @@ sort
       │    │    │    │    │    │    │    ├── key columns: [55] = [49]
       │    │    │    │    │    │    │    ├── key: (46)
       │    │    │    │    │    │    │    ├── fd: ()-->(66), (46)-->(49), (55)-->(57), (57)==(65), (65)==(57), (49)==(55), (55)==(49)
-      │    │    │    │    │    │    │    ├── inner-join (merge)
+      │    │    │    │    │    │    │    ├── inner-join (lookup nation@n_rk)
       │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:55!null n1.n_regionkey:57!null r_regionkey:65!null r_name:66!null
-      │    │    │    │    │    │    │    │    ├── left ordering: +57
-      │    │    │    │    │    │    │    │    ├── right ordering: +65
+      │    │    │    │    │    │    │    │    ├── key columns: [65] = [57]
       │    │    │    │    │    │    │    │    ├── key: (55)
       │    │    │    │    │    │    │    │    ├── fd: ()-->(66), (55)-->(57), (57)==(65), (65)==(57)
-      │    │    │    │    │    │    │    │    ├── scan n1@n_rk
-      │    │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:55!null n1.n_regionkey:57!null
-      │    │    │    │    │    │    │    │    │    ├── key: (55)
-      │    │    │    │    │    │    │    │    │    ├── fd: (55)-->(57)
-      │    │    │    │    │    │    │    │    │    └── ordering: +57
       │    │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    │    ├── columns: r_regionkey:65!null r_name:66!null
       │    │    │    │    │    │    │    │    │    ├── key: (65)
       │    │    │    │    │    │    │    │    │    ├── fd: ()-->(66)
-      │    │    │    │    │    │    │    │    │    ├── ordering: +65 opt(66) [actual: +65]
       │    │    │    │    │    │    │    │    │    ├── scan region
       │    │    │    │    │    │    │    │    │    │    ├── columns: r_regionkey:65!null r_name:66!null
       │    │    │    │    │    │    │    │    │    │    ├── key: (65)
-      │    │    │    │    │    │    │    │    │    │    ├── fd: (65)-->(66)
-      │    │    │    │    │    │    │    │    │    │    └── ordering: +65 opt(66) [actual: +65]
+      │    │    │    │    │    │    │    │    │    │    └── fd: (65)-->(66)
       │    │    │    │    │    │    │    │    │    └── filters
       │    │    │    │    │    │    │    │    │         └── r_name:66 = 'AMERICA' [outer=(66), constraints=(/66: [/'AMERICA' - /'AMERICA']; tight), fd=()-->(66)]
       │    │    │    │    │    │    │    │    └── filters (true)

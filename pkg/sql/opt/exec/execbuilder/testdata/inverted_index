@@ -678,7 +678,7 @@ inner-join (lookup geo_table)
  ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=10000]
- ├── cost: 112480.05
+ ├── cost: 112484.05
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── prune: (1,5)
@@ -687,13 +687,13 @@ inner-join (lookup geo_table)
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
  │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(5)=999.956829, null(5)=0]
- │    ├── cost: 41780.03
+ │    ├── cost: 41784.03
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    │    ├── cost: 1080.02
+ │    │    ├── cost: 1084.02
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── prune: (1,2)

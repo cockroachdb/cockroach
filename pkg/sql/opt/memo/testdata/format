@@ -9,7 +9,7 @@ sort
  ├── columns: "?column?":6(int) min:5(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
  ├── stats: [rows=98.1771622]
- ├── cost: 1097.88224
+ ├── cost: 1101.88224
  ├── key: (1)
  ├── fd: (1)-->(5,6)
  ├── ordering: +1
@@ -18,7 +18,7 @@ sort
       ├── columns: "?column?":6(int) t.public.t.a:1(int) min:5(int!null)
       ├── immutable
       ├── stats: [rows=98.1771622]
-      ├── cost: 1082.91531
+      ├── cost: 1086.91531
       ├── key: (1)
       ├── fd: (1)-->(5,6)
       ├── prune: (1,5,6)
@@ -27,7 +27,7 @@ sort
       │    ├── grouping columns: t.public.t.a:1(int)
       │    ├── immutable
       │    ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=1]
-      │    ├── cost: 1080.94177
+      │    ├── cost: 1084.94177
       │    ├── key: (1)
       │    ├── fd: (1)-->(5)
       │    ├── prune: (5)
@@ -35,14 +35,14 @@ sort
       │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
       │    │    ├── immutable
       │    │    ├── stats: [rows=330, distinct(1)=98.1771622, null(1)=3.3, distinct(2)=100, null(2)=0]
-      │    │    ├── cost: 1070.04
+      │    │    ├── cost: 1074.04
       │    │    ├── key: (3)
       │    │    ├── fd: (3)-->(1,2)
       │    │    ├── interesting orderings: (+3)
       │    │    ├── scan t.public.t
       │    │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
       │    │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
-      │    │    │    ├── cost: 1060.02
+      │    │    │    ├── cost: 1064.02
       │    │    │    ├── key: (3)
       │    │    │    ├── fd: (3)-->(1,2)
       │    │    │    ├── prune: (1-3)
@@ -67,25 +67,25 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 sort
  ├── columns: "?column?":6(int) min:5(int!null)  [hidden: t.public.t.a:1(int)]
  ├── stats: [rows=98.1771622]
- ├── cost: 1097.88224
+ ├── cost: 1101.88224
  ├── ordering: +1
  └── project
       ├── columns: "?column?":6(int) t.public.t.a:1(int) min:5(int!null)
       ├── stats: [rows=98.1771622]
-      ├── cost: 1082.91531
+      ├── cost: 1086.91531
       ├── group-by
       │    ├── columns: t.public.t.a:1(int) min:5(int!null)
       │    ├── grouping columns: t.public.t.a:1(int)
       │    ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=1]
-      │    ├── cost: 1080.94177
+      │    ├── cost: 1084.94177
       │    ├── select
       │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
       │    │    ├── stats: [rows=330, distinct(1)=98.1771622, null(1)=3.3, distinct(2)=100, null(2)=0]
-      │    │    ├── cost: 1070.04
+      │    │    ├── cost: 1074.04
       │    │    ├── scan t.public.t
       │    │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
       │    │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
-      │    │    │    └── cost: 1060.02
+      │    │    │    └── cost: 1064.02
       │    │    └── filters
       │    │         └── lt [type=bool]
       │    │              ├── variable: t.public.t.b:2 [type=int]
@@ -277,31 +277,31 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
  ├── stats: [rows=98.1771622]
- ├── cost: 1097.88224
+ ├── cost: 1101.88224
  ├── key: (1)
  ├── fd: (1)-->(5,6)
  ├── prune: (1,5,6)
  └── project
       ├── stats: [rows=98.1771622]
-      ├── cost: 1082.91531
+      ├── cost: 1086.91531
       ├── key: (1)
       ├── fd: (1)-->(5,6)
       ├── prune: (1,5,6)
       ├── group-by
       │    ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=1]
-      │    ├── cost: 1080.94177
+      │    ├── cost: 1084.94177
       │    ├── key: (1)
       │    ├── fd: (1)-->(5)
       │    ├── prune: (5)
       │    ├── select
       │    │    ├── stats: [rows=330, distinct(1)=98.1771622, null(1)=3.3, distinct(2)=100, null(2)=0]
-      │    │    ├── cost: 1070.04
+      │    │    ├── cost: 1074.04
       │    │    ├── key: (3)
       │    │    ├── fd: (3)-->(1,2)
       │    │    ├── interesting orderings: (+3)
       │    │    ├── scan t.public.t
       │    │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
-      │    │    │    ├── cost: 1060.02
+      │    │    │    ├── cost: 1064.02
       │    │    │    ├── key: (3)
       │    │    │    ├── fd: (3)-->(1,2)
       │    │    │    ├── prune: (1-3)

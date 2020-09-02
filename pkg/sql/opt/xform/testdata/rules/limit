@@ -233,16 +233,16 @@ memo (optimized, ~7KB, required=[presentation: s:4])
  ├── G1: (limit G2 G3) (scan a@s_idx,cols=(4),constrained,lim=1) (scan a@si_idx,cols=(4),constrained,lim=1)
  │    └── [presentation: s:4]
  │         ├── best: (scan a@s_idx,cols=(4),constrained,lim=1)
- │         └── cost: 1.06
+ │         └── cost: 5.06
  ├── G2: (select G4 G5) (scan a@s_idx,cols=(4),constrained) (scan a@si_idx,cols=(4),constrained)
  │    └── [limit hint: 1.00]
  │         ├── best: (scan a@s_idx,cols=(4),constrained)
- │         └── cost: 2.11
+ │         └── cost: 6.11
  ├── G3: (const 1)
  ├── G4: (scan a,cols=(4)) (scan a@s_idx,cols=(4)) (scan a@si_idx,cols=(4))
  │    └── [limit hint: 100.00]
  │         ├── best: (scan a@s_idx,cols=(4))
- │         └── cost: 210.02
+ │         └── cost: 214.02
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable s)
@@ -614,7 +614,7 @@ EliminateProject
               └── 5
 ================================================================================
 GenerateIndexScans
-  Cost: 5134.92
+  Cost: 5138.92
 ================================================================================
    explain
     ├── columns: tree:6 field:7 description:8
@@ -686,7 +686,7 @@ GenerateConstrainedScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
-  Cost: 5134.92
+  Cost: 5138.92
 ================================================================================
   explain
    ├── columns: tree:6 field:7 description:8
