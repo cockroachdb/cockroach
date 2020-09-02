@@ -152,7 +152,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 
 	inputs := make([]SynchronizerInput, 6)
 	inputs[0].Op = &colexecbase.CallbackOperator{NextCb: func(context.Context) coldata.Batch {
-		colexecerror.InternalError(expectedErr)
+		colexecerror.InternalError(errors.New(expectedErr))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}}

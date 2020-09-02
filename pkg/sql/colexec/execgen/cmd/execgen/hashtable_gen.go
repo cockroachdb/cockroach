@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // hashTableMode describes the mode in which the hash table can operate.
@@ -52,7 +53,7 @@ func (m hashTableMode) String() string {
 	case hashTableFullBuildDeletingProbe:
 		return "full_deleting"
 	default:
-		colexecerror.InternalError("unexpected hashTableMode")
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected hashTableMode"))
 		// This code is unreachable, but the compiler cannot infer that.
 		return ""
 	}
@@ -138,7 +139,7 @@ func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) err
 		}
 	}
 	if data == nil {
-		colexecerror.InternalError("unexpectedly didn't find overload for tree.NE")
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find overload for tree.NE"))
 	}
 	return tmpl.Execute(wr, struct {
 		Overloads     interface{}

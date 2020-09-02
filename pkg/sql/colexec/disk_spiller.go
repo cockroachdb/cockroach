@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/errors"
 )
 
 // oneInputDiskSpiller is an Operator that manages the fallback from a one
@@ -278,7 +278,7 @@ func (d *diskSpillerBase) Child(nth int, verbose bool) execinfra.OpNode {
 	case 0:
 		return d.inMemoryOp
 	default:
-		colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+		colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}

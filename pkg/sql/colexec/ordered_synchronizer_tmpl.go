@@ -22,7 +22,6 @@ package colexec
 import (
 	"container/heap"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // {{/*
@@ -176,7 +176,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						}
 						// {{end}}
 					default:
-						colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i].String()))
+						colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", o.typs[i].String()))
 					}
 				}
 			}
@@ -226,7 +226,7 @@ func (o *OrderedSynchronizer) resetOutput() {
 				}
 			// {{end}}
 			default:
-				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i]))
+				colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", o.typs[i]))
 			}
 		}
 	}
@@ -283,7 +283,7 @@ func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 			case encoding.Descending:
 				return -res
 			default:
-				colexecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected direction value %d", d))
 			}
 		}
 	}

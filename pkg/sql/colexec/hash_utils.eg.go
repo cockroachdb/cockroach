@@ -11,7 +11,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"reflect"
 	"unsafe"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // rehash takes an element of a key (tuple representing a row of equality
@@ -908,6 +908,6 @@ func rehash(
 			}
 		}
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", col.Type()))
+		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", col.Type()))
 	}
 }

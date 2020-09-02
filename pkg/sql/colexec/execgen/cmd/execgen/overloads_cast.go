@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 var castableCanonicalTypeFamilies = make(map[types.Family][]types.Family)
@@ -153,7 +154,7 @@ var castTypeCustomizers = make(map[typePair]typeCustomizer)
 
 func registerCastTypeCustomizer(pair typePair, customizer typeCustomizer) {
 	if _, found := castTypeCustomizers[pair]; found {
-		colexecerror.InternalError(fmt.Sprintf("unexpectedly cast type customizer already present for %v", pair))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly cast type customizer already present for %v", pair))
 	}
 	castTypeCustomizers[pair] = customizer
 	alreadyPresent := false
@@ -271,7 +272,7 @@ func (c floatCastCustomizer) getCastFunc() castFunc {
 	case types.IntFamily:
 		return floatToInt(c.toWidth, 64)
 	}
-	colexecerror.InternalError(fmt.Sprintf("unexpectedly didn't find a cast from float to %s with %d width", c.toFamily, c.toWidth))
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find a cast from float to %s with %d width", c.toFamily, c.toWidth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -294,7 +295,7 @@ func (c intCastCustomizer) getCastFunc() castFunc {
 	case types.FloatFamily:
 		return intToFloat()
 	}
-	colexecerror.InternalError(fmt.Sprintf("unexpectedly didn't find a cast from int to %s with %d width", c.toFamily, c.toWidth))
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find a cast from int to %s with %d width", c.toFamily, c.toWidth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -304,7 +305,7 @@ func (c datumCastCustomizer) getCastFunc() castFunc {
 	case types.BoolFamily:
 		return datumToBool
 	}
-	colexecerror.InternalError(fmt.Sprintf("unexpectedly didn't find a cast from datum-backed type to %s", c.toFamily))
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find a cast from datum-backed type to %s", c.toFamily))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

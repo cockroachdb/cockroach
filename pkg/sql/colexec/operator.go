@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // OperatorInitStatus indicates whether Init method has already been called on
@@ -62,7 +62,7 @@ func (n OneInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return n.input
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -93,7 +93,7 @@ func (n *twoInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	case 1:
 		return n.inputTwo
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid idx %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -449,7 +449,7 @@ func NewBatchSchemaSubsetEnforcer(
 func (e *BatchSchemaSubsetEnforcer) Init() {
 	e.input.Init()
 	if e.subsetStartIdx >= e.subsetEndIdx {
-		colexecerror.InternalError("unexpectedly subsetStartIdx is not less than subsetEndIdx")
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly subsetStartIdx is not less than subsetEndIdx"))
 	}
 }
 

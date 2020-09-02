@@ -11,13 +11,12 @@
 package colexec
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // ExprHelper is a utility interface that helps with expression handling in
@@ -51,7 +50,7 @@ func NewExprHelper(exprDeserialization ExprDeserialization) ExprHelper {
 	case ForcedExprDeserialization:
 		return &forcedDeserializationExprHelper{}
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unexpected ExprDeserialization %d", exprDeserialization))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected ExprDeserialization %d", exprDeserialization))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}

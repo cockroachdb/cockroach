@@ -12,7 +12,6 @@ package colexec
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/errors"
 )
 
 type mergeJoinRightOuterOp struct {
@@ -70,7 +70,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -296,7 +296,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -491,7 +491,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -685,7 +685,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -919,7 +919,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -1154,7 +1154,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -1392,7 +1392,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -1662,7 +1662,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -1885,7 +1885,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -2080,7 +2080,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -2260,7 +2260,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -2288,7 +2288,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -2500,7 +2500,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -2681,7 +2681,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -2861,7 +2861,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -3081,7 +3081,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -3302,7 +3302,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -3526,7 +3526,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -3782,7 +3782,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -3991,7 +3991,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -4172,7 +4172,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -4338,7 +4338,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		} else {
@@ -4368,7 +4368,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -4584,7 +4584,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -4769,7 +4769,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -4953,7 +4953,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -5177,7 +5177,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -5402,7 +5402,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -5630,7 +5630,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -5890,7 +5890,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -6103,7 +6103,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -6288,7 +6288,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -6458,7 +6458,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -6486,7 +6486,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -6688,7 +6688,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -6859,7 +6859,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -7029,7 +7029,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -7239,7 +7239,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -7450,7 +7450,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -7664,7 +7664,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -7910,7 +7910,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -8109,7 +8109,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -8280,7 +8280,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -8436,7 +8436,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		}
@@ -8483,7 +8483,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -8709,7 +8709,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -8904,7 +8904,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -9098,7 +9098,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -9332,7 +9332,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -9567,7 +9567,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -9805,7 +9805,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -10075,7 +10075,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -10298,7 +10298,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -10493,7 +10493,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -10673,7 +10673,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -10701,7 +10701,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -10913,7 +10913,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -11094,7 +11094,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -11274,7 +11274,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -11494,7 +11494,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -11715,7 +11715,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -11939,7 +11939,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -12195,7 +12195,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -12404,7 +12404,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -12585,7 +12585,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -12751,7 +12751,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		} else {
@@ -12781,7 +12781,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -12997,7 +12997,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -13182,7 +13182,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -13366,7 +13366,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -13590,7 +13590,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -13815,7 +13815,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -14043,7 +14043,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -14303,7 +14303,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -14516,7 +14516,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -14701,7 +14701,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -14871,7 +14871,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -14899,7 +14899,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -15101,7 +15101,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -15272,7 +15272,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -15442,7 +15442,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -15652,7 +15652,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -15863,7 +15863,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -16077,7 +16077,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -16323,7 +16323,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -16522,7 +16522,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -16693,7 +16693,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -16849,7 +16849,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		}
@@ -16896,7 +16896,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -17122,7 +17122,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -17317,7 +17317,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -17511,7 +17511,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -17745,7 +17745,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -17980,7 +17980,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -18218,7 +18218,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -18488,7 +18488,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -18711,7 +18711,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -18906,7 +18906,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -19086,7 +19086,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -19114,7 +19114,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -19326,7 +19326,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -19507,7 +19507,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -19687,7 +19687,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -19907,7 +19907,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -20128,7 +20128,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -20352,7 +20352,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -20608,7 +20608,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -20817,7 +20817,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -20998,7 +20998,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -21164,7 +21164,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		} else {
@@ -21194,7 +21194,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -21410,7 +21410,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -21595,7 +21595,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -21779,7 +21779,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -22003,7 +22003,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -22228,7 +22228,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -22456,7 +22456,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -22716,7 +22716,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -22929,7 +22929,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -23114,7 +23114,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -23284,7 +23284,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -23312,7 +23312,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -23514,7 +23514,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -23685,7 +23685,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -23855,7 +23855,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -24065,7 +24065,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -24276,7 +24276,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -24490,7 +24490,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -24736,7 +24736,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -24935,7 +24935,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -25106,7 +25106,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -25262,7 +25262,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		}
@@ -25309,7 +25309,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -25535,7 +25535,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -25730,7 +25730,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -25924,7 +25924,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -26158,7 +26158,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -26393,7 +26393,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -26631,7 +26631,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -26901,7 +26901,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -27124,7 +27124,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -27319,7 +27319,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -27499,7 +27499,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -27527,7 +27527,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -27739,7 +27739,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -27920,7 +27920,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -28100,7 +28100,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -28320,7 +28320,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -28541,7 +28541,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -28765,7 +28765,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -29021,7 +29021,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -29230,7 +29230,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -29411,7 +29411,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -29577,7 +29577,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		} else {
@@ -29607,7 +29607,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -29823,7 +29823,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -30008,7 +30008,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -30192,7 +30192,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -30416,7 +30416,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -30641,7 +30641,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -30869,7 +30869,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -31129,7 +31129,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -31342,7 +31342,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -31527,7 +31527,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -31697,7 +31697,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -31725,7 +31725,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -31927,7 +31927,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -32098,7 +32098,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -32268,7 +32268,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -32478,7 +32478,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -32689,7 +32689,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -32903,7 +32903,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -33149,7 +33149,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -33348,7 +33348,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -33519,7 +33519,7 @@ EqLoop:
 
 							if rGroup.unmatched {
 								if curRIdx+1 != curREndIdx {
-									colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
+									colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 								}
 								// The row already does not have a match, so we don't need to do any
 								// additional processing.
@@ -33675,7 +33675,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		}
@@ -34371,7 +34371,7 @@ func (o *mergeJoinRightOuterOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					} else {
 
@@ -34989,7 +34989,7 @@ func (o *mergeJoinRightOuterOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 				} else {
@@ -35629,7 +35629,7 @@ func (o *mergeJoinRightOuterOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					} else {
 
@@ -36237,7 +36237,7 @@ func (o *mergeJoinRightOuterOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 				}
@@ -36776,7 +36776,7 @@ func (o *mergeJoinRightOuterOp) buildLeftBufferedGroup(
 							}
 						}
 					default:
-						colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+						colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 					}
 					if colIdx == len(input.sourceTypes)-1 {
 						// We have appended some tuples into the output batch from the current
@@ -37526,7 +37526,7 @@ func (o *mergeJoinRightOuterOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					} else {
 
@@ -38184,7 +38184,7 @@ func (o *mergeJoinRightOuterOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 				} else {
@@ -38864,7 +38864,7 @@ func (o *mergeJoinRightOuterOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					} else {
 
@@ -39522,7 +39522,7 @@ func (o *mergeJoinRightOuterOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 				}
@@ -39860,7 +39860,7 @@ func (o *mergeJoinRightOuterOp) buildRightBufferedGroup(
 								}
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 					outStartIdx += toAppend
@@ -40021,7 +40021,7 @@ func (o *mergeJoinRightOuterOp) build(ctx context.Context) {
 			o.buildRightBufferedGroup(ctx, o.builderState.rGroups[0], len(o.left.sourceTypes), &o.right, o.proberState.rBufferedGroup, outStartIdx)
 
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unsupported mjBuildFrom %d", o.builderState.buildFrom))
+			colexecerror.InternalError(errors.AssertionFailedf("unsupported mjBuildFrom %d", o.builderState.buildFrom))
 		}
 	}
 }
@@ -40108,7 +40108,7 @@ func (o *mergeJoinRightOuterOp) Next(ctx context.Context) coldata.Batch {
 			}
 			return coldata.ZeroBatch
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
+			colexecerror.InternalError(errors.AssertionFailedf("unexpected merge joiner state in Next: %v", o.state))
 		}
 	}
 }

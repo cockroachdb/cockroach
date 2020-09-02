@@ -13,7 +13,6 @@ package colexec
 import (
 	"container/heap"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -125,7 +125,7 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 		case topKSortDone:
 			return coldata.ZeroBatch
 		default:
-			colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", t.state))
+			colexecerror.InternalError(errors.AssertionFailedf("invalid sort state %v", t.state))
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
@@ -251,7 +251,7 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 int) int 
 			case execinfrapb.Ordering_Column_DESC:
 				return -res
 			default:
-				colexecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected direction value %d", d))
 			}
 		}
 	}

@@ -12,7 +12,6 @@ package colexec
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/errors"
 )
 
 type mergeJoinLeftSemiOp struct {
@@ -1751,7 +1751,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -3360,7 +3360,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		} else {
@@ -4971,7 +4971,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -6480,7 +6480,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		}
@@ -8208,7 +8208,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -9817,7 +9817,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		} else {
@@ -11428,7 +11428,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -12937,7 +12937,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		}
@@ -14665,7 +14665,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -16274,7 +16274,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		} else {
@@ -17885,7 +17885,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -19394,7 +19394,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		}
@@ -21122,7 +21122,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -22731,7 +22731,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		} else {
@@ -24342,7 +24342,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			} else {
 
@@ -25851,7 +25851,7 @@ EqLoop:
 						}
 					}
 				default:
-					colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", colType))
 				}
 			}
 		}
@@ -26517,7 +26517,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					} else {
 
@@ -27105,7 +27105,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 				} else {
@@ -27715,7 +27715,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					} else {
 
@@ -28293,7 +28293,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 				}
@@ -28832,7 +28832,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftBufferedGroup(
 							}
 						}
 					default:
-						colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+						colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 					}
 					if colIdx == len(input.sourceTypes)-1 {
 						// We have appended some tuples into the output batch from the current
@@ -29582,7 +29582,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					} else {
 
@@ -30240,7 +30240,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 				} else {
@@ -30920,7 +30920,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					} else {
 
@@ -31578,7 +31578,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 				}
@@ -31916,7 +31916,7 @@ func (o *mergeJoinLeftSemiOp) buildRightBufferedGroup(
 								}
 							}
 						default:
-							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
+							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
 						}
 					}
 					outStartIdx += toAppend
@@ -32054,7 +32054,7 @@ func (o *mergeJoinLeftSemiOp) build(ctx context.Context) {
 			o.buildLeftBufferedGroup(ctx, o.builderState.lGroups[0], &o.left, o.proberState.lBufferedGroup, outStartIdx)
 
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unsupported mjBuildFrom %d", o.builderState.buildFrom))
+			colexecerror.InternalError(errors.AssertionFailedf("unsupported mjBuildFrom %d", o.builderState.buildFrom))
 		}
 	}
 }
@@ -32125,7 +32125,7 @@ func (o *mergeJoinLeftSemiOp) Next(ctx context.Context) coldata.Batch {
 			}
 			return coldata.ZeroBatch
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
+			colexecerror.InternalError(errors.AssertionFailedf("unexpected merge joiner state in Next: %v", o.state))
 		}
 	}
 }

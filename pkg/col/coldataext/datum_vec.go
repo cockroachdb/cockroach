@@ -11,8 +11,6 @@
 package coldataext
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -20,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // Datum wraps a tree.Datum. This is the struct that datumVec.Get() returns.
@@ -175,7 +174,7 @@ func (dv *datumVec) assertValidDatum(datum tree.Datum) {
 func (dv *datumVec) assertSameTypeFamily(t *types.T) {
 	if dv.t.Family() != t.Family() {
 		colexecerror.InternalError(
-			fmt.Sprintf("cannot use value of type %+v on a datumVec of type %+v", t, dv.t),
+			errors.AssertionFailedf("cannot use value of type %+v on a datumVec of type %+v", t, dv.t),
 		)
 	}
 }
@@ -201,7 +200,7 @@ func maybeUnwrapDatum(v coldata.Datum) tree.Datum {
 	} else if datum, ok := v.(tree.Datum); ok {
 		return datum
 	}
-	colexecerror.InternalError(fmt.Sprintf("unexpected value: %v", v))
+	colexecerror.InternalError(errors.AssertionFailedf("unexpected value: %v", v))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

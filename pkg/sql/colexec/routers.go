@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -164,7 +163,7 @@ func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return o.input
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

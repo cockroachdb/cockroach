@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -699,7 +698,7 @@ StateChanged:
 			}
 			return coldata.ZeroBatch
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected externalHashJoinerState %d", hj.state))
+			colexecerror.InternalError(errors.AssertionFailedf("unexpected externalHashJoinerState %d", hj.state))
 		}
 	}
 }

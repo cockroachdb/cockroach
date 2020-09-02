@@ -11,10 +11,9 @@
 package colbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/errors"
 )
 
 // SupportedWindowFns contains all window functions supported by the
@@ -45,7 +44,7 @@ func windowFnNeedsPeersInfo(windowFn execinfrapb.WindowerSpec_WindowFunc) bool {
 		execinfrapb.WindowerSpec_CUME_DIST:
 		return true
 	default:
-		colexecerror.InternalError(fmt.Sprintf("window function %s is not supported", windowFn.String()))
+		colexecerror.InternalError(errors.AssertionFailedf("window function %s is not supported", windowFn.String()))
 		// This code is unreachable, but the compiler cannot infer that.
 		return false
 	}

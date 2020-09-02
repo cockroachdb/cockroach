@@ -56,7 +56,7 @@ type _NON_CONST_GOTYPESLICE interface{}
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
 func _ASSIGN(_, _, _, _, _, _ interface{}) {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}
