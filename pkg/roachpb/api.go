@@ -602,7 +602,7 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 func (ru *RequestUnion) MustSetInner(args Request) {
 	ru.Reset()
 	if !ru.SetInner(args) {
-		panic(fmt.Sprintf("%T excludes %T", ru, args))
+		panic(errors.AssertionFailedf("%T excludes %T", ru, args))
 	}
 }
 
@@ -612,7 +612,7 @@ func (ru *RequestUnion) MustSetInner(args Request) {
 func (ru *ResponseUnion) MustSetInner(reply Response) {
 	ru.Reset()
 	if !ru.SetInner(reply) {
-		panic(fmt.Sprintf("%T excludes %T", ru, reply))
+		panic(errors.AssertionFailedf("%T excludes %T", ru, reply))
 	}
 }
 
@@ -1356,7 +1356,7 @@ func (b *BulkOpSummary) Add(other BulkOpSummary) {
 func (e *RangeFeedEvent) MustSetValue(value interface{}) {
 	e.Reset()
 	if !e.SetValue(value) {
-		panic(fmt.Sprintf("%T excludes %T", e, value))
+		panic(errors.AssertionFailedf("%T excludes %T", e, value))
 	}
 }
 

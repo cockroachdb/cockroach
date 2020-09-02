@@ -991,7 +991,7 @@ func printPlaceholder(i interface{}) string {
 	case nil:
 		return fmt.Sprintf("NULL")
 	default:
-		panic(fmt.Sprintf("unsupported type: %T", i))
+		panic(errors.AssertionFailedf("unsupported type: %T", i))
 	}
 }
 

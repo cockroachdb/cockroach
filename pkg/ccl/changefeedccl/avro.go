@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -86,7 +85,7 @@ func avroUnionKey(t avroSchemaType) string {
 	case *avroRecord:
 		return s.Name
 	default:
-		panic(fmt.Sprintf(`unsupported type %T %v`, t, t))
+		panic(errors.AssertionFailedf(`unsupported type %T %v`, t, t))
 	}
 }
 

@@ -1186,7 +1186,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("bad job details fail", func(t *testing.T) {
 		defer func() {
-			if r, ok := recover().(string); !ok || !strings.Contains(r, "unknown details type int") {
+			if r, ok := recover().(error); !ok || !strings.Contains(r.Error(), "unknown details type int") {
 				t.Fatalf("expected 'unknown details type int', but got: %v", r)
 			}
 		}()

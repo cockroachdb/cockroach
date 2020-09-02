@@ -1956,7 +1956,7 @@ func (l *Lease) Equal(that interface{}) bool {
 		if ok {
 			that1 = &that2
 		} else {
-			panic(fmt.Sprintf("attempting to compare lease to %T", that))
+			panic(errors.AssertionFailedf("attempting to compare lease to %T", that))
 		}
 	}
 	if that1 == nil {
