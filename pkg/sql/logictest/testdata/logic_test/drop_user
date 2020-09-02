@@ -152,3 +152,12 @@ DROP USER root
 
 statement error pq: cannot drop role/user admin: grants still exist on .*
 DROP USER admin
+
+statement ok
+CREATE USER user1
+
+statement ok
+INSERT INTO system.scheduled_jobs (schedule_name, owner, executor_type,execution_args) values('schedule', 'user1', 'invalid', '');
+
+statement error pq: cannot drop role/user user1; it owns 1 scheduled jobs.
+DROP USER user1
