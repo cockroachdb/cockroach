@@ -751,7 +751,7 @@ func (sc *SchemaChanger) distBackfill(
 			case <-ctxDone:
 				return nil
 			case <-tickJobCancel.C:
-				if err := sc.job.CheckStatus(ctx); err != nil {
+				if err := sc.job.WithTxn(nil).CheckStatus(ctx); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
 				}
 			case <-tickLease.C:
