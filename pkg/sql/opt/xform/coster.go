@@ -609,7 +609,7 @@ func (c *coster) computeValuesCost(values *memo.ValuesExpr) memo.Cost {
 }
 
 func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
-	if !join.Private().(*memo.JoinPrivate).Flags.Has(memo.AllowHashJoinStoreRight) {
+	if join.Private().(*memo.JoinPrivate).Flags.Has(memo.DisallowHashJoinStoreRight) {
 		return hugeCost
 	}
 	leftRowCount := join.Child(0).(memo.RelExpr).Relational().Stats.RowCount
