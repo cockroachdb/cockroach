@@ -752,6 +752,11 @@ func (c *coster) computeLookupJoinCost(
 		c.rowScanCost(join.Table, join.Index, numLookupCols)
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
+
+	if join.Flags.Has(memo.PreferLookupJoinIntoRight) {
+		// If we prefer a lookup join, make the cost much smaller.
+		cost *= 1e-6
+	}
 	return cost
 }
 

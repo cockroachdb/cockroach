@@ -134,3 +134,43 @@ delete doublechild
       │    └── columns: c:5!null p1:6 p2:7 crdb_internal_mvcc_timestamp:8
       └── filters
            └── p1:6 = 10
+
+# Verify that the join hint is set.
+build prefer-lookup-joins-for-fks
+DELETE FROM parent WHERE p = 3
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: x:5 parent.p:6 parent.other:7
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: x:5 parent.p:6!null parent.other:7 parent.crdb_internal_mvcc_timestamp:8
+ │    ├── scan parent
+ │    │    └── columns: x:5 parent.p:6!null parent.other:7 parent.crdb_internal_mvcc_timestamp:8
+ │    └── filters
+ │         └── parent.p:6 = 3
+ └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── semi-join (hash)
+      │         ├── columns: p:9!null
+      │         ├── flags: prefer lookup join (into right side)
+      │         ├── with-scan &1
+      │         │    ├── columns: p:9!null
+      │         │    └── mapping:
+      │         │         └──  parent.p:6 => p:9
+      │         ├── scan child
+      │         │    └── columns: child.p:11!null
+      │         └── filters
+      │              └── p:9 = child.p:11
+      └── f-k-checks-item: child2(p) -> parent(other)
+           └── semi-join (hash)
+                ├── columns: other:13
+                ├── flags: prefer lookup join (into right side)
+                ├── with-scan &1
+                │    ├── columns: other:13
+                │    └── mapping:
+                │         └──  parent.other:7 => other:13
+                ├── scan child2
+                │    └── columns: child2.p:15!null
+                └── filters
+                     └── other:13 = child2.p:15
