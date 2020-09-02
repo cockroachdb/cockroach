@@ -214,7 +214,7 @@ func StringTuple(datums []interface{}) []string {
 			// See the HACK comment in ColBatchToRows.
 			s[i] = lex.EscapeSQLString(string(x))
 		default:
-			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+			panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
 		}
 	}
 	return s
@@ -265,7 +265,7 @@ func (s sliceSliceInterface) Less(i, j int) bool {
 		case []byte:
 			cmp = bytes.Compare(x, s[j][offset].([]byte))
 		default:
-			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+			panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
 		}
 		if cmp < 0 {
 			return true

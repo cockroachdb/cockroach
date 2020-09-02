@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // A rangefeed's "resolved timestamp" is defined as the timestamp at which no
@@ -205,7 +206,7 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		return rts.intentQ.Del(t.TxnID)
 
 	default:
-		panic(fmt.Sprintf("unknown logical op %T", t))
+		panic(errors.AssertionFailedf("unknown logical op %T", t))
 	}
 }
 

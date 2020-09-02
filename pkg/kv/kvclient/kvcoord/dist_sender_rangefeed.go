@@ -175,7 +175,7 @@ func (ds *DistSender) partialRangeFeed(
 			case errors.HasType(err, (*roachpb.RangeFeedRetryError)(nil)):
 				var t *roachpb.RangeFeedRetryError
 				if ok := errors.As(err, &t); !ok {
-					panic(fmt.Sprintf("wrong error type: %T", err))
+					panic(errors.AssertionFailedf("wrong error type: %T", err))
 				}
 				switch t.Reason {
 				case roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,

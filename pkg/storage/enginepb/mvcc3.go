@@ -10,7 +10,7 @@
 
 package enginepb
 
-import "fmt"
+import "github.com/cockroachdb/errors"
 
 // ToStats converts the receiver to an MVCCStats.
 func (ms *MVCCStatsDelta) ToStats() MVCCStats {
@@ -37,6 +37,6 @@ func (ms *MVCCStats) ToPersistentStats() MVCCPersistentStats {
 func (op *MVCCLogicalOp) MustSetValue(value interface{}) {
 	op.Reset()
 	if !op.SetValue(value) {
-		panic(fmt.Sprintf("%T excludes %T", op, value))
+		panic(errors.AssertionFailedf("%T excludes %T", op, value))
 	}
 }

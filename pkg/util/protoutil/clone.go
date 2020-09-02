@@ -11,10 +11,10 @@
 package protoutil
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -74,7 +74,7 @@ func uncloneable(pb Message) (reflect.Type, bool) {
 // upstream, see https://github.com/gogo/protobuf/issues/147.
 func Clone(pb Message) Message {
 	if t, ok := uncloneable(pb); ok {
-		panic(fmt.Sprintf("attempt to clone %T, which contains uncloneable field of type %s", pb, t))
+		panic(errors.AssertionFailedf("attempt to clone %T, which contains uncloneable field of type %s", pb, t))
 	}
 	return proto.Clone(pb).(Message)
 }
