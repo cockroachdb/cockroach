@@ -1381,11 +1381,11 @@ type lookupTableEntry uint8
 const (
 	// never indicates that the transformation represented by the table entry is
 	// unconditionally incorrect.
-	never lookupTableEntry = 0
+	never lookupTableEntry = (1 << iota) / 2
 
 	// always indicates that the transformation represented by the table entry is
 	// unconditionally correct.
-	always lookupTableEntry = 1 << (iota - 1)
+	always
 
 	// filterA indicates that the filters of the "A" join operator must reject
 	// nulls for the set of vertexes specified by rejectsOnLeftA, rejectsOnRightA,
