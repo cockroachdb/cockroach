@@ -52,6 +52,9 @@ func setPoint(lineString *geom.LineString, index int, point *geom.Point) (*geom.
 	if lineString.Layout() != point.Layout() {
 		return nil, geom.ErrLayoutMismatch{Got: point.Layout(), Want: lineString.Layout()}
 	}
+	if point.Empty() {
+		point = geom.NewPointFlat(point.Layout(), make([]float64, point.Stride()))
+	}
 
 	coords := lineString.Coords()
 	hasNegIndex := index < 0
