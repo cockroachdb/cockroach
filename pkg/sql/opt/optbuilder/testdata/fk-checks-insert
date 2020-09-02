@@ -637,3 +637,31 @@ insert multi_ref_child
  └── values
       ├── columns: column1:6!null column2:7 column3:8 column4:9
       └── (1, NULL::INT8, NULL::INT8, NULL::INT8)
+
+# Verify that the join hint is set.
+build prefer-lookup-joins-for-fks
+INSERT INTO child VALUES (100, 1), (200, 1)
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => c:1
+ │    └── column2:5 => child.p:2
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:4!null column2:5!null
+ │    ├── (100, 1)
+ │    └── (200, 1)
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: column2:6!null
+                ├── flags: prefer lookup join (into right side)
+                ├── with-scan &1
+                │    ├── columns: column2:6!null
+                │    └── mapping:
+                │         └──  column2:5 => column2:6
+                ├── scan parent
+                │    └── columns: parent.p:7!null
+                └── filters
+                     └── column2:6 = parent.p:7

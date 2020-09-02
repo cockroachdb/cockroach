@@ -813,6 +813,25 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// CockroachDB extension.
+	`prefer_lookup_joins_for_fks`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.PreferLookupJoinsForFKs)
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("prefer_lookup_joins_for_fks"),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parseBoolVar("prefer_lookup_joins_for_fks", s)
+			if err != nil {
+				return err
+			}
+			m.SetPreferLookupJoinsForFKs(b)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(preferLookupJoinsForFKs.Get(sv))
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/ddl-schemas.html#DDL-SCHEMAS-PATH
 	// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	`search_path`: {

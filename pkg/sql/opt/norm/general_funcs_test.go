@@ -29,6 +29,11 @@ func TestCommuteJoinFlags(t *testing.T) {
 		},
 
 		{
+			memo.PreferLookupJoinIntoLeft,
+			memo.PreferLookupJoinIntoRight,
+		},
+
+		{
 			memo.AllowOnlyMergeJoin,
 			memo.AllowOnlyMergeJoin,
 		},

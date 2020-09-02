@@ -160,6 +160,10 @@ type Flags struct {
 	// JoinLimit is the default value for SessionData.ReorderJoinsLimit.
 	JoinLimit int
 
+	// PreferLookupJoinsForFK is the default value for
+	// SessionData.PreferLookupJoinsForFKs.
+	PreferLookupJoinsForFKs bool
+
 	// Locality specifies the location of the planning node as a set of user-
 	// defined key/value pairs, ordered from most inclusive to least inclusive.
 	// If there are no tiers, then the node's location is not known. Examples:
@@ -392,10 +396,8 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 	}
 
-	defer func(oldValue int) {
-		ot.evalCtx.SessionData.ReorderJoinsLimit = oldValue
-	}(ot.evalCtx.SessionData.ReorderJoinsLimit)
 	ot.evalCtx.SessionData.ReorderJoinsLimit = ot.Flags.JoinLimit
+	ot.evalCtx.SessionData.PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
 
 	ot.Flags.Verbose = datadriven.Verbose()
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
@@ -706,6 +708,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return errors.Wrap(err, "join-limit")
 		}
 		f.JoinLimit = int(limit)
+
+	case "prefer-lookup-joins-for-fks":
+		f.PreferLookupJoinsForFKs = true
 
 	case "rule":
 		if len(arg.Vals) != 1 {

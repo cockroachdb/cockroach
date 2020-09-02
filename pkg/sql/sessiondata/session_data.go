@@ -82,6 +82,9 @@ type SessionData struct {
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool
+	// PreferLookupJoinsForFKs causes foreign key operations to prefer lookup
+	// joins.
+	PreferLookupJoinsForFKs bool
 	// RemoteAddr is used to generate logging events.
 	RemoteAddr net.Addr
 	// ZigzagJoinEnabled indicates whether the optimizer should try and plan a

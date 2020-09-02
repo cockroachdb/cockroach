@@ -195,6 +195,12 @@ var optDrivenFKCascadesClusterLimit = settings.RegisterNonNegativeIntSetting(
 	10000,
 )
 
+var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
+	"sql.defaults.prefer_lookup_joins_for_fks.enabled",
+	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible",
+	false,
+)
+
 // optUseHistogramsClusterMode controls the cluster default for whether
 // histograms are used by the optimizer for cardinality estimation.
 // Note that it does not control histogram collection; regardless of the
@@ -2119,6 +2125,10 @@ func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondata.SerialNo
 
 func (m *sessionDataMutator) SetSafeUpdates(val bool) {
 	m.data.SafeUpdates = val
+}
+
+func (m *sessionDataMutator) SetPreferLookupJoinsForFKs(val bool) {
+	m.data.PreferLookupJoinsForFKs = val
 }
 
 func (m *sessionDataMutator) UpdateSearchPath(paths []string) {

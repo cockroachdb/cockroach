@@ -894,3 +894,239 @@ tree    field         description
 ·       distribution  local
 ·       vectorized    true
 norows  ·             ·
+
+# Verify that prefer_lookup_joins_for_fks works as expected.
+statement ok
+CREATE TABLE p (p INT PRIMARY KEY);
+CREATE TABLE c (c INT PRIMARY KEY, p INT REFERENCES p(p), INDEX(p));
+
+statement ok
+ALTER TABLE p INJECT STATISTICS '[
+  {
+    "columns": ["p"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE c INJECT STATISTICS '[
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+# These queries should not be using lookup joins (we're inserting more rows
+# than exist in the tables).
+query TTT
+EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3);
+----
+·                                distribution         local
+·                                vectorized           false
+root                             ·                    ·
+ ├── insert                      ·                    ·
+ │    │                          into                 c(c, p)
+ │    └── buffer                 ·                    ·
+ │         │                     label                buffer 1
+ │         └── values            ·                    ·
+ │                               size                 2 columns, 3 rows
+ └── fk-check                    ·                    ·
+      └── error if rows          ·                    ·
+           └── hash join (anti)  ·                    ·
+                │                equality             (column2) = (p)
+                │                right cols are key   ·
+                ├── scan buffer  ·                    ·
+                │                label                buffer 1
+                └── scan         ·                    ·
+·                                estimated row count  1
+·                                table                p@primary
+·                                spans                FULL SCAN
+
+query TTT
+EXPLAIN UPDATE c SET p=p+c WHERE c > 0
+----
+·                                     distribution         local
+·                                     vectorized           false
+root                                  ·                    ·
+ ├── update                           ·                    ·
+ │    │                               table                c
+ │    │                               set                  p
+ │    └── buffer                      ·                    ·
+ │         │                          label                buffer 1
+ │         └── render                 ·                    ·
+ │              └── scan              ·                    ·
+ │                                    estimated row count  1
+ │                                    table                c@primary
+ │                                    spans                [/1 - ]
+ │                                    locking strength     for update
+ └── fk-check                         ·                    ·
+      └── error if rows               ·                    ·
+           └── hash join (anti)       ·                    ·
+                │                     equality             (p_new) = (p)
+                │                     right cols are key   ·
+                ├── filter            ·                    ·
+                │    │                filter               p_new IS NOT NULL
+                │    └── scan buffer  ·                    ·
+                │                     label                buffer 1
+                └── scan              ·                    ·
+·                                     estimated row count  1
+·                                     table                p@primary
+·                                     spans                FULL SCAN
+
+query TTT
+EXPLAIN UPDATE p SET p=p+1 WHERE p > 0
+----
+·                                     distribution         local
+·                                     vectorized           false
+root                                  ·                    ·
+ ├── update                           ·                    ·
+ │    │                               table                p
+ │    │                               set                  p
+ │    └── buffer                      ·                    ·
+ │         │                          label                buffer 1
+ │         └── render                 ·                    ·
+ │              └── scan              ·                    ·
+ │                                    estimated row count  1
+ │                                    table                p@primary
+ │                                    spans                [/1 - ]
+ │                                    locking strength     for update
+ └── fk-check                         ·                    ·
+      └── error if rows               ·                    ·
+           └── hash join (semi)       ·                    ·
+                │                     equality             (p) = (p)
+                │                     left cols are key    ·
+                ├── except            ·                    ·
+                │    ├── scan buffer  ·                    ·
+                │    │                label                buffer 1
+                │    └── scan buffer  ·                    ·
+                │                     label                buffer 1
+                └── scan              ·                    ·
+·                                     estimated row count  1
+·                                     table                c@primary
+·                                     spans                FULL SCAN
+
+query TTT
+EXPLAIN DELETE FROM p WHERE p > 0
+----
+·                                distribution         local
+·                                vectorized           false
+root                             ·                    ·
+ ├── delete                      ·                    ·
+ │    │                          from                 p
+ │    └── buffer                 ·                    ·
+ │         │                     label                buffer 1
+ │         └── scan              ·                    ·
+ │                               estimated row count  1
+ │                               table                p@primary
+ │                               spans                [/1 - ]
+ └── fk-check                    ·                    ·
+      └── error if rows          ·                    ·
+           └── hash join (semi)  ·                    ·
+                │                equality             (p) = (p)
+                │                left cols are key    ·
+                ├── scan buffer  ·                    ·
+                │                label                buffer 1
+                └── scan         ·                    ·
+·                                estimated row count  1
+·                                table                c@primary
+·                                spans                FULL SCAN
+
+statement ok
+SET prefer_lookup_joins_for_fks = true
+
+# Now we should be using lookup joins.
+query TTT
+EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3);
+----
+·                 distribution  local
+·                 vectorized    false
+insert fast path  ·             ·
+·                 into          c(c, p)
+·                 auto commit   ·
+·                 FK check      p@primary
+·                 size          2 columns, 3 rows
+
+query TTT
+EXPLAIN UPDATE c SET p=p+c WHERE c > 0
+----
+·                                     distribution           local
+·                                     vectorized             false
+root                                  ·                      ·
+ ├── update                           ·                      ·
+ │    │                               table                  c
+ │    │                               set                    p
+ │    └── buffer                      ·                      ·
+ │         │                          label                  buffer 1
+ │         └── render                 ·                      ·
+ │              └── scan              ·                      ·
+ │                                    estimated row count    1
+ │                                    table                  c@primary
+ │                                    spans                  [/1 - ]
+ │                                    locking strength       for update
+ └── fk-check                         ·                      ·
+      └── error if rows               ·                      ·
+           └── lookup join (anti)     ·                      ·
+                │                     table                  p@primary
+                │                     equality               (p_new) = (p)
+                │                     equality cols are key  ·
+                └── filter            ·                      ·
+                     │                filter                 p_new IS NOT NULL
+                     └── scan buffer  ·                      ·
+·                                     label                  buffer 1
+
+query TTT
+EXPLAIN UPDATE p SET p=p+1 WHERE p > 0
+----
+·                                     distribution         local
+·                                     vectorized           false
+root                                  ·                    ·
+ ├── update                           ·                    ·
+ │    │                               table                p
+ │    │                               set                  p
+ │    └── buffer                      ·                    ·
+ │         │                          label                buffer 1
+ │         └── render                 ·                    ·
+ │              └── scan              ·                    ·
+ │                                    estimated row count  1
+ │                                    table                p@primary
+ │                                    spans                [/1 - ]
+ │                                    locking strength     for update
+ └── fk-check                         ·                    ·
+      └── error if rows               ·                    ·
+           └── lookup join (semi)     ·                    ·
+                │                     table                c@c_p_idx
+                │                     equality             (p) = (p)
+                └── except            ·                    ·
+                     ├── scan buffer  ·                    ·
+                     │                label                buffer 1
+                     └── scan buffer  ·                    ·
+·                                     label                buffer 1
+
+query TTT
+EXPLAIN DELETE FROM p WHERE p > 0
+----
+·                                  distribution         local
+·                                  vectorized           false
+root                               ·                    ·
+ ├── delete                        ·                    ·
+ │    │                            from                 p
+ │    └── buffer                   ·                    ·
+ │         │                       label                buffer 1
+ │         └── scan                ·                    ·
+ │                                 estimated row count  1
+ │                                 table                p@primary
+ │                                 spans                [/1 - ]
+ └── fk-check                      ·                    ·
+      └── error if rows            ·                    ·
+           └── lookup join (semi)  ·                    ·
+                │                  table                c@c_p_idx
+                │                  equality             (p) = (p)
+                └── scan buffer    ·                    ·
+·                                  label                buffer 1
+
+statement ok
+SET prefer_lookup_joins_for_fks = false
