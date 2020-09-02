@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -253,7 +254,9 @@ func (nl *NodeLiveness) sem(nodeID roachpb.NodeID) chan struct{} {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter func(int, string)) {
+func (nl *NodeLiveness) SetDraining(
+	ctx context.Context, drain bool, reporter func(int, redact.SafeString),
+) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		oldLivenessRec, err := nl.SelfEx()
@@ -359,7 +362,10 @@ func (nl *NodeLiveness) SetMembershipStatus(
 }
 
 func (nl *NodeLiveness) setDrainingInternal(
-	ctx context.Context, oldLivenessRec LivenessRecord, drain bool, reporter func(int, string),
+	ctx context.Context,
+	oldLivenessRec LivenessRecord,
+	drain bool,
+	reporter func(int, redact.SafeString),
 ) error {
 	nodeID := nl.gossip.NodeID.Get()
 	sem := nl.sem(nodeID)

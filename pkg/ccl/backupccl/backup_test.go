@@ -83,14 +83,22 @@ func init() {
 	cloud.RegisterKMSFromURIFactory(MakeTestKMS, "testkms")
 }
 
+type sqlDBKey struct {
+	server string
+	user   string
+}
+
 type datadrivenTestState struct {
 	servers    map[string]serverutils.TestServerInterface
 	dataDirs   map[string]string
-	sqlDBs     map[string]*gosql.DB
+	sqlDBs     map[sqlDBKey]*gosql.DB
 	cleanupFns []func()
 }
 
 func (d *datadrivenTestState) cleanup(ctx context.Context) {
+	for _, db := range d.sqlDBs {
+		db.Close()
+	}
 	for _, s := range d.servers {
 		s.Stopper().Stop(ctx)
 	}
@@ -99,16 +107,23 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 	}
 }
 
-func (d *datadrivenTestState) addServer(t *testing.T, name, iodir string) {
+func (d *datadrivenTestState) addServer(
+	t *testing.T, name, iodir string, allowImplicitAccess bool,
+) {
 	var tc serverutils.TestClusterInterface
 	var cleanup func()
+	params := base.TestClusterArgs{}
+	if allowImplicitAccess {
+		params.ServerArgs.Knobs.BackupRestore = &sql.BackupRestoreTestingKnobs{
+			AllowImplicitAccess: true,
+		}
+	}
 	if iodir == "" {
-		_, tc, _, iodir, cleanup = BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		_, tc, _, iodir, cleanup = backupRestoreTestSetupWithParams(t, singleNode, 0, InitNone, params)
 	} else {
-		_, tc, _, cleanup = backupRestoreTestSetupEmpty(t, singleNode, iodir, InitNone)
+		_, tc, _, cleanup = backupRestoreTestSetupEmptyWithParams(t, singleNode, iodir, InitNone, params)
 	}
 	d.servers[name] = tc.Server(0)
-	d.sqlDBs[name] = tc.ServerConn(0)
 	d.dataDirs[name] = iodir
 	d.cleanupFns = append(d.cleanupFns, cleanup)
 }
@@ -121,11 +136,19 @@ func (d *datadrivenTestState) getIODir(t *testing.T, server string) string {
 	return dir
 }
 
-func (d *datadrivenTestState) getSQLDB(t *testing.T, server string) *gosql.DB {
-	db, ok := d.sqlDBs[server]
-	if !ok {
-		t.Fatalf("server %s does not exist", server)
+func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string) *gosql.DB {
+	key := sqlDBKey{server, user}
+	if db, ok := d.sqlDBs[key]; ok {
+		return db
 	}
+	addr := d.servers[server].ServingSQLAddr()
+	pgURL, cleanup := sqlutils.PGUrl(t, addr, "TestBackupRestoreDataDriven", url.User(user))
+	d.cleanupFns = append(d.cleanupFns, cleanup)
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.sqlDBs[key] = db
 	return db
 }
 
@@ -133,7 +156,7 @@ func newDatadrivenTestState() datadrivenTestState {
 	return datadrivenTestState{
 		servers:  make(map[string]serverutils.TestServerInterface),
 		dataDirs: make(map[string]string),
-		sqlDBs:   make(map[string]*gosql.DB),
+		sqlDBs:   make(map[sqlDBKey]*gosql.DB),
 	}
 }
 
@@ -169,6 +192,7 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				return ""
 			case "new-server":
 				var name, shareDirWith, iodir string
+				var allowImplicitAccess bool
 				d.ScanArgs(t, "name", &name)
 				if d.HasArg("share-io-dir") {
 					d.ScanArgs(t, "share-io-dir", &shareDirWith)
@@ -176,29 +200,36 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				if shareDirWith != "" {
 					iodir = ds.getIODir(t, shareDirWith)
 				}
+				if d.HasArg("allow-implicit-access") {
+					allowImplicitAccess = true
+				}
 				lastCreatedServer = name
-				ds.addServer(t, name, iodir)
+				ds.addServer(t, name, iodir, allowImplicitAccess)
 				return ""
 			case "exec-sql":
-				var server string
+				server := lastCreatedServer
+				user := "root"
 				if d.HasArg("server") {
 					d.ScanArgs(t, "server", &server)
-				} else {
-					server = lastCreatedServer
 				}
-				_, err := ds.getSQLDB(t, server).Exec(d.Input)
+				if d.HasArg("user") {
+					d.ScanArgs(t, "user", &user)
+				}
+				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
 				if err == nil {
 					return ""
 				}
 				return err.Error()
 			case "query-sql":
-				var server string
+				server := lastCreatedServer
+				user := "root"
 				if d.HasArg("server") {
 					d.ScanArgs(t, "server", &server)
-				} else {
-					server = lastCreatedServer
 				}
-				rows, err := ds.getSQLDB(t, server).Query(d.Input)
+				if d.HasArg("user") {
+					d.ScanArgs(t, "user", &user)
+				}
+				rows, err := ds.getSQLDB(t, server, user).Query(d.Input)
 				if err != nil {
 					return err.Error()
 				}
@@ -4459,11 +4490,6 @@ func TestBackupRestorePermissions(t *testing.T) {
 	t.Run("root-only", func(t *testing.T) {
 		if _, err := testuser.Exec(backupStmt); !testutils.IsError(
 			err, "only users with the admin role are allowed to BACKUP",
-		) {
-			t.Fatal(err)
-		}
-		if _, err := testuser.Exec(`RESTORE blah FROM 'blah'`); !testutils.IsError(
-			err, "only users with the admin role are allowed to RESTORE",
 		) {
 			t.Fatal(err)
 		}

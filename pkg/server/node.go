@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -476,7 +477,11 @@ func (n *Node) start(
 
 	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
 	allEngines = append(allEngines, state.newEngines...)
-	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, allEngines, attrs.Attrs)
+	for _, e := range allEngines {
+		t := e.Type()
+		log.Infof(ctx, "started with engine type %v", t)
+	}
+	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
 	return nil
 }
 
@@ -498,7 +503,7 @@ func (n *Node) IsDraining() bool {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (n *Node) SetDraining(drain bool, reporter func(int, string)) error {
+func (n *Node) SetDraining(drain bool, reporter func(int, redact.SafeString)) error {
 	return n.stores.VisitStores(func(s *kvserver.Store) error {
 		s.SetDraining(drain, reporter)
 		return nil

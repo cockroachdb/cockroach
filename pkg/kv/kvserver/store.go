@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 	"go.etcd.io/etcd/raft"
 	"golang.org/x/time/rate"
@@ -1000,7 +1001,12 @@ func NewStore(
 
 // String formats a store for debug output.
 func (s *Store) String() string {
-	return fmt.Sprintf("[n%d,s%d]", s.Ident.NodeID, s.Ident.StoreID)
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s *Store) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[n%d,s%d]", s.Ident.NodeID, s.Ident.StoreID)
 }
 
 // ClusterSettings returns the node's ClusterSettings.
@@ -1022,7 +1028,7 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
+func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 	s.draining.Store(drain)
 	if !drain {
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
@@ -1649,7 +1655,7 @@ func (s *Store) startGossip() {
 	gossipFns := []struct {
 		key         roachpb.Key
 		fn          func(context.Context, *Replica) error
-		description string
+		description redact.SafeString
 		interval    time.Duration
 	}{
 		{

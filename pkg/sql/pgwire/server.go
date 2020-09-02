@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // ATTENTION: After changing this value in a unit test, you probably want to
@@ -319,7 +320,7 @@ func (s *Server) Metrics() (res []interface{}) {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (s *Server) Drain(drainWait time.Duration, reporter func(int, string)) error {
+func (s *Server) Drain(drainWait time.Duration, reporter func(int, redact.SafeString)) error {
 	return s.drainImpl(drainWait, cancelMaxWait, reporter)
 }
 
@@ -354,7 +355,7 @@ func (s *Server) setDrainingLocked(drain bool) bool {
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
 func (s *Server) drainImpl(
-	drainWait time.Duration, cancelWait time.Duration, reporter func(int, string),
+	drainWait time.Duration, cancelWait time.Duration, reporter func(int, redact.SafeString),
 ) error {
 	// This anonymous function returns a copy of s.mu.connCancelMap if there are
 	// any active connections to cancel. We will only attempt to cancel

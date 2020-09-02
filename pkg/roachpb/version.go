@@ -11,11 +11,11 @@
 package roachpb
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Less compares two Versions.
@@ -43,11 +43,16 @@ func (v Version) Less(otherV Version) bool {
 	return false
 }
 
-func (v Version) String() string {
+// String implements the fmt.Stringer interface.
+func (v Version) String() string { return redact.StringWithoutMarkers(v) }
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 	if v.Unstable == 0 {
-		return fmt.Sprintf("%d.%d", v.Major, v.Minor)
+		p.Printf("%d.%d", v.Major, v.Minor)
+		return
 	}
-	return fmt.Sprintf("%d.%d-%d", v.Major, v.Minor, v.Unstable)
+	p.Printf("%d.%d-%d", v.Major, v.Minor, v.Unstable)
 }
 
 // ParseVersion parses a Version from a string of the form
