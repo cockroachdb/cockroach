@@ -271,6 +271,9 @@ func getTableCreateParams(
 		if err != nil {
 			return nil, 0, err
 		}
+		if schemaID != keys.PublicSchemaID {
+			sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
+		}
 		tKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, dbID, schemaID, tableName.Table())
 	}
 
