@@ -45,6 +45,24 @@ func ConvexHull(g geo.Geometry) (geo.Geometry, error) {
 	return geo.ParseGeometryFromEWKB(convexHullEWKB)
 }
 
+// Simplify returns a simplified Geometry.
+func Simplify(g geo.Geometry, tolerance float64) (geo.Geometry, error) {
+	simplifiedEWKB, err := geos.Simplify(g.EWKB(), tolerance)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.ParseGeometryFromEWKB(simplifiedEWKB)
+}
+
+// SimplifyPreserveTopology returns a simplified Geometry with topology preserved.
+func SimplifyPreserveTopology(g geo.Geometry, tolerance float64) (geo.Geometry, error) {
+	simplifiedEWKB, err := geos.TopologyPreserveSimplify(g.EWKB(), tolerance)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.ParseGeometryFromEWKB(simplifiedEWKB)
+}
+
 // PointOnSurface returns the PointOnSurface of a given Geometry.
 func PointOnSurface(g geo.Geometry) (geo.Geometry, error) {
 	pointOnSurfaceEWKB, err := geos.PointOnSurface(g.EWKB())

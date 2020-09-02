@@ -391,6 +391,37 @@ func ConvexHull(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+// Simplify returns an EWKB which returns the simplified EWKB.
+func Simplify(ewkb geopb.EWKB, tolerance float64) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(
+		C.CR_GEOS_Simplify(g, goToCSlice(ewkb), &cEWKB, C.double(tolerance)),
+	); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
+// TopologyPreserveSimplify returns an EWKB which returns the simplified EWKB
+// with the topology preserved.
+func TopologyPreserveSimplify(ewkb geopb.EWKB, tolerance float64) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(
+		C.CR_GEOS_TopologyPreserveSimplify(g, goToCSlice(ewkb), &cEWKB, C.double(tolerance)),
+	); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
 // PointOnSurface returns an EWKB with a point that is on the surface of the given EWKB.
 func PointOnSurface(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	g, err := ensureInitInternal()
