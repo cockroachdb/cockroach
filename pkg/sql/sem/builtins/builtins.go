@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -4171,6 +4172,37 @@ may increase either contention or retry errors, or both.`,
 				return tree.MakeDBool(tree.DBool(live)), nil
 			},
 			Info:       "Checks is given sqlliveness session id is not expired",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	"crdb_internal.validate_descriptors": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				stmt := "SELECT id FROM system.descriptor ORDER BY id"
+				rows, err := ctx.InternalExecutor.Query(ctx.Context, "fetch-descriptors", nil, stmt)
+				if err != nil {
+					return nil, err
+				}
+				dg := catalogkv.NewOneLevelUncachedDescGetter(ctx.Txn, ctx.Codec)
+				res := make([]string, 0)
+				for _, row := range rows {
+					descID := int(tree.MustBeDInt(row[0]))
+					desc, err := catalog.GetTableDescFromID(ctx.Context, dg, descpb.ID(descID))
+					if err != nil {
+						continue
+					}
+					err = errors.Wrapf(desc.Validate(ctx.Context, dg), "desc %d", descID)
+					if err != nil {
+						res = append(res, err.Error())
+					}
+				}
+				return tree.NewDString(strings.Join(res, "\n")), nil
+			},
+			Info:       "Empty string or error from validating any of system's descriptors",
 			Volatility: tree.VolatilityStable,
 		},
 	),
