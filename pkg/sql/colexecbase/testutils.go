@@ -12,7 +12,6 @@ package colexecbase
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -192,10 +191,10 @@ func (s *TestingSemaphore) TryAcquire(n int) bool {
 // Release implements the semaphore.Semaphore interface.
 func (s *TestingSemaphore) Release(n int) int {
 	if n < 0 {
-		colexecerror.InternalError("releasing a negative amount")
+		colexecerror.InternalError(errors.AssertionFailedf("releasing a negative amount"))
 	}
 	if s.count-n < 0 {
-		colexecerror.InternalError(fmt.Sprintf("testing semaphore too many resources released, releasing %d, have %d", n, s.count))
+		colexecerror.InternalError(errors.AssertionFailedf("testing semaphore too many resources released, releasing %d, have %d", n, s.count))
 	}
 	pre := s.count
 	s.count -= n

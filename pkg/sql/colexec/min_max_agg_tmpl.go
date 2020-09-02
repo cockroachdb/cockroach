@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // Remove unused warning.
@@ -40,13 +41,13 @@ var _ = colexecerror.InternalError
 // if the second input compares successfully to the third input. The comparison
 // operator is tree.LT for MIN and is tree.GT for MAX.
 func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // _COPYVAL_MAYBE_CAST is the template function for copying the second argument
 // into the first one, possibly performing a cast in the process.
 func _COPYVAL_MAYBE_CAST(_, _ string) bool {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}

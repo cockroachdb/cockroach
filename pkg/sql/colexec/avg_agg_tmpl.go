@@ -36,13 +36,13 @@ import (
 // input to the result of the second input / the third input, where the third
 // input is an int64.
 func _ASSIGN_DIV_INT64(_, _, _, _, _, _ string) {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
 func _ASSIGN_ADD(_, _, _, _, _, _ string) {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}

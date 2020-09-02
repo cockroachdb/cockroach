@@ -245,7 +245,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		// during normal termination.
 		if err := recover(); err != nil {
 			i.close()
-			colexecerror.InternalError(err)
+			colexecerror.InternalError(log.PanicAsError(0, err))
 		}
 	}()
 

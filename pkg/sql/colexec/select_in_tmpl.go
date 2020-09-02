@@ -51,7 +51,7 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 const _TYPE_WIDTH = 0
 
 func _COMPARE(_, _, _, _, _ string) bool {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}

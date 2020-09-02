@@ -10,7 +10,10 @@
 
 package execgen
 
-import "github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/errors"
+)
 
 const nonTemplatePanic = "do not call from non-template code"
 
@@ -32,48 +35,48 @@ var (
 // source is. You must use this on the result of UNSAFEGET if you wish to store
 // that result past the lifetime of the batch you UNSAFEGET'd from.
 func COPYVAL(dest, src interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
 // SET is a template function.
 func SET(target, i, new interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
 // SLICE is a template function.
 func SLICE(target, start, end interface{}) interface{} {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 	return nil
 }
 
 // COPYSLICE is a template function.
 func COPYSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
 // APPENDSLICE is a template function.
 func APPENDSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
 // APPENDVAL is a template function.
 func APPENDVAL(target, v interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
 // LEN is a template function.
 func LEN(target interface{}) interface{} {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 	return nil
 }
 
 // ZERO is a template function.
 func ZERO(target interface{}) {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 
 // WINDOW is a template function.
 func WINDOW(target, start, end interface{}) interface{} {
-	colexecerror.InternalError(nonTemplatePanic)
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 	return nil
 }

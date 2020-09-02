@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -133,7 +132,7 @@ func (p *allSpooler) init() {
 
 func (p *allSpooler) spool(ctx context.Context) {
 	if p.spooled {
-		colexecerror.InternalError("spool() is called for the second time")
+		colexecerror.InternalError(errors.AssertionFailedf("spool() is called for the second time"))
 	}
 	p.spooled = true
 	for batch := p.input.Next(ctx); batch.Length() != 0; batch = p.input.Next(ctx) {
@@ -145,7 +144,7 @@ func (p *allSpooler) spool(ctx context.Context) {
 
 func (p *allSpooler) getValues(i int) coldata.Vec {
 	if !p.spooled {
-		colexecerror.InternalError("getValues() is called before spool()")
+		colexecerror.InternalError(errors.AssertionFailedf("getValues() is called before spool()"))
 	}
 	return p.bufferedTuples.ColVec(i)
 }
@@ -156,7 +155,7 @@ func (p *allSpooler) getNumTuples() int {
 
 func (p *allSpooler) getPartitionsCol() []bool {
 	if !p.spooled {
-		colexecerror.InternalError("getPartitionsCol() is called before spool()")
+		colexecerror.InternalError(errors.AssertionFailedf("getPartitionsCol() is called before spool()"))
 	}
 	return nil
 }
@@ -297,7 +296,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		case sortDone:
 			return coldata.ZeroBatch
 		default:
-			colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", p.state))
+			colexecerror.InternalError(errors.AssertionFailedf("invalid sort state %v", p.state))
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
@@ -418,7 +417,7 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

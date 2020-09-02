@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // checkColDeleting determines if the current key column in the groupID buckets
@@ -8946,7 +8947,7 @@ func (ht *hashTable) check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 			}
 		}
 	default:
-		colexecerror.InternalError("unsupported hash table probe mode")
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported hash table probe mode"))
 	}
 	return nDiffers
 }

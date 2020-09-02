@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -183,11 +184,11 @@ func (b *appendOnlyBufferedBatch) ColVecs() []coldata.Vec {
 }
 
 func (b *appendOnlyBufferedBatch) AppendCol(coldata.Vec) {
-	colexecerror.InternalError("AppendCol is prohibited on appendOnlyBufferedBatch")
+	colexecerror.InternalError(errors.AssertionFailedf("AppendCol is prohibited on appendOnlyBufferedBatch"))
 }
 
 func (b *appendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
-	colexecerror.InternalError("ReplaceCol is prohibited on appendOnlyBufferedBatch")
+	colexecerror.InternalError(errors.AssertionFailedf("ReplaceCol is prohibited on appendOnlyBufferedBatch"))
 }
 
 // append is a helper method that appends all tuples with indices in range

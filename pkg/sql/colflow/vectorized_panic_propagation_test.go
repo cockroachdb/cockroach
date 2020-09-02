@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,7 +146,7 @@ func (e *testVectorizedInternalPanicEmitter) Init() {
 func (e *testVectorizedInternalPanicEmitter) Next(ctx context.Context) coldata.Batch {
 	if !e.emitBatch {
 		e.emitBatch = true
-		colexecerror.InternalError("")
+		colexecerror.InternalError(errors.AssertionFailedf(""))
 	}
 
 	e.emitBatch = false

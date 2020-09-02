@@ -21,13 +21,13 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // {{/*
@@ -53,7 +53,7 @@ const _ISNULL = false
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the second input < the third input.
 func _ASSIGN_LT(_, _, _, _, _, _ string) bool {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}
@@ -108,7 +108,7 @@ func newSingleSorter(
 		}
 		// {{end}}
 	}
-	colexecerror.InternalError("isSorterSupported should have caught this")
+	colexecerror.InternalError(errors.AssertionFailedf("isSorterSupported should have caught this"))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -140,7 +140,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sort(ctx context.Context) {
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(ctx context.Context, partitions []int) {
 	if len(partitions) < 1 {
-		colexecerror.InternalError(fmt.Sprintf("invalid partitions list %v", partitions))
+		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
 	}
 	order := s.order
 	for i, partitionStart := range partitions {

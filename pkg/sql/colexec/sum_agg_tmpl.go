@@ -36,7 +36,7 @@ import (
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
 func _ASSIGN_ADD(_, _, _, _, _, _ string) {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}

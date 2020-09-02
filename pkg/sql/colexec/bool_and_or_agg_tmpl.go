@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/errors"
 )
 
 // Remove unused warning.
@@ -36,7 +37,7 @@ var _ = colexecerror.InternalError
 // first input to the result of a boolean operation of the second and the third
 // inputs.
 func _ASSIGN_BOOL_OP(_, _, _ string) {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}

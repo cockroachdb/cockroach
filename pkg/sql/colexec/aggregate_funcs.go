@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // isAggOptimized returns whether aggFn has an optimized implementation.
@@ -138,17 +139,17 @@ func (h *hashAggregateFuncBase) Reset() {
 }
 
 func (h *hashAggregateFuncBase) CurrentOutputIndex() int {
-	colexecerror.InternalError("CurrentOutputIndex called with hash aggregation")
+	colexecerror.InternalError(errors.AssertionFailedf("CurrentOutputIndex called with hash aggregation"))
 	// This code is unreachable, but the compiler cannot infer that.
 	return 0
 }
 
 func (h *hashAggregateFuncBase) SetOutputIndex(int) {
-	colexecerror.InternalError("SetOutputIndex called with hash aggregation")
+	colexecerror.InternalError(errors.AssertionFailedf("SetOutputIndex called with hash aggregation"))
 }
 
 func (h *hashAggregateFuncBase) HandleEmptyInputScalar() {
-	colexecerror.InternalError("HandleEmptyInputScalar called with hash aggregation")
+	colexecerror.InternalError(errors.AssertionFailedf("HandleEmptyInputScalar called with hash aggregation"))
 }
 
 // aggregateFuncAlloc is an aggregate function allocator that pools allocations

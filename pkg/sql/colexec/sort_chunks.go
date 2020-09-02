@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // NewSortChunks returns a new sort chunks operator, which sorts its input on
@@ -35,7 +35,7 @@ func NewSortChunks(
 	matchLen int,
 ) (colexecbase.Operator, error) {
 	if matchLen < 1 || matchLen == len(orderingCols) {
-		colexecerror.InternalError(fmt.Sprintf(
+		colexecerror.InternalError(errors.AssertionFailedf(
 			"sort chunks should only be used when the input is "+
 				"already ordered on at least one column but not fully ordered; "+
 				"num ordering cols = %d, matchLen = %d", len(orderingCols), matchLen))
@@ -76,7 +76,7 @@ func (c *sortChunksOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return c.input
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -311,7 +311,7 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 			if s.batch.Selection() != nil {
 				// We assume that the input has been deselected, so the batch should
 				// never have a selection vector set.
-				colexecerror.InternalError(fmt.Sprintf("unexpected: batch with non-nil selection vector"))
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected: batch with non-nil selection vector"))
 			}
 
 			// First, run the partitioners on our pre-sorted columns to determine the
@@ -404,11 +404,11 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 				if s.inputDone {
 					return chunkerDone
 				}
-				colexecerror.InternalError(fmt.Sprintf("unexpected: chunkerEmittingFromBatch state" +
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected: chunkerEmittingFromBatch state" +
 					"when s.chunks is fully processed and input is not done"))
 			}
 		default:
-			colexecerror.InternalError(fmt.Sprintf("invalid chunker spooler state %v", s.state))
+			colexecerror.InternalError(errors.AssertionFailedf("invalid chunker spooler state %v", s.state))
 		}
 	}
 }
@@ -436,7 +436,7 @@ func (s *chunker) getValues(i int) coldata.Vec {
 	case chunkerReadFromBatch:
 		return s.batch.ColVec(i).Window(s.chunks[s.chunksStartIdx], s.chunks[len(s.chunks)-1])
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unexpected chunkerReadingState in getValues: %v", s.state))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected chunkerReadingState in getValues: %v", s.state))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
@@ -451,7 +451,7 @@ func (s *chunker) getNumTuples() int {
 	case chunkerDone:
 		return 0
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unexpected chunkerReadingState in getNumTuples: %v", s.state))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected chunkerReadingState in getNumTuples: %v", s.state))
 		// This code is unreachable, but the compiler cannot infer that.
 		return 0
 	}
@@ -479,14 +479,14 @@ func (s *chunker) getPartitionsCol() []bool {
 	case chunkerDone:
 		return nil
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unexpected chunkerReadingState in getPartitionsCol: %v", s.state))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected chunkerReadingState in getPartitionsCol: %v", s.state))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
 }
 
 func (s *chunker) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
-	colexecerror.InternalError("getWindowedBatch is not implemented on chunker spooler")
+	colexecerror.InternalError(errors.AssertionFailedf("getWindowedBatch is not implemented on chunker spooler"))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

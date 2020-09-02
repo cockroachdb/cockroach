@@ -17,6 +17,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/errors"
 )
 
 type booleanAggTmplInfo struct {
@@ -30,7 +31,7 @@ func (b booleanAggTmplInfo) AssignBoolOp(target, l, r string) string {
 	case false:
 		return fmt.Sprintf("%s = %s || %s", target, l, r)
 	default:
-		colexecerror.InternalError("unsupported boolean agg type")
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported boolean agg type"))
 		// This code is unreachable, but the compiler cannot infer that.
 		return ""
 	}

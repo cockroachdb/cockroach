@@ -602,7 +602,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			return coldata.ZeroBatch
 
 		default:
-			colexecerror.InternalError("percent rank operator in unhandled state")
+			colexecerror.InternalError(errors.AssertionFailedf("percent rank operator in unhandled state"))
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
