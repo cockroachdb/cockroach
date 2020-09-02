@@ -1584,9 +1584,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	orders := DeriveInterestingOrderings(left).Copy()
 	orders.RestrictToCols(leftEq.ToSet())
 
-	if (!joinPrivate.Flags.Has(memo.AllowHashJoinStoreLeft) &&
-		!joinPrivate.Flags.Has(memo.AllowHashJoinStoreRight)) ||
-		c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
+	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
 		rightOrders := DeriveInterestingOrderings(right).Copy()
