@@ -1020,6 +1020,24 @@ func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 	)
 }
 
+func getUserDescriptorNames(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) ([]string, error) {
+	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, codec)
+	if err != nil {
+		return nil, err
+	}
+
+	var allNames = make([]string, 0, len(allDescs))
+	for _, desc := range allDescs {
+		if !catalogkeys.IsDefaultCreatedDescriptor(desc.GetID()) {
+			allNames = append(allNames, desc.GetName())
+		}
+	}
+
+	return allNames, nil
+}
+
 func resolveOptionsForRestoreJobDescription(
 	opts tree.RestoreOptions, intoDB string, kmsURIs []string,
 ) (tree.RestoreOptions, error) {
@@ -1357,9 +1375,16 @@ func doRestorePlan(
 		return errors.Wrap(err, "looking up user descriptors during restore")
 	}
 	if descCount != 0 && restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		var userDescriptorNames []string
+		userDescriptorNames, err := getUserDescriptorNames(ctx, txn, p.ExecCfg().Codec)
+		if err != nil {
+			// We're already returning an error, and we're just trying to make the
+			// error message more helpful. If we fail to do that, let's just log.
+			log.Errorf(ctx, "fetching user descriptor names: %+v", err)
+		}
 		return errors.Errorf(
-			"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors",
-			descCount,
+			"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors: %s",
+			descCount, userDescriptorNames,
 		)
 	}
 

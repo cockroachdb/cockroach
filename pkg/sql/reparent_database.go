@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -55,6 +56,8 @@ func (p *planner) ReparentDatabase(
 	if string(n.Name) == p.CurrentDatabase() {
 		return nil, pgerror.DangerousStatementf("CONVERT TO SCHEMA on current database")
 	}
+
+	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaReparentDatabase)
 
 	db, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), true /* required */)
 	if err != nil {

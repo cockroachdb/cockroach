@@ -103,6 +103,10 @@ func getCreateTypeParams(
 		return nil, 0, err
 	}
 
+	if schemaID != keys.PublicSchemaID {
+		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
+	}
+
 	typeKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, name.Type())
 	exists, collided, err := catalogkv.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, name.Type())

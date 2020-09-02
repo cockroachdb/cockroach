@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -4052,127 +4051,6 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 	require.NoError(b, r.readFile(ctx, pgCopyInput, 0, 0, nil))
 	close(kvCh)
 	b.ReportAllocs()
-}
-
-// TestImportControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
-// work as intended on import jobs.
-func TestImportControlJob(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 51792, "TODO(dt): add knob to force faster progress checks.")
-
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
-
-	var serverArgs base.TestServerArgs
-	// Disable external processing of mutations so that the final check of
-	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
-	// was never observed by a stress test, it is here for safety.
-	serverArgs.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		// TODO (lucy): if/when this test gets reinstated, figure out what knobs are
-		// needed.
-	}
-
-	var allowResponse chan struct{}
-	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
-	}
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, params)
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-	sqlDB.Exec(t, `CREATE DATABASE data`)
-
-	makeSrv := func() *httptest.Server {
-		var once sync.Once
-		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				// The following code correctly handles both the case where, after the
-				// CANCEL JOB is issued, the second stage of the IMPORT (the shuffle,
-				// after the sampling) may or may not be started. If it was started, then a
-				// second GET request is done. The once here will cause that request to not
-				// block. The draining for loop below will cause jobutils.RunJob's second send
-				// on allowResponse to succeed (which it does after issuing the CANCEL JOB).
-				once.Do(func() {
-					<-allowResponse
-					go func() {
-						for range allowResponse {
-						}
-					}()
-				})
-
-				_, _ = w.Write([]byte(r.URL.Path[1:]))
-			}
-		}))
-	}
-
-	t.Run("cancel", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE DATABASE cancelimport`)
-
-		srv := makeSrv()
-		defer srv.Close()
-
-		var urls []string
-		for i := 0; i < 10; i++ {
-			urls = append(urls, fmt.Sprintf("'%s/%d'", srv.URL, i))
-		}
-		csvURLs := strings.Join(urls, ", ")
-
-		query := fmt.Sprintf(`IMPORT TABLE cancelimport.t (i INT8 PRIMARY KEY) CSV DATA (%s)`, csvURLs)
-
-		if _, err := jobutils.RunJob(
-			t, sqlDB, &allowResponse, []string{"cancel"}, query,
-		); !testutils.IsError(err, "job canceled") {
-			t.Fatalf("expected 'job canceled' error, but got %+v", err)
-		}
-		// Check that executing again succeeds. This won't work if the first import
-		// was not successfully canceled.
-		sqlDB.Exec(t, query)
-	})
-
-	t.Run("pause", func(t *testing.T) {
-		// Test that IMPORT can be paused and resumed. This test also attempts to
-		// only pause the job after it has begun splitting ranges. When the job
-		// is resumed, if the sampling phase is re-run, the splits points will
-		// differ. When AddSSTable attempts to import the new ranges, they will
-		// fail because there is an existing split in the key space that it cannot
-		// handle. Use a sstsize that will more-or-less (since it is statistical)
-		// always cause this condition.
-
-		sqlDB.Exec(t, `CREATE DATABASE pauseimport`)
-
-		srv := makeSrv()
-		defer srv.Close()
-
-		count := 100
-		// This test takes a while with the race detector, so reduce the number of
-		// files in an attempt to speed it up.
-		if util.RaceEnabled {
-			count = 20
-		}
-
-		urls := make([]string, count)
-		for i := 0; i < count; i++ {
-			urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
-		}
-		csvURLs := strings.Join(urls, ", ")
-		query := fmt.Sprintf(`IMPORT TABLE pauseimport.t (i INT8 PRIMARY KEY) CSV DATA (%s) WITH sstsize = '50B'`, csvURLs)
-
-		jobID, err := jobutils.RunJob(
-			t, sqlDB, &allowResponse, []string{"PAUSE"}, query,
-		)
-		if !testutils.IsError(err, "job paused") {
-			t.Fatalf("unexpected: %v", err)
-		}
-		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-		jobutils.WaitForJob(t, sqlDB, jobID)
-		sqlDB.CheckQueryResults(t,
-			`SELECT * FROM pauseimport.t ORDER BY i`,
-			sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
-		)
-	})
 }
 
 // FakeResumer calls optional callbacks during the job lifecycle.

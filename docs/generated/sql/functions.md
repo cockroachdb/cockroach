@@ -1981,6 +1981,8 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td></tr>
 <tr><td><a name="st_reverse"></a><code>st_reverse(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified geometry by reversing the order of its vertices.</p>
 </span></td></tr>
+<tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, rot_radians: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle.</p>
+</span></td></tr>
 <tr><td><a name="st_scale"></a><code>st_scale(g: geometry, factor: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry scaled by taking in a Geometry as the factor.</p>
 </span></td></tr>
 <tr><td><a name="st_scale"></a><code>st_scale(g: geometry, factor: geometry, origin: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry scaled by the Geometry factor relative to a false origin.</p>

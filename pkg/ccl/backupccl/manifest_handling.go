@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -747,12 +748,15 @@ func resolveBackupManifests(
 						const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with '%s' option."
 						if i == 0 {
 							return nil, nil, nil, errors.Errorf(
-								errPrefix+" nearest backup time is %s", backupOptRevisionHistory, b.EndTime,
+								errPrefix+" nearest backup time is %s", backupOptRevisionHistory,
+								timeutil.Unix(0, b.EndTime.WallTime).UTC(),
 							)
 						}
 						return nil, nil, nil, errors.Errorf(
 							errPrefix+" nearest BACKUP times are %s or %s",
-							backupOptRevisionHistory, mainBackupManifests[i-1].EndTime, b.EndTime,
+							backupOptRevisionHistory,
+							timeutil.Unix(0, mainBackupManifests[i-1].EndTime.WallTime).UTC(),
+							timeutil.Unix(0, b.EndTime.WallTime).UTC(),
 						)
 					}
 					// Ensure that the revision history actually covers the requested time -
@@ -762,7 +766,8 @@ func resolveBackupManifests(
 					// the latest for ranges backed up.
 					if endTime.LessEq(b.RevisionStartTime) {
 						return nil, nil, nil, errors.Errorf(
-							"invalid RESTORE timestamp: BACKUP for requested time only has revision history from %v", b.RevisionStartTime,
+							"invalid RESTORE timestamp: BACKUP for requested time only has revision history"+
+								" from %v", timeutil.Unix(0, b.RevisionStartTime.WallTime).UTC(),
 						)
 					}
 				}
