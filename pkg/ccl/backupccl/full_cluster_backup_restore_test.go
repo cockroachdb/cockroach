@@ -321,8 +321,8 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 	sqlDBRestore.Exec(t, `CREATE DATABASE foo`)
-	sqlDBRestore.ExpectErr(
-		t, "pq: full cluster restore can only be run on a cluster with no tables or databases but found 1 descriptors",
+	sqlDBRestore.ExpectErr(t,
+		"pq: full cluster restore can only be run on a cluster with no tables or databases but found 1 descriptors: \\[foo\\]",
 		`RESTORE FROM $1`, LocalFoo,
 	)
 }

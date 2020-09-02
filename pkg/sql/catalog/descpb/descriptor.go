@@ -232,3 +232,12 @@ func TableFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TableDescriptor {
 	}
 	return t
 }
+
+// TypeFromDescriptor is the same thing as TableFromDescriptor, but for types.
+func TypeFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TypeDescriptor {
+	t := desc.GetType()
+	if t != nil {
+		MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.TODO(), desc, ts)
+	}
+	return t
+}
