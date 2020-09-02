@@ -25,11 +25,13 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 )
 
@@ -94,6 +96,17 @@ func runClusterDoctor(cmd *cobra.Command, args []string) (retErr error) {
 	stmt := `
 SELECT id, descriptor, crdb_internal_mvcc_timestamp AS mod_time_logical
 FROM system.descriptor ORDER BY id`
+	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp"
+	_, err = sqlConn.Query(checkColumnExistsStmt, nil)
+	// On versions before 20.2, the system.descriptor won't have the builtin
+	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedColumn {
+			stmt = `
+SELECT id, descriptor, NULL AS mod_time_logical
+FROM system.descriptor ORDER BY id`
+		}
+	}
 	descTable := make([]doctor.DescriptorTableRow, 0)
 
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 3), func(vals []driver.Value) error {
@@ -129,9 +142,21 @@ FROM system.descriptor ORDER BY id`
 		return err
 	}
 
-	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace2`
-	namespaceTable := make([]doctor.NamespaceTableRow, 0)
+	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace`
 
+	checkColumnExistsStmt = `SELECT "parentSchemaID" FROM system.namespace LIMIT 0`
+	_, err = sqlConn.Query(checkColumnExistsStmt, nil)
+	// On versions before 20.1, table system.namespace does not have this column.
+	// In that case the ParentSchemaID for tables is 29 and for databases is 0.
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedColumn {
+			stmt = `
+SELECT "parentID", CASE WHEN "parentID" = 0 THEN 0 ELSE 29 END AS "parentSchemaID", name, id
+FROM system.namespace`
+		}
+	}
+
+	namespaceTable := make([]doctor.NamespaceTableRow, 0)
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
 		var row doctor.NamespaceTableRow
 		if parentID, ok := vals[0].(int64); ok {
@@ -254,7 +279,7 @@ func selectRowsMap(
 ) error {
 	rows, err := conn.Query(stmt, nil)
 	if err != nil {
-		return errors.Wrap(err, "could not read system.descriptor")
+		return errors.Wrapf(err, "query '%s'", stmt)
 	}
 	for {
 		var err error
