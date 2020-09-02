@@ -25,11 +25,13 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 )
 
@@ -94,6 +96,17 @@ func runClusterDoctor(cmd *cobra.Command, args []string) (retErr error) {
 	stmt := `
 SELECT id, descriptor, crdb_internal_mvcc_timestamp AS mod_time_logical
 FROM system.descriptor ORDER BY id`
+	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp"
+	_, err = sqlConn.Query(checkColumnExistsStmt, nil)
+	// On versions before 20.2, the system.descriptor won't have the builtin
+	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedColumn {
+			stmt = `
+SELECT id, descriptor, NULL AS mod_time_logical
+FROM system.descriptor ORDER BY id`
+		}
+	}
 	descTable := make([]doctor.DescriptorTableRow, 0)
 
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 3), func(vals []driver.Value) error {
@@ -129,7 +142,7 @@ FROM system.descriptor ORDER BY id`
 		return err
 	}
 
-	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace2`
+	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace`
 	namespaceTable := make([]doctor.NamespaceTableRow, 0)
 
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
