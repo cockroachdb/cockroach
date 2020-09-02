@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -29,6 +30,8 @@ import (
 const (
 	defaultUserfileScheme      = "userfile"
 	defaultQualifiedNamePrefix = "defaultdb.public.userfiles_"
+	tmpSuffix                  = ".tmp"
+	fileTableNameSuffix        = "_upload_files"
 )
 
 var userFileUploadCmd = &cobra.Command{
@@ -156,6 +159,9 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 	var err error
 	if userfileURI, err = url.ParseRequestURI(destination); err == nil {
 		if userfileURI.Scheme == defaultUserfileScheme {
+			if userfileURI.Host == "" {
+				userfileURI.Host = defaultQualifiedNamePrefix + user
+			}
 			return userfileURI.String()
 		}
 	}
@@ -312,6 +318,49 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 	return nil
 }
 
+func renameUserFile(
+	ctx context.Context, conn *sqlConn, oldFilename,
+	newFilename, qualifiedTableName string,
+) error {
+	if err := conn.ensureConn(); err != nil {
+		return err
+	}
+
+	ex := conn.conn.(driver.ExecerContext)
+	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
+		return err
+	}
+
+	stmt, err := conn.conn.Prepare(fmt.Sprintf(`UPDATE %s SET filename=$1 WHERE filename=$2`,
+		qualifiedTableName+fileTableNameSuffix))
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if stmt != nil {
+			_ = stmt.Close()
+			_, _ = ex.ExecContext(ctx, `ROLLBACK`, nil)
+		}
+	}()
+
+	_, err = stmt.Exec([]driver.Value{newFilename, oldFilename})
+	if err != nil {
+		return err
+	}
+
+	if err := stmt.Close(); err != nil {
+		return err
+	}
+	stmt = nil
+
+	if _, err := ex.ExecContext(ctx, `COMMIT`, nil); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func uploadUserFile(
 	ctx context.Context, conn *sqlConn, reader io.Reader, source, destination string,
 ) error {
@@ -337,6 +386,11 @@ func uploadUserFile(
 	// Accounts for filenames with arbitrary unicode characters. url.URL escapes
 	// these characters by default when setting the Path above.
 	unescapedUserfileURL, err := url.PathUnescape(userfileURI)
+
+	// We append a tmp suffix to the filename being uploaded to indicate that the
+	// upload is still ongoing. This suffix is dropped once the copyTxn running
+	// the upload commits.
+	unescapedUserfileURL = unescapedUserfileURL + tmpSuffix
 	if err != nil {
 		return err
 	}
@@ -378,7 +432,20 @@ func uploadUserFile(
 		return err
 	}
 
-	fmt.Printf("successfully uploaded to %s\n", unescapedUserfileURL)
+	// Drop the .tmp suffix from the filename uploaded to userfile, thereby
+	// indicating all chunks have been uploaded successfully.
+	tmpURL, err := url.Parse(unescapedUserfileURL)
+	if err != nil {
+		return err
+	}
+	err = renameUserFile(ctx, conn, tmpURL.Path, strings.TrimSuffix(tmpURL.Path, tmpSuffix),
+		tmpURL.Host)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("successfully uploaded to %s\n",
+		strings.TrimSuffix(unescapedUserfileURL, tmpSuffix))
 	return nil
 }
 
