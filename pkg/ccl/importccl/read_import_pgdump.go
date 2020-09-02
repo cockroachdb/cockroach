@@ -754,7 +754,7 @@ func (m *pgDumpReader) readFile(
 						if s == nil {
 							conv.Datums[idx] = tree.DNull
 						} else {
-							conv.Datums[idx], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
+							conv.Datums[idx], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[idx], *s, conv.EvalCtx)
 							if err != nil {
 								col := conv.VisibleCols[idx]
 								return wrapRowErr(err, "", count, pgcode.Syntax,
