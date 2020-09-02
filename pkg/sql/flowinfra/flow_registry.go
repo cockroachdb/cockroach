@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -362,7 +363,9 @@ func (fr *FlowRegistry) waitForFlowLocked(
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
 func (fr *FlowRegistry) Drain(
-	flowDrainWait time.Duration, minFlowDrainWait time.Duration, reporter func(int, string),
+	flowDrainWait time.Duration,
+	minFlowDrainWait time.Duration,
+	reporter func(int, redact.SafeString),
 ) {
 	allFlowsDone := make(chan struct{}, 1)
 	start := timeutil.Now()

@@ -213,7 +213,11 @@ func (c *conn) serveImpl(
 ) {
 	defer func() { _ = c.conn.Close() }()
 
-	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
+	if c.sessionArgs.User == security.RootUser || c.sessionArgs.User == security.NodeUser {
+		ctx = logtags.AddTag(ctx, "user", log.Safe(c.sessionArgs.User))
+	} else {
+		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
+	}
 
 	inTestWithoutSQL := sqlServer == nil
 	var authLogger *log.SecondaryLogger

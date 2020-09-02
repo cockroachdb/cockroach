@@ -2,6 +2,7 @@ The following types are considered always safe for reporting:
 
 File | Type
 --|--
+pkg/jobs/jobspb/wrap.go | `Type`
 pkg/kv/kvserver/raft.go | `SnapshotRequest_Type`
 pkg/roachpb/data.go | `ReplicaChangeType`
 pkg/roachpb/metadata.go | `NodeID`
@@ -10,6 +11,15 @@ pkg/roachpb/metadata.go | `RangeID`
 pkg/roachpb/metadata.go | `ReplicaID`
 pkg/roachpb/metadata.go | `RangeGeneration`
 pkg/roachpb/metadata.go | `ReplicaType`
+pkg/sql/catalog/descpb/structured.go | `ID`
+pkg/sql/catalog/descpb/structured.go | `FamilyID`
+pkg/sql/catalog/descpb/structured.go | `IndexID`
+pkg/sql/catalog/descpb/structured.go | `DescriptorVersion`
+pkg/sql/catalog/descpb/structured.go | `IndexDescriptorVersion`
+pkg/sql/catalog/descpb/structured.go | `ColumnID`
+pkg/sql/catalog/descpb/structured.go | `MutationID`
+pkg/sql/sem/tree/table_ref.go | `ID`
+pkg/sql/sem/tree/table_ref.go | `ColumnID`
 pkg/util/hlc/timestamp.go | `Timestamp`
 pkg/util/log/redact.go | `reflect.TypeOf(true)`
 pkg/util/log/redact.go | `reflect.TypeOf(123)`

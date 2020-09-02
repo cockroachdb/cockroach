@@ -347,7 +347,7 @@ func (s *jobScheduler) executeSchedules(
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
-		log.Infof(ctx, "waiting %s before scheduled jobs daemon start", initialDelay.String())
+		log.Infof(ctx, "waiting %v before scheduled jobs daemon start", initialDelay)
 
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
 			getWaitPeriod(&s.Settings.SV, s.TestingKnobs)) {
