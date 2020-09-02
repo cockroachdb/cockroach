@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -977,9 +978,13 @@ func populateTableConstraints(
 			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
 				return err
 			}
-			consrc = tree.NewDString(fmt.Sprintf("(%s)", con.Details))
+			displayExpr, err := schemaexpr.FormatExprForDisplayWithoutTypeAnnotations(ctx, table, con.Details, &p.semaCtx)
+			if err != nil {
+				return err
+			}
+			consrc = tree.NewDString(fmt.Sprintf("(%s)", displayExpr))
 			conbin = consrc
-			condef = tree.NewDString(fmt.Sprintf("CHECK ((%s))", con.Details))
+			condef = tree.NewDString(fmt.Sprintf("CHECK ((%s))", displayExpr))
 		}
 
 		if err := addRow(

@@ -90,7 +90,7 @@ query TTTTB colnames
 SHOW CONSTRAINTS FROM t
 ----
 table_name  constraint_name  constraint_type  details                              validated
-t           check_a          CHECK            CHECK ((a > 0:::INT8))               true
+t           check_a          CHECK            CHECK ((a > 0))                      true
 t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
 t           foo              UNIQUE           UNIQUE (b ASC)                       true
 t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                  true
@@ -119,7 +119,7 @@ INSERT INTO t (a) VALUES (-3)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0:::INT8))               true
+t  check_a         CHECK        CHECK ((a > 0))                      true
 t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
 t  foo             UNIQUE       UNIQUE (b ASC)                       true
 t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
@@ -137,8 +137,8 @@ ALTER TABLE t ADD CHECK (a > 0)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0:::INT8))               true
-t  check_a1        CHECK        CHECK ((a > 0:::INT8))               true
+t  check_a         CHECK        CHECK ((a > 0))                      true
+t  check_a1        CHECK        CHECK ((a > 0))                      true
 t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
 t  foo             UNIQUE       UNIQUE (b ASC)                       true
 t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
@@ -159,8 +159,8 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0:::INT8))               true
-t  check_a1        CHECK        CHECK ((a > 0:::INT8))               true
+t  check_a         CHECK        CHECK ((a > 0))                      true
+t  check_a1        CHECK        CHECK ((a > 0))                      true
 t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
 t  foo             UNIQUE       UNIQUE (b ASC)                       true
 t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
@@ -381,12 +381,12 @@ ALTER TABLE t ADD i INT AS (g - 1) STORED CHECK (i > 0)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_f   CHECK        CHECK ((f > 1:::INT8))  true
-t  check_g   CHECK        CHECK ((g > 0:::INT8))  true
-t  check_h   CHECK        CHECK ((h > 0:::INT8))  true
-t  check_h1  CHECK        CHECK ((h < 10:::INT8)) true
-t  primary   PRIMARY KEY  PRIMARY KEY (a ASC)     true
-t  t_h_key   UNIQUE       UNIQUE (h ASC)          true
+t  check_f   CHECK        CHECK ((f > 1))      true
+t  check_g   CHECK        CHECK ((g > 0))      true
+t  check_h   CHECK        CHECK ((h > 0))      true
+t  check_h1  CHECK        CHECK ((h < 10))     true
+t  primary   PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t  t_h_key   UNIQUE       UNIQUE (h ASC)       true
 
 statement ok
 DROP TABLE t
@@ -419,13 +419,13 @@ ALTER TABLE t ADD COLUMN u INT UNIQUE, ADD COLUMN v INT UNIQUE, ADD CONSTRAINT c
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_c_b  CHECK        CHECK ((c > b))         true
-t  ck         CHECK        CHECK ((a > 0:::INT8))  true
-t  primary    PRIMARY KEY  PRIMARY KEY (a ASC)     true
-t  t_d_key    UNIQUE       UNIQUE (d ASC)          true
-t  t_e_key    UNIQUE       UNIQUE (e ASC)          true
-t  t_u_key    UNIQUE       UNIQUE (u ASC)          true
-t  t_v_key    UNIQUE       UNIQUE (v ASC)          true
+t  check_c_b  CHECK        CHECK ((c > b))      true
+t  ck         CHECK        CHECK ((a > 0))      true
+t  primary    PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t  t_d_key    UNIQUE       UNIQUE (d ASC)       true
+t  t_e_key    UNIQUE       UNIQUE (e ASC)       true
+t  t_u_key    UNIQUE       UNIQUE (u ASC)       true
+t  t_v_key    UNIQUE       UNIQUE (v ASC)       true
 
 statement ok
 DROP TABLE t
@@ -978,8 +978,8 @@ ALTER TABLE t ADD CHECK (a < 16) NOT VALID
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK  CHECK  ((a < 100:::INT8))  true
-t  check_a1  CHECK  CHECK  ((a < 16:::INT8))   false
+t  check_a   CHECK  CHECK ((a < 100))  true
+t  check_a1  CHECK  CHECK ((a < 16))   false
 
 query error pq: failed to satisfy CHECK constraint \(a < 16:::INT8\)
 INSERT INTO t VALUES (20)
@@ -996,8 +996,8 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a1
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK  CHECK  ((a < 100:::INT8))  true
-t  check_a1  CHECK  CHECK  ((a < 16:::INT8))   true
+t  check_a   CHECK  CHECK ((a < 100))  true
+t  check_a1  CHECK  CHECK ((a < 16))   true
 
 subtest regression_42858
 

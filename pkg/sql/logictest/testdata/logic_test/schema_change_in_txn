@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant(49854)
+ # LogicTest: !3node-tenant(49854)
 # Disable automatic stats to avoid flakiness (sometimes causes retry errors).
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
@@ -924,9 +924,9 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  c_0      CHECK        CHECK ((c > 0:::INT8))  false
-check_table  d_0      CHECK        CHECK ((d > 0:::INT8))  true
-check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)     true
+check_table  c_0      CHECK        CHECK ((c > 0))      false
+check_table  d_0      CHECK        CHECK ((d > 0))      true
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
 
 statement ok
 BEGIN
@@ -957,9 +957,9 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  c_0      CHECK        CHECK ((c > 0:::INT8))  false
-check_table  d_0      CHECK        CHECK ((d > 0:::INT8))  true
-check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)     true
+check_table  c_0      CHECK        CHECK ((c > 0))      false
+check_table  d_0      CHECK        CHECK ((d > 0))      true
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
 
 # Adding column e was rolled back
 query TTBTTTB
@@ -1142,8 +1142,8 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  ck_a  CHECK  CHECK ((a = 0:::INT8))  true
-check_table  ck_b  CHECK  CHECK ((b > 0:::INT8))  true
+check_table  ck_a  CHECK  CHECK ((a = 0))  true
+check_table  ck_b  CHECK  CHECK ((b > 0))  true
 check_table  ck_c  CHECK  CHECK ((c > b))  true
 
 # Also test insert/update to ensure constraint was added in a valid state (with correct column IDs, etc.)
