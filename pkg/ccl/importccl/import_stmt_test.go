@@ -102,8 +102,6 @@ func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 51811, "failing on teamcity with testrace")
-
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -112,14 +110,15 @@ func TestImportData(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 
 	tests := []struct {
-		name     string
-		create   string
-		with     string
-		typ      string
-		data     string
-		err      string
-		rejected string
-		query    map[string][][]string
+		name      string
+		create    string
+		with      string
+		typ       string
+		data      string
+		err       string
+		rejected  string
+		query     map[string][][]string
+		skipIssue int
 	}{
 		{
 			name: "duplicate unique index key",
@@ -162,7 +161,8 @@ c
 D
 d
 `,
-			err: "duplicate key",
+			err:       "duplicate key",
+			skipIssue: 51811,
 		},
 		{
 			name: "duplicate PK at sst boundary",
@@ -263,6 +263,7 @@ d
 			query: map[string][][]string{
 				`SELECT s, count(*) FROM t GROUP BY s`: {{"1", "2000"}},
 			},
+			skipIssue: 51811,
 		},
 		{
 			name:   "quotes are accepted in a quoted string",
@@ -281,12 +282,13 @@ d
 			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
 		},
 		{
-			name:   "strict quotes: bare quote in the middle of a field that is not quoted",
-			create: `s string`,
-			typ:    "CSV",
-			with:   `WITH strict_quotes`,
-			data:   `abc"de`,
-			err:    `row 1: reading CSV record: parse error on line 1, column 3: bare " in non-quoted-field`,
+			name:      "strict quotes: bare quote in the middle of a field that is not quoted",
+			create:    `s string`,
+			typ:       "CSV",
+			with:      `WITH strict_quotes`,
+			data:      `abc"de`,
+			err:       `row 1: reading CSV record: parse error on line 1, column 3: bare " in non-quoted-field`,
+			skipIssue: 51811,
 		},
 		{
 			name:   "no matching quote in a quoted field",
@@ -296,12 +298,13 @@ d
 			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
 		},
 		{
-			name:   "strict quotes: bare quote in the middle of a quoted field is not ok",
-			create: `s string`,
-			typ:    "CSV",
-			with:   `WITH strict_quotes`,
-			data:   `"abc"de"`,
-			err:    `row 1: reading CSV record: parse error on line 1, column 4: extraneous or missing " in quoted-field`,
+			name:      "strict quotes: bare quote in the middle of a quoted field is not ok",
+			create:    `s string`,
+			typ:       "CSV",
+			with:      `WITH strict_quotes`,
+			data:      `"abc"de"`,
+			err:       `row 1: reading CSV record: parse error on line 1, column 4: extraneous or missing " in quoted-field`,
+			skipIssue: 51811,
 		},
 		{
 			name:     "too many imported columns",
@@ -630,18 +633,20 @@ d
 
 		// PG COPY
 		{
-			name:   "unexpected escape x",
-			create: `b bytes`,
-			typ:    "PGCOPY",
-			data:   `\x`,
-			err:    `row 1: unsupported escape sequence: \\x`,
+			name:      "unexpected escape x",
+			create:    `b bytes`,
+			typ:       "PGCOPY",
+			data:      `\x`,
+			err:       `row 1: unsupported escape sequence: \\x`,
+			skipIssue: 51811,
 		},
 		{
-			name:   "unexpected escape 3",
-			create: `b bytes`,
-			typ:    "PGCOPY",
-			data:   `\3`,
-			err:    `row 1: unsupported escape sequence: \\3`,
+			name:      "unexpected escape 3",
+			create:    `b bytes`,
+			typ:       "PGCOPY",
+			data:      `\3`,
+			err:       `row 1: unsupported escape sequence: \\3`,
+			skipIssue: 51811,
 		},
 		{
 			name:   "escapes",
@@ -672,11 +677,12 @@ d
 			},
 		},
 		{
-			name:   "size out of range",
-			create: `i int8`,
-			typ:    "PGCOPY",
-			with:   `WITH max_row_size = '10GB'`,
-			err:    "max_row_size out of range",
+			name:      "size out of range",
+			create:    `i int8`,
+			typ:       "PGCOPY",
+			with:      `WITH max_row_size = '10GB'`,
+			err:       "max_row_size out of range",
+			skipIssue: 51811,
 		},
 		{
 			name:   "line too long",
@@ -711,7 +717,8 @@ d
 				0
 				\.
 			`,
-			err: `COPY columns do not match table columns for table t`,
+			err:       `COPY columns do not match table columns for table t`,
+			skipIssue: 51811,
 		},
 		{
 			name: "missing COPY done",
@@ -738,10 +745,11 @@ d
 			},
 		},
 		{
-			name: "size out of range",
-			typ:  "PGDUMP",
-			with: `WITH max_row_size = '10GB'`,
-			err:  "max_row_size out of range",
+			name:      "size out of range",
+			typ:       "PGDUMP",
+			with:      `WITH max_row_size = '10GB'`,
+			err:       "max_row_size out of range",
+			skipIssue: 51811,
 		},
 		{
 			name: "line too long",
@@ -784,7 +792,8 @@ COPY t (a, b, c) FROM stdin;
 1	2	3
 \.
 			`,
-			err: "expected 2 columns, got 3",
+			err:       "expected 2 columns, got 3",
+			skipIssue: 51811,
 		},
 		{
 			name: "out-of-order and omitted COPY columns",
@@ -827,6 +836,7 @@ END;
 				`SHOW CONSTRAINTS FROM weather
 				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities(city)", "false"}},
 			},
+			skipIssue: 51811,
 		},
 		{
 			name: "fk-circular",
@@ -876,6 +886,7 @@ END;
 					{"b", "b_pkey", "PRIMARY KEY", "PRIMARY KEY (j ASC)", "true"},
 				},
 			},
+			skipIssue: 51811,
 		},
 		{
 			name: "fk-skip",
@@ -888,6 +899,7 @@ END;
 				`SELECT dependson_name FROM crdb_internal.backward_dependencies`: {},
 				`SHOW CONSTRAINTS FROM weather`:                                  {},
 			},
+			skipIssue: 51811,
 		},
 		{
 			name: "fk unreferenced",
@@ -903,6 +915,7 @@ END;
 			query: map[string][][]string{
 				`SHOW TABLES`: {{"public", "weather", "table"}},
 			},
+			skipIssue: 51811,
 		},
 		{
 			name: "case sensitive table names",
@@ -934,6 +947,7 @@ END;
 				`SELECT nextval('i_seq')`:    {{"11"}},
 				`SHOW CREATE SEQUENCE i_seq`: {{"i_seq", "CREATE SEQUENCE i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1"}},
 			},
+			skipIssue: 51811,
 		},
 		{
 			name: "ALTER COLUMN x SET NOT NULL",
@@ -955,6 +969,7 @@ END;
 					},
 				},
 			},
+			skipIssue: 51811,
 		},
 		{
 			name: "non-public schema",
@@ -968,6 +983,7 @@ END;
 			data: "create table t (t time with time zone)",
 			err: `create table t \(t time with time zone\)
                                  \^`,
+			skipIssue: 51811,
 		},
 		{
 			name: "various create ignores",
@@ -991,6 +1007,7 @@ END;
 			query: map[string][][]string{
 				`SHOW TABLES`: {{"public", "t", "table"}},
 			},
+			skipIssue: 51811,
 		},
 		{
 			name: "many tables",
@@ -1071,6 +1088,10 @@ CREATE INDEX i ON t USING btree (a) WHERE (b > 10);
 				}
 			}
 			t.Run(fmt.Sprintf("%s/%s: save_rejected=%v", tc.typ, tc.name, saveRejected), func(t *testing.T) {
+				if tc.skipIssue != 0 {
+					skip.WithIssue(t, tc.skipIssue)
+					return
+				}
 				dbName := fmt.Sprintf("d%d", i)
 				sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
 				defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
