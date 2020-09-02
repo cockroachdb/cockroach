@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // managerImpl implements the Manager interface.
@@ -260,7 +261,9 @@ func (m *managerImpl) HandleWriterIntentError(
 		intent := &t.Intents[i]
 		added, err := m.lt.AddDiscoveredLock(intent, seq, g.ltg)
 		if err != nil {
-			log.Fatalf(ctx, "%v", err)
+			reqBa := roachpb.BatchRequest{Requests: g.Req.Requests}
+			log.Fatalf(ctx, "assertion failed: %s; req=[%s], req_txn={%s}, intent_txn={%s}",
+				err, errors.Safe(reqBa.Summary()), g.Req.Txn, intent.Txn)
 		}
 		if !added {
 			wait = true
