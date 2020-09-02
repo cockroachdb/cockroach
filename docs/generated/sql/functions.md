@@ -2013,6 +2013,12 @@ The paths themselves are given in the direction of the first geometry.</p>
 <tr><td><a name="st_shortestline"></a><code>st_shortestline(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the LineString corresponds to the minimum distance across every pair of points comprising the given geometries.</p>
 <p>Note if geometries are the same, it will return the LineString with the minimum distance between the geometry’s vertexes. The function will return the shortest line that was discovered first when comparing minimum distances if more than one is found.</p>
 </span></td></tr>
+<tr><td><a name="st_simplify"></a><code>st_simplify(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm.</p>
+</span></td></tr>
+<tr><td><a name="st_simplify"></a><code>st_simplify(geometry: geometry, tolerance: <a href="float.html">float</a>, preserve_collapsed: <a href="bool.html">bool</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm, retaining objects that would be too small given the tolerance if preserve_collapsed is set to true.</p>
+</span></td></tr>
+<tr><td><a name="st_simplifypreservetopology"></a><code>st_simplifypreservetopology(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.</p>
+</span></td></tr>
 <tr><td><a name="st_srid"></a><code>st_srid(geography: geography) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the Spatial Reference Identifier (SRID) for the ST_Geography as defined in spatial_ref_sys table.</p>
 </span></td></tr>
 <tr><td><a name="st_srid"></a><code>st_srid(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the Spatial Reference Identifier (SRID) for the ST_Geometry as defined in spatial_ref_sys table.</p>
