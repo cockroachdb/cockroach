@@ -16,6 +16,65 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
+// AddPoint adds a point to a LineString at the given 0-based index. -1 appends.
+func AddPoint(lineString geo.Geometry, index int, point geo.Geometry) (geo.Geometry, error) {
+	g, err := lineString.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	lineStringG, ok := g.(*geom.LineString)
+	if !ok {
+		e := geom.ErrUnsupportedType{Value: g}
+		return geo.Geometry{}, errors.Wrap(e, "geometry to be modified must be a LineString")
+	}
+
+	g, err = point.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+
+	pointG, ok := g.(*geom.Point)
+	if !ok {
+		e := geom.ErrUnsupportedType{Value: g}
+		return geo.Geometry{}, errors.Wrapf(e, "invalid geometry used to add a Point to a LineString")
+	}
+
+	g, err = addPoint(lineStringG, index, pointG)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+
+	return geo.MakeGeometryFromGeomT(g)
+}
+
+func addPoint(lineString *geom.LineString, index int, point *geom.Point) (*geom.LineString, error) {
+	if lineString.Layout() != point.Layout() {
+		return nil, geom.ErrLayoutMismatch{Got: point.Layout(), Want: lineString.Layout()}
+	}
+	if point.Empty() {
+		point = geom.NewPointFlat(point.Layout(), make([]float64, point.Stride()))
+	}
+
+	coords := lineString.Coords()
+
+	if index > len(coords) {
+		return nil, errors.Newf("index %d out of range of LineString with %d coordinates",
+			index, len(coords))
+	} else if index == -1 {
+		index = len(coords)
+	} else if index < 0 {
+		return nil, errors.Newf("invalid index %v", index)
+	}
+
+	// Shift the slice right by one element, then replace the element at the index, to avoid
+	// allocating an additional slice.
+	coords = append(coords, geom.Coord{})
+	copy(coords[index+1:], coords[index:])
+	coords[index] = point.Coords()
+
+	return lineString.SetCoords(coords)
+}
+
 // SetPoint sets the point at the given index of lineString; index is 0-based.
 func SetPoint(lineString geo.Geometry, index int, point geo.Geometry) (geo.Geometry, error) {
 	g, err := lineString.AsGeomT()
