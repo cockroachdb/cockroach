@@ -1122,10 +1122,6 @@ func (n *Node) GossipSubscription(
 // Join implements the roachpb.InternalServer service. This is the
 // "connectivity" API; individual CRDB servers are passed in a --join list and
 // the join targets are addressed through this API.
-//
-// TODO(irfansharif): Perhaps we could opportunistically create a liveness
-// record here so as to no longer have to worry about the liveness record not
-// existing for a given node.
 func (n *Node) Join(
 	ctx context.Context, req *roachpb.JoinNodeRequest,
 ) (*roachpb.JoinNodeResponse, error) {

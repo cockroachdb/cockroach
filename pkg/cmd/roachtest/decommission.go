@@ -309,21 +309,6 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 		Multiplier:     2,
 	}
 
-	// This is a pretty gross hack to let the bootstrap info (cluster ID,
-	// liveness records) disseminate through the cluster. Since it's no longer
-	// happening through gossip, it takes a bit longer to happen. We should do
-	// two things to improve our story here:
-	//
-	// - We should opportunistically write to the liveness table when adding a
-	//   node through the Join RPC. This would also simplify the handling of
-	//   empty liveness records (they would no longer exist).
-	// - We should add roachtest helpers that wait until each node has received
-	//   cluster ID information, and use it in all the tests that need it (which
-	//   may very well be all the tests).
-	//
-	// TODO(irfansharif): Do the above.
-	time.Sleep(30 * time.Second)
-
 	// Partially decommission then recommission a random node, from another
 	// random node. Run a couple of status checks while doing so.
 	{

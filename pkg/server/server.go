@@ -1402,11 +1402,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// one, make sure it's the clusterID we already know (and are guaranteed to
 	// know) at this point. If it's not the same, explode.
 	//
-	// TODO(tbg): remove this when we have changed ServeAndWait() to join an
-	// existing cluster via a one-off RPC, at which point we can create gossip
-	// (and thus the RPC layer) only after the clusterID is already known. We
-	// can then rely on the RPC layer's protection against cross-cluster
-	// communication.
+	// TODO(irfansharif): The above is no longer applicable; in 21.1 we can
+	// always assume that the RPC layer will always get set up after having
+	// found out what the cluster ID is. The checks below can be removed then.
 	{
 		// We populated this above, so it should still be set. This is just to
 		// demonstrate that we're not doing anything functional here (and to
@@ -1538,6 +1536,32 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	})
 
+	// Begin the node liveness heartbeat. Add a callback which records the
+	// local store "last up" timestamp for every store whenever the liveness
+	// record is updated. We're sure to do this before we open RPC
+	// floodgates.
+	var livenessOnce sync.Once
+	livenessRecordCreated := make(chan struct{}, 1)
+	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, s.engines, func(ctx context.Context) {
+		now := s.clock.Now()
+		if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
+			return s.WriteLastUpTimestamp(ctx, now)
+		}); err != nil {
+			log.Warningf(ctx, "writing last up timestamp: %v", err)
+		}
+		livenessOnce.Do(func() {
+			livenessRecordCreated <- struct{}{}
+		})
+	})
+
+	if initialStart {
+		// If we're a new node being added, we're going to wait for the
+		// liveness record to be created before allowing all RPCs below.
+		<-livenessRecordCreated
+	}
+
+	// Allow all RPCs, this server can now be considered to be fully
+	// initialized.
 	s.grpc.setMode(modeOperational)
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
@@ -1551,18 +1575,6 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
-
-	// Begin the node liveness heartbeat. Add a callback which records the local
-	// store "last up" timestamp for every store whenever the liveness record is
-	// updated.
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, s.engines, func(ctx context.Context) {
-		now := s.clock.Now()
-		if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
-			return s.WriteLastUpTimestamp(ctx, now)
-		}); err != nil {
-			log.Warningf(ctx, "writing last up timestamp: %v", err)
-		}
-	})
 
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval)

@@ -175,10 +175,8 @@ func (s *initServer) needsInitLocked() bool {
 // necessarily all. This is fine, since initializing additional stores later is
 // easy.
 //
-// `initialBoot` is true if this is a new node. This flag should only be used
-// for logging and reporting. A newly bootstrapped single-node cluster is
-// functionally equivalent to one that restarted; any decisions should be made
-// on persisted data instead of this flag.
+// `initialStart` is true if this is a new node (i.e. it was either just
+// bootstrapped, or it just joined an existing cluster for the first time).
 //
 // [1]: In mixed version clusters it waits until Gossip connects (but this is
 // slated to be removed in 21.1).
@@ -191,7 +189,7 @@ func (s *initServer) ServeAndWait(
 	stopper *stop.Stopper,
 	sv *settings.Values,
 	startGossipFn func() *gossip.Gossip,
-) (state *initState, initialBoot bool, err error) {
+) (state *initState, initialStart bool, err error) {
 	// If already bootstrapped, return early.
 	s.mu.Lock()
 	if !s.needsInitLocked() {

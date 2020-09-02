@@ -455,16 +455,10 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 	if oldLivenessRec.Liveness == (kvserverpb.Liveness{}) {
 		// Liveness record didn't previously exist, so we create one.
 		//
-		// TODO(irfansharif): This code feels a bit unwieldy because it's
-		// possible for a liveness record to not exist previously. It is just
-		// generally difficult to write it at startup. When a node joins the
-		// cluster, this completes before it has had a chance to write its
-		// liveness record. If it gets decommissioned immediately, there won't
-		// be one yet. The Connect RPC can solve this though, I think? We can
-		// bootstrap clusters with a liveness record for n1. Any other node at
-		// some point has to join the cluster for the first time via the Connect
-		// RPC, which as part of its job can make sure the liveness record
-		// exists before responding to the new node.
+		// TODO(irfansharif): The above is now no longer possible. We always
+		// create a liveness record before fully starting up the node. We should
+		// clean up all this logic that tries to work around the possibility of
+		// the liveness record not existing.
 		newLiveness = kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
