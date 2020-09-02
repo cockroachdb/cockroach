@@ -12,7 +12,6 @@ package coldatatestutils
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // maxVarLen specifies a length limit for variable length types (e.g. byte slices).
@@ -228,7 +228,7 @@ func RandomBatch(
 // less than batchSize.
 func RandomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
 	if probOfOmitting < 0 || probOfOmitting > 1 {
-		colexecerror.InternalError(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
+		colexecerror.InternalError(errors.AssertionFailedf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
 	sel := make([]int, 0, batchSize)
 	for i := 0; i < batchSize; i++ {
@@ -396,7 +396,7 @@ func (o *RandomDataOp) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (o *RandomDataOp) Child(nth int, verbose bool) execinfra.OpNode {
-	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(errors.AssertionFailedf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

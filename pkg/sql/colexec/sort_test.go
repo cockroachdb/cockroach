@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 var sortAllTestCases []sortTestCase
@@ -402,7 +403,7 @@ func generateColumnOrdering(
 	rng *rand.Rand, nCols int, nOrderingCols int,
 ) []execinfrapb.Ordering_Column {
 	if nOrderingCols > nCols {
-		colexecerror.InternalError("nOrderingCols > nCols in generateColumnOrdering")
+		colexecerror.InternalError(errors.AssertionFailedf("nOrderingCols > nCols in generateColumnOrdering"))
 	}
 	orderingCols := make([]execinfrapb.Ordering_Column, nOrderingCols)
 	for i, col := range rng.Perm(nCols)[:nOrderingCols] {

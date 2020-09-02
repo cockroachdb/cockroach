@@ -56,17 +56,17 @@ const _RIGHT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
 const _RIGHT_TYPE_WIDTH = 0
 
 func _CAST(to, from, fromCol interface{}) {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // This will be replaced with execgen.SET.
 func _R_SET(to, from interface{}) {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // This will be replaced with execgen.SLICE.
 func _L_SLICE(col, i, j interface{}) interface{} {
-	colexecerror.InternalError("")
+	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
 // */}}

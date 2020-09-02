@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // VectorizedStatsCollector collects VectorizedStats on Operators.
@@ -70,7 +71,7 @@ func NewVectorizedStatsCollector(
 	inputStatsCollectors []*VectorizedStatsCollector,
 ) *VectorizedStatsCollector {
 	if inputWatch == nil {
-		colexecerror.InternalError("input watch for VectorizedStatsCollector is nil")
+		colexecerror.InternalError(errors.AssertionFailedf("input watch for VectorizedStatsCollector is nil"))
 	}
 	// ioTime indicates whether the time should be displayed as "IO time" on
 	// the diagram.

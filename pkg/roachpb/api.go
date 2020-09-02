@@ -309,11 +309,7 @@ func CombineResponses(left, right Response) error {
 	if lOK && rOK {
 		return cLeft.combine(cRight)
 	} else if lOK != rOK {
-		// TODO(knz): Simplify to %T when
-		// https://github.com/cockroachdb/cockroach/issues/53207 is
-		// addressed.
-		return errors.Errorf("can not combine %s and %s",
-			errors.Safe(fmt.Sprintf("%T", left)), errors.Safe(fmt.Sprintf("%T", right)))
+		return errors.Errorf("can not combine %T and %T", left, right)
 	}
 	return nil
 }
@@ -606,7 +602,7 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 func (ru *RequestUnion) MustSetInner(args Request) {
 	ru.Reset()
 	if !ru.SetInner(args) {
-		panic(fmt.Sprintf("%T excludes %T", ru, args))
+		panic(errors.AssertionFailedf("%T excludes %T", ru, args))
 	}
 }
 
@@ -616,7 +612,7 @@ func (ru *RequestUnion) MustSetInner(args Request) {
 func (ru *ResponseUnion) MustSetInner(reply Response) {
 	ru.Reset()
 	if !ru.SetInner(reply) {
-		panic(fmt.Sprintf("%T excludes %T", ru, reply))
+		panic(errors.AssertionFailedf("%T excludes %T", ru, reply))
 	}
 }
 
@@ -1360,7 +1356,7 @@ func (b *BulkOpSummary) Add(other BulkOpSummary) {
 func (e *RangeFeedEvent) MustSetValue(value interface{}) {
 	e.Reset()
 	if !e.SetValue(value) {
-		panic(fmt.Sprintf("%T excludes %T", e, value))
+		panic(errors.AssertionFailedf("%T excludes %T", e, value))
 	}
 }
 

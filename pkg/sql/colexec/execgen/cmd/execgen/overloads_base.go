@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // overloadBase and other overload-related structs form a leveled hierarchy
@@ -429,7 +430,7 @@ func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
 		case 64, anyWidth:
 			return "coldata.Int64s"
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected int width %d", width))
+			colexecerror.InternalError(errors.AssertionFailedf("unexpected int width %d", width))
 			// This code is unreachable, but the compiler cannot infer that.
 			return ""
 		}
@@ -442,7 +443,7 @@ func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "coldata.DatumVec"
 	}
-	colexecerror.InternalError(fmt.Sprintf("unsupported canonical type family %s", canonicalTypeFamily))
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported canonical type family %s", canonicalTypeFamily))
 	return ""
 }
 
@@ -845,7 +846,7 @@ func toVecMethod(canonicalTypeFamily types.Family, width int32) string {
 		case 64, anyWidth:
 			return "Int64"
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected width of int type family: %d", width))
+			colexecerror.InternalError(errors.AssertionFailedf("unexpected width of int type family: %d", width))
 		}
 	case types.FloatFamily:
 		return "Float64"
@@ -856,7 +857,7 @@ func toVecMethod(canonicalTypeFamily types.Family, width int32) string {
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "Datum"
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unsupported canonical type family %s", canonicalTypeFamily))
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported canonical type family %s", canonicalTypeFamily))
 	}
 	// This code is unreachable, but the compiler cannot infer that.
 	return ""
@@ -882,7 +883,7 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 		case 64, anyWidth:
 			return "int64"
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected width of int type family: %d", width))
+			colexecerror.InternalError(errors.AssertionFailedf("unexpected width of int type family: %d", width))
 		}
 	case types.FloatFamily:
 		return "float64"
@@ -896,7 +897,7 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 		// different packages (sql/colexec and col/coldata).
 		return "interface{}"
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unsupported canonical type family %s", canonicalTypeFamily))
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported canonical type family %s", canonicalTypeFamily))
 	}
 	// This code is unreachable, but the compiler cannot infer that.
 	return ""

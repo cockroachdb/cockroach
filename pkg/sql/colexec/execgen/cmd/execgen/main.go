@@ -63,7 +63,7 @@ type entry struct {
 
 func registerGenerator(g generator, outputFile, inputFile string) {
 	if _, ok := generators[outputFile]; ok {
-		colexecerror.InternalError(fmt.Sprintf("%s generator already registered", outputFile))
+		colexecerror.InternalError(errors.AssertionFailedf("%s generator already registered", outputFile))
 	}
 	generators[outputFile] = entry{fn: g, inputFile: inputFile}
 }

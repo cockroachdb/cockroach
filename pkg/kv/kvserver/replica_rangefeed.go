@@ -464,7 +464,7 @@ func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
 			// Nothing to do.
 			continue
 		default:
-			panic(fmt.Sprintf("unknown logical op %T", t))
+			panic(errors.AssertionFailedf("unknown logical op %T", t))
 		}
 
 		// Don't read previous values from the reader for operations that are
@@ -538,7 +538,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			// Nothing to do.
 			continue
 		default:
-			panic(fmt.Sprintf("unknown logical op %T", t))
+			panic(errors.AssertionFailedf("unknown logical op %T", t))
 		}
 
 		// Don't read values from the reader for operations that are not needed

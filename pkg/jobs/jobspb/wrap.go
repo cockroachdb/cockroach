@@ -11,11 +11,11 @@
 package jobspb
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/errors"
 )
 
 // Details is a marker interface for job details proto structs.
@@ -67,7 +67,7 @@ func DetailsType(d isPayload_Details) Type {
 	case *Payload_TypeSchemaChange:
 		return TypeTypeSchemaChange
 	default:
-		panic(fmt.Sprintf("Payload.Type called on a payload with an unknown details type: %T", d))
+		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
 }
 
@@ -97,7 +97,7 @@ func WrapProgressDetails(details ProgressDetails) interface {
 	case TypeSchemaChangeProgress:
 		return &Progress_TypeSchemaChange{TypeSchemaChange: &d}
 	default:
-		panic(fmt.Sprintf("WrapProgressDetails: unknown details type %T", d))
+		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
 }
 
@@ -185,7 +185,7 @@ func WrapPayloadDetails(details Details) interface {
 	case TypeSchemaChangeDetails:
 		return &Payload_TypeSchemaChange{TypeSchemaChange: &d}
 	default:
-		panic(fmt.Sprintf("jobs.WrapPayloadDetails: unknown details type %T", d))
+		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
 }
 

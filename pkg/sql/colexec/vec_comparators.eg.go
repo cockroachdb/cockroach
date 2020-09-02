@@ -11,7 +11,6 @@ package colexec
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // vecComparator is a helper for the ordered synchronizer. It stores multiple
@@ -570,7 +570,7 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 			}
 		}
 	}
-	colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
+	colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

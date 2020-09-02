@@ -12,7 +12,6 @@ package colmem
 
 import (
 	"context"
-	"fmt"
 	"time"
 	"unsafe"
 
@@ -228,7 +227,7 @@ func (a *Allocator) NewMemColumn(t *types.T, capacity int) coldata.Vec {
 // NOTE: b must be non-zero length batch.
 func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 	if b.Length() == 0 {
-		colexecerror.InternalError("trying to add a column to zero length batch")
+		colexecerror.InternalError(errors.AssertionFailedf("trying to add a column to zero length batch"))
 	}
 	width := b.Width()
 	if colIdx < width {
@@ -250,14 +249,14 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 			return
 		}
 		// We have a vector with an unexpected type, so we panic.
-		colexecerror.InternalError(errors.Errorf(
+		colexecerror.InternalError(errors.AssertionFailedf(
 			"trying to add a column of %s type at index %d but %s vector already present",
 			t, colIdx, presentType,
 		))
 	} else if colIdx > width {
 		// We have a batch of unexpected width which indicates an error in the
 		// planning stage.
-		colexecerror.InternalError(errors.Errorf(
+		colexecerror.InternalError(errors.AssertionFailedf(
 			"trying to add a column of %s type at index %d but batch has width %d",
 			t, colIdx, width,
 		))
@@ -305,7 +304,7 @@ func (a *Allocator) AdjustMemoryUsage(delta int64) {
 // allocator by (at most) size bytes. size must be non-negative.
 func (a *Allocator) ReleaseMemory(size int64) {
 	if size < 0 {
-		colexecerror.InternalError(fmt.Sprintf("unexpectedly negative size in ReleaseMemory: %d", size))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly negative size in ReleaseMemory: %d", size))
 	}
 	if size > a.acc.Used() {
 		size = a.acc.Used()
@@ -382,7 +381,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			implementationSize, _ := tree.DatumTypeSize(t)
 			acc += int(implementationSize) + sizeOfDatum
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
 		}
 	}
 	// For byte arrays, we initially allocate BytesInitialAllocationFactor

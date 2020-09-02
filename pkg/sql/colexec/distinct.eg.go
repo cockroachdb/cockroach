@@ -51,7 +51,7 @@ func OrderedDistinctColsToOperators(
 		}
 	}
 	if r, ok = input.(ResettableOperator); !ok {
-		colexecerror.InternalError("unexpectedly an ordered distinct is not a resetter")
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly an ordered distinct is not a resetter"))
 	}
 	distinctChain := &distinctChainOps{
 		ResettableOperator: r,

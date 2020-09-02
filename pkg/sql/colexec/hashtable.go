@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // hashTableBuildMode represents different modes in which the hashTable can be
@@ -212,7 +212,7 @@ func newHashTable(
 	if !allowNullEquality && probeMode == hashTableDeletingProbeMode {
 		// At the moment, we don't have a use case for such behavior, so let's
 		// assert that it is not requested.
-		colexecerror.InternalError("hashTableDeletingProbeMode is supported only when null equality is allowed")
+		colexecerror.InternalError(errors.AssertionFailedf("hashTableDeletingProbeMode is supported only when null equality is allowed"))
 	}
 	// This number was chosen after running benchmarks of all users of the hash
 	// table (hash joiner, hash aggregator, unordered distinct). The reasoning
@@ -361,7 +361,7 @@ func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
 		}
 
 	default:
-		colexecerror.InternalError(fmt.Sprintf("hashTable in unhandled state"))
+		colexecerror.InternalError(errors.AssertionFailedf("hashTable in unhandled state"))
 	}
 }
 
@@ -471,7 +471,7 @@ func (ht *hashTable) checkCols(probeVecs []coldata.Vec, nToCheck uint64, probeSe
 			ht.checkColDeleting(probeVecs[i], ht.vals.ColVec(int(keyCol)), i, nToCheck, probeSel)
 		}
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unsupported hash table probe mode: %d", ht.probeMode))
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported hash table probe mode: %d", ht.probeMode))
 	}
 }
 
@@ -590,7 +590,7 @@ func (ht *hashTable) checkBuildForDistinct(
 	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
 ) uint64 {
 	if probeSel == nil {
-		colexecerror.InternalError("invalid selection vector")
+		colexecerror.InternalError(errors.AssertionFailedf("invalid selection vector"))
 	}
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
@@ -619,7 +619,7 @@ func (ht *hashTable) checkBuildForAggregation(
 	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
 ) uint64 {
 	if probeSel == nil {
-		colexecerror.InternalError("invalid selection vector")
+		colexecerror.InternalError(errors.AssertionFailedf("invalid selection vector"))
 	}
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
