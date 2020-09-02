@@ -13,7 +13,6 @@ package kvserver
 import (
 	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -218,14 +217,6 @@ func evaluateBatch(
 		// cantDeferWTOE is set when a WriteTooOldError cannot be deferred past the
 		// end of the current batch.
 		cantDeferWTOE bool
-
-		// The following fields help with debugging #50317.
-		msg              string
-		initialTxnStatus roachpb.TransactionStatus
-	}
-
-	if baHeader.Txn != nil {
-		writeTooOldState.initialTxnStatus = baHeader.Txn.Status
 	}
 
 	for index, union := range baReqs {
@@ -284,7 +275,6 @@ func evaluateBatch(
 				// other concurrent overlapping transactions are forced
 				// through intent resolution and the chances of this batch
 				// succeeding when it will be retried are increased.
-				writeTooOldState.msg += fmt.Sprintf("request %d (%s) got WriteTooOldErr; ", index, args.Method())
 				if writeTooOldState.err != nil {
 					writeTooOldState.err.ActualTimestamp.Forward(
 						tErr.ActualTimestamp)
@@ -398,20 +388,6 @@ func evaluateBatch(
 				header.Txn = nil
 				reply.SetHeader(header)
 			}
-		}
-	}
-
-	if writeTooOldState.err != nil {
-		if baHeader.Txn != nil && baHeader.Txn.Status.IsCommittedOrStaging() {
-			err := errorutil.UnexpectedWithIssueErrorf(
-				50317,
-				"committed txn with writeTooOld; "+
-					"requests: %s, msg: %s, txn: %s, initial txn status: %s, cantDeferErr: %t, err: %s",
-				ba.RequestsSafe(), log.Safe(writeTooOldState.msg), baHeader.Txn,
-				log.Safe(writeTooOldState.initialTxnStatus.String()),
-				writeTooOldState.cantDeferWTOE, writeTooOldState.err)
-			log.Errorf(ctx, "%v", err)
-			errorutil.SendReport(ctx, &rec.ClusterSettings().SV, err)
 		}
 	}
 
