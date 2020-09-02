@@ -692,6 +692,7 @@ func StartTenant(
 		mux := http.NewServeMux()
 		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
 		mux.Handle("/", debugServer)
+		mux.HandleFunc(	"/health", HealthHandler)
 		f := varsHandler{metricSource: args.recorder}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
 		_ = http.Serve(httpL, mux)
@@ -714,6 +715,15 @@ func StartTenant(
 	}
 
 	return pgLAddr, httpLAddr, nil
+}
+
+// HealthHandler simply returns status OK. It may make sense to allow
+// passing ready=1 that checks the liveness of the connection to the KV cluster.
+func HealthHandler(w http.ResponseWriter, req *http.Request) {
+	if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
