@@ -4559,6 +4559,35 @@ SELECT ST_AsEWKT(
 ----
 GEOMETRYCOLLECTION (MULTILINESTRING ((126 156.25, 126 125), (101 150, 90 161), (90 161, 76 175)), MULTILINESTRING EMPTY)
 
+subtest add_point_test
+
+query T
+SELECT
+  ST_AsText(ST_AddPoint(ls::geometry, p::geometry, i))
+FROM ( VALUES
+  ('LINESTRING(0 0, 1 1, 2 2)', 'POINT(5 5)', 0),
+  ('LINESTRING(0 0, 1 1, 2 2)', 'POINT(5 5)', 2),
+  ('LINESTRING(0 0, 1 1, 2 2)', 'POINT(5 5)', 3),
+  ('LINESTRING(0 0, 1 1, 2 2)', 'POINT(5 5)', -1)
+  )
+ t(ls, p, i) ;
+----
+LINESTRING (5 5, 0 0, 1 1, 2 2)
+LINESTRING (0 0, 1 1, 5 5, 2 2)
+LINESTRING (0 0, 1 1, 2 2, 5 5)
+LINESTRING (0 0, 1 1, 2 2, 5 5)
+
+query T
+SELECT
+  ST_AsText(ST_AddPoint(ls::geometry, p::geometry))
+FROM ( VALUES
+  ('LINESTRING(0 0, 1 1, 2 2)', 'POINT(5 5)')
+  )
+ t(ls, p) ;
+----
+LINESTRING (0 0, 1 1, 2 2, 5 5)
+
+
 subtest set_point_test
 
 query T
