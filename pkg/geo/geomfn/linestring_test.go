@@ -19,6 +19,138 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
+func TestAddPoint(t *testing.T) {
+	testCases := []struct {
+		lineString *geom.LineString
+		index      int
+		point      *geom.Point
+		expected   *geom.LineString
+	}{
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      0,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{0, 0, 1, 1, 2, 2}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      1,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{1, 1, 0, 0, 2, 2}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      2,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2, 0, 0}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      -1,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2, 0, 0}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      1,
+			point:      geom.NewPointEmpty(geom.XY),
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{1, 1, 0, 0, 2, 2}),
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			ls, err := geo.MakeGeometryFromGeomT(tc.lineString)
+			require.NoError(t, err)
+
+			p, err := geo.MakeGeometryFromGeomT(tc.point)
+			require.NoError(t, err)
+
+			got, err := AddPoint(ls, tc.index, p)
+			require.NoError(t, err)
+
+			want, err := geo.MakeGeometryFromGeomT(tc.expected)
+			require.NoError(t, err)
+
+			require.Equal(t, want, got)
+			require.EqualValues(t, tc.lineString.SRID(), got.SRID())
+		})
+	}
+
+	errTestCases := []struct {
+		lineString geom.T
+		index      int
+		point      geom.T
+	}{
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      3,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      -2,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+		},
+		{
+			lineString: geom.NewPointFlat(geom.XY, []float64{1, 1}),
+			index:      0,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+		},
+		{
+			lineString: geom.NewPolygonFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3, 1, 1}, []int{8}),
+			index:      0,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+		},
+		{
+			lineString: geom.NewMultiLineStringFlat(geom.XY, []float64{1, 1, 2, 2}, []int{4}),
+			index:      0,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      0,
+			point:      geom.NewLineStringFlat(geom.XY, []float64{3, 3, 4, 4}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      0,
+			point:      geom.NewPolygonFlat(geom.XY, []float64{3, 3, 4, 4, 5, 5, 3, 3}, []int{8}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:      0,
+			point:      geom.NewMultiPointFlat(geom.XY, []float64{3, 3, 4, 4}),
+		},
+		// The below test case deviates from PostGIS behavior, where it is in fact possible to
+		// create a line with a single coordinate via ST_AddPoint, which is probably a bug:
+		//
+		// postgis=# SELECT st_astext(st_addpoint('LINESTRING EMPTY', 'POINT (1 1)'))
+		//
+		//     st_astext
+		// -----------------
+		// LINESTRING(1 1)
+		{
+			lineString: geom.NewLineString(geom.XY),
+			index:      0,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+		},
+	}
+
+	for i, tc := range errTestCases {
+		t.Run(fmt.Sprintf("error-%d", i), func(t *testing.T) {
+			ls, err := geo.MakeGeometryFromGeomT(tc.lineString)
+			require.NoError(t, err)
+
+			p, err := geo.MakeGeometryFromGeomT(tc.point)
+			require.NoError(t, err)
+
+			_, err = AddPoint(ls, tc.index, p)
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestSetPoint(t *testing.T) {
 	testCases := []struct {
 		lineString *geom.LineString

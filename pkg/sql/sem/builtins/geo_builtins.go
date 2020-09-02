@@ -3622,6 +3622,55 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_addpoint": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"line_string", types.Geometry},
+				{"point", types.Geometry},
+				{"index", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				lineString := tree.MustBeDGeometry(args[0])
+				point := tree.MustBeDGeometry(args[1])
+				index := int(tree.MustBeDInt(args[2]))
+
+				ret, err := geomfn.AddPoint(lineString.Geometry, index, point.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Adds a Point to a LineString at the given 0-based index (-1 to append).`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"line_string", types.Geometry},
+				{"point", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				lineString := tree.MustBeDGeometry(args[0])
+				point := tree.MustBeDGeometry(args[1])
+
+				ret, err := geomfn.AddPoint(lineString.Geometry, -1, point.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Adds a Point to the end of a LineString.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_setpoint": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -4454,7 +4503,6 @@ Bottom Left.`,
 	// Unimplemented.
 	//
 
-	"st_addpoint":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48864}),
 	"st_angle":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48866}),
 	"st_asencodedpolyline":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48872}),
 	"st_asgml":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
