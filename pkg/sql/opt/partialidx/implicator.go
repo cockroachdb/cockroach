@@ -128,12 +128,12 @@ type Implicator struct {
 	// constraintCache stores constraints built from atoms. Caching the
 	// constraints prevents building constraints for the same atom multiple
 	// times.
-	constraintCache map[opt.ScalarExpr]constraintResult
+	constraintCache map[opt.ScalarExpr]constraintCacheItem
 }
 
-// constraintResult contains the result of building the constraint for an atom.
+// constraintCacheItem contains the result of building the constraint for an atom.
 // It includes both the constraint and the tight boolean.
-type constraintResult struct {
+type constraintCacheItem struct {
 	c     *constraint.Set
 	tight bool
 }
@@ -144,7 +144,7 @@ func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.Eval
 	im.f = f
 	im.md = md
 	im.evalCtx = evalCtx
-	im.constraintCache = make(map[opt.ScalarExpr]constraintResult)
+	im.constraintCache = make(map[opt.ScalarExpr]constraintCacheItem)
 }
 
 // FiltersImplyPredicate attempts to prove that a partial index predicate is
@@ -277,6 +277,9 @@ func (im *Implicator) scalarExprImpliesPredicate(
 	case *memo.OrExpr:
 		return im.orExprImpliesPredicate(t, pred)
 
+	case *memo.InExpr:
+		return im.inExprImpliesPredicate(t, pred, exactMatches)
+
 	default:
 		return im.atomImpliesPredicate(e, pred, exactMatches)
 	}
@@ -315,7 +318,7 @@ func (im *Implicator) filtersExprImpliesPredicate(
 		//   any of A's children => B
 		//
 		// Here we handle the first part, checking if A implies any of B's
-		// children. The second part is logically equivalent AND => atom
+		// children. The second part is logically equivalent to AND => atom
 		// implication, and is handled after the switch statement.
 		//
 		// Do not pass exactMatches to the recursive call with pt.Left or
@@ -357,8 +360,8 @@ func (im *Implicator) andExprImpliesPredicate(
 	return im.filtersExprImpliesPredicate(&f, pred, exactMatches)
 }
 
-// orExprImpliesPredicate returns true if the FiltersExpr e implies the
-// ScalarExpr pred.
+// orExprImpliesPredicate returns true if the OrExpr e implies the ScalarExpr
+// pred.
 //
 // Note that in all recursive calls within this function, we do not pass
 // exactMatches. See FiltersImplyPredicate (rule #3) for more details.
@@ -411,6 +414,35 @@ func (im *Implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr
 		return im.scalarExprImpliesPredicate(e.Left, pred, nil /* exactMatches */) &&
 			im.scalarExprImpliesPredicate(e.Right, pred, nil /* exactMatches */)
 	}
+}
+
+// inExprImpliesPredicate returns true if the InExpr e implies the ScalarExpr
+// pred. It is similar to atomImpliesPredicate, except that it handles a special
+// case where e is an IN expression and pred is an OR expression, such as:
+//
+//   a IN (1, 2)
+//   =>
+//   a = 1 OR a = 2
+//
+// Bespoke logic for IN filters and OR predicates in this form is required
+// because the OrExpr must be considered as a single atomic unit in order to
+// prove that the InExpr implies it. If the OrExpr was not treated as an atom,
+// then (a = 1) and (a = 2) are considered individually. Neither expression
+// individually contains (a IN (1, 2)), so implication could not be proven.
+//
+// If pred is not an OrExpr, it falls-back to treating pred as a non-atom and
+// calls atomImpliesPredicate.
+func (im *Implicator) inExprImpliesPredicate(
+	e *memo.InExpr, pred opt.ScalarExpr, exactMatches exprSet,
+) bool {
+	// If pred is an OrExpr, treat it as an atom.
+	if pt, ok := pred.(*memo.OrExpr); ok {
+		return im.atomImpliesAtom(e, pt, exactMatches)
+	}
+
+	// If pred is not an OrExpr, then fallback to standard atom-filter
+	// implication.
+	return im.atomImpliesPredicate(e, pred, exactMatches)
 }
 
 // atomImpliesPredicate returns true if the atom expression e implies the
@@ -514,7 +546,7 @@ func (im *Implicator) atomImpliesAtom(
 	// predConstraint.
 	if predConstraint.Contains(im.evalCtx, eConstraint) {
 		// If the constraints contain each other, then they are semantically
-		// equal and the filter atom can be removed from the remaining filters.
+		// equivalent and the filter atom can be removed from the remaining filters.
 		// For example:
 		//
 		//   (a::INT > 17)
@@ -618,7 +650,7 @@ func (im *Implicator) twoVarComparisonImpliesTwoVarComparison(
 // scalar expression.
 func (im *Implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight bool) {
 	if _, ok := im.constraintCache[e]; !ok {
-		im.constraintCache[e] = constraintResult{
+		im.constraintCache[e] = constraintCacheItem{
 			c:     c,
 			tight: tight,
 		}
