@@ -112,7 +112,7 @@ func (dsp *DistSQLPlanner) createPlanForInterleavedJoin(
 			return nil, err
 		}
 		if filter != nil {
-			if err := plans[i].AddFilter(filter, planCtx, plan.PlanToStreamColMap); err != nil {
+			if err := plans[i].AddFilter(filter, planCtx, plans[i].PlanToStreamColMap); err != nil {
 				return nil, err
 			}
 		}
