@@ -557,7 +557,7 @@ func (r *Replica) executeAdminBatch(
 	// NB: we pass nil for the spanlatch guard because we haven't acquired
 	// latches yet. This is ok because each individual request that the admin
 	// request sends will acquire latches.
-	if err := r.checkExecutionCanProceed(ctx, ba, nil /* g */, &status); err != nil {
+	if _, err := r.checkExecutionCanProceed(ctx, ba, nil /* g */, &status); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 

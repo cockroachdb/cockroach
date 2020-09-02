@@ -904,12 +904,6 @@ func (r *Replica) getMergeCompleteChRLocked() chan struct{} {
 	return r.mu.mergeComplete
 }
 
-func (r *Replica) mergeInProgress() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mergeInProgressRLocked()
-}
-
 func (r *Replica) mergeInProgressRLocked() bool {
 	return r.mu.mergeComplete != nil
 }
@@ -1119,36 +1113,44 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 // the Range.
 //
 // The method accepts a concurrency Guard, which is used to indicate whether the
-// caller has acquired latches. The method will only check for a pending merge
-// if this condition is true. Callers might be ok with this if they know that
-// they will end up checking for a pending merge at some later time.
+// caller has acquired latches. When this condition is false, the batch request
+// will not wait for a pending merge to conclude before proceeding. Callers might
+// be ok with this if they know that they will end up checking for a pending
+// merge at some later time.
+//
+// NB: We record and return the result of `mergeInProgress()` here because we use
+// it to assert that no request that bumps the LeaseAppliedIndex of a range is
+// proposed to Raft while a range is subsumed. This is a correctness invariant
+// for range merges. See comment block inside Subsume() in cmd_subsume.go for
+// more details.
 func (r *Replica) checkExecutionCanProceed(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, st *kvserverpb.LeaseStatus,
-) error {
+) (bool, error) {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
-		return err
+		return false, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	mergeInProgress := r.mergeInProgressRLocked()
 	if _, err := r.isDestroyedRLocked(); err != nil {
-		return err
+		return mergeInProgress, err
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
-		return err
+		return mergeInProgress, err
 	} else if err := r.checkTSAboveGCThresholdRLocked(
 		ba.EarliestActiveTimestamp(), st, ba.IsAdmin(),
 	); err != nil {
-		return err
-	} else if g.HoldingLatches() {
-		// Only check for a pending merge if latches are held.
-		//
-		// In practice, this means that any request where
-		// concurrency.shouldAcquireLatches() == false (e.g. RequestLeaseRequests)
-		// will not check for a pending merge before executing and, as such, can
-		// execute while a range is in a merge's critical phase.
-		return r.checkForPendingMergeRLocked(ba)
+		return mergeInProgress, err
+	} else if mergeInProgress && g.HoldingLatches() {
+		// We only call `shouldWaitForPendingMergeRLocked` if we're currently holding
+		// latches. In practice, this means that any request where
+		// concurrency.shouldAcquireLatches() == false (e.g. RequestLeaseRequests) will
+		// not wait for a pending merge before executing and, as such, can execute while
+		// a range is in a merge's critical phase (i.e. while the RHS of the merge is
+		// subsumed).
+		return mergeInProgress, r.shouldWaitForPendingMergeRLocked(ctx, ba)
 	}
-	return nil
+	return mergeInProgress, nil
 }
 
 // checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request
@@ -1202,18 +1204,23 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 	}
 }
 
-// checkForPendingMergeRLocked determines whether the replica is being merged
-// into its left-hand neighbor. If so, an error is returned to prevent the
-// request from proceeding until the merge completes.
-func (r *Replica) checkForPendingMergeRLocked(ba *roachpb.BatchRequest) error {
-	if r.getMergeCompleteChRLocked() == nil {
+// shouldWaitForPendingMergeRLocked determines whether the given batch request
+// should wait for an on-going merge to conclude before being allowed to proceed.
+// If not, an error is returned to prevent the request from proceeding until the
+// merge completes.
+func (r *Replica) shouldWaitForPendingMergeRLocked(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) error {
+	if !r.mergeInProgressRLocked() {
+		log.Fatal(ctx, "programming error: shouldWaitForPendingMergeRLocked should"+
+			" only be called when a range merge is in progress")
 		return nil
 	}
+
 	if ba.IsSingleSubsumeRequest() {
 		return nil
 	}
 
-	// The range is being merged into its left-hand neighbor.
 	if ba.IsReadOnly() {
 		freezeStart := r.getFreezeStartRLocked()
 		ts := ba.Timestamp
@@ -1240,7 +1247,7 @@ func (r *Replica) checkForPendingMergeRLocked(ba *roachpb.BatchRequest) error {
 			// before the `mergeCompleteCh` channel is removed. Let's say the read
 			// timestamp of this request is X (with X <= freezeStart), and let's
 			// denote its uncertainty interval by [X, Y).
-			// 3. By the time this request reaches `checkForPendingMergeRLocked`, the
+			// 3. By the time this request reaches `shouldWaitForPendingMergeRLocked`, the
 			// merge has committed so all subsequent requests are directed to the
 			// leaseholder of the (subsuming) left-hand range but this pre-merge range
 			// hasn't been destroyed yet.
