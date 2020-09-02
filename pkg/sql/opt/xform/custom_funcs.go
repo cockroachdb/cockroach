@@ -1563,7 +1563,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if !joinPrivate.Flags.Has(memo.AllowMergeJoin) {
+	if joinPrivate.Flags.Has(memo.DisallowMergeJoin) {
 		return
 	}
 
@@ -1701,7 +1701,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if !joinPrivate.Flags.Has(memo.AllowLookupJoinIntoRight) {
+	if joinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return
 	}
 	md := c.e.mem.Metadata()
@@ -1916,7 +1916,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if !joinPrivate.Flags.Has(memo.AllowLookupJoinIntoRight) {
+	if joinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return
 	}
 
