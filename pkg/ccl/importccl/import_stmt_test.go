@@ -954,7 +954,7 @@ END;
 			typ:  "PGDUMP",
 			data: `
 				CREATE TABLE t (a INT8 PRIMARY KEY, b INT8);
-				ALTER TABLE t ALTER COLUMN a SET NOT NULL;
+				ALTER TABLE t ALTER COLUMN b SET NOT NULL;
 			`,
 			query: map[string][][]string{
 				`SHOW CREATE TABLE t`: {
@@ -962,14 +962,34 @@ END;
 						"t",
 						`CREATE TABLE public.t (
 	a INT8 NOT NULL,
-	b INT8 NULL,
+	b INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 )`,
 					},
 				},
 			},
-			skipIssue: 51811,
+		},
+		{
+			name: "ALTER COLUMN x SET DEFAULT",
+			typ:  "PGDUMP",
+			data: `
+				CREATE TABLE t (a INT8 PRIMARY KEY, b INT8);
+				ALTER TABLE t ALTER COLUMN b SET DEFAULT 8;
+			`,
+			query: map[string][][]string{
+				`SHOW CREATE TABLE t`: {
+					{
+						"t",
+						`CREATE TABLE public.t (
+	a INT8 NOT NULL,
+	b INT8 NULL DEFAULT 8:::INT8,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	FAMILY "primary" (a, b)
+)`,
+					},
+				},
+			},
 		},
 		{
 			name: "non-public schema",
