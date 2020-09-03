@@ -619,11 +619,16 @@ func (jr *joinReader) GetBytesRead() int64 {
 	return jr.fetcher.GetBytesRead()
 }
 
+// GetRowsRead is part of the execinfra.IOReader interface.
+func (jr *joinReader) GetRowsRead() int64 {
+	return jr.rowsRead
+}
+
 func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
-	meta.Metrics.RowsRead = jr.rowsRead
+	meta.Metrics.RowsRead = jr.GetRowsRead()
 	meta.Metrics.BytesRead = jr.GetBytesRead()
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta,

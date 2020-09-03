@@ -172,7 +172,7 @@ func changefeedPlanHook(
 		targetDescs, _, err := backupccl.ResolveTargetsToDescriptors(
 			ctx, p, statementTime, &changefeedStmt.Targets)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
 		}
 		for _, desc := range targetDescs {
 			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {

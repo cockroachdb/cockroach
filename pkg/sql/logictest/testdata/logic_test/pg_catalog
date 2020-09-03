@@ -2706,3 +2706,13 @@ query T
 SELECT attname FROM pg_attribute WHERE attrelid = $testid LIMIT 1
 ----
 x
+
+# Regression test for #53854.
+statement ok
+SELECT
+  t.typname, t.oid
+FROM
+  pg_catalog.pg_type AS t JOIN pg_catalog.pg_namespace AS n ON t.typnamespace = n.oid
+WHERE
+  n.nspname != 'pg_toast'
+  AND (t.typrelid = 0 OR (SELECT c.relkind = 'c' FROM pg_catalog.pg_class AS c WHERE c.oid = t.typrelid))

@@ -23,4 +23,6 @@ type OpNode interface {
 type IOReader interface {
 	// GetBytesRead returns the number of bytes read from disk by this operator.
 	GetBytesRead() int64
+	// GetRowsRead returns the number of rows read from disk by this operator.
+	GetRowsRead() int64
 }
