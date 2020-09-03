@@ -281,8 +281,7 @@ func (r fkResolver) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 // Implements the sql.SchemaResolver interface.
 func (r fkResolver) ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags {
 	return tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
-		RequireMutable:    requireMutable,
+		CommonLookupFlags: tree.CommonLookupFlags{Required: required, RequireMutable: requireMutable},
 	}
 }
 

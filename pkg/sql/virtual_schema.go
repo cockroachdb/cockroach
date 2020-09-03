@@ -460,9 +460,7 @@ func (e virtualDefEntry) getPlanInfo(
 		if dbName != "" {
 			dbDescI, err := p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec,
 				dbName, tree.DatabaseLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required: true, AvoidCached: p.avoidCachedDescriptors,
-					},
+					Required: true, AvoidCached: p.avoidCachedDescriptors,
 				})
 			if err != nil {
 				return nil, err
