@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -61,7 +60,11 @@ well unless it can be verified using a trusted root certificate store. That is,
 func runStartSQL(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	const clusterName = ""
-	stopper := stop.NewStopper()
+
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd)
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop(ctx)
 
 	st := serverCfg.BaseConfig.Settings
