@@ -851,7 +851,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 		if nodeID != 0 {
 			c.Set(context.Background(), nodeID)
 		}
-		dbCtx.NodeID = base.NewSQLIDContainer(0, &c, true /* exposed */)
+		dbCtx.NodeID = base.NewSQLIDContainer(0, &c)
 
 		db := kv.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
 		return db

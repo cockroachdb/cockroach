@@ -96,7 +96,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	newRegistry := func(id roachpb.NodeID) *jobs.Registry {
 		var c base.NodeIDContainer
 		c.Set(ctx, id)
-		idContainer := base.NewSQLIDContainer(0, &c, true /* exposed */)
+		idContainer := base.NewSQLIDContainer(0, &c)
 		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
 		sqlStorage := slstorage.NewStorage(
 			s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor), s.ClusterSettings(),
