@@ -140,9 +140,8 @@ type sqlServerArgs struct {
 	// other things.
 	clock *hlc.Clock
 
-	// DistSQLCfg holds on to this to check for node CPU utilization in
-	// samplerProcessor.
-	runtime execinfra.RuntimeStats
+	// The RuntimeStatSampler provides metrics data to the recorder.
+	runtime *status.RuntimeStatSampler
 
 	// DistSQL uses rpcContext to set up flows. Less centrally, the executor
 	// also uses rpcContext in a number of places to learn whether the server
