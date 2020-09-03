@@ -13,7 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -31,13 +30,22 @@ import (
 var restoreDataOutputTypes = []*types.T{}
 
 type restoreDataProcessor struct {
+	execinfra.ProcessorBase
+
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.RestoreDataSpec
 	input   execinfra.RowSource
 	output  execinfra.RowReceiver
+
+	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+	alloc  rowenc.DatumAlloc
+	kr     *storageccl.KeyRewriter
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
+var _ execinfra.RowSource = &restoreDataProcessor{}
+
+const restoreDataProcName = "restoreDataProcessor"
 
 // OutputTypes implements the execinfra.Processor interface.
 func (rd *restoreDataProcessor) OutputTypes() []*types.T {
@@ -46,8 +54,9 @@ func (rd *restoreDataProcessor) OutputTypes() []*types.T {
 
 func newRestoreDataProcessor(
 	flowCtx *execinfra.FlowCtx,
-	_ int32,
+	processorID int32,
 	spec execinfrapb.RestoreDataSpec,
+	post *execinfrapb.PostProcessSpec,
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
@@ -57,87 +66,82 @@ func newRestoreDataProcessor(
 		spec:    spec,
 		output:  output,
 	}
-	return rd, nil
-}
 
-// Run implements the execinfra.Processor interface.
-func (rd *restoreDataProcessor) Run(ctx context.Context) {
-	ctx, span := tracing.ChildSpan(ctx, "restoreDataProcessor")
-	defer tracing.FinishSpan(span)
-	defer rd.output.ProducerDone()
-
-	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
+	var err error
+	rd.kr, err = storageccl.MakeKeyRewriterFromRekeys(rd.spec.Rekeys)
+	if err != nil {
+		return nil, err
+	}
 
 	// We don't have to worry about this go routine leaking because next we loop over progCh
 	// which is closed only after the goroutine returns.
-	var err error
-	go func() {
-		defer close(progCh)
-		err = runRestoreData(ctx, rd.flowCtx, &rd.spec, rd.input, progCh)
-	}()
+	rd.progCh = make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
-	for prog := range progCh {
-		// Take a copy so that we can send the progress address to the output processor.
-		p := prog
-		rd.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
+	if err := rd.Init(rd, post, rd.OutputTypes(), flowCtx, processorID, output, nil, /* memMonitor */
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{input},
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+				rd.close()
+				return nil
+			},
+		}); err != nil {
+		return nil, err
 	}
-
-	if err != nil {
-		rd.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
-		return
-	}
+	return rd, nil
 }
 
-func runRestoreData(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	spec *execinfrapb.RestoreDataSpec,
-	input execinfra.RowSource,
-	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-) error {
-	input.Start(ctx)
-	kr, err := storageccl.MakeKeyRewriterFromRekeys(spec.Rekeys)
-	if err != nil {
-		return err
-	}
+// Start is part of the RowSource interface.
+func (rd *restoreDataProcessor) Start(ctx context.Context) context.Context {
+	rd.input.Start(ctx)
+	return rd.StartInternal(ctx, restoreDataProcName)
+}
 
-	alloc := &rowenc.DatumAlloc{}
-	for {
+// Next is part of the RowSource interface.
+func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	for rd.State == execinfra.StateRunning {
 		// We read rows from the SplitAndScatter processor. We expect each row to
 		// contain 2 columns. The first is used to route the row to this processor,
 		// and the second contains the RestoreSpanEntry that we're interested in.
-		row, meta := input.Next()
+		row, meta := rd.input.Next()
 		if meta != nil {
-			return errors.Newf("unexpected metadata %+v", meta)
+			if meta.Err != nil {
+				rd.MoveToDraining(nil /* err */)
+			}
+			return nil, meta
 		}
 		if row == nil {
-			// Done.
+			rd.MoveToDraining(nil /* err */)
 			break
 		}
 
 		if len(row) != 2 {
-			return errors.New("expected input rows to have exactly 2 columns")
+			rd.MoveToDraining(errors.New("expected input rows to have exactly 2 columns"))
+			break
 		}
-		if err := row[1].EnsureDecoded(types.Bytes, alloc); err != nil {
-			return err
+		if err := row[1].EnsureDecoded(types.Bytes, &rd.alloc); err != nil {
+			rd.MoveToDraining(err)
+			break
 		}
 		datum := row[1].Datum
 		entryDatumBytes, ok := datum.(*tree.DBytes)
 		if !ok {
-			return errors.AssertionFailedf(`unexpected datum type %T: %+v`, datum, row)
+			rd.MoveToDraining(errors.AssertionFailedf(`unexpected datum type %T: %+v`, datum, row))
+			break
 		}
 
 		var entry execinfrapb.RestoreSpanEntry
 		if err := protoutil.Unmarshal([]byte(*entryDatumBytes), &entry); err != nil {
-			return errors.Wrap(err, "un-marshaling restore span entry")
+			rd.MoveToDraining(errors.Wrap(err, "un-marshaling restore span entry"))
+			break
 		}
 
-		newSpanKey, err := rewriteBackupSpanKey(kr, entry.Span.Key)
+		newSpanKey, err := rewriteBackupSpanKey(rd.kr, entry.Span.Key)
 		if err != nil {
-			return errors.Wrap(err, "re-writing span key to import")
+			rd.MoveToDraining(errors.Wrap(err, "re-writing span key to import"))
+			break
 		}
 
-		log.VEventf(ctx, 1 /* level */, "importing span %v", entry.Span)
+		log.VEventf(rd.Ctx, 1 /* level */, "importing span %v", entry.Span)
 		importRequest := &roachpb.ImportRequest{
 			// Import is a point request because we don't want DistSender to split
 			// it. Assume (but don't require) the entire post-rewrite span is on the
@@ -145,31 +149,41 @@ func runRestoreData(
 			RequestHeader: roachpb.RequestHeader{Key: newSpanKey},
 			DataSpan:      entry.Span,
 			Files:         entry.Files,
-			EndTime:       spec.RestoreTime,
-			Rekeys:        spec.Rekeys,
-			Encryption:    spec.Encryption,
+			EndTime:       rd.spec.RestoreTime,
+			Rekeys:        rd.spec.Rekeys,
+			Encryption:    rd.spec.Encryption,
 		}
 
-		importRes, pErr := kv.SendWrapped(ctx, flowCtx.Cfg.DB.NonTransactionalSender(), importRequest)
+		importRes, pErr := kv.SendWrapped(rd.Ctx, rd.flowCtx.Cfg.DB.NonTransactionalSender(), importRequest)
 		if pErr != nil {
-			return errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan)
+			rd.MoveToDraining(errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan))
+			break
 		}
 
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		progDetails := RestoreProgress{}
-		progDetails.Summary = countRows(importRes.(*roachpb.ImportResponse).Imported, spec.PKIDs)
+		progDetails.Summary = countRows(importRes.(*roachpb.ImportResponse).Imported, rd.spec.PKIDs)
 		progDetails.ProgressIdx = entry.ProgressIdx
 		progDetails.DataSpan = entry.Span
 		details, err := gogotypes.MarshalAny(&progDetails)
 		if err != nil {
-			return err
+			rd.MoveToDraining(err)
+			break
 		}
 		prog.ProgressDetails = *details
-		progCh <- prog
-		log.VEventf(ctx, 1 /* level */, "imported span %v", entry.Span)
+		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 	}
 
-	return nil
+	return nil, rd.DrainHelper()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (rd *restoreDataProcessor) ConsumerClosed() {
+	rd.close()
+}
+
+func (rd *restoreDataProcessor) close() {
+	rd.InternalClose()
 }
 
 func init() {
