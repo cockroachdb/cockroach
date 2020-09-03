@@ -815,6 +815,7 @@ func init() {
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 
 		stringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
+		varFlag(f, &startCtx.logDir, cliflags.LogDir)
 	}
 }
 
