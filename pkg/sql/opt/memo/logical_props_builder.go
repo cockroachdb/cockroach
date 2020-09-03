@@ -295,7 +295,7 @@ func (b *logicalPropsBuilder) buildInvertedFilterProps(
 	// Output Columns
 	// --------------
 	// Inherit output columns from input, but remove the inverted column.
-	rel.OutputCols = inputProps.OutputCols
+	rel.OutputCols = inputProps.OutputCols.Copy()
 	rel.OutputCols.Remove(invFilter.InvertedColumn)
 
 	// Not Null Columns
