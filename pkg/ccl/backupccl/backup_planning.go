@@ -562,7 +562,7 @@ func backupPlanHook(
 
 		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 		}
 
 		var tables []catalog.TableDescriptor

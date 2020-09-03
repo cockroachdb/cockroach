@@ -49,9 +49,9 @@ type ColBatchScan struct {
 	limitHint   int64
 	parallelize bool
 	ctx         context.Context
-	// rowsRead contains the number of total rows this colBatchScan has returned
+	// rowsRead contains the number of total rows this ColBatchScan has returned
 	// so far.
-	rowsRead int
+	rowsRead int64
 	// init is true after Init() has been called.
 	init bool
 	// ResultTypes is the slice of resulting column types from this operator.
@@ -83,7 +83,7 @@ func (s *ColBatchScan) Next(ctx context.Context) coldata.Batch {
 	if bat.Selection() != nil {
 		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly a selection vector is set on the batch coming from CFetcher"))
 	}
-	s.rowsRead += bat.Length()
+	s.rowsRead += int64(bat.Length())
 	return bat
 }
 
@@ -111,7 +111,7 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
-	meta.Metrics.RowsRead = int64(s.rowsRead)
+	meta.Metrics.RowsRead = s.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
 }
@@ -119,6 +119,11 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 // GetBytesRead is part of the execinfra.IOReader interface.
 func (s *ColBatchScan) GetBytesRead() int64 {
 	return s.rf.fetcher.GetBytesRead()
+}
+
+// GetRowsRead is part of the execinfra.IOReader interface.
+func (s *ColBatchScan) GetRowsRead() int64 {
+	return s.rowsRead
 }
 
 // NewColBatchScan creates a new ColBatchScan operator.

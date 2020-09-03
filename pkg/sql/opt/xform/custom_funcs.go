@@ -1042,8 +1042,10 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// The Scan operator always goes in a new group, since it's always nested
 		// underneath the IndexJoin. The IndexJoin may also go into its own group,
 		// if there's a remaining filter above it.
-		// TODO(justin): We might not need to do an index join in order to get the
-		// correct columns, but it's difficult to tell at this point.
+		// TODO(mgartner): We don't always need to create an index join. The
+		// index join will be removed by EliminateIndexJoinInsideProject, but
+		// it'd be more efficient to not create the index join in the first
+		// place.
 		sb.setScan(&newScanPrivate)
 
 		// Add an inverted filter if it exists.

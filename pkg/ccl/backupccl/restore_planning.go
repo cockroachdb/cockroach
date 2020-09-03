@@ -1396,7 +1396,9 @@ func doRestorePlan(
 
 	sqlDescs, restoreDBs, tenants, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
-		return err
+		return errors.Wrap(err,
+			"failed to resolve targets in the BACKUP location specified by the RESTORE stmt, "+
+				"use SHOW BACKUP to find correct targets")
 	}
 
 	if len(tenants) > 0 {

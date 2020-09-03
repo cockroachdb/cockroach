@@ -33,7 +33,7 @@ public
 exec-sql
 BACKUP TABLE temp_table TO 'nodelocal://0/temp_table_backup'
 ----
-pq: table "temp_table" does not exist
+pq: failed to resolve targets specified in the BACKUP stmt: table "temp_table" does not exist
 
 exec-sql
 BACKUP DATABASE d1 TO 'nodelocal://0/d1_backup/'

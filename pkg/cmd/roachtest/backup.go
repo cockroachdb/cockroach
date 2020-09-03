@@ -57,9 +57,6 @@ func registerBackup(r *testRegistry) {
 			"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
 			fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
 		}
-		if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
-			importArgs = append(importArgs, "--deprecated-fk-indexes")
-		}
 		c.Run(ctx, c.Node(1), importArgs...)
 
 		return dest
@@ -228,11 +225,14 @@ func registerBackup(r *testRegistry) {
 			incDir := backupDir + "/inc"
 
 			t.Status(`workload initialization`)
-			cmd := fmt.Sprintf(
+			cmd := []string{fmt.Sprintf(
 				"./workload init tpcc --warehouses=%d {pgurl:1-%d}",
 				warehouses, c.spec.NodeCount,
-			)
-			c.Run(ctx, c.Node(1), cmd)
+			)}
+			if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+				cmd = append(cmd, "--deprecated-fk-indexes")
+			}
+			c.Run(ctx, c.Node(1), cmd...)
 
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {

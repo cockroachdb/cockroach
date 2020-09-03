@@ -1497,18 +1497,14 @@ output row: [9 3 3 '33']
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
-·                distribution         local       ·          ·
-·                vectorized           true        ·          ·
-project          ·                    ·           (a)        ·
- │               estimated row count  3           ·          ·
- └── index join  ·                    ·           (a, b, s)  ·
-      │          estimated row count  3           ·          ·
-      │          table                t2@primary  ·          ·
-      │          key columns          a           ·          ·
-      └── scan   ·                    ·           (a, b)     ·
-·                estimated row count  3           ·          ·
-·                table                t2@bc       ·          ·
-·                spans                /2-/3       ·          ·
+·          distribution         local  ·       ·
+·          vectorized           true   ·       ·
+project    ·                    ·      (a)     ·
+ │         estimated row count  3      ·       ·
+ └── scan  ·                    ·      (a, b)  ·
+·          estimated row count  3      ·       ·
+·          table                t2@bc  ·       ·
+·          spans                /2-/3  ·       ·
 
 statement ok
 CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
