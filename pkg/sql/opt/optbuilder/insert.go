@@ -680,8 +680,8 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	// TODO(andyk): do we need to do more here?
 	mb.outScope.ordering = nil
 
-	// Loop again over each UNIQUE index, potentially creating a left join +
-	// filter for each one.
+	// Loop over each arbiter index, potentially creating a left join + filter
+	// for each one.
 	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 		// Skip non-arbiter indexes.
 		if !arbiterIndexes.Contains(idx) {
