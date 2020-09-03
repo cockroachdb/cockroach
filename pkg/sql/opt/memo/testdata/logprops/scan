@@ -323,3 +323,77 @@ project
       ├── fd: ()-->(3), (1)-->(2,4)
       ├── prune: (1-4)
       └── interesting orderings: (+1) (+3,+2,+1)
+
+# Test partial index scan functional dependencies.
+
+exec-ddl
+CREATE TABLE c (
+    k INT PRIMARY KEY,
+    x INT NOT NULL,
+    y INT,
+    s STRING,
+    UNIQUE (x) WHERE s = 'foo',
+    UNIQUE (y) WHERE s = 'bar'
+)
+----
+
+# Do not build table function dependency keys from partial index columns.
+build
+SELECT k FROM c
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ └── scan c
+      ├── columns: k:1(int!null) x:2(int!null) y:3(int) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
+      ├── partial index predicates
+      │    ├── secondary: filters
+      │    │    └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      │    │         ├── variable: s:4 [type=string]
+      │    │         └── const: 'foo' [type=string]
+      │    └── secondary: filters
+      │         └── eq [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar']; tight), fd=()-->(4)]
+      │              ├── variable: s:4 [type=string]
+      │              └── const: 'bar' [type=string]
+      ├── key: (1)
+      ├── fd: (1)-->(2-5)
+      ├── prune: (1-5)
+      └── interesting orderings: (+1) (+2) (+3,+1)
+
+# Add a strict key for partial index scan functional dependencies. (x)-->(k)
+# should be in the fds.
+opt
+SELECT * FROM c WHERE s = 'foo'
+----
+index-join c
+ ├── columns: k:1(int!null) x:2(int!null) y:3(int) s:4(string!null)
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── prune: (1-3)
+ ├── interesting orderings: (+1) (+2) (+3,+1)
+ └── scan c@secondary,partial
+      ├── columns: k:1(int!null) x:2(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(1)
+      ├── prune: (1,2)
+      └── interesting orderings: (+1) (+2)
+
+# Add a lax key for partial index scan functional dependencies when the key can
+# be null. (y)~~>(k) should be in the fds.
+opt
+SELECT * FROM c WHERE s = 'bar'
+----
+index-join c
+ ├── columns: k:1(int!null) x:2(int!null) y:3(int) s:4(string!null)
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── prune: (1-3)
+ ├── interesting orderings: (+1) (+2) (+3,+1)
+ └── scan c@secondary,partial
+      ├── columns: k:1(int!null) y:3(int)
+      ├── key: (1)
+      ├── fd: (1)-->(3), (3)~~>(1)
+      ├── prune: (1,3)
+      └── interesting orderings: (+1) (+3,+1)
