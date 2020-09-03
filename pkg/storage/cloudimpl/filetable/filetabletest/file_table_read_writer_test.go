@@ -49,7 +49,7 @@ func uploadFile(
 	randutil.ReadTestdataBytes(randGen, data)
 
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		writer, err := ft.NewFileWriter(ctx, filename, chunkSize, txn)
+		writer, err := ft.NewFileWriter(ctx, filename, chunkSize)
 		if err != nil {
 			return err
 		}
@@ -210,13 +210,28 @@ func TestReadWriteFile(t *testing.T) {
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
 	}
 
-	t.Run("file-already-exists", func(t *testing.T) {
+	t.Run("can-overwrite-file", func(t *testing.T) {
 		_, err = uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter, kvDB)
 		require.NoError(t, err)
 
-		// Upload the same file again, and expect a PK violation.
-		_, err = uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter, kvDB)
-		require.Error(t, err)
+		// Upload the same file again, and expect the old one to be overwritten.
+		expected, err := uploadFile(ctx, testFileName, 12, 2, fileTableReadWriter, kvDB)
+		require.NoError(t, err)
+
+		// Check size.
+		size, err := fileTableReadWriter.FileSize(ctx, testFileName)
+		require.NoError(t, err)
+		require.Equal(t, size, int64(12))
+
+		// Check content.
+		require.True(t, isContentEqual(testFileName, expected, fileTableReadWriter))
+
+		// Check chunking and metadata entry.
+		checkMetadataEntryExists(ctx, t, fileTableReadWriter.GetFQFileTableName(), testFileName,
+			sqlDB)
+		expectedNumChunks := (12 / 2) + (12 % 2)
+		checkNumberOfPayloadChunks(ctx, t, fileTableReadWriter.GetFQFileTableName(),
+			fileTableReadWriter.GetFQPayloadTableName(), testFileName, expectedNumChunks, sqlDB)
 
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
 	})
@@ -245,7 +260,7 @@ func TestReadWriteFile(t *testing.T) {
 		randutil.ReadTestdataBytes(randGen, data)
 
 		err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			writer, err := fileTableReadWriter.NewFileWriter(ctx, testFileName, chunkSize, txn)
+			writer, err := fileTableReadWriter.NewFileWriter(ctx, testFileName, chunkSize)
 			if err != nil {
 				return err
 			}
