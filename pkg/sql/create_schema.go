@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
@@ -51,6 +52,10 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	// Users cannot create schemas within the system database.
 	if db.ID == keys.SystemDatabaseID {
 		return pgerror.New(pgcode.InvalidObjectDefinition, "cannot create schemas in the system database")
+	}
+
+	if err := p.CheckPrivilege(params.ctx, db, privilege.CREATE); err != nil {
+		return err
 	}
 
 	schemaName := n.Schema
