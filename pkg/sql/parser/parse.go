@@ -229,11 +229,31 @@ func Parse(sql string) (Statements, error) {
 // single statement, and returns that Statement. ParseOne will always
 // interpret the INT and SERIAL types as 64-bit types, since this is
 // used in various internal-execution paths where we might receive
-// bits of SQL from other nodes. In general, we expect that all
+// bits of SQL from other nodes. In general,earwe expect that all
 // user-generated SQL has been run through the ParseWithInt() function.
 func ParseOne(sql string) (Statement, error) {
 	var p Parser
 	return p.parseOneWithDepth(1, sql)
+}
+
+// HasMultipleStatements returns true if the sql string contains more than one
+// statements.
+func HasMultipleStatements(sql string) bool {
+	var p Parser
+	p.scanner.init(sql)
+	defer p.scanner.cleanup()
+	count := 0
+	for {
+		_, _, done := p.scanOneStmt()
+		if done {
+			break
+		}
+		count++
+		if count > 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseQualifiedTableName parses a SQL string of the form
