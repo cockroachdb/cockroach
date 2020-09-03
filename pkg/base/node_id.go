@@ -155,18 +155,6 @@ func (c *SQLIDContainer) SQLInstanceID() SQLInstanceID {
 	return c.sqlInstanceID
 }
 
-// Get is a temporary method to aid refactoring.
-//
-// TODO(tbg): remove.
-func (c *SQLIDContainer) Get() roachpb.NodeID {
-	// Silence staticcheck.
-	var _ = (*SQLIDContainer)(nil).OptionalNodeID
-	var _ = (*SQLIDContainer)(nil).OptionalNodeIDErr
-	var _ = (*SQLIDContainer)(nil).SQLInstanceID
-	return c.DeprecatedNodeID(-12131415)
-
-}
-
 // TestingIDContainer is an SQLIDContainer with hard-coded SQLInstanceID of 10 and
 // NodeID of 1.
 var TestingIDContainer = func() *SQLIDContainer {
