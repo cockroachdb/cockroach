@@ -24,6 +24,7 @@ func TestDepWhitelist(t *testing.T) {
 	// set of deps, run it by danhhz first.
 	buildutil.VerifyTransitiveWhitelist(t, "github.com/cockroachdb/cockroach/pkg/workload",
 		[]string{
+			`github.com/cockroachdb/cockroach/pkg/build`,
 			`github.com/cockroachdb/cockroach/pkg/col/coldata`,
 			`github.com/cockroachdb/cockroach/pkg/col/coltypes`,
 			`github.com/cockroachdb/cockroach/pkg/util/arith`,
@@ -33,6 +34,7 @@ func TestDepWhitelist(t *testing.T) {
 			`github.com/cockroachdb/cockroach/pkg/util/stacktrace`,
 			`github.com/cockroachdb/cockroach/pkg/util/syncutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/timeutil`,
+			`github.com/cockroachdb/cockroach/pkg/util/version`,
 			`github.com/cockroachdb/cockroach/pkg/workload/histogram`,
 			// TODO(dan): These really shouldn't be used in util packages, but the
 			// payoff of fixing it is not worth it right now.
