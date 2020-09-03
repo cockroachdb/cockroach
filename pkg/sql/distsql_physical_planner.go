@@ -3169,6 +3169,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	}
 
 	p := MakePhysicalPlan(dsp.gatewayNodeID)
+	p.SetRowEstimates(&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
 
 	// Merge the plans' PlanToStreamColMap, which we know are equivalent.
 	p.PlanToStreamColMap = planToStreamColMap
