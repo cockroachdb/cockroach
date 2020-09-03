@@ -142,7 +142,7 @@ func registerDjango(r *testRegistry) {
 		if err := repeatRunE(
 			ctx, c, node, "install django's dependencies", `
 				cd /mnt/data1/django/tests &&
-				sudo pip3 install .. &&
+				sudo pip3 install -e .. &&
 				sudo pip3 install -r requirements/py3.txt &&
 				sudo pip3 install -r requirements/postgres.txt`,
 		); err != nil {
