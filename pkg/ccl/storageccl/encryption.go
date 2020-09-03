@@ -117,6 +117,9 @@ func DecryptFile(ciphertext, key []byte) ([]byte, error) {
 	iv := ciphertext[:ivSize]
 	ciphertext = ciphertext[ivSize:]
 	plaintext, err := gcm.Open(ciphertext[:0], iv, ciphertext, nil)
+	if err != nil {
+		err = errors.Wrap(err, "failed to decrypt — maybe incorrect key")
+	}
 	return plaintext, err
 }
 
