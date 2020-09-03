@@ -2334,3 +2334,48 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 		}
 	})
 }
+
+func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	// The default FormatVersion value in SchemaChangeDetails corresponds to a
+	// pre-20.1 job.
+	rec := jobs.Record{
+		DescriptorIDs: []descpb.ID{1},
+		Details:       jobspb.BackupDetails{},
+		Progress:      jobspb.BackupProgress{},
+	}
+
+	defer jobs.ResetConstructors()()
+	resuming := make(chan struct{})
+	jobs.RegisterConstructor(jobspb.TypeBackup, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+				resuming <- struct{}{}
+				return nil
+			},
+		}
+	})
+
+	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, nil /* txn */)
+	require.NoError(t, err)
+	registry.TestingNudgeAdoptionQueue()
+	// We want the job to be resumed very rapidly. We set this long timeout of 2s
+	// to deal with extremely slow stressrace. The adoption interval is still
+	// much larger than this so this should be a sufficient test.
+	const aLongTime = 5 * time.Second
+	select {
+	case <-resuming:
+	case <-time.After(aLongTime):
+		t.Fatal("job was not adopted")
+	}
+}
