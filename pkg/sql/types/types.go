@@ -2316,6 +2316,16 @@ func (t *T) IsAmbiguous() bool {
 	return false
 }
 
+// IsNumeric returns true iff this type is an integer, float, or decimal.
+func (t *T) IsNumeric() bool {
+	switch t.Family() {
+	case IntFamily, FloatFamily, DecimalFamily:
+		return true
+	default:
+		return false
+	}
+}
+
 // EnumGetIdxOfPhysical returns the index within the TypeMeta's slice of
 // enum physical representations that matches the input byte slice.
 func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {

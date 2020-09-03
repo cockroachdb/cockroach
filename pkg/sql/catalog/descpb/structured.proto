@@ -853,6 +853,7 @@ message TableDescriptor {
     // to a user. User defined types within Expr have been serialized
     // in a internal format. Instead, format the result of
     // DeserializeTableDescExpr.
+    // todo: old comment
     optional string expr = 1 [(gogoproto.nullable) = false];
     optional string name = 2 [(gogoproto.nullable) = false];
     optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];

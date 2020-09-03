@@ -1646,18 +1646,6 @@ type AnnotateTypeExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
-	if ctx.HasFlags(FmtPGAttrdefAdbin) {
-		ctx.FormatNode(node.Expr)
-		if typ, ok := GetStaticallyKnownType(node.Type); ok {
-			switch typ.Family() {
-			case types.StringFamily, types.CollatedStringFamily:
-				// Postgres formats strings using a cast afterward. Let's do the same.
-				ctx.WriteString("::")
-				ctx.WriteString(typ.SQLString())
-			}
-		}
-		return
-	}
 	switch node.SyntaxMode {
 	case AnnotateShort:
 		exprFmtWithParen(ctx, node.Expr)
