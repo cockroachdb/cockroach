@@ -1235,6 +1235,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_addpoint"></a><code>st_addpoint(line_string: geometry, point: geometry, index: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Adds a Point to a LineString at the given 0-based index (-1 to append).</p>
 </span></td></tr>
+<tr><td><a name="st_affine"></a><code>st_affine(geometry: geometry, a: <a href="float.html">float</a>, b: <a href="float.html">float</a>, d: <a href="float.html">float</a>, e: <a href="float.html">float</a>, x_off: <a href="float.html">float</a>, y_off: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Applies a 2D affine transformation to the given geometry.</p>
+<p>The matrix transformation will be applied as follows for each coordinate:
+/ a  b  x_off \  / x <br />
+| d  e  y_off |  | y |
+\ 0  0      1 /  \ 0 /</p>
+</span></td></tr>
 <tr><td><a name="st_area"></a><code>st_area(geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geography in meters^2. Uses a spheroid to perform the operation.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
@@ -1985,7 +1991,11 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td></tr>
 <tr><td><a name="st_reverse"></a><code>st_reverse(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified geometry by reversing the order of its vertices.</p>
 </span></td></tr>
-<tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, rot_radians: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle.</p>
+<tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, angle_radians: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle.</p>
+</span></td></tr>
+<tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, angle_radians: <a href="float.html">float</a>, origin_point: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.</p>
+</span></td></tr>
+<tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, angle_radians: <a href="float.html">float</a>, origin_x: <a href="float.html">float</a>, origin_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.</p>
 </span></td></tr>
 <tr><td><a name="st_scale"></a><code>st_scale(g: geometry, factor: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry scaled by taking in a Geometry as the factor.</p>
 </span></td></tr>

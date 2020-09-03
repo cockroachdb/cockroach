@@ -3577,6 +3577,47 @@ The paths themselves are given in the direction of the first geometry.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_affine": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"a", types.Float},
+				{"b", types.Float},
+				{"d", types.Float},
+				{"e", types.Float},
+				{"x_off", types.Float},
+				{"y_off", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				ret, err := geomfn.Affine(
+					g.Geometry,
+					geomfn.AffineMatrix([][]float64{
+						{float64(tree.MustBeDFloat(args[1])), float64(tree.MustBeDFloat(args[2])), 0, float64(tree.MustBeDFloat(args[5]))},
+						{float64(tree.MustBeDFloat(args[3])), float64(tree.MustBeDFloat(args[4])), 0, float64(tree.MustBeDFloat(args[6]))},
+						{0, 0, 1, 0},
+						{0, 0, 0, 1},
+					}),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Applies a 2D affine transformation to the given geometry.
+
+The matrix transformation will be applied as follows for each coordinate:
+/ a  b  x_off \  / x \
+| d  e  y_off |  | y |
+\ 0  0      1 /  \ 0 /
+				`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_scale": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -3663,7 +3704,7 @@ The paths themselves are given in the direction of the first geometry.`,
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"g", types.Geometry},
-				{"rot_radians", types.Float},
+				{"angle_radians", types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -3679,6 +3720,37 @@ The paths themselves are given in the direction of the first geometry.`,
 			},
 			Info: infoBuilder{
 				info: `Returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"angle_radians", types.Float},
+				{"origin_x", types.Float},
+				{"origin_y", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return nil, unimplemented.NewWithIssue(49019, "st_rotate")
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"angle_radians", types.Float},
+				{"origin_point", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return nil, unimplemented.NewWithIssue(49021, "st_rotate")
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.`,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},

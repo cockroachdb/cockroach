@@ -90,10 +90,8 @@ func TestFlipCoordinates(t *testing.T) {
 			require.EqualValues(t, tc.input.SRID(), got.SRID())
 		})
 	}
-}
 
-func TestCollectionFlipCoordinates(t *testing.T) {
-	testCases := []struct {
+	collectionTestCases := []struct {
 		desc     string
 		input    *geom.GeometryCollection
 		expected *geom.GeometryCollection
@@ -117,7 +115,7 @@ func TestCollectionFlipCoordinates(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
+	for _, tc := range collectionTestCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
