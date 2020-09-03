@@ -215,7 +215,7 @@ statement ok
 CREATE TABLE constraint_db.t3 (
     a INT,
     b INT CHECK (b > 11),
-    c STRING DEFAULT 'FOO',
+    c STRING DEFAULT 'FOO' CHECK (c != ''),
     CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES constraint_db.t1(b, c),
     INDEX (a, b DESC) STORING (c)
 )
@@ -381,7 +381,7 @@ index_key     false      i        2         0          false       false
 t2            false      r        2         0          false       true
 primary       false      i        1         0          false       false
 t2_t1_id_idx  false      i        1         0          false       false
-t3            false      r        4         1          false       true
+t3            false      r        4         2          false       true
 primary       false      i        1         0          false       false
 t3_a_b_idx    false      i        2         0          false       false
 v1            false      v        4         0          false       false
@@ -610,19 +610,19 @@ oid         amname    amstrategies  amsupport  amcanorder  amcanorderbyop  amcan
 
 ## pg_catalog.pg_attrdef
 
-query OTOITT colnames
-SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc
+query OTOITTT colnames
+SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc, pg_get_expr(ad.adbin, ad.adrelid)
 FROM pg_catalog.pg_attrdef ad
 JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-oid         relname  adrelid  adnum  adbin           adsrc
-1666782879  t1       55       4      12              12
-841178406   t2       56       2      unique_rowid()  unique_rowid()
-2186255414  t3       57       3      'FOO'           'FOO'
-2186255409  t3       57       4      unique_rowid()  unique_rowid()
-581442133   mv1      59       2      unique_rowid()  unique_rowid()
+oid         relname  adrelid  adnum  adbin           adsrc           pg_get_expr
+1666782879  t1       55       4      12              12              12
+841178406   t2       56       2      unique_rowid()  unique_rowid()  unique_rowid()
+2186255414  t3       57       3      'FOO'           'FOO'           'FOO'
+2186255409  t3       57       4      unique_rowid()  unique_rowid()  unique_rowid()
+581442133   mv1      59       2      unique_rowid()  unique_rowid()  unique_rowid()
 
 ## pg_catalog.pg_indexes
 
@@ -839,8 +839,9 @@ WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
 oid         conname    connamespace  contype  condef
+370295511   check_c    2332901747    c        CHECK ((c != ''))
 2143281868  fk         2332901747    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
-2792001267  check_b    2332901747    c        CHECK ((b > 11:::INT8))
+2792001267  check_b    2332901747    c        CHECK ((b > 11))
 3572320190  primary    2332901747    p        PRIMARY KEY (p ASC)
 4089604113  fk         2332901747    f        FOREIGN KEY (t1_id) REFERENCES t1(a)
 4243354484  t1_a_key   2332901747    u        UNIQUE (a ASC)
@@ -854,6 +855,7 @@ WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
 conname    contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
+check_c    c        false          false        true          57        0         0
 fk         f        false          false        true          57        0         450499961
 check_b    c        false          false        true          57        0         0
 primary    p        false          false        true          55        0         450499963
@@ -877,6 +879,7 @@ WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
 conname    confrelid  confupdtype  confdeltype  confmatchtype
+check_c    0          NULL         NULL         NULL
 check_b    0          NULL         NULL         NULL
 primary    0          NULL         NULL         NULL
 t1_a_key   0          NULL         NULL         NULL
@@ -901,6 +904,7 @@ WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
 conname    conislocal  coninhcount  connoinherit  conkey
+check_c    true        0            true          {3}
 fk         true        0            true          {1,2}
 check_b    true        0            true          {2}
 primary    true        0            true          {1}
@@ -908,18 +912,19 @@ fk         true        0            true          {1}
 t1_a_key   true        0            true          {2}
 index_key  true        0            true          {3,4}
 
-query TTTTTTTT colnames
-SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
+query TTTTTTTTT colnames
+SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, pg_get_constraintdef(con.oid) as condef
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
-conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin           consrc
-check_b    NULL     NULL       NULL       NULL       NULL       (b > 11:::INT8)  (b > 11:::INT8)
-primary    NULL     NULL       NULL       NULL       NULL       NULL             NULL
-t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL             NULL
-index_key  NULL     NULL       NULL       NULL       NULL       NULL             NULL
+conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin     consrc     condef
+check_c    NULL     NULL       NULL       NULL       NULL       (c != '')  (c != '')  CHECK ((c != ''))
+check_b    NULL     NULL       NULL       NULL       NULL       (b > 11)   (b > 11)   CHECK ((b > 11))
+primary    NULL     NULL       NULL       NULL       NULL       NULL       NULL       PRIMARY KEY (p ASC)
+t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL       NULL       UNIQUE (a ASC)
+index_key  NULL     NULL       NULL       NULL       NULL       NULL       NULL       UNIQUE (b ASC, c ASC)
 
 query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
