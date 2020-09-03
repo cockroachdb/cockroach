@@ -401,8 +401,6 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 	return errors.New("fake protectedts.Provider")
 }
 
-const fakeNodeID = roachpb.NodeID(123456789)
-
 func makeSQLServerArgs(
 	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
 ) (sqlServerArgs, error) {
@@ -606,11 +604,9 @@ func StartTenant(
 		return "", "", err
 	}
 
-	// NB: this should no longer be necessary after #47902. Right now it keeps
-	// the tenant from crashing.
-	//
-	// NB: this NodeID is actually used by the DistSQL planner.
-	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: fakeNodeID})
+	// TODO(asubiotto): remove this. Right now it is needed to initialize the
+	// SpanResolver.
+	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
 
 	connManager := netutil.MakeServer(
 		args.stopper,
