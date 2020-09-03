@@ -59,13 +59,14 @@ func init() {
 type profileStore struct {
 	*dumpstore.DumpStore
 	prefix string
+	suffix string
 	st     *cluster.Settings
 }
 
 func newProfileStore(
-	store *dumpstore.DumpStore, prefix string, st *cluster.Settings,
+	store *dumpstore.DumpStore, prefix, suffix string, st *cluster.Settings,
 ) *profileStore {
-	s := &profileStore{DumpStore: store, prefix: prefix, st: st}
+	s := &profileStore{DumpStore: store, prefix: prefix, suffix: suffix, st: st}
 	return s
 }
 
@@ -77,8 +78,8 @@ func (s *profileStore) makeNewFileName(timestamp time.Time, curHeap int64) strin
 	// We place the timestamp immediately after the (immutable) file
 	// prefix to ensure that a directory listing sort also sorts the
 	// profiles in timestamp order.
-	fileName := fmt.Sprintf("%s.%s.%d",
-		s.prefix, timestamp.Format(timestampFormat), curHeap)
+	fileName := fmt.Sprintf("%s.%s.%d%s",
+		s.prefix, timestamp.Format(timestampFormat), curHeap, s.suffix)
 	return s.GetFullPath(fileName)
 }
 
@@ -150,8 +151,8 @@ func (s *profileStore) parseFileName(
 	ctx context.Context, fileName string,
 ) (ok bool, timestamp time.Time, heapUsage uint64) {
 	parts := strings.Split(fileName, ".")
-	const numParts = 4 /* prefix, date/time, milliseconds,  heap usage */
-	if len(parts) != numParts || parts[0] != s.prefix {
+	numParts := 4 /* prefix, date/time, milliseconds,  heap usage */
+	if len(parts) < numParts || parts[0] != s.prefix {
 		// Not for us. Silently ignore.
 		return
 	}
