@@ -273,7 +273,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 //   ts := s.(*server.TestServer)
 //
 type TestServer struct {
-	Cfg *Config
+	Cfg    *Config
+	params base.TestServerArgs
 	// server is the embedded Cockroach server struct.
 	*Server
 	// authClient is an http.Client that has been authenticated to access the
@@ -387,43 +388,8 @@ func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
 // TestServer.ServingRPCAddr() after Start() for client connections.
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
-func (ts *TestServer) Start(params base.TestServerArgs) error {
-	if ts.Cfg == nil {
-		panic("Cfg not set")
-	}
-
-	if params.Stopper == nil {
-		params.Stopper = stop.NewStopper()
-	}
-
-	if !params.PartOfCluster {
-		ts.Cfg.DefaultZoneConfig.NumReplicas = proto.Int32(1)
-	}
-
+func (ts *TestServer) Start() error {
 	ctx := context.Background()
-
-	// Needs to be called before NewServer to ensure resolvers are initialized.
-	if err := ts.Cfg.InitNode(ctx); err != nil {
-		return err
-	}
-
-	var err error
-	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
-	if err != nil {
-		return err
-	}
-
-	// Create a breaker which never trips and never backs off to avoid
-	// introducing timing-based flakes.
-	ts.rpcContext.BreakerFactory = func() *circuit.Breaker {
-		return circuit.NewBreakerWithOptions(&circuit.Options{
-			BackOff: &backoff.ZeroBackOff{},
-		})
-	}
-
-	// Our context must be shared with our server.
-	ts.Cfg = &ts.Server.cfg
-
 	return ts.Server.Start(ctx)
 }
 
@@ -1257,5 +1223,38 @@ var TestServerFactory = testServerFactoryImpl{}
 // New is part of TestServerFactory interface.
 func (testServerFactoryImpl) New(params base.TestServerArgs) interface{} {
 	cfg := makeTestConfigFromParams(params)
-	return &TestServer{Cfg: &cfg}
+	ts := &TestServer{Cfg: &cfg, params: params}
+
+	if params.Stopper == nil {
+		params.Stopper = stop.NewStopper()
+	}
+
+	if !params.PartOfCluster {
+		ts.Cfg.DefaultZoneConfig.NumReplicas = proto.Int32(1)
+	}
+
+	// Needs to be called before NewServer to ensure resolvers are initialized.
+	ctx := context.Background()
+	if err := ts.Cfg.InitNode(ctx); err != nil {
+		return err
+	}
+
+	var err error
+	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
+	if err != nil {
+		return err
+	}
+
+	// Create a breaker which never trips and never backs off to avoid
+	// introducing timing-based flakes.
+	ts.rpcContext.BreakerFactory = func() *circuit.Breaker {
+		return circuit.NewBreakerWithOptions(&circuit.Options{
+			BackOff: &backoff.ZeroBackOff{},
+		})
+	}
+
+	// Our context must be shared with our server.
+	ts.Cfg = &ts.Server.cfg
+
+	return ts
 }

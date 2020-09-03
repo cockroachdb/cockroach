@@ -44,7 +44,7 @@ func TestDistBackfill(t *testing.T) {
 	}
 	const numNodes = 5
 
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{

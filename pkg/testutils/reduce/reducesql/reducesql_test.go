@@ -42,7 +42,7 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 			Insecure: true,
 		}
 		serv := server.TestServerFactory.New(args).(*server.TestServer)
-		if err := serv.Start(args); err != nil {
+		if err := serv.Start(); err != nil {
 			panic(err)
 		}
 		defer serv.Stopper().Stop(ctx)
