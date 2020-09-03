@@ -33,7 +33,8 @@ type HeapProfiler struct {
 	profiler
 }
 
-const heapFileNamePrefix = "memprof"
+// HeapFileNamePrefix is the prefix of files containing pprof data.
+const HeapFileNamePrefix = "memprof"
 
 // NewHeapProfiler creates a HeapProfiler. dir is the directory in which
 // profiles are to be stored.
@@ -48,7 +49,7 @@ func NewHeapProfiler(ctx context.Context, dir string, st *cluster.Settings) (*He
 
 	hp := &HeapProfiler{
 		profiler{
-			store: newProfileStore(dumpStore, heapFileNamePrefix, st),
+			store: newProfileStore(dumpStore, HeapFileNamePrefix, st),
 		},
 	}
 	return hp, nil

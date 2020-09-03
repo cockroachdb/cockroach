@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -579,7 +580,12 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			} else {
 				fmt.Printf("%d found\n", len(profiles.Files))
 				for _, file := range profiles.Files {
-					name := prefix + "/heapprof/" + file.Name + ".pprof"
+					name := prefix + "/heapprof/" + file.Name
+					if strings.HasPrefix(file.Name, heapprofiler.HeapFileNamePrefix+".") && !strings.HasSuffix(file.Name, ".pprof") {
+						name += ".pprof"
+					} else if strings.HasPrefix(file.Name, heapprofiler.StatsFileNamePrefix+".") && !strings.HasSuffix(file.Name, ".txt") {
+						name += ".txt"
+					}
 					if err := z.createRaw(name, file.Contents); err != nil {
 						return err
 					}
