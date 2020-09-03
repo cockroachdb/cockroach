@@ -845,11 +845,11 @@ func (b *Builder) presentationToResultColumns(pres physical.Presentation) colinf
 }
 
 func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
-	if f := join.Private().(*memo.JoinPrivate).Flags; !f.Has(memo.AllowHashJoinStoreRight) {
+	if f := join.Private().(*memo.JoinPrivate).Flags; f.Has(memo.DisallowHashJoinStoreRight) {
 		// We need to do a bit of reverse engineering here to determine what the
 		// hint was.
 		hint := tree.AstLookup
-		if f.Has(memo.AllowMergeJoin) {
+		if !f.Has(memo.DisallowMergeJoin) {
 			hint = tree.AstMerge
 		}
 

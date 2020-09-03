@@ -567,8 +567,9 @@ func (c *CustomFuncs) CommuteJoinFlags(p *memo.JoinPrivate) *memo.JoinPrivate {
 		return f
 	}
 	f := p.Flags
-	f = swap(f, memo.AllowLookupJoinIntoLeft, memo.AllowLookupJoinIntoRight)
-	f = swap(f, memo.AllowHashJoinStoreLeft, memo.AllowHashJoinStoreRight)
+	f = swap(f, memo.DisallowLookupJoinIntoLeft, memo.DisallowLookupJoinIntoRight)
+	f = swap(f, memo.DisallowHashJoinStoreLeft, memo.DisallowHashJoinStoreRight)
+	f = swap(f, memo.PreferLookupJoinIntoLeft, memo.PreferLookupJoinIntoRight)
 	if p.Flags == f {
 		return p
 	}

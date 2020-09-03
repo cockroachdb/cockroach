@@ -58,11 +58,11 @@ func (b *Builder) buildJoin(
 	case "":
 	case tree.AstHash:
 		telemetry.Inc(sqltelemetry.HashJoinHintUseCounter)
-		flags = memo.AllowHashJoinStoreRight
+		flags = memo.AllowOnlyHashJoinStoreRight
 
 	case tree.AstLookup:
 		telemetry.Inc(sqltelemetry.LookupJoinHintUseCounter)
-		flags = memo.AllowLookupJoinIntoRight
+		flags = memo.AllowOnlyLookupJoinIntoRight
 		if joinType != descpb.InnerJoin && joinType != descpb.LeftOuterJoin {
 			panic(pgerror.Newf(pgcode.Syntax,
 				"%s can only be used with INNER or LEFT joins", tree.AstLookup,
@@ -71,7 +71,7 @@ func (b *Builder) buildJoin(
 
 	case tree.AstMerge:
 		telemetry.Inc(sqltelemetry.MergeJoinHintUseCounter)
-		flags = memo.AllowMergeJoin
+		flags = memo.AllowOnlyMergeJoin
 
 	default:
 		panic(pgerror.Newf(

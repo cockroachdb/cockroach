@@ -23,23 +23,34 @@ func TestCommuteJoinFlags(t *testing.T) {
 	cases := [][2]memo.JoinFlags{
 		{0, 0},
 
-		{memo.AllowLookupJoinIntoLeft, memo.AllowLookupJoinIntoRight},
-
 		{
-			memo.AllowLookupJoinIntoLeft | memo.AllowLookupJoinIntoRight,
-			memo.AllowLookupJoinIntoLeft | memo.AllowLookupJoinIntoRight,
-		},
-
-		{memo.AllowHashJoinStoreLeft, memo.AllowHashJoinStoreRight},
-
-		{
-			memo.AllowHashJoinStoreLeft | memo.AllowHashJoinStoreRight,
-			memo.AllowHashJoinStoreLeft | memo.AllowHashJoinStoreRight,
+			memo.DisallowLookupJoinIntoLeft,
+			memo.DisallowLookupJoinIntoRight,
 		},
 
 		{
-			memo.AllowMergeJoin | memo.AllowHashJoinStoreLeft | memo.AllowLookupJoinIntoRight,
-			memo.AllowMergeJoin | memo.AllowHashJoinStoreRight | memo.AllowLookupJoinIntoLeft,
+			memo.PreferLookupJoinIntoLeft,
+			memo.PreferLookupJoinIntoRight,
+		},
+
+		{
+			memo.AllowOnlyMergeJoin,
+			memo.AllowOnlyMergeJoin,
+		},
+
+		{
+			memo.DisallowHashJoinStoreLeft | memo.DisallowMergeJoin | memo.DisallowLookupJoinIntoLeft | memo.DisallowLookupJoinIntoRight,
+			memo.DisallowHashJoinStoreRight | memo.DisallowMergeJoin | memo.DisallowLookupJoinIntoLeft | memo.DisallowLookupJoinIntoRight,
+		},
+
+		{
+			memo.DisallowHashJoinStoreLeft | memo.DisallowHashJoinStoreRight | memo.DisallowMergeJoin | memo.DisallowLookupJoinIntoLeft,
+			memo.DisallowHashJoinStoreLeft | memo.DisallowHashJoinStoreRight | memo.DisallowMergeJoin | memo.DisallowLookupJoinIntoRight,
+		},
+
+		{
+			memo.DisallowMergeJoin | memo.DisallowHashJoinStoreLeft | memo.DisallowLookupJoinIntoRight,
+			memo.DisallowMergeJoin | memo.DisallowHashJoinStoreRight | memo.DisallowLookupJoinIntoLeft,
 		},
 	}
 

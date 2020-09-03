@@ -1565,7 +1565,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if !joinPrivate.Flags.Has(memo.AllowMergeJoin) {
+	if joinPrivate.Flags.Has(memo.DisallowMergeJoin) {
 		return
 	}
 
@@ -1586,9 +1586,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	orders := DeriveInterestingOrderings(left).Copy()
 	orders.RestrictToCols(leftEq.ToSet())
 
-	if (!joinPrivate.Flags.Has(memo.AllowHashJoinStoreLeft) &&
-		!joinPrivate.Flags.Has(memo.AllowHashJoinStoreRight)) ||
-		c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
+	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
 		rightOrders := DeriveInterestingOrderings(right).Copy()
@@ -1705,7 +1703,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if !joinPrivate.Flags.Has(memo.AllowLookupJoinIntoRight) {
+	if joinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return
 	}
 	md := c.e.mem.Metadata()
@@ -1920,7 +1918,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if !joinPrivate.Flags.Has(memo.AllowLookupJoinIntoRight) {
+	if joinPrivate.Flags.Has(memo.DisallowLookupJoinIntoRight) {
 		return
 	}
 
