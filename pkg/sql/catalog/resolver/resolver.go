@@ -110,8 +110,7 @@ func ResolveMutableExistingTableObject(
 	requiredType tree.RequiredTableKind,
 ) (res *tabledesc.Mutable, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
-		RequireMutable:       true,
+		CommonLookupFlags:    tree.CommonLookupFlags{Required: required, RequireMutable: true},
 		DesiredObjectKind:    tree.TableObject,
 		DesiredTableDescKind: requiredType,
 	}
@@ -133,8 +132,7 @@ func ResolveMutableType(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName, required bool,
 ) (*tree.TypeName, *typedesc.Mutable, error) {
 	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
-		RequireMutable:    true,
+		CommonLookupFlags: tree.CommonLookupFlags{Required: required, RequireMutable: true},
 		DesiredObjectKind: tree.TypeObject,
 	}
 	desc, prefix, err := ResolveExistingObject(ctx, sc, un, lookupFlags)

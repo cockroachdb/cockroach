@@ -144,7 +144,7 @@ func (dc *Cache) GetDatabaseDesc(
 			}
 			a := catalogkv.UncachedPhysicalAccessor{}
 			descI, err := a.GetDatabaseDesc(ctx, txn, dc.codec, name,
-				tree.DatabaseLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}})
+				tree.DatabaseLookupFlags{Required: required})
 			if err != nil {
 				return err
 			}
