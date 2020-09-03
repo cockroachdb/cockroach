@@ -1401,7 +1401,7 @@ func fitColumnToFamily(desc *Mutable, col descpb.ColumnDescriptor) (int, bool) {
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.
-	if desc.Version == desc.ClusterVersion.Version+1 {
+	if desc.Version == desc.ClusterVersion.Version+1 || desc.ClusterVersion.Version == 0 {
 		return
 	}
 	desc.Version++
