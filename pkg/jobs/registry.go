@@ -50,9 +50,6 @@ import (
 
 const defaultLeniencySetting = 60 * time.Second
 
-// See https://github.com/cockroachdb/cockroach/issues/47892.
-const multiTenancyIssueNo = 47892
-
 var (
 	gcSetting = settings.RegisterPublicDurationSetting(
 		"jobs.retention_time",

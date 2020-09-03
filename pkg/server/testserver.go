@@ -505,10 +505,8 @@ func makeSQLServerArgs(
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
-	var c base.NodeIDContainer
-	c.Set(context.Background(), fakeNodeID)
 	const sqlInstanceID = base.SQLInstanceID(10001)
-	idContainer := base.NewSQLIDContainer(sqlInstanceID, &c, false /* exposed */)
+	idContainer := base.NewSQLIDContainer(sqlInstanceID, nil /* nodeID */)
 
 	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
 	registry.AddMetricStruct(runtime)
