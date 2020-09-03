@@ -544,6 +544,9 @@ func makeSQLServerArgs(
 	const sqlInstanceID = base.SQLInstanceID(10001)
 	idContainer := base.NewSQLIDContainer(sqlInstanceID, &c, false /* exposed */)
 
+	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
+	registry.AddMetricStruct(runtime)
+
 	// We don't need this for anything except some services that want a gRPC
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
@@ -573,7 +576,7 @@ func makeSQLServerArgs(
 		BaseConfig:               &baseCfg,
 		stopper:                  stopper,
 		clock:                    clock,
-		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
+		runtime:                  runtime,
 		rpcContext:               rpcContext,
 		nodeDescs:                tenantConnect,
 		systemConfigProvider:     tenantConnect,

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -61,7 +60,18 @@ well unless it can be verified using a trusted root certificate store. That is,
 func runStartSQL(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	const clusterName = ""
-	stopper := stop.NewStopper()
+
+	// Remove the default store, which avoids using it to set up logging.
+	// Instead, we'll default to logging to stderr unless --log-dir is
+	// specified. This makes sense since the standalone SQL server is
+	// at the time of writing stateless and may not be provisioned with
+	// suitable storage.
+	serverCfg.Stores.Specs = nil
+
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd)
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop(ctx)
 
 	st := serverCfg.BaseConfig.Settings

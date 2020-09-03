@@ -1001,7 +1001,7 @@ func logOutputDirectory() string {
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
 // Prior to this however it determines suitable defaults for the
 // logging output directory and the verbosity level of stderr logging.
-// We only do this for the "start" command which is why this work
+// We only do this for the "start" and "start-sql" commands which is why this work
 // occurs here and not in an OnInitialize function.
 func setupAndInitializeLoggingAndProfiling(
 	ctx context.Context, cmd *cobra.Command,
@@ -1031,6 +1031,7 @@ func setupAndInitializeLoggingAndProfiling(
 			}
 			newDir = filepath.Join(spec.Path, "logs")
 		}
+
 		if err := startCtx.logDir.Set(newDir); err != nil {
 			return nil, err
 		}
