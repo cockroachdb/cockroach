@@ -4110,7 +4110,7 @@ func TestEncryptedBackup(t *testing.T) {
 			if tc.useKMS {
 				expectedShowError = `one of the provided URIs was not used when encrypting the base BACKUP`
 			} else {
-				expectedShowError = `cipher: message authentication failed`
+				expectedShowError = `failed to decrypt — maybe incorrect key: cipher: message authentication failed`
 			}
 			sqlDB.ExpectErr(t, expectedShowError,
 				fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, incorrectEncryptionOption), backupLoc1)
