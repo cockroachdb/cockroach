@@ -212,7 +212,9 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		conf.FileTableConfig.QualifiedTableName = qualifiedTableName
 		conf.FileTableConfig.Path = uri.Path
 	default:
-		return conf, errors.Errorf("unsupported storage scheme: %q", uri.Scheme)
+		// TODO(adityamaru): Link dedicated ExternalStorage scheme docs once ready.
+		return conf, errors.Errorf("unsupported storage scheme: %q - refer to docs to find supported"+
+			" storage schemes", uri.Scheme)
 	}
 	return conf, nil
 }
