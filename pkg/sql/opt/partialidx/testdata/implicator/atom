@@ -539,16 +539,6 @@ predtest vars=(bool, bool)
 ----
 false
 
-# This filter actually implies this predicate, but our logic does not currently
-# handle this case. To do so, we'd have to create constraints at each AndExpr in
-# the filter and check for containment, which would add complexity for a case
-# which is unlikely to occur in the real-world.
-predtest vars=(int, int)
-@1 >= 2 AND @2 > 0
-=>
-(@1, @2) > (2, 0)
-----
-false
 
 # Range filters
 
