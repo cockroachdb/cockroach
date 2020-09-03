@@ -389,6 +389,37 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 	return nil
 }
 
+var deletePayloadQueryPlaceholder = `DELETE FROM %s WHERE file_id IN (SELECT file_id FROM %s WHERE filename=$1)`
+
+var deleteFileMetadataQueryPlaceholder = `DELETE FROM %s WHERE filename=$1`
+
+// deleteFileInTxn differs from DeleteFile in that an existing txn is supplied to be able to perform
+// the delete operations in. This is used by WriteFile to allow for overwriting of an existing file
+// with the same name.
+func (f *FileToTableSystem) deleteFileInTxn(
+	ctx context.Context, filename string, ie *sql.InternalExecutor, txn *kv.Txn,
+) error {
+	deletePayloadQuery := fmt.Sprintf(deletePayloadQueryPlaceholder, f.GetFQPayloadTableName(),
+		f.GetFQFileTableName())
+
+	execSessionDataOverride := sessiondata.InternalExecutorOverride{User: f.username}
+	_, err := ie.ExecEx(ctx, "delete-payload-table", txn, execSessionDataOverride,
+		deletePayloadQuery, filename)
+	if err != nil {
+		return errors.Wrap(err,
+			"failed to delete from the payload table while preparing for overwrite")
+	}
+
+	deleteFileQuery := fmt.Sprintf(deleteFileMetadataQueryPlaceholder, f.GetFQFileTableName())
+	_, err = ie.ExecEx(ctx, "delete-file-table", txn, execSessionDataOverride,
+		deleteFileQuery, filename)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete from the file table while preparing for overwrite")
+	}
+
+	return nil
+}
+
 // DeleteFile deletes the blobs and metadata of filename from the user scoped
 // tables.
 func (f *FileToTableSystem) DeleteFile(ctx context.Context, filename string) error {
@@ -401,9 +432,8 @@ func (f *FileToTableSystem) DeleteFile(ctx context.Context, filename string) err
 		return txnErr
 	}
 
-	deletePayloadQuery := fmt.Sprintf(`DELETE FROM %s WHERE EXISTS (
-SELECT * FROM %s JOIN %s USING (%s) WHERE %s=$1)`, f.GetFQPayloadTableName(),
-		f.GetFQFileTableName(), f.GetFQPayloadTableName(), "file_id", f.GetFQFileTableName()+".filename")
+	deletePayloadQuery := fmt.Sprintf(deletePayloadQueryPlaceholder, f.GetFQPayloadTableName(),
+		f.GetFQFileTableName())
 
 	txnErr = f.executor.Exec(ctx, "delete-payload-table", deletePayloadQuery,
 		f.username, filename)
@@ -411,8 +441,7 @@ SELECT * FROM %s JOIN %s USING (%s) WHERE %s=$1)`, f.GetFQPayloadTableName(),
 		return errors.Wrap(txnErr, "failed to delete from the payload table")
 	}
 
-	deleteFileQuery := fmt.Sprintf(`DELETE FROM %s WHERE filename=$1`,
-		f.GetFQFileTableName())
+	deleteFileQuery := fmt.Sprintf(deleteFileMetadataQueryPlaceholder, f.GetFQFileTableName())
 	txnErr = f.executor.Exec(ctx, "delete-file-table", deleteFileQuery,
 		f.username, filename)
 	if txnErr != nil {
@@ -787,6 +816,17 @@ func (f *FileToTableSystem) NewFileWriter(
 	ctx context.Context, filename string, chunkSize int, txn *kv.Txn,
 ) (io.WriteCloser, error) {
 	e, err := resolveInternalFileToTableExecutor(f.executor)
+	if err != nil {
+		return nil, err
+	}
+
+	// BACKUP must allow overwriting of files. Since userfile is backed by a SQL
+	// table with filename as a PK, this would cause a constraint violation if
+	// we did not delete the file and its contents before writing.
+	//
+	// NB: userfile upload will error out on the client side if a file with the
+	// same name already exists.
+	err = f.deleteFileInTxn(ctx, filename, e.ie, txn)
 	if err != nil {
 		return nil, err
 	}
