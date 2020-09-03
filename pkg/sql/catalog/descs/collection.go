@@ -392,16 +392,14 @@ func (tc *Collection) getMutableObjectDescriptor(
 	}
 
 	// Resolve the database.
-	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
-		tree.DatabaseLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
+	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(), flags.CommonLookupFlags)
 	if err != nil || db == nil {
 		return nil, err
 	}
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
-		tree.SchemaLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(), flags.CommonLookupFlags)
 	if err != nil || !foundSchema {
 		return nil, err
 	}
@@ -508,8 +506,7 @@ func (tc *Collection) getUserDefinedSchemaVersion(
 	// descriptor here, since we'll already have done this lookup when we're
 	// resolving the schema by name. Arguably we should be doing this at a higher
 	// level.
-	dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, dbID,
-		tree.DatabaseLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: true}})
+	dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, dbID, tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +533,7 @@ func (tc *Collection) getUserDefinedSchemaVersion(
 	// the database which doesn't reflect the changes to the schema. But this
 	// isn't a problem for correctness; it can only happen on other sessions
 	// before the schema change has returned results.
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, schemaInfo.ID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, schemaInfo.ID, flags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
@@ -785,16 +782,14 @@ func (tc *Collection) getObjectVersion(
 	}
 
 	// Resolve the database.
-	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
-		tree.DatabaseLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
+	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(), flags.CommonLookupFlags)
 	if err != nil || db == nil {
 		return nil, err
 	}
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
-		tree.SchemaLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(), flags.CommonLookupFlags)
 	if err != nil || !foundSchema {
 		return nil, err
 	}
@@ -853,7 +848,7 @@ func (tc *Collection) GetDatabaseVersionByID(
 		return tc.deprecatedDatabaseCache().GetDatabaseDescByID(ctx, txn, dbID)
 	}
 
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, dbID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, dbID, flags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
@@ -1054,7 +1049,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 				return tree.TypeName{}, nil, err
 			}
 			dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, desc.ParentID,
-				tree.DatabaseLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: true}})
+				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
@@ -1083,7 +1078,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 				return tree.TypeName{}, nil, err
 			}
 			dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, desc.ParentID,
-				tree.DatabaseLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: true}})
+				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}

@@ -141,8 +141,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
-	ok, schema, err := a.GetSchema(ctx, txn, codec, dbDesc.GetID(), scName,
-		tree.SchemaLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
+	ok, schema, err := a.GetSchema(ctx, txn, codec, dbDesc.GetID(), scName, flags.CommonLookupFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -242,8 +241,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		return nil, err
 	}
 
-	ok, schema, err := a.GetSchema(ctx, txn, codec, dbID, scName,
-		tree.SchemaLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
+	ok, schema, err := a.GetSchema(ctx, txn, codec, dbID, scName, flags.CommonLookupFlags)
 	if err != nil {
 		return nil, err
 	}
