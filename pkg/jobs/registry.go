@@ -68,6 +68,15 @@ type adoptedJob struct {
 	cancel context.CancelFunc
 }
 
+// adoptionNotice is used by Run to notify the registry to resumeClaimedJobs
+// and by TestingNudgeAdoptionQueue to claimAndResumeClaimedJobs.
+type adoptionNotice bool
+
+const (
+	resumeClaimedJobs         adoptionNotice = false
+	claimAndResumeClaimedJobs adoptionNotice = true
+)
+
 // Registry creates Jobs and manages their leases and cancelation.
 //
 // Job information is stored in the `system.jobs` table.  Each node will
@@ -94,17 +103,20 @@ type adoptedJob struct {
 // node simply behaves as though its leniency period is 0. Epoch-based
 // nodes will see time-based nodes delay the act of stealing a job.
 type Registry struct {
-	ac          log.AmbientContext
-	stopper     *stop.Stopper
-	nl          optionalnodeliveness.Container
-	db          *kv.DB
-	ex          sqlutil.InternalExecutor
-	clock       *hlc.Clock
-	nodeID      *base.SQLIDContainer
-	settings    *cluster.Settings
-	planFn      planHookMaker
-	metrics     Metrics
-	adoptionCh  chan struct{}
+	ac       log.AmbientContext
+	stopper  *stop.Stopper
+	nl       optionalnodeliveness.Container
+	db       *kv.DB
+	ex       sqlutil.InternalExecutor
+	clock    *hlc.Clock
+	nodeID   *base.SQLIDContainer
+	settings *cluster.Settings
+	planFn   planHookMaker
+	metrics  Metrics
+
+	// adoptionChan is used to nudge the registry to resume claimed jobs and
+	// potentially attempt to claim jobs.
+	adoptionCh  chan adoptionNotice
 	sqlInstance sqlliveness.Instance
 
 	// sessionBoundInternalExecutorFactory provides a way for jobs to create
@@ -205,7 +217,7 @@ func MakeRegistry(
 		settings:            settings,
 		planFn:              planFn,
 		preventAdoptionFile: preventAdoptionFile,
-		adoptionCh:          make(chan struct{}),
+		adoptionCh:          make(chan adoptionNotice),
 	}
 	r.mu.deprecatedEpoch = 1
 	r.mu.deprecatedJobs = make(map[int64]context.CancelFunc)
@@ -308,7 +320,7 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 		// start all previously claimed jobs.
 		if !usingSQLLiveness || i == 0 {
 			select {
-			case r.adoptionCh <- struct{}{}:
+			case r.adoptionCh <- resumeClaimedJobs:
 			case <-r.stopper.ShouldQuiesce():
 				return stop.ErrUnavailable
 			case <-ctx.Done():
@@ -717,9 +729,12 @@ UPDATE system.jobs
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
-			case <-r.adoptionCh:
+			case shouldClaim := <-r.adoptionCh:
 				// Try to adopt the most recently created job.
 				if r.startUsingSQLLivenessAdoption(ctx) {
+					if shouldClaim {
+						claimJobs(ctx)
+					}
 					processClaimedJobs(ctx)
 				} else {
 					// TODO(spaskob): remove in 20.2 as this code path is only needed while
@@ -1270,5 +1285,5 @@ func (r *Registry) unregister(jobID int64) {
 // TestingNudgeAdoptionQueue is used by tests to tell the registry that there is
 // a job to be adopted.
 func (r *Registry) TestingNudgeAdoptionQueue() {
-	r.adoptionCh <- struct{}{}
+	r.adoptionCh <- claimAndResumeClaimedJobs
 }
