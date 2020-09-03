@@ -49,7 +49,7 @@ func uploadFile(
 	randutil.ReadTestdataBytes(randGen, data)
 
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		writer, err := ft.NewFileWriter(ctx, filename, chunkSize, txn)
+		writer, err := ft.NewFileWriter(ctx, filename, chunkSize)
 		if err != nil {
 			return err
 		}
@@ -210,13 +210,50 @@ func TestReadWriteFile(t *testing.T) {
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
 	}
 
-	t.Run("file-already-exists", func(t *testing.T) {
+	t.Run("can-overwrite-file", func(t *testing.T) {
 		_, err = uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter, kvDB)
 		require.NoError(t, err)
 
-		// Upload the same file again, and expect a PK violation.
-		_, err = uploadFile(ctx, testFileName, 11, 2, fileTableReadWriter, kvDB)
-		require.Error(t, err)
+		// Record the old files' UUID.
+		var oldFileID []uint8
+		err := sqlDB.QueryRowContext(ctx, fmt.Sprintf(`SELECT file_id FROM %s WHERE filename=$1`,
+			fileTableReadWriter.GetFQFileTableName()), testFileName).Scan(&oldFileID)
+		require.NoError(t, err)
+
+		// Upload the same file again, and expect the old one to be overwritten.
+		expected, err := uploadFile(ctx, testFileName, 12, 2, fileTableReadWriter, kvDB)
+		require.NoError(t, err)
+
+		// Record the overwritten files' UUID and verify it is different from the
+		// old one.
+		var newFileID []uint8
+		err = sqlDB.QueryRowContext(ctx, fmt.Sprintf(`SELECT file_id FROM %s WHERE filename=$1`,
+			fileTableReadWriter.GetFQFileTableName()), testFileName).Scan(&newFileID)
+		require.NoError(t, err)
+
+		require.NotEqual(t, oldFileID, newFileID)
+
+		// Check size.
+		size, err := fileTableReadWriter.FileSize(ctx, testFileName)
+		require.NoError(t, err)
+		require.Equal(t, size, int64(12))
+
+		// Check content.
+		require.True(t, isContentEqual(testFileName, expected, fileTableReadWriter))
+
+		// Check chunking and metadata entry.
+		checkMetadataEntryExists(ctx, t, fileTableReadWriter.GetFQFileTableName(), testFileName,
+			sqlDB)
+		expectedNumChunks := (12 / 2) + (12 % 2)
+		checkNumberOfPayloadChunks(ctx, t, fileTableReadWriter.GetFQFileTableName(),
+			fileTableReadWriter.GetFQPayloadTableName(), testFileName, expectedNumChunks, sqlDB)
+
+		// Check that the old file UUID has no payload entries lying around.
+		var rowCount int
+		err = sqlDB.QueryRowContext(ctx, fmt.Sprintf(`SELECT count(*) FROM %s WHERE file_id=$1`,
+			fileTableReadWriter.GetFQPayloadTableName()), oldFileID).Scan(&rowCount)
+		require.NoError(t, err)
+		require.Equal(t, 0, rowCount)
 
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
 	})
@@ -244,22 +281,15 @@ func TestReadWriteFile(t *testing.T) {
 		randGen, _ := randutil.NewPseudoRand()
 		randutil.ReadTestdataBytes(randGen, data)
 
-		err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			writer, err := fileTableReadWriter.NewFileWriter(ctx, testFileName, chunkSize, txn)
-			if err != nil {
-				return err
-			}
+		writer, err := fileTableReadWriter.NewFileWriter(ctx, testFileName, chunkSize)
+		require.NoError(t, err)
 
-			// Write two 1 Kib files using the same writer.
-			for i := 0; i < 2; i++ {
-				_, err = io.Copy(writer, bytes.NewReader(data))
-				if err != nil {
-					return err
-				}
-			}
+		// Write two 1 Kib files using the same writer.
+		for i := 0; i < 2; i++ {
+			_, err = io.Copy(writer, bytes.NewReader(data))
+			require.NoError(t, err)
+		}
 
-			return writer.Close()
-		})
 		require.NoError(t, err)
 
 		// Check content.

@@ -42,6 +42,7 @@ type fileTableStorage struct {
 	cfg      roachpb.ExternalStorage_FileTable
 	ioConf   base.ExternalIODirConfig
 	db       *kv.DB
+	ie       *sql.InternalExecutor
 	prefix   string // relative filepath
 	settings *cluster.Settings
 }
@@ -91,6 +92,7 @@ func makeFileTableStorage(
 		cfg:      cfg,
 		ioConf:   ioConf,
 		db:       db,
+		ie:       ie,
 		prefix:   cfg.Path,
 		settings: settings,
 	}, nil
@@ -199,22 +201,42 @@ func (f *fileTableStorage) WriteFile(
 	if err != nil {
 		return err
 	}
-	err = f.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		writer, err := f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize, txn)
-		if err != nil {
-			return err
-		}
 
-		if _, err = io.Copy(writer, content); err != nil {
-			return errors.Wrap(err, "failed to write using the FileTable writer")
-		}
+	// This is only possible if the method is invoked by a SQLConnFileTableStorage
+	// which should never be the case.
+	if f.ie == nil {
+		return errors.New("cannot WriteFile without a configured internal executor")
+	}
 
-		if err := writer.Close(); err != nil {
-			return errors.Wrap(err, "failed to close the FileTable writer")
-		}
+	defer func() {
+		_, _ = f.ie.Exec(ctx, "userfile-write-file-commit", nil /* txn */, `COMMIT`)
+	}()
 
-		return nil
-	})
+	// We open an explicit txn within which we will write the file metadata entry
+	// and payload chunks to the userfile tables. We cannot perform these
+	// operations within a db.Txn retry loop because when coming from the
+	// copyMachine (which backs the userfile CLI upload command), we do not have
+	// access to all the file data at once. As a result of which, if a txn were to
+	// retry we are not able to seek to the start of `content` and try again,
+	// resulting in bytes being missed across txn retry attempts.
+	// See chunkWriter.WriteFile for more information about writing semantics.
+	_, err = f.ie.Exec(ctx, "userfile-write-file-txn", nil /* txn */, `BEGIN`)
+	if err != nil {
+		return err
+	}
+
+	writer, err := f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize)
+	if err != nil {
+		return err
+	}
+
+	if _, err = io.Copy(writer, content); err != nil {
+		return errors.Wrap(err, "failed to write using the FileTable writer")
+	}
+
+	if err := writer.Close(); err != nil {
+		return errors.Wrap(err, "failed to close the FileTable writer")
+	}
 
 	return err
 }
