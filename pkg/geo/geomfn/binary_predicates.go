@@ -13,6 +13,7 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/geo/geosprepared"
 )
 
 // Covers returns whether geometry A covers geometry B.
@@ -95,6 +96,8 @@ func Equals(a geo.Geometry, b geo.Geometry) (bool, error) {
 	return geos.Equals(a.EWKB(), b.EWKB())
 }
 
+var preparedCache = &geosprepared.Cache{}
+
 // Intersects returns whether geometry A intersects geometry B.
 func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
@@ -102,6 +105,13 @@ func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 	}
 	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
 		return false, nil
+	}
+	prep, try, err := preparedCache.Get(a.SpatialObject(), b.SpatialObject())
+	if err != nil {
+		return false, err
+	}
+	if prep != nil {
+		return geos.PreparedIntersects(prep, try.EWKB)
 	}
 	return geos.Intersects(a.EWKB(), b.EWKB())
 }

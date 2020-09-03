@@ -16,6 +16,7 @@ extern "C" {
 
 // Data Types adapted from `capi/geos_c.h.in` in GEOS.
 typedef void* CR_GEOS_Geometry;
+typedef void* CR_GEOS_PreparedGeometry;
 
 // NB: Both CR_GEOS_Slice and CR_GEOS_String can contain non-printable
 // data, so neither is necessarily compatible with a NUL character
@@ -121,8 +122,27 @@ CR_GEOS_Status CR_GEOS_Interpolate(CR_GEOS* lib, CR_GEOS_Slice a, double distanc
 CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double* ret);
 
 //
+// PreparedGeometry
+//
+
+CR_GEOS_Status CR_GEOS_PrepareGeometry(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_PreparedGeometry* ret);
+CR_GEOS_Status CR_GEOS_PreparedGeometryDestroy(CR_GEOS* lib, CR_GEOS_PreparedGeometry g);
+
+CR_GEOS_Status CR_GEOS_PreparedCovers(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+CR_GEOS_Status CR_GEOS_PreparedCoveredBy(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+CR_GEOS_Status CR_GEOS_PreparedContains(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+CR_GEOS_Status CR_GEOS_PreparedCrosses(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+CR_GEOS_Status CR_GEOS_PreparedDisjoint(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+CR_GEOS_Status CR_GEOS_PreparedEquals(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+CR_GEOS_Status CR_GEOS_PreparedIntersects(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+CR_GEOS_Status CR_GEOS_PreparedOverlaps(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+CR_GEOS_Status CR_GEOS_PreparedTouches(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+CR_GEOS_Status CR_GEOS_PreparedWithin(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+
+//
 // Binary predicates.
 //
+
 
 CR_GEOS_Status CR_GEOS_Covers(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret);
 CR_GEOS_Status CR_GEOS_CoveredBy(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret);
