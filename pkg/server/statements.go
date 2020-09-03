@@ -112,6 +112,7 @@ func (s *statusServer) StatementsLocal() (*serverpb.StatementsResponse, error) {
 				KeyData: stmt.Key,
 				NodeID:  s.gossip.NodeID.Get(),
 			},
+			ID:    stmt.ID,
 			Stats: stmt.Stats,
 		}
 	}
