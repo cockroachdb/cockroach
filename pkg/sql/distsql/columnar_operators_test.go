@@ -126,9 +126,6 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 				execinfrapb.AggregatorSpec_PERCENTILE_CONT_IMPL:
 				// We skip percentile functions because those can only be
 				// planned as window functions.
-			case execinfrapb.AggregatorSpec_ST_UNION:
-				// We skip ST_Union for now because it seg faults in GEOS.
-				// TODO(#53254): figure out why.
 			default:
 				found = true
 			}
