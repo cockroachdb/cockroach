@@ -12,6 +12,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"database/sql/driver"
 	hx "encoding/hex"
 	"fmt"
@@ -22,12 +23,15 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 )
 
@@ -65,9 +69,12 @@ Run doctor tool reading system data from a live cluster specified by --url.
 	RunE: MaybeDecorateGRPCError(runClusterDoctor),
 }
 
-func wrapExamine(descTable []doctor.DescriptorTableRow) error {
+func wrapExamine(
+	descTable []doctor.DescriptorTableRow, namespaceTable []doctor.NamespaceTableRow,
+) error {
 	// TODO(spaskob): add --verbose flag.
-	valid, err := doctor.Examine(descTable, false, os.Stdout)
+	valid, err := doctor.Examine(
+		context.Background(), descTable, namespaceTable, false, os.Stdout)
 	if err != nil {
 		return &cliError{exitCode: 2, cause: errors.Wrap(err, "examine failed")}
 	}
@@ -86,22 +93,23 @@ func runClusterDoctor(cmd *cobra.Command, args []string) (retErr error) {
 	}
 	defer sqlConn.Close()
 
-	rows, err := sqlConn.Query(`
+	stmt := `
 SELECT id, descriptor, crdb_internal_mvcc_timestamp AS mod_time_logical
-FROM system.descriptor 
-ORDER BY id`,
-		nil,
-	)
-	if err != nil {
-		return errors.Wrap(err, "could not read system.descriptor")
-	}
-
-	descTable := make([]doctor.DescriptorTableRow, 0)
-	vals := make([]driver.Value, 3)
-	for {
-		if err := rows.Next(vals); err == io.EOF {
-			break
+FROM system.descriptor ORDER BY id`
+	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp"
+	_, err = sqlConn.Query(checkColumnExistsStmt, nil)
+	// On versions before 20.2, the system.descriptor won't have the builtin
+	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedColumn {
+			stmt = `
+SELECT id, descriptor, NULL AS mod_time_logical
+FROM system.descriptor ORDER BY id`
 		}
+	}
+	descTable := make([]doctor.DescriptorTableRow, 0)
+
+	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 3), func(vals []driver.Value) error {
 		var row doctor.DescriptorTableRow
 		if id, ok := vals[0].(int64); ok {
 			row.ID = id
@@ -129,9 +137,55 @@ ORDER BY id`,
 			return errors.Errorf("unexpected value: %T of %v", vals[2], vals[2])
 		}
 		descTable = append(descTable, row)
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	return wrapExamine(descTable)
+	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace`
+
+	checkColumnExistsStmt = `SELECT "parentSchemaID" FROM system.namespace LIMIT 0`
+	_, err = sqlConn.Query(checkColumnExistsStmt, nil)
+	// On versions before 20.1, table system.namespace does not have this column.
+	// In that case the ParentSchemaID for tables is 29 and for databases is 0.
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+		if pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedColumn {
+			stmt = `
+SELECT "parentID", CASE WHEN "parentID" = 0 THEN 0 ELSE 29 END AS "parentSchemaID", name, id
+FROM system.namespace`
+		}
+	}
+
+	namespaceTable := make([]doctor.NamespaceTableRow, 0)
+	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
+		var row doctor.NamespaceTableRow
+		if parentID, ok := vals[0].(int64); ok {
+			row.ParentID = descpb.ID(parentID)
+		} else {
+			return errors.Errorf("unexpected value: %T of %v", vals[0], vals[0])
+		}
+		if schemaID, ok := vals[1].(int64); ok {
+			row.ParentSchemaID = descpb.ID(schemaID)
+		} else {
+			return errors.Errorf("unexpected value: %T of %v", vals[0], vals[0])
+		}
+		if name, ok := vals[2].(string); ok {
+			row.Name = name
+		} else {
+			return errors.Errorf("unexpected value: %T of %v", vals[1], vals[1])
+		}
+		if id, ok := vals[3].(int64); ok {
+			row.ID = id
+		} else {
+			return errors.Errorf("unexpected value: %T of %v", vals[0], vals[0])
+		}
+		namespaceTable = append(namespaceTable, row)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return wrapExamine(descTable, namespaceTable)
 }
 
 // runZipDirDoctor runs the doctors tool reading data from a debug zip dir.
@@ -139,21 +193,15 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 	// To make parsing user functions code happy.
 	_ = builtins.AllBuiltinNames
 
-	file, err := os.Open(path.Join(args[0], "system.descriptor.txt"))
+	descFile, err := os.Open(path.Join(args[0], "system.descriptor.txt"))
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-
+	defer descFile.Close()
 	descTable := make([]doctor.DescriptorTableRow, 0)
-	sc := bufio.NewScanner(file)
-	firstLine := true
-	for sc.Scan() {
-		if firstLine {
-			firstLine = false
-			continue
-		}
-		fields := strings.Fields(sc.Text())
+
+	if err := tableMap(descFile, func(row string) error {
+		fields := strings.Fields(row)
 		last := len(fields) - 1
 		i, err := strconv.Atoi(fields[0])
 		if err != nil {
@@ -166,7 +214,84 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 		}
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		descTable = append(descTable, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	return wrapExamine(descTable)
+	namespaceFile, err := os.Open(path.Join(args[0], "system.namespace2.txt"))
+	if err != nil {
+		return err
+	}
+	defer namespaceFile.Close()
+	namespaceTable := make([]doctor.NamespaceTableRow, 0)
+	if err := tableMap(namespaceFile, func(row string) error {
+		fields := strings.Fields(row)
+		parID, err := strconv.Atoi(fields[0])
+		if err != nil {
+			return errors.Errorf("failed to parse parent id %s: %v", fields[0], err)
+		}
+		parSchemaID, err := strconv.Atoi(fields[1])
+		if err != nil {
+			return errors.Errorf("failed to parse parent schema id %s: %v", fields[1], err)
+		}
+		id, err := strconv.Atoi(fields[3])
+		if err != nil {
+			if fields[3] == "NULL" {
+				id = int(descpb.InvalidID)
+			} else {
+				return errors.Errorf("failed to parse id %s: %v", fields[3], err)
+			}
+		}
+
+		namespaceTable = append(namespaceTable, doctor.NamespaceTableRow{
+			NameInfo: descpb.NameInfo{
+				ParentID: descpb.ID(parID), ParentSchemaID: descpb.ID(parSchemaID), Name: fields[2],
+			},
+			ID: int64(id),
+		})
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return wrapExamine(descTable, namespaceTable)
+}
+
+// tableMap applies `fn` to all rows in `in`.
+func tableMap(in io.Reader, fn func(string) error) error {
+	firstLine := true
+	for sc := bufio.NewScanner(in); sc.Scan(); {
+		if firstLine {
+			firstLine = false
+			continue
+		}
+		if err := fn(sc.Text()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// selectRowsMap applies `fn` to all rows returned from a select statement.
+func selectRowsMap(
+	conn *sqlConn, stmt string, vals []driver.Value, fn func([]driver.Value) error,
+) error {
+	rows, err := conn.Query(stmt, nil)
+	if err != nil {
+		return errors.Wrapf(err, "query '%s'", stmt)
+	}
+	for {
+		var err error
+		if err = rows.Next(vals); err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if err := fn(vals); err != nil {
+			return err
+		}
+	}
+	return nil
 }
