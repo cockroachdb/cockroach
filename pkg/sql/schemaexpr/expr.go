@@ -136,6 +136,21 @@ func FormatExprForDisplayWithoutTypeAnnotations(
 	return tree.AsString(expr), nil
 }
 
+// FormatExprForDisplayInPGCatalog formats a schema expression string for
+// display, similar to FormatExprForDisplay, but does not add type annotations
+// and does add typecasts for non-numeric constants. This is the format that
+// should be used for displaying expressions in pg_catalog, in order to achieve
+// compatibility with the pg_catalog from PostgreSQL.
+func FormatExprForDisplayInPGCatalog(
+	ctx context.Context, desc catalog.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
+) (string, error) {
+	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx)
+	if err != nil {
+		return "", err
+	}
+	return tree.AsStringWithFlags(expr, tree.FmtPGCatalog), nil
+}
+
 func deserializeExprForFormatting(
 	ctx context.Context, desc catalog.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
 ) (tree.Expr, error) {

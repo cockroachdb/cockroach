@@ -112,11 +112,12 @@ const (
 	// the numeric by enclosing them within parentheses.
 	FmtParsableNumerics
 
-	// FmtPGAttrdefAdbin is used to produce expressions formatted in a way that's
-	// as close as possible to what clients expect to live in the pg_attrdef.adbin
-	// column. Specifically, this strips type annotations, since Postgres doesn't
-	// know what those are.
-	FmtPGAttrdefAdbin
+	// FmtPGCatalog is used to produce expressions formatted in a way that's as
+	// close as possible to what clients expect to live in pg_catalog (e.g.
+	// pg_attrdef.adbin and pg_constraint.condef columns). Specifically, this
+	// strips type annotations, since Postgres doesn't know what those are, and
+	// adds cast expressions for non-numeric constants.
+	FmtPGCatalog
 
 	// FmtPGIndexDef is used to produce CREATE INDEX statements that are
 	// compatible with pg_get_indexdef.
@@ -365,7 +366,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			ctx.WriteByte(')')
 		}
 	}
-	if f.HasFlags(fmtDisambiguateDatumTypes) {
+	if f.HasFlags(fmtDisambiguateDatumTypes) || f.HasFlags(FmtPGCatalog) {
 		var typ *types.T
 		if d, isDatum := n.(Datum); isDatum {
 			if p, isPlaceholder := d.(*Placeholder); isPlaceholder {
@@ -376,8 +377,13 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			}
 		}
 		if typ != nil {
-			ctx.WriteString(":::")
-			ctx.FormatTypeReference(typ)
+			if f.HasFlags(fmtDisambiguateDatumTypes) {
+				ctx.WriteString(":::")
+				ctx.FormatTypeReference(typ)
+			} else if f.HasFlags(FmtPGCatalog) && !typ.IsNumeric() {
+				ctx.WriteString("::")
+				ctx.FormatTypeReference(typ)
+			}
 		}
 	}
 }
