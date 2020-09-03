@@ -16,8 +16,8 @@
 #include <dlfcn.h>
 #endif  // #if _WIN32
 #include <memory>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string>
 #include <vector>
 
@@ -98,6 +98,9 @@ typedef int (*CR_GEOS_Normalize_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
 typedef CR_GEOS_Geometry (*CR_GEOS_Centroid_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_ConvexHull_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_Simplify_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
+typedef CR_GEOS_Geometry (*CR_GEOS_TopologyPreserveSimplify_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                               double);
 typedef CR_GEOS_Geometry (*CR_GEOS_Union_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_Intersection_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                    CR_GEOS_Geometry);
@@ -134,7 +137,8 @@ typedef void (*CR_GEOS_WKBWriter_setIncludeSRID_r)(CR_GEOS_Handle, CR_GEOS_WKBWr
 typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double, double,
                                                  double, double);
 
-typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                  CR_GEOS_Geometry);
 
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
@@ -186,6 +190,8 @@ struct CR_GEOS {
 
   CR_GEOS_Centroid_r GEOSGetCentroid_r;
   CR_GEOS_ConvexHull_r GEOSConvexHull_r;
+  CR_GEOS_Simplify_r GEOSSimplify_r;
+  CR_GEOS_TopologyPreserveSimplify_r GEOSTopologyPreserveSimplify_r;
   CR_GEOS_Union_r GEOSUnion_r;
   CR_GEOS_PointOnSurface_r GEOSPointOnSurface_r;
   CR_GEOS_Intersection_r GEOSIntersection_r;
@@ -269,6 +275,8 @@ struct CR_GEOS {
     INIT(GEOSisSimple_r);
     INIT(GEOSGetCentroid_r);
     INIT(GEOSConvexHull_r);
+    INIT(GEOSSimplify_r);
+    INIT(GEOSTopologyPreserveSimplify_r);
     INIT(GEOSUnion_r);
     INIT(GEOSPointOnSurface_r);
     INIT(GEOSIntersection_r);
@@ -527,8 +535,7 @@ CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
   return CR_GEOS_UnaryOperator(lib, lib->GEOSLength_r, a, ret);
 }
 
-CR_GEOS_Status CR_GEOS_Normalize(CR_GEOS* lib, CR_GEOS_Slice a,
-                                 CR_GEOS_String* normalizedEWKB) {
+CR_GEOS_Status CR_GEOS_Normalize(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* normalizedEWKB) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
   *normalizedEWKB = {.data = NULL, .len = 0};
@@ -714,6 +721,44 @@ CR_GEOS_Status CR_GEOS_ConvexHull(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String*
   return toGEOSString(error.data(), error.length());
 }
 
+CR_GEOS_Status CR_GEOS_Simplify(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* simplifyEWKB,
+                                double tolerance) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  *simplifyEWKB = {.data = NULL, .len = 0};
+  if (geom != nullptr) {
+    auto simplifyGeom = lib->GEOSSimplify_r(handle, geom, tolerance);
+    if (simplifyGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geom);
+      CR_GEOS_writeGeomToEWKB(lib, handle, simplifyGeom, simplifyEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, simplifyGeom);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_TopologyPreserveSimplify(CR_GEOS* lib, CR_GEOS_Slice a,
+                                                CR_GEOS_String* simplifyEWKB, double tolerance) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  *simplifyEWKB = {.data = NULL, .len = 0};
+  if (geom != nullptr) {
+    auto simplifyGeom = lib->GEOSTopologyPreserveSimplify_r(handle, geom, tolerance);
+    if (simplifyGeom != nullptr) {
+      auto srid = lib->GEOSGetSRID_r(handle, geom);
+      CR_GEOS_writeGeomToEWKB(lib, handle, simplifyGeom, simplifyEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, simplifyGeom);
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
 CR_GEOS_Status CR_GEOS_Union(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
                              CR_GEOS_String* unionEWKB) {
   std::string error;
@@ -788,7 +833,7 @@ CR_GEOS_Status CR_GEOS_Intersection(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice
 }
 
 CR_GEOS_Status CR_GEOS_SymDifference(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
-                                    CR_GEOS_String* symdifferenceEWKB) {
+                                     CR_GEOS_String* symdifferenceEWKB) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
   *symdifferenceEWKB = {.data = NULL, .len = 0};
@@ -984,7 +1029,8 @@ CR_GEOS_Status CR_GEOS_RelatePattern(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slic
   return toGEOSString(error.data(), error.length());
 }
 
-CR_GEOS_Status CR_GEOS_SharedPaths(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, CR_GEOS_String* ret) {
+CR_GEOS_Status CR_GEOS_SharedPaths(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                   CR_GEOS_String* ret) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
 
