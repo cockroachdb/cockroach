@@ -1,7 +1,11 @@
 # This file documents operations that are unsupported when running a SQL tenant
 # server.
-# TODO(tbg): file an issue detailing which ones are Phase 2 blockers.
 # LogicTest: 3node-tenant
+
+query I
+SELECT crdb_internal.node_id()
+----
+NULL
 
 statement ok
 CREATE TABLE kv (k STRING PRIMARY KEY, v STRING)

@@ -426,7 +426,8 @@ func (p *planner) preparePlannerForCopy(
 	stmtTs := txnOpt.stmtTimestamp
 	autoCommit := false
 	if txn == nil {
-		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, p.execCfg.NodeID.Get())
+		nodeID, _ := p.execCfg.NodeID.OptionalNodeID()
+		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID)
 		txnTs = p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
 		autoCommit = true
