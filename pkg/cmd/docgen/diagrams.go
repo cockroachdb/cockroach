@@ -1237,6 +1237,11 @@ var specs = []stmtSpec{
 		unlink:  []string{"row_vals"},
 	},
 	{
+		name:   "show_schedules",
+		stmt:   "show_schedules_stmt",
+		inline: []string{"schedule_state", "opt_schedule_executor_type"},
+	},
+	{
 		name: "show_schemas",
 		stmt: "show_schemas_stmt",
 	},
