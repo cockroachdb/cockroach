@@ -384,12 +384,8 @@ CR_GEOS_Geometry CR_GEOS_GeometryFromSlice(CR_GEOS* lib, CR_GEOS_Handle handle,
 
 void CR_GEOS_writeGeomToEWKB(CR_GEOS* lib, CR_GEOS_Handle handle, CR_GEOS_Geometry geom,
                              CR_GEOS_String* ewkb, int srid) {
-  auto hasZ = lib->GEOSHasZ_r(handle, geom);
   auto wkbWriter = lib->GEOSWKBWriter_create_r(handle);
   lib->GEOSWKBWriter_setByteOrder_r(handle, wkbWriter, 1);
-  if (hasZ) {
-    lib->GEOSWKBWriter_setOutputDimension_r(handle, wkbWriter, 3);
-  }
   if (srid != 0) {
     lib->GEOSSetSRID_r(handle, geom, srid);
   }
