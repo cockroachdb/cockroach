@@ -117,6 +117,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTablesTableID:               crdbInternalTablesTable,
 		catconstants.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
 		catconstants.CrdbInternalZonesTableID:                crdbInternalZonesTable,
+		catconstants.CrdbInternalInvalidDescriptorsTableID:   crdbInternalInvalidTablesTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -3517,5 +3518,39 @@ CREATE TABLE crdb_internal.predefined_comments (
 		}
 
 		return nil
+	},
+}
+
+var crdbInternalInvalidTablesTable = virtualSchemaTable{
+	comment: `virtual table to validate tables`,
+	schema: `
+CREATE TABLE crdb_internal.invalid_tables (
+  table_id      INT,
+  database_name STRING,
+  schema_name   STRING,
+  table_name    STRING,
+  error         STRING
+)`,
+	populate: func(
+		ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error,
+	) error {
+		// The internalLookupContext will only have descriptors in the current
+		// database. To deal with this, we fall through
+		//
+		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, func(
+			dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, fn tableLookupFn,
+		) error {
+			err := descriptor.Validate(ctx, fn)
+			if err == nil {
+				return nil
+			}
+			return addRow(
+				tree.NewDInt(tree.DInt(descriptor.GetID())),
+				tree.NewDString(dbDesc.GetName()),
+				tree.NewDString(schema),
+				tree.NewDString(descriptor.GetName()),
+				tree.NewDString(err.Error()),
+			)
+		})
 	},
 }
