@@ -572,8 +572,14 @@ func newSourceNotFoundError(fmt string, args ...interface{}) error {
 type CommonLookupFlags struct {
 	// if required is set, lookup will return an error if the item is not found.
 	Required bool
+	// return a MutableTableDescriptor
+	RequireMutable bool
 	// if AvoidCached is set, lookup will avoid the cache (if any).
 	AvoidCached bool
+	// IncludeOffline specifies if offline descriptors should be visible.
+	IncludeOffline bool
+	// IncludeOffline specifies if dropped descriptors should be visible.
+	IncludeDropped bool
 }
 
 // SchemaLookupFlags is the flag struct suitable for GetSchema().
@@ -650,10 +656,6 @@ func (r RequiredTableKind) String() string {
 // ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
 type ObjectLookupFlags struct {
 	CommonLookupFlags
-	// return a MutableTableDescriptor
-	RequireMutable         bool
-	IncludeOffline         bool
-	IncludeDropped         bool
 	AllowWithoutPrimaryKey bool
 	// Control what type of object is being requested.
 	DesiredObjectKind DesiredObjectKind

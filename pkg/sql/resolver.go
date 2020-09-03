@@ -248,9 +248,8 @@ func (p *planner) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: true},
+		CommonLookupFlags: tree.CommonLookupFlags{Required: true, RequireMutable: false},
 		DesiredObjectKind: tree.TypeObject,
-		RequireMutable:    false,
 	}
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
 	if err != nil {
@@ -291,10 +290,9 @@ func (p *planner) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, 
 
 // ObjectLookupFlags is part of the resolver.SchemaResolver interface.
 func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLookupFlags {
-	return tree.ObjectLookupFlags{
-		CommonLookupFlags: p.CommonLookupFlags(required),
-		RequireMutable:    requireMutable,
-	}
+	flags := p.CommonLookupFlags(required)
+	flags.RequireMutable = requireMutable
+	return tree.ObjectLookupFlags{CommonLookupFlags: flags}
 }
 
 // getDescriptorsFromTargetListForPrivilegeChange fetches the descriptors for the targets.
@@ -866,8 +864,7 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 	requiredType tree.RequiredTableKind,
 ) (*tabledesc.Mutable, error) {
 	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags:      tree.CommonLookupFlags{Required: required},
-		RequireMutable:         true,
+		CommonLookupFlags:      tree.CommonLookupFlags{Required: required, RequireMutable: true},
 		AllowWithoutPrimaryKey: true,
 		DesiredObjectKind:      tree.TableObject,
 		DesiredTableDescKind:   requiredType,
