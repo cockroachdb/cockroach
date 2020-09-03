@@ -178,6 +178,7 @@ func createTestStoreWithOpts(
 			Stopper:    stopper,
 		},
 		distSender,
+		distSender.RangeDescriptorCache(),
 	)
 	storeCfg.DB = kv.NewDB(ac, tcsFactory, storeCfg.Clock, stopper)
 	storeCfg.StorePool = kvserver.NewTestStorePool(storeCfg)
@@ -825,6 +826,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 			Stopper:    stopper,
 		},
 		m.distSenders[idx],
+		m.distSenders[idx].RangeDescriptorCache(),
 	)
 	m.dbs[idx] = kv.NewDB(ambient, tcsFactory, m.clocks[idx], stopper)
 }

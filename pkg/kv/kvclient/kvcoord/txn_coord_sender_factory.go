@@ -82,7 +82,7 @@ func NewTxnCoordSenderFactory(
 		heartbeatBatcher: &TxnHeartbeatBatcher{
 			rdc: rangeCache,
 			batcher: requestbatcher.New(requestbatcher.Config{
-				Name:            "test_r_batcher",
+				Name:            "heartbeat_batcher",
 				MaxMsgsPerBatch: 10,
 				Stopper:         cfg.Stopper,
 				Sender:          wrapped,

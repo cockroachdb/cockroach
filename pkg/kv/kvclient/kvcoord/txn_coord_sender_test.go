@@ -238,6 +238,7 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 			Stopper:    s.Stopper(),
 		},
 		ds,
+		ds.RangeDescriptorCache(),
 	)
 	db := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
 	ctx := context.Background()
@@ -297,6 +298,10 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 
 	// Make a db with a short heartbeat interval.
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ds := NewDistSenderForLocalTestCluster(
+		s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
+		ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
+	)
 	tsf := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
@@ -306,10 +311,8 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			Clock:             s.Clock,
 			Stopper:           s.Stopper(),
 		},
-		NewDistSenderForLocalTestCluster(
-			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
-			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
-		),
+		ds,
+		ds.RangeDescriptorCache(),
 	)
 	quickHeartbeatDB := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
 
@@ -815,6 +818,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					Stopper:    stopper,
 				},
 				senderFn,
+				NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 			)
 			db := kv.NewDB(ambient, tsf, clock, stopper)
 			key := roachpb.Key("test-key")
@@ -957,6 +961,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		senderFn,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	defer stopper.Stop(ctx)
 
@@ -1330,6 +1335,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 					Settings:   cluster.MakeTestingClusterSettings(),
 				},
 				senderFn,
+				NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 			)
 
 			db := kv.NewDB(ambient, factory, clock, stopper)
@@ -1411,6 +1417,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(ambient, factory, clock, stopper)
 
@@ -1479,6 +1486,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(ambient, factory, clock, stopper)
 	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
@@ -1570,6 +1578,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	testutils.RunTrueAndFalse(t, "explicit txn", func(t *testing.T, explicitTxn bool) {
 		testutils.RunTrueAndFalse(t, "with get", func(t *testing.T, withGet bool) {
@@ -1637,6 +1646,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 
 	// Test all transactional write methods.
@@ -1722,6 +1732,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 	if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
@@ -1779,6 +1790,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 			},
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
@@ -1871,6 +1883,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
@@ -1927,6 +1940,7 @@ func TestSequenceNumbers(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
@@ -1977,6 +1991,7 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(ambient, factory, clock, stopper)
 
@@ -2019,6 +2034,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
@@ -2095,6 +2111,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		sender,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 
@@ -2156,12 +2173,16 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 	}
 
 	ambientCtx := log.AmbientContext{Tracer: tracing.NewTracer()}
-	tsf := NewTxnCoordSenderFactory(TxnCoordSenderFactoryConfig{
-		AmbientCtx: ambientCtx,
-		Settings:   s.Cfg.Settings,
-		Clock:      s.Clock,
-		Stopper:    s.Stopper(),
-	}, senderFn)
+	tsf := NewTxnCoordSenderFactory(
+		TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambientCtx,
+			Settings:   s.Cfg.Settings,
+			Clock:      s.Clock,
+			Stopper:    s.Stopper(),
+		},
+		senderFn,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+	)
 	db := kv.NewDB(ambientCtx, tsf, s.Clock, s.Stopper())
 
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -2240,6 +2261,7 @@ func TestAnchorKey(t *testing.T) {
 			Settings:   cluster.MakeTestingClusterSettings(),
 		},
 		senderFn,
+		NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 	)
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 

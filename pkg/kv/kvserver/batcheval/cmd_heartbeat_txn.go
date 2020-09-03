@@ -36,7 +36,10 @@ func declareKeysHeartbeatTransaction(
 
 // HeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
-// coordinator. Returns the updated transaction.
+// coordinator. Returns the updated transaction and a nil error
+// (For HeartbeatTxnRequests, even if an error occurs, we still
+// only care about the updated transaction, which is why we always
+// return a nil error)
 func HeartbeatTxn(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -50,7 +53,7 @@ func HeartbeatTxn(
 
 	if args.Now.IsEmpty() {
 		reply.Txn = args.Txn
-		return result.Result{}, nil // , fmt.Errorf("now not specified for heartbeat")
+		return result.Result{}, nil
 	}
 
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
@@ -60,7 +63,7 @@ func HeartbeatTxn(
 		ctx, readWriter, key, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 	); err != nil {
 		reply.Txn = &txn
-		return result.Result{}, nil // err
+		return result.Result{}, nil
 	} else if !ok {
 		// No existing transaction record was found - create one by writing
 		// it below.
@@ -68,8 +71,9 @@ func HeartbeatTxn(
 
 		// Verify that it is safe to create the transaction record.
 		if err := CanCreateTxnRecord(ctx, cArgs.EvalCtx, &txn); err != nil {
-			// create a txn with ABORTED status (CanCreateTxnRecord returns a
-			// TransactionAbortedError)
+			// CanCreateTxnRecord returns a TransactionAbortedError, so in the
+			// case of an error, we create a txn with ABORTED status and add it
+			// to the reply
 			txn.Status = roachpb.ABORTED
 			reply.Txn = &txn
 			return result.Result{}, nil
@@ -84,7 +88,7 @@ func HeartbeatTxn(
 		txnRecord := txn.AsRecord()
 		if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 			reply.Txn = &txn
-			return result.Result{}, nil //, err
+			return result.Result{}, nil
 		}
 	}
 

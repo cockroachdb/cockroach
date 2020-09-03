@@ -70,13 +70,6 @@ type txnHeartbeater struct {
 
 	// wrapped is the next sender in the interceptor stack.
 	wrapped lockedSender
-	// gatekeeper is the sender to which heartbeat requests need to be sent. It is
-	// set to the gatekeeper interceptor, so sending directly to it will bypass
-	// all the other interceptors; heartbeats don't need them and they can only
-	// hurt - we don't want heartbeats to get sequence numbers or to check any
-	// intents. Note that the async rollbacks that this interceptor sometimes
-	// sends got through `wrapped`, not directly through `gatekeeper`.
-	gatekeeper lockedSender
 
 	// mu contains state protected by the TxnCoordSender's mutex.
 	mu struct {
@@ -125,7 +118,6 @@ func (h *txnHeartbeater) init(
 	metrics *TxnMetrics,
 	loopInterval time.Duration,
 	heartbeatBatcher *TxnHeartbeatBatcher,
-	gatekeeper lockedSender,
 	mu sync.Locker,
 	txn *roachpb.Transaction,
 ) {
@@ -135,7 +127,6 @@ func (h *txnHeartbeater) init(
 	h.metrics = metrics
 	h.loopInterval = loopInterval
 	h.heartbeatBatcher = heartbeatBatcher
-	h.gatekeeper = gatekeeper
 	h.mu.Locker = mu
 	h.mu.txn = txn
 }
@@ -305,25 +296,20 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	}
 
 	log.VEvent(ctx, 2, "heartbeat")
-
 	rangeCacheEntry, err := h.heartbeatBatcher.rdc.Lookup(ctx, txn.Key)
 	if err != nil {
 		return false
 	}
 	h.mu.Unlock()
-	resp, err := h.heartbeatBatcher.batcher.Send(ctx, rangeCacheEntry.Desc().RangeID, &roachpb.HeartbeatTxnRequest{
+	// Add HeartbeatTxnRequest to the heartbeat batcher.
+	resp, _ := h.heartbeatBatcher.batcher.Send(ctx, rangeCacheEntry.Desc().RangeID, &roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now: h.clock.Now(),
 		Txn: txn,
 	})
-
 	h.mu.Lock()
-	if err != nil {
-		log.Warningf(ctx, "XXX: error! %s", err.Error())
-		return false
-	}
 
 	// If the txn is no longer pending, ignore the result of the heartbeat
 	// and tear down the heartbeat loop.

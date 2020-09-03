@@ -221,7 +221,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 				return err
 			}
 			d.oID = dNextOID - 1
-			time.Sleep(2 * time.Second)
+
 			// Select the warehouse tax rate.
 			if err := n.selectWarehouseTax.QueryRowTx(
 				ctx, tx, wID,

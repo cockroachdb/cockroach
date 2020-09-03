@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -144,6 +145,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 				Metrics:    kvcoord.MakeTxnMetrics(time.Second),
 			},
 			store.TestSender(),
+			kvcoord.NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), nil, func() int64 { return 2 << 10 }, stopper),
 		)
 		db := kv.NewDB(actx, tcsf, store.cfg.Clock, stopper)
 		ctx := context.Background()

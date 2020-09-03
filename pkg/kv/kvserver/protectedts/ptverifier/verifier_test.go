@@ -61,6 +61,7 @@ func TestVerifier(t *testing.T) {
 			}
 			return ds.Send(ctx, ba)
 		}),
+		ds.RangeDescriptorCache(),
 	)
 
 	pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor))

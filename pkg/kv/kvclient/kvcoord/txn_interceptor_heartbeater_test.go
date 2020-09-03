@@ -15,8 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,22 +32,33 @@ import (
 )
 
 func makeMockTxnHeartbeater(
-	txn *roachpb.Transaction,
-) (th txnHeartbeater, mockSender, mockGatekeeper *mockLockedSender) {
-	mockSender, mockGatekeeper = &mockLockedSender{}, &mockLockedSender{}
+	db *testDescriptorDB, txn *roachpb.Transaction, mockDistSender *kv.SenderFunc,
+) (th txnHeartbeater, mockSender *mockLockedSender) {
+	mockSender = &mockLockedSender{}
 	manual := hlc.NewManualClock(123)
+	stopper := stop.NewStopper()
+
 	th.init(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
-		stop.NewStopper(),
+		stopper,
 		hlc.NewClock(manual.UnixNano, time.Nanosecond),
 		new(TxnMetrics),
 		1*time.Millisecond,
-		mockGatekeeper,
+		&TxnHeartbeatBatcher{
+			rdc: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), db, staticSize(2<<10), stopper),
+			batcher: requestbatcher.New(requestbatcher.Config{
+				Name:            "heartbeat_batcher",
+				MaxMsgsPerBatch: 1,
+				Stopper:         stopper,
+				Sender:          mockDistSender,
+				MaxWait:         0,
+			}),
+		},
 		new(syncutil.Mutex),
 		txn,
 	)
 	th.setWrapped(mockSender)
-	return th, mockSender, mockGatekeeper
+	return th, mockSender
 }
 
 func waitForHeartbeatLoopToStop(t *testing.T, th *txnHeartbeater) {
@@ -67,7 +81,8 @@ func TestTxnHeartbeaterSetsTransactionKey(t *testing.T) {
 	ctx := context.Background()
 	txn := makeTxnProto()
 	txn.Key = nil // reset
-	th, mockSender, _ := makeMockTxnHeartbeater(&txn)
+	db := initTestDescriptorDB(t)
+	th, mockSender := makeMockTxnHeartbeater(db, &txn, nil)
 	defer th.stopper.Stop(ctx)
 
 	// No key is set on a read-only batch.
@@ -149,7 +164,9 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
 		ctx := context.Background()
 		txn := makeTxnProto()
-		th, _, _ := makeMockTxnHeartbeater(&txn)
+		db := initTestDescriptorDB(t)
+
+		th, _ := makeMockTxnHeartbeater(db, &txn, nil)
 		defer th.stopper.Stop(ctx)
 
 		// Read-only requests don't start the heartbeat loop.
@@ -201,7 +218,9 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	txn := makeTxnProto()
-	th, _, _ := makeMockTxnHeartbeater(&txn)
+	db := initTestDescriptorDB(t)
+
+	th, _ := makeMockTxnHeartbeater(db, &txn, nil)
 	defer th.stopper.Stop(ctx)
 
 	keyA := roachpb.Key("a")
@@ -220,29 +239,26 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	th.mu.Unlock()
 }
 
-// TestTxnHeartbeaterLoopRequests tests that the HeartbeatTxnRequests that the
-// txnHeartbeater sends contain the correct information. It then tests that the
-// heartbeat loop shuts itself down if it detects a committed transaction. This
-// can occur through two different paths. A heartbeat request itself can find
-// a committed transaction record or the request can race with a request sent
-// from the transaction coordinator that finalizes the transaction.
+//TestTxnHeartbeaterLoopRequests tests that the HeartbeatTxnRequests that the
+//txnHeartbeater sends contain the correct information. It then tests that the
+//heartbeat loop shuts itself down if it detects a committed transaction. This
+//can occur through two different paths. A heartbeat request itself can find
+//a committed transaction record or the request can race with a request sent
+//from the transaction coordinator that finalizes the transaction.
 func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "heartbeatObserved", func(t *testing.T, heartbeatObserved bool) {
 		ctx := context.Background()
 		txn := makeTxnProto()
-		th, _, mockGatekeeper := makeMockTxnHeartbeater(&txn)
-		defer th.stopper.Stop(ctx)
-
 		var count int
 		var lastTime hlc.Timestamp
-		mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockDistSender := kv.SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			require.Len(t, ba.Requests, 1)
 			require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
 			hbReq := ba.Requests[0].GetInner().(*roachpb.HeartbeatTxnRequest)
-			require.Equal(t, &txn, ba.Txn)
+			require.Equal(t, &txn, hbReq.Txn)
 			require.Equal(t, roachpb.Key(txn.Key), hbReq.Key)
 			require.True(t, lastTime.Less(hbReq.Now))
 
@@ -250,9 +266,12 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 			lastTime = hbReq.Now
 
 			br := ba.CreateReply()
-			br.Txn = ba.Txn
+			br.Txn = hbReq.Txn
 			return br, nil
 		})
+		db := initTestDescriptorDB(t)
+		th, _ := makeMockTxnHeartbeater(db, &txn, &mockDistSender)
+		defer th.stopper.Stop(ctx)
 
 		// Kick off the heartbeat loop.
 		keyA := roachpb.Key("a")
@@ -279,21 +298,25 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 		// Mark the coordinator's transaction record as COMMITTED while a heartbeat
 		// is in-flight. This should cause the heartbeat loop to shut down.
 		th.mu.Lock()
-		mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockDistSender = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			require.Len(t, ba.Requests, 1)
 			require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
 			br := ba.CreateReply()
-			br.Txn = ba.Txn
+			br.Txn = ba.Requests[0].GetHeartbeatTxn().Txn
 			if heartbeatObserved {
 				// Mimic a Heartbeat request that observed a committed record.
 				br.Txn.Status = roachpb.COMMITTED
+				resp := br.Responses[0].GetInner()
+				reply := resp.(*roachpb.HeartbeatTxnResponse)
+				reply.Txn = br.Txn
 			} else {
 				// Mimic an EndTxn that raced with the heartbeat loop.
 				txn.Status = roachpb.COMMITTED
 			}
 			return br, nil
-		})
+		}
+
 		th.mu.Unlock()
 		waitForHeartbeatLoopToStop(t, &th)
 
@@ -314,69 +337,73 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testutils.RunTrueAndFalse(t, "abortedErr", func(t *testing.T, abortedErr bool) {
-		ctx := context.Background()
-		txn := makeTxnProto()
-		th, mockSender, mockGatekeeper := makeMockTxnHeartbeater(&txn)
-		defer th.stopper.Stop(ctx)
 
-		putDone, asyncAbortDone := make(chan struct{}), make(chan struct{})
-		mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			// Wait for the Put to finish to avoid a data race.
-			<-putDone
+	ctx := context.Background()
+	txn := makeTxnProto()
+	//txn.Key = roachpb.RKey(string("b"))
 
-			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+	putDone, asyncAbortDone := make(chan struct{}), make(chan struct{})
 
-			if abortedErr {
-				return nil, roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_UNKNOWN), ba.Txn,
-				)
-			}
-			br := ba.CreateReply()
-			br.Txn = ba.Txn
-			br.Txn.Status = roachpb.ABORTED
-			return br, nil
-		})
+	db := initTestDescriptorDB(t)
 
-		// Kick off the heartbeat loop.
-		keyA := roachpb.Key("a")
-		var ba roachpb.BatchRequest
-		ba.Header = roachpb.Header{Txn: txn.Clone()}
-		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	mockDistSender := kv.SenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		//Wait for the Put to finish to avoid a data race.
+		<-putDone
 
-		br, pErr := th.SendLocked(ctx, ba)
-		require.Nil(t, pErr)
-		require.NotNil(t, br)
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
-		// Test that the transaction is rolled back.
-		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			defer close(asyncAbortDone)
-			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+		br := ba.CreateReply()
+		br.Txn = ba.Requests[0].GetHeartbeatTxn().Txn
+		br.Txn.Status = roachpb.ABORTED
 
-			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
-			require.Equal(t, &txn, ba.Txn)
-			require.Nil(t, etReq.Key) // set in txnCommitter
-			require.False(t, etReq.Commit)
-			require.True(t, etReq.Poison)
+		resp := br.Responses[0].GetInner()
+		reply := resp.(*roachpb.HeartbeatTxnResponse)
+		reply.Txn = br.Txn
 
-			br = ba.CreateReply()
-			br.Txn = ba.Txn
-			br.Txn.Status = roachpb.ABORTED
-			return br, nil
-		})
-		close(putDone)
-
-		// The heartbeat loop should eventually close.
-		waitForHeartbeatLoopToStop(t, &th)
-
-		// Wait for the async abort to finish.
-		<-asyncAbortDone
-
-		// Regardless of which channel informed the heartbeater of the
-		// transaction's aborted status, we expect the heartbeater's final
-		// observed status to be set.
-		require.Equal(t, roachpb.ABORTED, th.mu.finalObservedStatus)
+		return br, nil
 	})
+	th, mockSender := makeMockTxnHeartbeater(db, &txn, &mockDistSender)
+
+	defer th.stopper.Stop(ctx)
+	// Kick off the heartbeat loop.
+	keyA := roachpb.Key("a")
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: txn.Clone()}
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+
+	br, pErr := th.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Test that the transaction is rolled back.
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		defer close(asyncAbortDone)
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+		etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+		require.Equal(t, &txn, ba.Txn)
+		require.Nil(t, etReq.Key) // set in txnCommitter
+		require.False(t, etReq.Commit)
+		require.True(t, etReq.Poison)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.ABORTED
+
+		return br, nil
+	})
+	close(putDone)
+
+	// The heartbeat loop should eventually close.
+	waitForHeartbeatLoopToStop(t, &th)
+
+	// Wait for the async abort to finish.
+	<-asyncAbortDone
+
+	// Regardless of which channel informed the heartbeater of the
+	// transaction's aborted status, we expect the heartbeater's final
+	// observed status to be set.
+	require.Equal(t, roachpb.ABORTED, th.mu.finalObservedStatus)
 }
