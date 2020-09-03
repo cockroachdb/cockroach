@@ -122,6 +122,14 @@ type BaseConfig struct {
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
 
+	// GoroutineDumpDirName is the directory name for goroutine dumps using
+	// goroutinedumper.
+	GoroutineDumpDirName string
+
+	// HeapProfileDirName is the directory name for heap profiles using
+	// heapprofiler. If empty, no heap profiles will be collected.
+	HeapProfileDirName string
+
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
 	// server testing knob.
@@ -194,14 +202,6 @@ type KVConfig struct {
 	// TimeSeriesServerConfig contains configuration specific to the time series
 	// server.
 	TimeSeriesServerConfig ts.ServerConfig
-
-	// GoroutineDumpDirName is the directory name for goroutine dumps using
-	// goroutinedumper.
-	GoroutineDumpDirName string
-
-	// HeapProfileDirName is the directory name for heap profiles using
-	// heapprofiler. If empty, no heap profiles will be collected.
-	HeapProfileDirName string
 
 	// Parsed values.
 
