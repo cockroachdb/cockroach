@@ -434,6 +434,7 @@ var specs = []stmtSpec{
 		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP'")},
 		replace: map[string]string{
+			"opt_backup_":                                     "",
 			"non_reserved_word_or_sconst":                     "destination",
 			"'AS' 'OF' 'SYSTEM' 'TIME' a_expr":                "'AS OF SYSTEM TIME' timestamp",
 			"'INCREMENTAL' 'FROM' string_or_placeholder_list": "'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* )",
@@ -562,6 +563,14 @@ var specs = []stmtSpec{
 		stmt:   "create_index_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("'CREATE' 'INVERTED'")},
 		inline: []string{"opt_storing", "storing", "opt_unique", "opt_name", "index_params", "index_elem", "opt_asc_desc"},
+	},
+	{
+		name:   "create_schedule_for_backup_stmt",
+		inline: []string{"opt_description", "string_or_placeholder_opt_list", "string_or_placeholder_list", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
+		replace: map[string]string{
+			"string_or_placeholder 'FOR'":       "label 'FOR'",
+			"'RECURRING' sconst_or_placeholder": "'RECURRING' cronexpr",
+			"targets":                           "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
 	},
 	{
 		name:    "create_sequence_stmt",
