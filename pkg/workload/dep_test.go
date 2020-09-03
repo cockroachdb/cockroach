@@ -24,12 +24,14 @@ func TestDepWhitelist(t *testing.T) {
 	// set of deps, run it by danhhz first.
 	buildutil.VerifyTransitiveWhitelist(t, "github.com/cockroachdb/cockroach/pkg/workload",
 		[]string{
+			`github.com/cockroachdb/cockroach/pkg/build`,
 			`github.com/cockroachdb/cockroach/pkg/col/coldata`,
 			`github.com/cockroachdb/cockroach/pkg/col/coltypes`,
 			`github.com/cockroachdb/cockroach/pkg/util/bufalloc`,
 			`github.com/cockroachdb/cockroach/pkg/util/encoding/csv`,
 			`github.com/cockroachdb/cockroach/pkg/util/syncutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/timeutil`,
+			`github.com/cockroachdb/cockroach/pkg/util/version`,
 			`github.com/cockroachdb/cockroach/pkg/workload/histogram`,
 		},
 	)
