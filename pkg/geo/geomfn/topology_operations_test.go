@@ -93,6 +93,67 @@ func TestConvexHull(t *testing.T) {
 	}
 }
 
+func TestSimplify(t *testing.T) {
+	testCases := []struct {
+		wkt       string
+		tolerance float64
+		expected  string
+	}{
+		{
+			wkt:       "POLYGON ((20 10, 10 20, 20 20, 20 30, 30 30, 30 20, 40 20, 40 10, 30 0, 20 0, 20 10))",
+			tolerance: 5,
+			expected:  "POLYGON ((20 10, 10 20, 30 30, 40 10, 30 00, 20 0, 20 10))",
+		},
+		{
+			wkt:       "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
+			tolerance: 3,
+			expected:  "POLYGON ((5 7, 16 11, 18 7, 2 5, 5 7))",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s_%f", tc.wkt, tc.tolerance), func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := Simplify(g, tc.tolerance)
+			require.NoError(t, err)
+
+			expected, err := geo.ParseGeometry(tc.expected)
+			require.NoError(t, err)
+
+			require.Equal(t, expected, ret)
+		})
+	}
+}
+
+func TestSimplifyPreserveTopology(t *testing.T) {
+	testCases := []struct {
+		wkt       string
+		tolerance float64
+		expected  string
+	}{
+		{
+			wkt:       "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
+			tolerance: 3,
+			expected:  "POLYGON ((5 7, 2 5, 13 4, 18 7, 16 11, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s_%f", tc.wkt, tc.tolerance), func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := SimplifyPreserveTopology(g, tc.tolerance)
+			require.NoError(t, err)
+
+			expected, err := geo.ParseGeometry(tc.expected)
+			require.NoError(t, err)
+
+			require.Equal(t, expected, ret)
+		})
+	}
+}
+
 func TestPointOnSurface(t *testing.T) {
 	testCases := []struct {
 		wkt      string
