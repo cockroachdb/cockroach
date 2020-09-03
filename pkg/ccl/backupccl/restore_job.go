@@ -693,6 +693,10 @@ type restoreResumer struct {
 		// restore. It is used to simulate any errors that we may face at this point
 		// of the restore.
 		duringSystemTableRestoration func() error
+		// afterOfflineTableCreation is called after creating the OFFLINE table
+		// descriptors we're ingesting. If an error is returned, we fail the
+		// restore.
+		afterOfflineTableCreation func() error
 	}
 }
 
@@ -1089,6 +1093,12 @@ func (r *restoreResumer) Resume(
 	// Refresh the job details since they may have been updated when creating the
 	// importing descriptors.
 	details = r.job.Details().(jobspb.RestoreDetails)
+
+	if fn := r.testingKnobs.afterOfflineTableCreation; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
 	r.execCfg = p.ExecCfg()
 	backupStats, err := getStatisticsFromBackup(ctx, defaultStore, details.Encryption, latestBackupManifest)
 	if err != nil {
@@ -1334,15 +1344,16 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 				return err
 			}
 		}
-		return r.dropDescriptors(ctx, execCfg.JobRegistry, txn)
+		return r.dropDescriptors(ctx, execCfg, txn)
 	})
 }
 
 // dropDescriptors implements the OnFailOrCancel logic.
 func (r *restoreResumer) dropDescriptors(
-	ctx context.Context, jr *jobs.Registry, txn *kv.Txn,
+	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
+	jr := execCfg.JobRegistry
 
 	// No need to mark the tables as dropped if they were not even created in the
 	// first place.
@@ -1351,7 +1362,7 @@ func (r *restoreResumer) dropDescriptors(
 	}
 
 	// Needed to trigger the schema change manager.
-	if err := txn.SetSystemConfigTrigger(r.execCfg.Codec.ForSystemTenant()); err != nil {
+	if err := txn.SetSystemConfigTrigger(execCfg.Codec.ForSystemTenant()); err != nil {
 		return err
 	}
 
@@ -1380,7 +1391,7 @@ func (r *restoreResumer) dropDescriptors(
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")
 		}
-		existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, prev)
+		existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, prev)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
 		}
@@ -1466,7 +1477,7 @@ func (r *restoreResumer) dropDescriptors(
 	for _, dbDesc := range details.DatabaseDescs {
 		db := dbdesc.NewExistingMutable(*dbDesc)
 		// We need to ignore details.TableDescs since we haven't committed the txn that deletes these.
-		isDBEmpty, err = isDatabaseEmpty(ctx, r.execCfg.DB, db, ignoredTables)
+		isDBEmpty, err = isDatabaseEmpty(ctx, execCfg.DB, db, ignoredTables)
 		if err != nil {
 			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", db.GetName())
 		}
