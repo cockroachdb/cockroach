@@ -595,7 +595,8 @@ message CancelQueryRequest {
   string node_id = 1;
   // ID of query to be canceled (converted to string).
   string query_id = 2 [ (gogoproto.customname) = "QueryID" ];
-  // Username of the user making this cancellation request.
+  // Username of the user making this cancellation request. This may be omitted
+  // if the user is the same as the one issuing the CancelQueryRequest.
   string username = 3;
 }
 
@@ -615,6 +616,8 @@ message CancelSessionRequest {
   // forwarding is necessary.
   string node_id = 1;
   bytes session_id = 2 [ (gogoproto.customname) = "SessionID" ];
+  // Username of the user making this cancellation request. This may be omitted
+  // if the user is the same as the one issuing the CancelSessionRequest.
   string username = 3;
 }
 
