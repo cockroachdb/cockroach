@@ -70,7 +70,7 @@ func TestClosedTimestampWorksWhenRequestsAreSentToNonLeaseHolders(t *testing.T) 
 			Epoch:      1000,
 			Expiration: hlc.LegacyTimestamp{WallTime: 1},
 		}))
-	tc.AddServer(t, serverArgs)
+	tc.AddAndStartServer(t, serverArgs)
 
 	// Create our scratch range and up-replicate it.
 	k := tc.ScratchRange(t)

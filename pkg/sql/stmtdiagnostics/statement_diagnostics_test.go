@@ -98,7 +98,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 // Test that a different node can service a diagnostics request.
 func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 	db0 := tc.ServerConn(0)

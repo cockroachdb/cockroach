@@ -142,7 +142,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	}
 
 	moveTableToNewStore := func(t *testing.T, tc *testcluster.TestCluster, args base.TestClusterArgs, tablePrefix roachpb.Key) {
-		tc.AddServer(t, args.ServerArgs)
+		tc.AddAndStartServer(t, args.ServerArgs)
 		testutils.SucceedsSoon(t, func() error {
 			desc, err := tc.LookupRange(tablePrefix)
 			require.NoError(t, err)

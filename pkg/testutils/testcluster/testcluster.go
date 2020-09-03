@@ -55,6 +55,7 @@ type TestCluster struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
 	}
+	serverArgs []base.TestServerArgs
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
@@ -120,10 +121,18 @@ func (tc *TestCluster) StopServer(idx int) {
 	}
 }
 
-// StartTestCluster starts up a TestCluster made up of `nodes` in-memory testing
-// servers.
+// StartTestCluster creates and starts up a TestCluster made up of `nodes`
+// in-memory testing servers.
 // The cluster should be stopped using TestCluster.Stopper().Stop().
 func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
+	cluster := NewTestCluster(t, nodes, args)
+	cluster.Start(t, args)
+	return cluster
+}
+
+// NewTestCluster initializes a TestCluster made up of `nodes` in-memory testing
+// servers. It needs to be started separately using the return type.
+func NewTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
@@ -166,12 +175,6 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		t.Fatal(err)
 	}
 
-	var errCh chan error
-	if args.ParallelStart {
-		errCh = make(chan error, nodes)
-	}
-
-	disableLBS := false
 	for i := 0; i < nodes; i++ {
 		var serverArgs base.TestServerArgs
 		if perNodeServerArgs, ok := args.ServerArgsPerNode[i]; ok {
@@ -206,30 +209,47 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			serverArgs.NoAutoInitializeCluster = true
 		}
 
+		if _, err := tc.AddServer(serverArgs); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return tc
+}
+
+// Start is the companion method to NewTestCluster, and is responsible for
+// actually starting up the cluster. Start waits for each server to be fully up
+// and running.
+//
+// If looking to test initialization/bootstrap behavior, Start should be invoked
+// in a separate thread and with ParallelStart enabled (otherwise it'll block
+// on waiting for init for the first server).
+func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
+	nodes := len(tc.Servers)
+	var errCh chan error
+	if args.ParallelStart {
+		errCh = make(chan error, nodes)
+	}
+
+	disableLBS := false
+	for i := 0; i < nodes; i++ {
 		// Disable LBS if any server has a very low scan interval.
-		if serverArgs.ScanInterval > 0 && serverArgs.ScanInterval <= 100*time.Millisecond {
+		if tc.serverArgs[i].ScanInterval > 0 && tc.serverArgs[i].ScanInterval <= 100*time.Millisecond {
 			disableLBS = true
 		}
 
-		// Note: uncomment to have the testcluster stored on disk which can aid
-		// post-mortem debugging.
-		//
-		// serverArgs.StoreSpecs = []base.StoreSpec{{
-		// 	Path: fmt.Sprintf("cluster/%d", i+1),
-		// }}
-
 		if args.ParallelStart {
-			go func() {
-				errCh <- tc.doAddServer(t, serverArgs)
-			}()
+			go func(i int) {
+				errCh <- tc.StartServer(t, tc.Server(i), tc.serverArgs[i])
+			}(i)
 		} else {
-			if err := tc.doAddServer(t, serverArgs); err != nil {
+			if err := tc.StartServer(t, tc.Server(i), tc.serverArgs[i]); err != nil {
 				t.Fatal(err)
 			}
 			// We want to wait for stores for each server in order to have predictable
 			// store IDs. Otherwise, stores can be asynchronously bootstrapped in an
 			// unexpected order (#22342).
-			tc.WaitForStores(t, tc.Servers[0].Gossip())
+			tc.WaitForNStores(t, i+1, tc.Servers[0].Gossip())
 		}
 	}
 
@@ -239,7 +259,8 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 				t.Fatal(err)
 			}
 		}
-		tc.WaitForStores(t, tc.Servers[0].Gossip())
+
+		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].Gossip())
 	}
 
 	if tc.replicationMode == base.ReplicationManual {
@@ -272,7 +293,6 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 
 	// Wait until a NodeStatus is persisted for every node (see #25488, #25649, #31574).
 	tc.WaitForNodeStatuses(t)
-	return tc
 }
 
 type checkType bool
@@ -309,26 +329,32 @@ func checkServerArgsForCluster(
 	return nil
 }
 
-// AddServer creates a server with the specified arguments and appends it to
-// the TestCluster.
+// AddAndStartServer creates a server with the specified arguments and appends it to
+// the TestCluster. It also starts it.
 //
 // The new Server's copy of serverArgs might be changed according to the
 // cluster's ReplicationMode.
-func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) {
+func (tc *TestCluster) AddAndStartServer(t testing.TB, serverArgs base.TestServerArgs) {
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
 		serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 	}
-	if err := tc.doAddServer(t, serverArgs); err != nil {
+	serv, err := tc.AddServer(serverArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tc.StartServer(t, serv, serverArgs); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs) error {
+// AddServer is like AddAndStartServer, except it does not start it.
+func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestServer, error) {
 	serverArgs.PartOfCluster = true
 	if serverArgs.JoinAddr != "" {
 		serverArgs.NoAutoInitializeCluster = true
 	}
-	// Check args even though they might have been checked in StartTestCluster;
+	// Check args even though they might have been checked in StartNewTestCluster;
 	// this method might be called for servers being added after the cluster was
 	// started, in which case the check has not been performed.
 	if err := checkServerArgsForCluster(
@@ -338,7 +364,7 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 		// started should have a JoinAddr filled in at this point.
 		allowJoinAddr,
 	); err != nil {
-		return err
+		return nil, err
 	}
 	serverArgs.Stopper = stop.NewStopper()
 	if tc.replicationMode == base.ReplicationManual {
@@ -352,22 +378,36 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 		serverArgs.Knobs.Store = &stkCopy
 	}
 
-	s, conn, _ := serverutils.StartServer(t, serverArgs)
+	s := serverutils.NewServer(serverArgs).(*server.TestServer)
+
+	tc.Servers = append(tc.Servers, s)
+	tc.serverArgs = append(tc.serverArgs, serverArgs)
+	return s, nil
+}
+
+// StartServer is the companion method to AddServer, and is responsible for
+// actually starting the server.
+func (tc *TestCluster) StartServer(
+	t testing.TB, server serverutils.TestServerInterface, serverArgs base.TestServerArgs,
+) error {
+	if err := server.Start(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	dbConn := serverutils.OpenDBConn(t, server, serverArgs, server.Stopper())
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
-	tc.Servers = append(tc.Servers, s.(*server.TestServer))
-	tc.Conns = append(tc.Conns, conn)
-	tc.mu.serverStoppers = append(tc.mu.serverStoppers, serverArgs.Stopper)
+	tc.Conns = append(tc.Conns, dbConn)
+	tc.mu.serverStoppers = append(tc.mu.serverStoppers, server.Stopper())
 	return nil
 }
 
-// WaitForStores waits for all of the store descriptors to be gossiped. Servers
-// other than the first "bootstrap" their stores asynchronously, but we'd like
-// to wait for all of the stores to be initialized before returning the
-// TestCluster.
-func (tc *TestCluster) WaitForStores(t testing.TB, g *gossip.Gossip) {
+// WaitForNStores waits for N store descriptors to be gossiped. Servers other
+// than the first "bootstrap" their stores asynchronously, but we'd like to have
+// control over when stores get initialized before returning the TestCluster.
+func (tc *TestCluster) WaitForNStores(t testing.TB, n int, g *gossip.Gossip) {
 	// Register a gossip callback for the store descriptors.
 	var storesMu syncutil.Mutex
 	stores := map[roachpb.StoreID]struct{}{}
@@ -388,7 +428,7 @@ func (tc *TestCluster) WaitForStores(t testing.TB, g *gossip.Gossip) {
 			}
 
 			stores[desc.StoreID] = struct{}{}
-			if len(stores) == len(tc.Servers) {
+			if len(stores) == n {
 				close(storesDoneOnce)
 				storesDoneOnce = nil
 			}
@@ -957,9 +997,9 @@ type testClusterFactoryImpl struct{}
 // TestClusterFactory can be passed to serverutils.InitTestClusterFactory
 var TestClusterFactory serverutils.TestClusterFactory = testClusterFactoryImpl{}
 
-// StartTestCluster is part of TestClusterFactory interface.
-func (testClusterFactoryImpl) StartTestCluster(
+// NewTestCluster is part of the TestClusterFactory interface.
+func (testClusterFactoryImpl) NewTestCluster(
 	t testing.TB, numNodes int, args base.TestClusterArgs,
 ) serverutils.TestClusterInterface {
-	return StartTestCluster(t, numNodes, args)
+	return NewTestCluster(t, numNodes, args)
 }

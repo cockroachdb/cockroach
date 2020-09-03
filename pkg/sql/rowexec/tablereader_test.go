@@ -188,7 +188,7 @@ func TestMisplannedRangesMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	tc := serverutils.StartTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{

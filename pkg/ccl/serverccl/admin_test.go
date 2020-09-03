@@ -28,7 +28,7 @@ var adminPrefix = "/_admin/v1/"
 func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)

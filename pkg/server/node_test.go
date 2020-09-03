@@ -189,7 +189,7 @@ func TestNodeJoin(t *testing.T) {
 
 	numNodes := len(perNode)
 
-	s := serverutils.StartTestCluster(t, numNodes, args)
+	s := serverutils.StartNewTestCluster(t, numNodes, args)
 	defer s.Stopper().Stop(ctx)
 
 	// Verify all stores are initialized.

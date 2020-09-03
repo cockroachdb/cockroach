@@ -2575,7 +2575,7 @@ func TestChangefeedNodeShutdown(t *testing.T) {
 		},
 	}}}
 
-	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "d",
 			Knobs:       knobs,
@@ -2877,7 +2877,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	sinkDir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	tc := serverutils.StartTestCluster(t, 4, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			UseDatabase:   "test",
 			Knobs:         knobs,
