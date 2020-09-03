@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -579,7 +580,8 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			} else {
 				fmt.Printf("%d found\n", len(profiles.Files))
 				for _, file := range profiles.Files {
-					name := prefix + "/heapprof/" + file.Name + ".pprof"
+					fName := maybeAddProfileSuffix(file.Name)
+					name := prefix + "/heapprof/" + fName
 					if err := z.createRaw(name, file.Contents); err != nil {
 						return err
 					}
@@ -753,6 +755,23 @@ find . -name cpu.pprof | xargs go tool pprof -tags
 	}
 
 	return nil
+}
+
+// maybeAddProfileSuffix adds a file extension if this was not done
+// already on the server. This is necessary as pre-20.2 servers did
+// not use any extension for memory profiles.
+//
+// TODO(knz): Remove this in v21.1.
+func maybeAddProfileSuffix(name string) string {
+	switch {
+	case strings.HasPrefix(name, heapprofiler.HeapFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.HeapFileNameSuffix):
+		name += heapprofiler.HeapFileNameSuffix
+	case strings.HasPrefix(name, heapprofiler.StatsFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.StatsFileNameSuffix):
+		name += heapprofiler.StatsFileNameSuffix
+	case strings.HasPrefix(name, heapprofiler.JemallocFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.JemallocFileNameSuffix):
+		name += heapprofiler.JemallocFileNameSuffix
+	}
+	return name
 }
 
 type fileNameEscaper struct {

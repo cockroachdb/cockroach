@@ -5908,7 +5908,10 @@ func TestClientDisconnect(t *testing.T) {
 				close(allowResponse)
 				sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", restoreDB))
 				sqlDB.Exec(t, "BACKUP TO $1", LocalFoo)
+				// Reset the channels. There will be a request on the gotRequest channel
+				// due to the backup.
 				allowResponse = make(chan struct{})
+				<-gotRequest
 			}
 
 			// Make credentials for the new connection.
