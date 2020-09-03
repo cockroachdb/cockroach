@@ -165,6 +165,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData.SafeUpdates = false
 	notStale()
 
+	// Stale prefer lookup joins for FKs.
+	evalCtx.SessionData.PreferLookupJoinsForFKs = true
+	stale()
+	evalCtx.SessionData.PreferLookupJoinsForFKs = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()

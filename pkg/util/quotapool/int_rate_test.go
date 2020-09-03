@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -26,7 +25,6 @@ import (
 
 func TestRateLimiterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 53795, "flaky test")
 
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	mt := timeutil.NewManualTime(t0)
