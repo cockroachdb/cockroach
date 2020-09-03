@@ -383,7 +383,7 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
 	debugStdoutBuffer, _ := circbuf.NewBuffer(4096)
-	debugStderrBuffer, _ := circbuf.NewBuffer(1024)
+	debugStderrBuffer, _ := circbuf.NewBuffer(4096)
 
 	// Do a dance around https://github.com/golang/go/issues/23019.
 	// When the command we run launches a subprocess, that subprocess receives
@@ -478,6 +478,15 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 	closePipes(ctx)
 	wg.Wait()
 
+	stdoutString := debugStdoutBuffer.String()
+	if debugStdoutBuffer.TotalWritten() > debugStdoutBuffer.Size() {
+		stdoutString = "<... some data truncated by circular buffer; go to artifacts for details ...>\n" + stdoutString
+	}
+	stderrString := debugStderrBuffer.String()
+	if debugStderrBuffer.TotalWritten() > debugStderrBuffer.Size() {
+		stderrString = "<... some data truncated by circular buffer; go to artifacts for details ...>\n" + stderrString
+	}
+
 	if err != nil {
 		// Context errors opaquely appear as "signal killed" when manifested.
 		// We surface this error explicitly.
@@ -489,16 +498,16 @@ func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 			err = &withCommandDetails{
 				cause:  err,
 				cmd:    strings.Join(args, " "),
-				stderr: debugStderrBuffer.String(),
-				stdout: debugStdoutBuffer.String(),
+				stderr: stderrString,
+				stdout: stdoutString,
 			}
 		}
 	}
 
 	return cmdRes{
 		err:    err,
-		stdout: debugStdoutBuffer.String(),
-		stderr: debugStderrBuffer.String(),
+		stdout: stdoutString,
+		stderr: stderrString,
 	}
 }
 
