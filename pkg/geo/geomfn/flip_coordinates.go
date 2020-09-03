@@ -15,82 +15,30 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
-// FlipCoordinates returns a modified Geometry whose X, Y coordinates are flipped.
-func FlipCoordinates(geometry geo.Geometry) (geo.Geometry, error) {
-	if geometry.Empty() {
-		return geometry, nil
+// FlipCoordinates returns a modified g whose X, Y coordinates are flipped.
+func FlipCoordinates(g geo.Geometry) (geo.Geometry, error) {
+	if g.Empty() {
+		return g, nil
 	}
 
-	g, err := geometry.AsGeomT()
+	t, err := g.AsGeomT()
 	if err != nil {
 		return geo.Geometry{}, err
 	}
 
-	g, err = flipCoordinates(g)
+	newT, err := applyOnCoordsForGeomT(t, func(l geom.Layout, dst, src []float64) error {
+		dst[0], dst[1] = src[1], src[0]
+		if l.ZIndex() != -1 {
+			dst[l.ZIndex()] = src[l.ZIndex()]
+		}
+		if l.MIndex() != -1 {
+			dst[l.MIndex()] = src[l.MIndex()]
+		}
+		return nil
+	})
 	if err != nil {
 		return geo.Geometry{}, err
 	}
 
-	return geo.MakeGeometryFromGeomT(g)
-}
-
-func flipCoordinates(g geom.T) (geom.T, error) {
-	if geomCollection, ok := g.(*geom.GeometryCollection); ok {
-		return flipCollection(geomCollection)
-	}
-
-	newCoords, err := flipCoords(g)
-	if err != nil {
-		return nil, err
-	}
-
-	switch t := g.(type) {
-	case *geom.Point:
-		g = geom.NewPointFlat(t.Layout(), newCoords).SetSRID(g.SRID())
-	case *geom.LineString:
-		g = geom.NewLineStringFlat(t.Layout(), newCoords).SetSRID(g.SRID())
-	case *geom.Polygon:
-		g = geom.NewPolygonFlat(t.Layout(), newCoords, t.Ends()).SetSRID(g.SRID())
-	case *geom.MultiPoint:
-		g = geom.NewMultiPointFlat(t.Layout(), newCoords).SetSRID(g.SRID())
-	case *geom.MultiLineString:
-		g = geom.NewMultiLineStringFlat(t.Layout(), newCoords, t.Ends()).SetSRID(g.SRID())
-	case *geom.MultiPolygon:
-		g = geom.NewMultiPolygonFlat(t.Layout(), newCoords, t.Endss()).SetSRID(g.SRID())
-	default:
-		return nil, geom.ErrUnsupportedType{Value: g}
-	}
-
-	return g, nil
-}
-
-// flipCoords swaps X,Y coordinates.
-// M and Z coordinates are maintained
-func flipCoords(g geom.T) ([]float64, error) {
-	stride := g.Stride()
-	coords := g.FlatCoords()
-
-	for i := 0; i < len(coords); i += stride {
-		coords[i], coords[i+1] = coords[i+1], coords[i]
-	}
-
-	return coords, nil
-}
-
-// flipCollection iterates through a GeometryCollection and calls flipCoordinates() on each item.
-func flipCollection(geomCollection *geom.GeometryCollection) (*geom.GeometryCollection, error) {
-	res := geom.NewGeometryCollection()
-
-	for _, subG := range geomCollection.Geoms() {
-		subGeom, err := flipCoordinates(subG)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := res.Push(subGeom); err != nil {
-			return nil, err
-		}
-	}
-
-	return res, nil
+	return geo.MakeGeometryFromGeomT(newT)
 }
