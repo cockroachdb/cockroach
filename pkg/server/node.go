@@ -468,12 +468,13 @@ func (n *Node) start(
 
 	n.startComputePeriodicMetrics(n.stopper, base.DefaultMetricsSampleInterval)
 
-	// Be careful about moving this line above `startStores`; store migrations rely
-	// on the fact that the cluster version has not been updated via Gossip (we
-	// have migrations that want to run only if the server starts with a given
-	// cluster version, but not if the server starts with a lower one and gets
-	// bumped immediately, which would be possible if gossip got started earlier).
-	n.startGossip(ctx, n.stopper)
+	// Be careful about moving this line above where we start stores; store
+	// migrations rely on the fact that the cluster version has not been updated
+	// via Gossip (we have migrations that want to run only if the server starts
+	// with a given cluster version, but not if the server starts with a lower
+	// one and gets bumped immediately, which would be possible if gossip got
+	// started earlier).
+	n.startGossiping(ctx, n.stopper)
 
 	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
 	allEngines = append(allEngines, state.newEngines...)
@@ -597,7 +598,7 @@ func (n *Node) bootstrapStores(
 			}
 			n.addStore(ctx, s)
 			log.Infof(ctx, "bootstrapped store %s", s)
-			// Done regularly in Node.startGossip, but this cuts down the time
+			// Done regularly in Node.startGossiping, but this cuts down the time
 			// until this store is used for range allocations.
 			if err := s.GossipStore(ctx, false /* useCached */); err != nil {
 				log.Warningf(ctx, "error doing initial gossiping: %s", err)
@@ -616,9 +617,9 @@ func (n *Node) bootstrapStores(
 	return nil
 }
 
-// startGossip loops on a periodic ticker to gossip node-related
+// startGossiping loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
-func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
+func (n *Node) startGossiping(ctx context.Context, stopper *stop.Stopper) {
 	ctx = n.AnnotateCtx(ctx)
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		// Verify we've already gossiped our node descriptor.
