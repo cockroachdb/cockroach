@@ -1797,6 +1797,7 @@ information about the resources on a node used by that table.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | key | [StatementsResponse.ExtendedStatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey) |  |  |
+| id | [string](#cockroach.server.serverpb.StatementsResponse-string) |  |  |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.StatementStatistics) |  |  |
 
 

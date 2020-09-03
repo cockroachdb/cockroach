@@ -1632,6 +1632,12 @@ func TestStatusAPITransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Construct a map of all the statement IDs.
+	statementIDs := make(map[roachpb.StmtID]bool, len(resp.Statements))
+	for _, respStatement := range resp.Statements {
+		statementIDs[respStatement.ID] = true
+	}
+
 	respAppNames := make(map[string]bool)
 	for _, respTransaction := range resp.Transactions {
 		appName := respTransaction.StatsData.App
@@ -1641,6 +1647,13 @@ func TestStatusAPITransactions(t *testing.T) {
 			continue
 		}
 		respAppNames[appName] = true
+		// Ensure all statementIDs comprised by the Transaction Response can be
+		// linked to StatementIDs for statements in the response.
+		for _, stmtID := range respTransaction.StatsData.StatementIDs {
+			if _, found := statementIDs[stmtID]; !found {
+				t.Fatalf("app: %s, expected stmtID: %s not found in StatementResponse.", appName, stmtID)
+			}
+		}
 		stats := respTransaction.StatsData.Stats
 		if tc.count != int(stats.Count) {
 			t.Fatalf("app: %s, expected count %d, got %d", appName, tc.count, stats.Count)

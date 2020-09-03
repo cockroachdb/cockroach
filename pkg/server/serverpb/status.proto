@@ -870,6 +870,8 @@ message StatementsResponse {
 
   message CollectedStatementStatistics {
     ExtendedStatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
+   string id = 3 [(gogoproto.customname) = "ID",
+                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtID"];
     cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
   }
 
