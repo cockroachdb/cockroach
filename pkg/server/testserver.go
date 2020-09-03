@@ -539,10 +539,8 @@ func makeSQLServerArgs(
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
-	var c base.NodeIDContainer
-	c.Set(context.Background(), fakeNodeID)
 	const sqlInstanceID = base.SQLInstanceID(10001)
-	idContainer := base.NewSQLIDContainer(sqlInstanceID, &c, false /* exposed */)
+	idContainer := base.NewSQLIDContainer(sqlInstanceID, nil /* nodeID */)
 
 	// We don't need this for anything except some services that want a gRPC
 	// server to register against (but they'll never get RPCs at the time of
