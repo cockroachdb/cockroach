@@ -29,6 +29,11 @@ func (f FmtFlags) HasFlags(subset FmtFlags) bool {
 	return f&subset == subset
 }
 
+// HasAnyFlags tests whether any of the given flags are all set.
+func (f FmtFlags) HasAnyFlags(subset FmtFlags) bool {
+	return f&subset != 0
+}
+
 // EncodeFlags returns the subset of the flags that are also lex encode flags.
 func (f FmtFlags) EncodeFlags() lex.EncodeFlags {
 	return lex.EncodeFlags(f) & (lex.EncFirstFreeFlagBit - 1)
@@ -366,7 +371,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			ctx.WriteByte(')')
 		}
 	}
-	if f.HasFlags(fmtDisambiguateDatumTypes) || f.HasFlags(FmtPGCatalog) {
+	if f.HasAnyFlags(fmtDisambiguateDatumTypes | FmtPGCatalog) {
 		var typ *types.T
 		if d, isDatum := n.(Datum); isDatum {
 			if p, isPlaceholder := d.(*Placeholder); isPlaceholder {

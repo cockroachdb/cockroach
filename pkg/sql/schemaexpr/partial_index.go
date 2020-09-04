@@ -215,7 +215,7 @@ func FormatIndexForDisplay(
 
 	if index.IsPartial() {
 		f.WriteString(" WHERE ")
-		pred, err := FormatExprForDisplay(ctx, table, index.Predicate, semaCtx)
+		pred, err := FormatExprForDisplay(ctx, table, index.Predicate, semaCtx, tree.FmtParsable)
 		if err != nil {
 			return "", err
 		}
