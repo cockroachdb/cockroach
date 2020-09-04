@@ -366,7 +366,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			ctx.WriteByte(')')
 		}
 	}
-	if f.HasFlags(fmtDisambiguateDatumTypes) || f.HasFlags(FmtPGCatalog) {
+	if f.HasFlags(fmtDisambiguateDatumTypes | FmtPGCatalog) {
 		var typ *types.T
 		if d, isDatum := n.(Datum); isDatum {
 			if p, isPlaceholder := d.(*Placeholder); isPlaceholder {
