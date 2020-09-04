@@ -3369,17 +3369,17 @@ func TestUnimplementedSyntax(t *testing.T) {
 					t.Errorf("%s: expected %q in telemetry keys, got %+v", d.sql, exp, tkeys)
 				}
 
-				exp2 := fmt.Sprintf("issue/%d", d.issue)
+				exp2 := fmt.Sprintf("issue-v/%d", d.issue)
 				found = false
 				hints := errors.GetAllHints(err)
 				for _, h := range hints {
-					if strings.HasSuffix(h, exp2) {
+					if strings.Contains(h, exp2) {
 						found = true
 						break
 					}
 				}
 				if !found {
-					t.Errorf("%s: expected %q at end of hint, got %+v", d.sql, exp2, hints)
+					t.Errorf("%s: expected %q at in hint, got %+v", d.sql, exp2, hints)
 				}
 			}
 		})
