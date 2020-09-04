@@ -12,12 +12,12 @@ package tpcc
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
@@ -95,11 +95,16 @@ func createDelivery(
 
 func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 	atomic.AddUint64(&del.config.auditor.deliveryTransactions, 1)
-
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()
+
+	// Enter the delivery queue for this warehouse. This ensures that we only
+	// run a single delivery transaction at a time, as all devivery transactions
+	// within a warehouse contend. See section 2.7.2.
+	del.config.deliveryQueue.wait(wID)
+	defer del.config.deliveryQueue.release(wID)
 
 	tx, err := del.mcp.Get().BeginEx(ctx, del.config.txOpts)
 	if err != nil {
@@ -266,3 +271,14 @@ func checkSameKeys(a, b map[int]int) error {
 	}
 	return nil
 }
+
+// deliveryQueue provides mutual exclusion between all concurrent delivery
+// transactions for the same warehouse.
+type deliveryQueue []syncutil.Mutex
+
+func newDeliveryQueue(warehouses int) deliveryQueue {
+	return make(deliveryQueue, warehouses)
+}
+
+func (q deliveryQueue) wait(wID int)    { q[wID].Lock() }
+func (q deliveryQueue) release(wID int) { q[wID].Unlock() }
