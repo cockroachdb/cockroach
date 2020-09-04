@@ -122,6 +122,42 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
     constraints = '[+region=test]',
     lease_preferences = '[[+region=test]]'
 
+# Check that we can configure zones in tables in non-public schemas, and that
+# they don't conflict with tables of the same name in different schemas.
+
+statement ok
+CREATE SCHEMA test
+
+statement ok
+CREATE TABLE test.a (a INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE test.a CONFIGURE ZONE USING gc.ttlseconds=1234
+
+query IT
+SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE test.a]
+----
+55  ALTER TABLE test.a CONFIGURE ZONE USING
+    range_min_bytes = 1234567,
+    range_max_bytes = 536870912,
+    gc.ttlseconds = 1234,
+    num_replicas = 3,
+    constraints = '[]',
+    lease_preferences = '[]'
+
+# Check that the original table's zone config is unmodified.
+
+query IT
+SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
+----
+53  ALTER TABLE a CONFIGURE ZONE USING
+    range_min_bytes = 200001,
+    range_max_bytes = 400000,
+    gc.ttlseconds = 3600,
+    num_replicas = 1,
+    constraints = '[+region=test]',
+    lease_preferences = '[[+region=test]]'
+
 # Check that we can reset the configuration to defaults.
 
 statement ok
