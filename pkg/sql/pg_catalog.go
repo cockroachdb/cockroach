@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
@@ -1826,7 +1827,21 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Interleave = intlDef
 	}
-	fmtCtx := tree.NewFmtCtx(tree.FmtPGIndexDef)
+	if index.IsPartial() {
+		// Format the raw predicate for display in order to resolve user-defined
+		// types to a human readable form.
+		//
+		// TODO(mgartner): Avoid parsing the predicate expression twice. It is
+		// parsed in schemaexpr.FormatExprForDisplay and again here.
+		formattedPred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.Predicate, p.SemaCtx(), tree.FmtPGCatalog)
+
+		pred, err := parser.ParseExpr(formattedPred)
+		if err != nil {
+			return "", err
+		}
+		indexDef.Predicate = pred
+	}
+	fmtCtx := tree.NewFmtCtx(tree.FmtPGCatalog)
 	fmtCtx.FormatNode(&indexDef)
 	return fmtCtx.String(), nil
 }
