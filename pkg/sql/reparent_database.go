@@ -147,9 +147,11 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			tree.ObjectLookupFlags{
 				// Note we set required to be false here in order to not error out
 				// if we don't find the object.
-				CommonLookupFlags: tree.CommonLookupFlags{Required: false},
-				RequireMutable:    true,
-				IncludeOffline:    true,
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       false,
+					RequireMutable: true,
+					IncludeOffline: true,
+				},
 				DesiredObjectKind: tree.TableObject,
 			},
 			objName.Catalog(),
@@ -211,9 +213,11 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			found, desc, err := p.LookupObject(
 				ctx,
 				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{Required: true},
-					RequireMutable:    true,
-					IncludeOffline:    true,
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required:       true,
+						RequireMutable: true,
+						IncludeOffline: true,
+					},
 					DesiredObjectKind: tree.TypeObject,
 				},
 				objName.Catalog(),
