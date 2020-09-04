@@ -86,6 +86,8 @@ type tpcc struct {
 		values [][]int
 	}
 	localsPool *sync.Pool
+
+	deliveryQueue deliveryQueue
 }
 
 type waitSetter struct {
@@ -292,6 +294,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 
 			w.auditor = newAuditor(w.warehouses)
+			w.deliveryQueue = newDeliveryQueue(w.warehouses)
 
 			// Create a partitioner to help us partition the warehouses. The base-case is
 			// where w.warehouses == w.activeWarehouses and w.partitions == 1.
