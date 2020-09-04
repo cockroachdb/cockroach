@@ -3626,27 +3626,70 @@ anti-join (cross)
  └── filters
       └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
 
-opt expect-not=GenerateInvertedJoins
+#opt expect-not=GenerateInvertedJoins
+opt
 SELECT *
 FROM nyc_census_blocks AS c
-LEFT JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n ON ST_Covers(c.geom, n.geom)
+LEFT JOIN nyc_neighborhoods AS n ON ST_Covers(c.geom, n.geom)
 ----
-left-join (cross)
+with &1
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10 gid:13 boroname:14 name:15 geom:16
  ├── immutable
  ├── key: (1,13)
  ├── fd: (1)-->(2-10), (13)-->(14-16)
  ├── scan c
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
+ │    ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10
  │    ├── key: (1)
  │    └── fd: (1)-->(2-10)
- ├── scan n
- │    ├── columns: n.gid:13!null n.boroname:14 name:15 n.geom:16
- │    ├── flags: force-index=nyc_neighborhoods_geo_idx
- │    ├── key: (13)
- │    └── fd: (13)-->(14-16)
- └── filters
-      └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+ └── project
+      ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.boroname:14 name:15 n.geom:16
+      ├── immutable
+      ├── fd: (1)-->(2-10), (13)-->(14-16)
+      └── right-join (hash)
+           ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.boroname:14 name:15 n.geom:16 gid:19 geom:28
+           ├── immutable
+           ├── key: (1,13,19)
+           ├── fd: (1)-->(2-10), (19)-->(28), (13)-->(14-16)
+           ├── inner-join (lookup nyc_neighborhoods)
+           │    ├── columns: n.gid:13!null n.boroname:14 name:15 n.geom:16 gid:19!null geom:28
+           │    ├── key columns: [13] = [13]
+           │    ├── lookup columns are key
+           │    ├── immutable
+           │    ├── key: (13,19)
+           │    ├── fd: (19)-->(28), (13)-->(14-16)
+           │    ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+           │    │    ├── columns: n.gid:13!null gid:19!null geom:28
+           │    │    ├── inverted-expr
+           │    │    │    └── st_covers(geom:28, n.geom:16)
+           │    │    ├── key: (13,19)
+           │    │    ├── fd: (19)-->(28)
+           │    │    ├── with-scan &1
+           │    │    │    ├── columns: gid:19!null geom:28
+           │    │    │    ├── mapping:
+           │    │    │    │    ├──  c.gid:1 => gid:19
+           │    │    │    │    └──  c.geom:10 => geom:28
+           │    │    │    ├── key: (19)
+           │    │    │    └── fd: (19)-->(28)
+           │    │    └── filters (true)
+           │    └── filters
+           │         └── st_covers(geom:28, n.geom:16) [outer=(16,28), immutable]
+           ├── with-scan &1
+           │    ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10
+           │    ├── mapping:
+           │    │    ├──  c.gid:1 => c.gid:1
+           │    │    ├──  c.blkid:2 => c.blkid:2
+           │    │    ├──  c.popn_total:3 => c.popn_total:3
+           │    │    ├──  c.popn_white:4 => c.popn_white:4
+           │    │    ├──  c.popn_black:5 => c.popn_black:5
+           │    │    ├──  c.popn_nativ:6 => c.popn_nativ:6
+           │    │    ├──  c.popn_asian:7 => c.popn_asian:7
+           │    │    ├──  c.popn_other:8 => c.popn_other:8
+           │    │    ├──  c.boroname:9 => c.boroname:9
+           │    │    └──  c.geom:10 => c.geom:10
+           │    ├── key: (1)
+           │    └── fd: (1)-->(2-10)
+           └── filters
+                └── c.gid:1 = gid:19 [outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
 
 # Bounding box operations.
 opt expect=GenerateInvertedJoins

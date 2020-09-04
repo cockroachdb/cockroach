@@ -118,6 +118,59 @@
     (OutputCols $left)
 )
 
+# ConvertLeftToInnerJoin converts a left join to an inner join with the same
+# ON condition, and then wraps the expression in another left join with the
+# original left side. In order to avoid computing the left side of the join
+# twice, we create a With expression for the left side, and then reference it
+# with two WithScans. For example (assuming x is the primary key of a):
+#
+#   SELECT a.x, b.y FROM a LEFT JOIN b ON ST_Intersects(a.geom, b.geom);
+#
+# is converted to:
+#
+#   WITH a_buf AS (
+#     SELECT * FROM a
+#   )
+#   SELECT a_buf.x, inr.y FROM a_buf LEFT JOIN (
+#     SELECT * FROM a_buf JOIN b ON ST_Intersects(a_buf.geom, b.geom)
+#   ) AS inr
+#   ON a_buf.x = inr.x;
+#
+# Note that this transformation is not desirable in the general case, but it
+# is useful if there is a possibility of creating an inverted join (such as in
+# the above example). For this reason, we only perform this transformation if
+# CanGenerateInvertedJoin returns true.
+#
+# We also don't match if the right hand side is an InnerJoin, to prevent this
+# rule from matching an infinite number of times.
+[ConvertLeftToInnerJoin, Explore]
+(LeftJoin
+    $left:*
+    $right:^(InnerJoin)
+    $on:* & (CanGenerateInvertedJoin $left $right $on)
+    $private:* & (NoJoinHints $private) & (AddWithBinding $id:(NextWithID) $newLeft:(EnsureKey $left))
+)
+=>
+(With
+    $newLeft
+    (Project
+        (LeftJoin
+            $outerLeft:(MakeWithScanSameCols $id)
+            (InnerJoin
+                $innerLeft:(MakeWithScan $id)
+                $right
+                (MapFilterCols $on (OutputCols $newLeft) (OutputCols $innerLeft))
+                $private
+            )
+            (MakeWithScanKeyEqualityFilters $outerLeft $innerLeft)
+            $private
+        )
+        []
+        (OutputCols2 $outerLeft $right)
+    )
+    (MakeWithPrivate $id)
+)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]
