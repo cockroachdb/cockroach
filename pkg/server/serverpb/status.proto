@@ -491,6 +491,20 @@ message TxnInfo {
   // The deadline by which the transaction must be committed.
   google.protobuf.Timestamp deadline = 7
   [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+
+  // implicit is true if this transaction was an implicit SQL transaction.
+  bool implicit = 8;
+
+  // Number of currently allocated bytes in the txn memory monitor.
+  int64 alloc_bytes = 9;
+  // High water mark of allocated bytes in the txn memory monitor.
+  int64 max_alloc_bytes = 10;
+
+  bool read_only = 11;
+
+  bool is_historical = 12;
+
+  string priority = 13;
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -521,6 +535,9 @@ message ActiveQuery {
   Phase phase = 5;
 
   float progress = 6;
+
+  // The SQL statement fingerprint, compatible with StatementStatisticsKey.
+  string sql_anon = 8;
 }
 
 // Request object for ListSessions and ListLocalSessions.
@@ -561,6 +578,9 @@ message Session {
   // Information about the txn in progress on this session. Nil if the
   // session doesn't currently have a transaction.
   TxnInfo active_txn = 12;
+  // The SQL statement fingerprint of the last query executed on this session,
+  // compatible with StatementStatisticsKey.
+  string last_active_query_anon = 13;
 }
 
 // An error wrapper object for ListSessionsResponse.
@@ -1023,12 +1043,14 @@ service Status {
   }
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {
     option (google.api.http) = {
-      get : "/_status/cancel_query/{node_id}"
+      post : "/_status/cancel_query/{node_id}"
+			body: "*"
     };
   }
   rpc CancelSession(CancelSessionRequest) returns (CancelSessionResponse) {
     option (google.api.http) = {
-      get : "/_status/cancel_session/{node_id}"
+      post : "/_status/cancel_session/{node_id}"
+			body: "*"
     };
   }
 

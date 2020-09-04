@@ -1644,10 +1644,6 @@ func (s *statusServer) ListLocalSessions(
 		return nil, err
 	}
 
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	if !isAdmin && !hasViewActivity {
 		// For non-superusers, requests with an empty username is
 		// implicitly a request for the client's own sessions.
@@ -1774,10 +1770,6 @@ func (s *statusServer) ListSessions(
 		return nil, err
 	}
 
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	response := &serverpb.ListSessionsResponse{
 		Sessions: make([]serverpb.Session, 0),
 		Errors:   make([]serverpb.ListSessionsError, 0),
@@ -1885,15 +1877,7 @@ func (s *statusServer) CancelSession(
 		}
 	}
 
-	output := &serverpb.CancelSessionResponse{}
-	canceled, err := s.sessionRegistry.CancelSession(req.SessionID)
-
-	if err != nil {
-		output.Error = err.Error()
-	}
-
-	output.Canceled = canceled
-	return output, nil
+	return s.sessionRegistry.CancelSession(req.SessionID)
 }
 
 // CancelQuery responds to a query cancellation request, and cancels

@@ -215,11 +215,35 @@ export const StatementTableCell = {
   nodeLink: (nodeNames: NodeNames) => (stmt: any) => <NodeLink nodeId={stmt.label} nodeNames={ nodeNames } />,
 };
 
-export const StatementLink = (props: { statement: string, app: string, implicitTxn: boolean, search: string }) => {
+interface StatementLinkProps {
+  statement: string;
+  app: string;
+  implicitTxn: boolean;
+  search: string;
+  anonStatement?: string;
+}
+
+// StatementLinkTarget returns the link to the relevant statement page, given
+// the input statement details.
+export const StatementLinkTarget = (props: StatementLinkProps) => {
+  let base: string;
+  if (props.app && props.app.length > 0) {
+    base = `/statements/${props.app}/${props.implicitTxn}`;
+  } else {
+    base = `/statement/${props.implicitTxn}`;
+  }
+
+  let linkStatement = props.statement;
+  if (props.anonStatement) {
+    linkStatement = props.anonStatement;
+  }
+  return `${base}/${encodeURIComponent(linkStatement)}`;
+};
+
+export const StatementLink = (props: StatementLinkProps) => {
   const summary = summarize(props.statement);
-  const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
-    <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
+    <Link to={ StatementLinkTarget(props) }>
       <div>
         <Tooltip
           placement="bottom"
@@ -237,8 +261,8 @@ export const StatementLink = (props: { statement: string, app: string, implicitT
   );
 };
 
-const NodeLink = (props: { nodeId: string, nodeNames: NodeNames }) => (
+export const NodeLink = (props: { nodeId: string, nodeNames: NodeNames }) => (
   <Link to={ `/node/${props.nodeId}` }>
-    <div className="node-name-tooltip__info-icon">{props.nodeNames[props.nodeId]}</div>
+    <span className="node-name-tooltip__info-icon">{props.nodeNames[props.nodeId]}</span>
   </Link>
 );

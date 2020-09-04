@@ -15,6 +15,7 @@ import { localSettingsSaga } from "./localsettings";
 import { customAnalyticsSaga } from "./customAnalytics";
 import { statementsSaga } from "./statements";
 import { analyticsSaga } from "./analyticsSagas";
+import { sessionsSaga } from "./sessions";
 
 export default function* rootSaga() {
   yield all([
@@ -23,5 +24,6 @@ export default function* rootSaga() {
     fork(customAnalyticsSaga),
     fork(statementsSaga),
     fork(analyticsSaga),
+    fork(sessionsSaga),
   ]);
 }

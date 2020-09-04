@@ -314,6 +314,92 @@ export const createStatementDiagnosticsAlertSelector = createSelector(
   },
 );
 
+type TerminateSessionAlertPayload = {
+  show: boolean;
+  status?: "SUCCESS" | "FAILED";
+};
+
+export const terminateSessionAlertLocalSetting = new LocalSetting<AdminUIState, TerminateSessionAlertPayload>(
+  "terminate_session_alert", localSettingsSelector, { show: false },
+);
+
+export const terminateSessionAlertSelector = createSelector(
+  terminateSessionAlertLocalSetting.selector,
+  (terminateSessionAlert): Alert => {
+    if (!terminateSessionAlert || !terminateSessionAlert.show) {
+      return undefined;
+    }
+    const { status } = terminateSessionAlert;
+
+    if (status === "FAILED") {
+      return {
+        level: AlertLevel.CRITICAL,
+        title: "There was an error terminating the session.",
+        text: "Please try activating again. If the problem continues please reach out to customer support.",
+        showAsAlert: true,
+        dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+          dispatch(terminateSessionAlertLocalSetting.set({ show: false }));
+          return Promise.resolve();
+        },
+      };
+    }
+    return {
+      level: AlertLevel.SUCCESS,
+      title: "Session terminated.",
+      showAsAlert: true,
+      autoClose: true,
+      closable: false,
+      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+        dispatch(terminateSessionAlertLocalSetting.set({ show: false }));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
+type TerminateQueryAlertPayload = {
+  show: boolean;
+  status?: "SUCCESS" | "FAILED";
+};
+
+export const terminateQueryAlertLocalSetting = new LocalSetting<AdminUIState, TerminateQueryAlertPayload>(
+  "terminate_query_alert", localSettingsSelector, { show: false },
+);
+
+export const terminateQueryAlertSelector = createSelector(
+  terminateQueryAlertLocalSetting.selector,
+  (terminateQueryAlert): Alert => {
+    if (!terminateQueryAlert || !terminateQueryAlert.show) {
+      return undefined;
+    }
+    const { status } = terminateQueryAlert;
+
+    if (status === "FAILED") {
+      return {
+        level: AlertLevel.CRITICAL,
+        title: "There was an error terminating the query.",
+        text: "Please try terminating again. If the problem continues please reach out to customer support.",
+        showAsAlert: true,
+        dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+          dispatch(terminateQueryAlertLocalSetting.set({ show: false }));
+          return Promise.resolve();
+        },
+      };
+    }
+    return {
+      level: AlertLevel.SUCCESS,
+      title: "Query terminated.",
+      showAsAlert: true,
+      autoClose: true,
+      closable: false,
+      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
+        dispatch(terminateQueryAlertLocalSetting.set({ show: false }));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
 /**
  * Selector which returns an array of all active alerts which should be
  * displayed in the alerts panel, which is embedded within the cluster overview
@@ -337,6 +423,8 @@ export const bannerAlertsSelector = createSelector(
   disconnectedAlertSelector,
   emailSubscriptionAlertSelector,
   createStatementDiagnosticsAlertSelector,
+  terminateSessionAlertSelector,
+  terminateQueryAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },

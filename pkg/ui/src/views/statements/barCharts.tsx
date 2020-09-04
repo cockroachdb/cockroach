@@ -229,6 +229,11 @@ export function rowsBreakdown(s: StatementStatistics) {
 }
 
 export function genericBarChart(s: NumericStat, count: number | Long, format?: (v: number) => string) {
+    if (!s) {
+      return () => (
+        <div/>
+      );
+    }
     const mean = s.mean;
     const sd = stdDevLong(s, count);
 

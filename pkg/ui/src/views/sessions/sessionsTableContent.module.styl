@@ -1,0 +1,46 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+@require '~src/components/core/index'
+
+.cl-table-link__description
+  font-size $font-size--small
+  line-height 22px
+  color $colors--neutral-1
+  white-space pre-wrap
+  margin-bottom 0
+
+.cl-table-link__statement-tooltip--fixed-width
+  max-width max-content
+  :global(.ant-tooltip-content)
+    max-width 500px
+
+.tooltip__table--title
+  font-family $font-family--base
+  font-weight 600
+  font-size $font-size--small
+  line-height $line-height--small
+  letter-spacing 0.3px
+  color $colors--neutral-0
+  a
+    color $colors--neutral-0
+    text-decoration underline
+    &:hover
+      opacity 0.7
+      color $colors--neutral-0
+  code
+    font-family $font-family--monospace
+    line-height $line-height--medium
+    color $colors--neutral-8
+    background $colors--neutral-4
+    border-radius 3px
+    padding 2px 5px
+
