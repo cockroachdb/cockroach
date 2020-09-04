@@ -67,11 +67,6 @@ func alterZoneConfigAndClusterSettings(
 		return err
 	}
 
-	// TODO(rafi): remove this check once we stop testing against 2.0 and 2.1
-	if strings.HasPrefix(version, "v2.0") || strings.HasPrefix(version, "v2.1") {
-		return nil
-	}
-
 	if _, err := db.ExecContext(
 		ctx, `SET CLUSTER SETTING jobs.retention_time = '180s';`,
 	); err != nil {
@@ -81,6 +76,14 @@ func alterZoneConfigAndClusterSettings(
 	// Shorten the merge queue interval to clean up ranges due to dropped tables.
 	if _, err := db.ExecContext(
 		ctx, `SET CLUSTER SETTING kv.range_merge.queue_interval = '200ms'`,
+	); err != nil {
+		return err
+	}
+
+	// Disable syncs associated with the Raft log which are the primary causes of
+	// fsyncs.
+	if _, err := db.ExecContext(
+		ctx, `SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = 'true'`,
 	); err != nil {
 		return err
 	}
