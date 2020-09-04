@@ -193,6 +193,9 @@ CREATE TABLE regression_47110_interval_ok(interval_ok INTERVAL)
 statement error type TIMESTAMP\(3\) is not supported until version upgrade is finalized
 CREATE TABLE regression_47110_not_ok(tt_not_ok TIMESTAMP(3))
 
+statement error type TIMESTAMPTZ\(3\)\[\] is not supported until version upgrade is finalized
+CREATE TABLE regression_47110_not_ok(a TIMESTAMPTZ(3)[])
+
 statement error type TIMESTAMPTZ\(3\) is not supported until version upgrade is finalized
 CREATE TABLE regression_47110_not_ok(ttz_not_ok TIMESTAMPTZ(3))
 

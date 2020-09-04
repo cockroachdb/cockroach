@@ -119,6 +119,12 @@ var minimumTypeUsageVersions = map[types.Family]clusterversion.VersionKey{
 
 // isTypeSupportedInVersion returns whether a given type is supported in the given version.
 func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) (bool, error) {
+	// For these checks, if we have an array, we only want to find whether
+	// we support the array contents.
+	if t.Family() == types.ArrayFamily {
+		t = t.ArrayContents()
+	}
+
 	switch t.Family() {
 	case types.TimeFamily, types.TimestampFamily, types.TimestampTZFamily, types.TimeTZFamily:
 		if t.Precision() != 6 && !v.IsActive(clusterversion.VersionTimePrecision) {
