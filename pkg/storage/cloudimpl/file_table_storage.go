@@ -11,6 +11,7 @@
 package cloudimpl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -199,13 +200,22 @@ func (f *fileTableStorage) WriteFile(
 	if err != nil {
 		return err
 	}
+	var buf bytes.Buffer
+	contentTee := io.TeeReader(content, &buf)
 	err = f.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		writer, err := f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize, txn)
 		if err != nil {
 			return err
 		}
 
-		if _, err = io.Copy(writer, content); err != nil {
+		// Since the txn that writes the data might be retried, we need to keep
+		// track of the data that has been written on previous attempts. We need to
+		// write any data that we've accumulated from previous attempts before
+		// continuing to consume the reader.
+		if _, err = io.Copy(writer, &buf); err != nil {
+			return errors.Wrap(err, "failed to write using the FileTable writer")
+		}
+		if _, err = io.Copy(writer, contentTee); err != nil {
 			return errors.Wrap(err, "failed to write using the FileTable writer")
 		}
 
@@ -215,7 +225,6 @@ func (f *fileTableStorage) WriteFile(
 
 		return nil
 	})
-
 	return err
 }
 
