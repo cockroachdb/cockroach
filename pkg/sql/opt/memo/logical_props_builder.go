@@ -119,6 +119,26 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		}
 		if isPartialIndexScan {
 			b.addFiltersToFuncDep(pred, &rel.FuncDeps)
+
+			// Partial index keys are not added to the functional dependencies in
+			// MakeTableFuncDep, because they do not apply to the entire table. They are
+			// added here if the scan uses a partial index.
+			index := md.Table(scan.Table).Index(scan.Index)
+			var keyCols opt.ColSet
+			for col := 0; col < index.LaxKeyColumnCount(); col++ {
+				ord := index.Column(col).Ordinal()
+				keyCols.Add(scan.Table.ColumnID(ord))
+			}
+			allCols := keyCols.Union(rel.OutputCols)
+
+			// If index has a separate lax key, add a lax key FD. Otherwise, add a
+			// strict key. See the comment for cat.Index.LaxKeyColumnCount.
+			if index.LaxKeyColumnCount() < index.KeyColumnCount() {
+				// This case only occurs for a UNIQUE index having a NULL-able column.
+				rel.FuncDeps.AddLaxKey(keyCols, allCols)
+			} else {
+				rel.FuncDeps.AddStrictKey(keyCols, allCols)
+			}
 		}
 		rel.FuncDeps.MakeNotNull(rel.NotNullCols)
 		rel.FuncDeps.ProjectCols(rel.OutputCols)
@@ -1606,6 +1626,13 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 
 		if index.IsInverted() {
 			// Skip inverted indexes for now.
+			continue
+		}
+
+		if _, isPartial := index.Predicate(); isPartial {
+			// Partial indexes cannot be considered while building functional
+			// dependency keys for the table because their keys are only unique
+			// for a subset of the rows in the table.
 			continue
 		}
 
