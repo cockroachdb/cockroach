@@ -199,8 +199,9 @@ func TestSettingsSetAndShow(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(rawDB)
 
-	// TODO(dt): add placeholder support to SET and SHOW.
+	// TODO(dt): add full placeholder support to SET and SHOW.
 	setQ := `SET CLUSTER SETTING "%s" = %s`
+	setQPlaceholder := `SET CLUSTER SETTING "%s" = $1`
 	showQ := `SHOW CLUSTER SETTING "%s"`
 
 	db.Exec(t, fmt.Sprintf(setQ, strKey, "'via-set'"))
@@ -208,8 +209,18 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
+	db.Exec(t, fmt.Sprintf(setQPlaceholder, strKey), "via-set-2")
+	if expected, actual := "via-set-2", db.QueryStr(t, fmt.Sprintf(showQ, strKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+
 	db.Exec(t, fmt.Sprintf(setQ, intKey, "5"))
 	if expected, actual := "5", db.QueryStr(t, fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+
+	db.Exec(t, fmt.Sprintf(setQPlaceholder, intKey), "6")
+	if expected, actual := "6", db.QueryStr(t, fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
@@ -221,11 +232,27 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
+	db.Exec(t, fmt.Sprintf(setQPlaceholder, durationKey), "3h")
+	if expected, actual := time.Hour*3, durationA.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "03:00:00", db.QueryStr(t, fmt.Sprintf(showQ, durationKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+
 	db.Exec(t, fmt.Sprintf(setQ, byteSizeKey, "'1500MB'"))
 	if expected, actual := int64(1500000000), byteSizeA.Get(&st.SV); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 	if expected, actual := "1.4 GiB", db.QueryStr(t, fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+
+	db.Exec(t, fmt.Sprintf(setQPlaceholder, byteSizeKey), "1300MB")
+	if expected, actual := int64(1300000000), byteSizeA.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "1.2 GiB", db.QueryStr(t, fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
@@ -236,7 +263,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 
 	db.ExpectErr(t, `could not parse "a-str" as type int`, fmt.Sprintf(setQ, intKey, "'a-str'"))
 
-	db.Exec(t, fmt.Sprintf(setQ, enumKey, "2"))
+	db.Exec(t, fmt.Sprintf(setQ, enumKey, "'2'"))
 	if expected, actual := int64(2), enumA.Get(&st.SV); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
@@ -252,12 +279,32 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
+	db.Exec(t, fmt.Sprintf(setQPlaceholder, enumKey), "2")
+	if expected, actual := int64(2), enumA.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "bar", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+
+	db.Exec(t, fmt.Sprintf(setQPlaceholder, enumKey), "bar")
+	if expected, actual := int64(2), enumA.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "bar", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+
 	db.ExpectErr(
 		t, `invalid string value 'unknown' for enum setting`,
 		fmt.Sprintf(setQ, enumKey, "'unknown'"),
 	)
 
-	db.ExpectErr(t, `invalid integer value '7' for enum setting`, fmt.Sprintf(setQ, enumKey, "7"))
+	db.ExpectErr(
+		t, `pq: invalid string value 'unknown' for enum setting`,
+		fmt.Sprintf(setQPlaceholder, enumKey),
+		"unknown",
+	)
 
 	db.Exec(t, `CREATE USER testuser`)
 	pgURL, cleanupFunc := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User("testuser"))
