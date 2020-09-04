@@ -71,7 +71,9 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 
 		// This field contains the original subquery (which could have been modified
 		// by optimizer transformations).
-		ob.Attr("original sql", tree.AsStringWithFlags(s.ExprNode, tree.FmtSimple))
+		if s.ExprNode != nil {
+			ob.Attr("original sql", tree.AsStringWithFlags(s.ExprNode, tree.FmtSimple))
+		}
 		var mode string
 		switch s.Mode {
 		case exec.SubqueryExists:

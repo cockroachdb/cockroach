@@ -118,6 +118,83 @@
     (OutputCols $left)
 )
 
+# ConvertLeftToInnerJoin converts a left join to an inner join with the same
+# ON condition, and then wraps the expression in another left join with the
+# original left side. In order to avoid computing the left side of the join
+# twice, we create a With expression for the left side, and then reference it
+# with two WithScans. For example (assuming x is the primary key of a):
+#
+#   SELECT a.x, b.y FROM a LEFT JOIN b ON ST_Intersects(a.geom, b.geom);
+#
+# is converted to:
+#
+#   WITH a_buf AS (
+#     SELECT * FROM a
+#   )
+#   SELECT a_buf.x, inr.y FROM a_buf LEFT JOIN (
+#     SELECT * FROM a_buf JOIN b ON ST_Intersects(a_buf.geom, b.geom)
+#   ) AS inr
+#   ON a_buf.x = inr.x;
+#
+# Note that this transformation is not desirable in the general case, but it
+# is useful if there is a possibility of creating an inverted join (such as in
+# the above example). For this reason, we only perform this transformation if
+# CanGenerateInvertedJoin returns true.
+#
+# There is some added complexity due to the need to maintain the same output
+# column IDs. Therefore, the WithScan in the outer left join must retain the
+# original column IDs, but the binding expression of the With and the WithScan
+# in the inner join must have different column IDs. See the ReplaceOutputCols
+# and MakeWithScanUsingCols functions for details about how this works. Only
+# the columns from the outer left side and the inner right side are ultimately
+# projected.
+#
+# TODO(rytaft): This is a temporary solution to support index acceleration of
+# geospatial left joins. Eventually we would like to support index acceleration
+# of left joins directly by adding some extra bookkeeping to the execution
+# operators. See #53576.
+#
+# TODO(rytaft): It is possible that this transformation may be desirable in
+# more cases than just spatial queries. For example, it could enable the use
+# of a lookup join with a non-covering index.
+[ConvertLeftToInnerJoin, Explore]
+(LeftJoin
+    $left:*
+    $right:*
+    $on:* & (CanGenerateInvertedJoin $right $on)
+    $private:* & (NoJoinHints $private)
+)
+=>
+(With
+    $bindingExpr:(ReplaceOutputCols $newLeft:(EnsureKey $left))
+    (Project
+        (LeftJoin
+            $outerLeft:(MakeWithScanUsingCols
+                $id:(AddWithBinding $bindingExpr)
+                (OutputCols $newLeft)
+            )
+            (InnerJoin
+                $innerLeft:(MakeWithScan $id)
+                $right
+                (MapFilterCols
+                    $on
+                    (OutputCols $newLeft)
+                    (OutputCols $innerLeft)
+                )
+                (EmptyJoinPrivate)
+            )
+            (MakeWithScanKeyEqualityFilters
+                $outerLeft
+                $innerLeft
+            )
+            $private
+        )
+        []
+        (OutputCols2 $left $right)
+    )
+    (MakeWithPrivate $id)
+)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]
