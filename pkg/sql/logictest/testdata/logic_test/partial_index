@@ -1126,3 +1126,24 @@ statement ok
 SELECT * FROM t52702@t52702_false WHERE 1 = 2;
 SELECT * FROM t52702@t52702_false WHERE 's' = 't';
 SELECT * FROM t52702@t52702_false WHERE false;
+
+# Regression test for #53922. Do not build function dependency keys from partial
+# indexes. This causes incorrect results. For example, the optimizer could
+# incorrectly remove distinct operators if it thinks the column is a strict key.
+subtest regression_53922
+
+statement ok
+CREATE TABLE t53922 (
+    a INT NOT NULL,
+    UNIQUE INDEX (a) WHERE a > 10
+)
+
+statement ok
+INSERT INTO t53922 VALUES (1), (2), (3), (3)
+
+query I rowsort
+SELECT distinct(a) FROM t53922
+----
+1
+2
+3

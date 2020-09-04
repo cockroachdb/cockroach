@@ -2387,17 +2387,17 @@ insert unique_partial_indexes
       ├── columns: column13:13!null column14:14!null column15:15!null column1:5!null column2:6!null column3:7!null
       ├── select
       │    ├── columns: column1:5!null column2:6!null column3:7!null a:8 b:9
-      │    ├── left-join (cross)
+      │    ├── right-join (cross)
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null a:8 b:9
-      │    │    ├── values
-      │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │    │    │    └── (1, 1, 'bar')
       │    │    ├── select
       │    │    │    ├── columns: a:8!null b:9!null
       │    │    │    ├── scan unique_partial_indexes@u4,partial
       │    │    │    │    └── columns: a:8!null b:9
       │    │    │    └── filters
       │    │    │         └── b:9 = 1
+      │    │    ├── values
+      │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │    │    │    └── (1, 1, 'bar')
       │    │    └── filters (true)
       │    └── filters
       │         └── a:8 IS NULL
