@@ -183,6 +183,126 @@ ORDER BY rk
 13
 16
 
+# Left join is supported by having the optimizer convert it to an inner join.
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+4  NULL
+5  12
+5  16
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  14
+2  16
+3  11
+3  12
+3  16
+4  NULL
+5  11
+5  12
+5  16
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  14
+2  16
+3  11
+3  12
+3  16
+4  NULL
+5  11
+5  12
+5  16
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+4  NULL
+5  12
+5  16
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable
+ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+4  NULL
+5  NULL
+6  NULL
+
+query II
+SELECT lk, rk FROM ltable LEFT JOIN rtable
+ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
+----
+1  12
+1  13
+1  14
+1  16
+2  12
+2  13
+2  14
+2  16
+3  12
+3  13
+3  14
+3  16
+4  12
+4  13
+4  14
+4  16
+5  12
+5  16
+6  NULL
+
+query III
+WITH q AS (
+  SELECT * FROM ltable WHERE lk > 2
+)
+SELECT lk, count(*), (SELECT count(*) FROM q) FROM (
+  SELECT lk, rk
+  FROM q
+  LEFT JOIN rtable ON ST_Intersects(q.geom1, rtable.geom)
+) GROUP BY lk ORDER BY lk
+----
+3  2  4
+4  1  4
+5  2  4
+6  1  4
+
 # These queries perform anti-joins, which do not currently use an inverted join.
 query I
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))

@@ -410,7 +410,9 @@ func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
 }
 
 func (h *hasher) HashStatement(val tree.Statement) {
-	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+	if val != nil {
+		h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+	}
 }
 
 func (h *hasher) HashColumnID(val opt.ColumnID) {
