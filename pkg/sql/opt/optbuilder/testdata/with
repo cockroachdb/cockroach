@@ -849,6 +849,8 @@ with &2 (t)
  │    ├── working table binding: &1
  │    ├── initial columns: column1:1
  │    ├── recursive columns: "?column?":4
+ │    ├── fake-rel
+ │    │    └── columns: column1:1
  │    ├── values
  │    │    ├── columns: column1:1!null
  │    │    └── (1,)
@@ -897,6 +899,8 @@ with &2 (included_parts)
  │    ├── working table binding: &1
  │    ├── initial columns: parts.sub_part:2 parts.part:1 parts.quantity:3
  │    ├── recursive columns: p.sub_part:13 p.part:12 p.quantity:14
+ │    ├── fake-rel
+ │    │    └── columns: parts.part:1 parts.sub_part:2 parts.quantity:3
  │    ├── project
  │    │    ├── columns: parts.part:1!null parts.sub_part:2 parts.quantity:3
  │    │    └── select
@@ -964,6 +968,8 @@ with &2 (search_graph)
  │    ├── working table binding: &1
  │    ├── initial columns: g.id:1 g.link:2 g.data:3 "?column?":5 array:6 bool:7
  │    ├── recursive columns: g.id:14 g.link:15 g.data:16 "?column?":24 "?column?":25 "?column?":26
+ │    ├── fake-rel
+ │    │    └── columns: g.id:1 g.link:2 g.data:3 "?column?":5 array:6 bool:7
  │    ├── project
  │    │    ├── columns: "?column?":5!null array:6!null bool:7!null g.id:1!null g.link:2 g.data:3
  │    │    ├── scan g
@@ -1021,6 +1027,8 @@ with &2 (cte)
  │    ├── working table binding: &1
  │    ├── initial columns: "?column?":1 "?column?":1
  │    ├── recursive columns: "?column?":6 "?column?":7
+ │    ├── fake-rel
+ │    │    └── columns: "?column?":1
  │    ├── project
  │    │    ├── columns: "?column?":1!null
  │    │    ├── values
@@ -1062,6 +1070,8 @@ with &2 (cte)
  │    ├── working table binding: &1
  │    ├── initial columns: "?column?":1 "?column?":2
  │    ├── recursive columns: "?column?":7 "?column?":7
+ │    ├── fake-rel
+ │    │    └── columns: "?column?":1 "?column?":2
  │    ├── project
  │    │    ├── columns: "?column?":1!null "?column?":2!null
  │    │    ├── values
@@ -1228,6 +1238,8 @@ with &3 (cte)
  │    ├── working table binding: &1
  │    ├── initial columns: "?column?":1 "?column?":2
  │    ├── recursive columns: "?column?":11 "?column?":12
+ │    ├── fake-rel
+ │    │    └── columns: "?column?":1 "?column?":2
  │    ├── project
  │    │    ├── columns: "?column?":1!null "?column?":2!null
  │    │    ├── values
@@ -1281,6 +1293,8 @@ with &3 (cte)
  │    ├── working table binding: &1
  │    ├── initial columns: "?column?":4
  │    ├── recursive columns: "?column?":7
+ │    ├── fake-rel
+ │    │    └── columns: "?column?":4
  │    ├── with &2 (v)
  │    │    ├── columns: "?column?":4!null
  │    │    ├── values
