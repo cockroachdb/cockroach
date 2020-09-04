@@ -13,6 +13,7 @@ package unimplemented
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/errors"
 )
 
@@ -109,5 +110,5 @@ func unimplementedInternal(
 }
 
 func makeURL(issue int) string {
-	return fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issue)
+	return fmt.Sprintf("https://go.crdb.dev/issue-v/%d/%s", issue, build.VersionPrefix())
 }
