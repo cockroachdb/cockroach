@@ -2537,22 +2537,22 @@ idxb       CREATE INDEX idxb ON test.public.geospatial_table USING gin (b ASC)
 
 subtest regression_46799
 statement ok
-CREATE TABLE t(x INT DEFAULT 1, y INT DEFAULT 1);
+CREATE TABLE t46799 (x INT DEFAULT 1, y INT DEFAULT 1);
 
 query I
-SELECT adnum FROM pg_attrdef WHERE adrelid = 91
+SELECT adnum FROM pg_attrdef WHERE adrelid = 't46799'::REGCLASS
 ----
 1
 2
 3
 
 statement ok
-ALTER TABLE t DROP COLUMN y;
-ALTER TABLE t ADD COLUMN y INT DEFAULT 1;
+ALTER TABLE t46799 DROP COLUMN y;
+ALTER TABLE t46799 ADD COLUMN y INT DEFAULT 1;
 
 # Make sure after adding and dropping the same column, the adnum for the re-added column increases.
 query I
-select adnum from pg_attrdef WHERE adrelid = 91
+select adnum from pg_attrdef WHERE adrelid = 't46799'::REGCLASS
 ----
 1
 3
