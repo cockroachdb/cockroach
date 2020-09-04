@@ -970,6 +970,14 @@ func populateTableConstraints(
 			f.WriteString("UNIQUE (")
 			con.Index.ColNamesFormat(f)
 			f.WriteByte(')')
+			if con.Index.IsPartial() {
+				pred, err := schemaexpr.FormatExprForDisplayWithoutTypeAnnotations(ctx, table, con.Index.Predicate, p.SemaCtx())
+				if err != nil {
+					return err
+				}
+				f.WriteString(" WHERE ")
+				f.WriteString(pred)
+			}
 			condef = tree.NewDString(f.CloseAndGetString())
 
 		case descpb.ConstraintTypeCheck:
@@ -1212,7 +1220,7 @@ CREATE TABLE pg_catalog.pg_conversion (
 	conforencoding INT4,
 	contoencoding INT4,
 	conproc OID,
-  condefault BOOL
+	condefault BOOL
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil

@@ -2550,7 +2550,7 @@ CREATE TABLE partial_index_table (
 )
 
 statement ok
-CREATE INDEX ON partial_index_table (a) WHERE b IN ('foo', 'bar')
+CREATE UNIQUE INDEX ON partial_index_table (a) WHERE b IN ('foo', 'bar')
 
 # TODO(mgartner): To match Postgres, "::" casts should be appended to constants
 # of strings and enums in the partial index predicate, for example:
@@ -2562,10 +2562,22 @@ SELECT indexname, indexdef
 FROM pg_catalog.pg_indexes
 WHERE tablename = 'partial_index_table'
 ----
-indexname                  indexdef
-primary                    CREATE UNIQUE INDEX "primary" ON test.public.partial_index_table USING btree (rowid ASC)
-partial_index_table_a_key  CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE a > 0
-partial_index_table_a_idx  CREATE INDEX partial_index_table_a_idx ON test.public.partial_index_table USING btree (a ASC) WHERE b IN ('foo', 'bar')
+indexname                   indexdef
+primary                     CREATE UNIQUE INDEX "primary" ON test.public.partial_index_table USING btree (rowid ASC)
+partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE a > 0
+partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE b IN ('foo', 'bar')
+
+# TODO(mgartner): To match Postgres, "::" casts should be appended to constants
+# of strings and enums in the partial index predicate.
+query TT colnames
+SELECT conname, condef
+FROM pg_catalog.pg_constraint c JOIN pg_catalog.pg_class t
+ON c.conrelid = t.oid
+WHERE t.relname = 'partial_index_table'
+----
+conname                     condef
+partial_index_table_a_key   UNIQUE (a ASC) WHERE a > 0
+partial_index_table_a_key1  UNIQUE (a ASC) WHERE b IN ('foo', 'bar')
 
 subtest regression_46799
 statement ok

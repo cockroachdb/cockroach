@@ -2180,15 +2180,20 @@ CREATE TABLE test.pg_constraintdef_test (
   a int,
   b int unique,
   c int check (c > a),
+  d string,
+  UNIQUE INDEX (a) WHERE d = 'foo',
   FOREIGN KEY(a) REFERENCES test.pg_indexdef_test(a) ON DELETE CASCADE
 )
 
+# TODO(mgartner): To match Postgres, "::" casts should be appended to constants
+# of strings and enums in the partial index predicate (e.g., d = 'foo'::text).
 query T rowsort
 SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
 UNIQUE (b ASC)
+UNIQUE (a ASC) WHERE d = 'foo'
 FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
 CHECK ((c > a))
 
