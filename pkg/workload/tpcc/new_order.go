@@ -78,8 +78,11 @@ type newOrder struct {
 	updateDistrict     workload.StmtHandle
 	selectWarehouseTax workload.StmtHandle
 	selectCustomerInfo workload.StmtHandle
+	selectItemInfos    workload.StmtHandle
+	selectStockInfo    [10]workload.StmtHandle // 0-indexed, by district ID
 	insertOrder        workload.StmtHandle
 	insertNewOrder     workload.StmtHandle
+	insertOrderLine    workload.StmtHandle
 }
 
 var _ tpccTx = &newOrder{}
@@ -105,12 +108,33 @@ func createNewOrder(
 		SELECT w_tax FROM warehouse WHERE w_id = $1`,
 	)
 
-	// Select the customer's discount, last name and credit.
+	// Select the customer's discount, last name, and credit.
 	n.selectCustomerInfo = n.sr.Define(`
 		SELECT c_discount, c_last, c_credit
 		FROM customer
 		WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3`,
 	)
+
+	// For each o_ol_cnt item in the order, query the relevant item row.
+	n.selectItemInfos = n.sr.Define(`
+		SELECT i_price, i_name, i_data
+		FROM item
+		WHERE i_id = ANY ($1)
+		ORDER BY i_id`,
+	)
+
+	// The row in the STOCK table with matching S_I_ID (equals OL_I_ID) and
+	// S_W_ID (equals OL_SUPPLY_W_ID) is selected. S_QUANTITY, the quantity in
+	// stock, S_DIST_xx, where xx represents the district number, and S_DATA are
+	// retrieved.
+	for i := range n.selectStockInfo {
+		n.selectStockInfo[i] = n.sr.Define(fmt.Sprintf(`
+			SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
+			FROM (SELECT unnest($1:::INT[]) AS i_id, unnest($2:::INT[]) AS w_id)
+			INNER LOOKUP JOIN stock ON s_i_id = i_id AND s_w_id = w_id
+			ORDER BY s_i_id`, i+1,
+		))
+	}
 
 	n.insertOrder = n.sr.Define(`
 		INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
@@ -120,6 +144,32 @@ func createNewOrder(
 	n.insertNewOrder = n.sr.Define(`
 		INSERT INTO new_order (no_o_id, no_d_id, no_w_id)
 		VALUES ($1, $2, $3)`,
+	)
+
+	n.insertOrderLine = n.sr.Define(`
+		INSERT INTO order_line
+		(
+			ol_o_id,
+			ol_d_id,
+			ol_w_id,
+			ol_i_id,
+			ol_supply_w_id,
+			ol_number,
+			ol_quantity,
+			ol_amount,
+			ol_dist_info
+		)
+		(
+		 SELECT $1,
+				$2,
+				$3,
+				unnest($4:::INT[]),
+				unnest($5:::INT[]),
+				unnest($6:::INT[]),
+				unnest($7:::INT[]),
+				unnest($8:::DECIMAL[]),
+				unnest($9:::STRING[])
+		)`,
 	)
 
 	if err := n.sr.Init(ctx, "new-order", mcp, config.connFlags); err != nil {
@@ -229,7 +279,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 				return err
 			}
 
-			// Select the customer's discount, last name and credit.
+			// Select the customer's discount, last name, and credit.
 			if err := n.selectCustomerInfo.QueryRowTx(
 				ctx, tx, d.wID, d.dID, d.cID,
 			).Scan(&d.cDiscount, &d.cLast, &d.cCredit); err != nil {
@@ -239,21 +289,11 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			// 2.4.2.2: For each o_ol_cnt item in the order, query the relevant item
 			// row, update the stock row to account for the order, and insert a new
 			// line into the order_line table to reflect the item on the order.
-			itemIDs := make([]string, d.oOlCnt)
+			itemIDs := make([]int64, d.oOlCnt)
 			for i, item := range d.items {
-				itemIDs[i] = fmt.Sprint(item.olIID)
+				itemIDs[i] = int64(item.olIID)
 			}
-			rows, err := tx.QueryEx(
-				ctx,
-				fmt.Sprintf(`
-					SELECT i_price, i_name, i_data
-					FROM item
-					WHERE i_id IN (%[1]s)
-					ORDER BY i_id`,
-					strings.Join(itemIDs, ", "),
-				),
-				nil, /* options */
-			)
+			rows, err := n.selectItemInfos.QueryTx(ctx, tx, itemIDs)
 			if err != nil {
 				return err
 			}
@@ -292,24 +332,25 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 			rows.Close()
 
-			stockIDs := make([]string, d.oOlCnt)
+			// The row in the STOCK table with matching S_I_ID (equals OL_I_ID)
+			// and S_W_ID (equals OL_SUPPLY_W_ID) is selected. S_QUANTITY, the
+			// quantity in stock, S_DIST_xx, where xx represents the district
+			// number, and S_DATA are retrieved.
+			supplyWIDs := make([]int64, d.oOlCnt)
 			for i, item := range d.items {
-				stockIDs[i] = fmt.Sprintf("(%d, %d)", item.olIID, item.olSupplyWID)
+				supplyWIDs[i] = int64(item.olSupplyWID)
 			}
-			rows, err = tx.QueryEx(
-				ctx,
-				fmt.Sprintf(`
-					SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
-					FROM stock
-					WHERE (s_i_id, s_w_id) IN (%[2]s)
-					ORDER BY s_i_id`,
-					d.dID, strings.Join(stockIDs, ", "),
-				),
-				nil, /* options */
-			)
+			rows, err = n.selectStockInfo[d.dID-1].QueryTx(ctx, tx, itemIDs, supplyWIDs)
 			if err != nil {
 				return err
 			}
+
+			// If the retrieved value for S_QUANTITY exceeds OL_QUANTITY by 10
+			// or more, then S_QUANTITY is decreased by OL_QUANTITY; otherwise
+			// S_QUANTITY is updated to (S_QUANTITY - OL_QUANTITY)+91. S_YTD is
+			// increased by OL_QUANTITY and S_ORDER_CNT is incremented by 1. If
+			// the ord er-line is remote, then S_REMOTE_CNT is incremented by 1.
+			stockIDs := make([]string, d.oOlCnt)
 			distInfos := make([]string, d.oOlCnt)
 			sQuantityUpdateCases := make([]string, d.oOlCnt)
 			sYtdUpdateCases := make([]string, d.oOlCnt)
@@ -349,6 +390,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 					newSRemoteCnt++
 				}
 
+				stockIDs[i] = fmt.Sprintf("(%d, %d)", item.olIID, item.olSupplyWID)
 				sQuantityUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], newSQuantity)
 				sYtdUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], sYtd+item.olQuantity)
 				sOrderCntUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], sOrderCnt+1)
@@ -361,19 +403,6 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 				return err
 			}
 			rows.Close()
-
-			// Insert row into the orders and new orders table.
-			if _, err := n.insertOrder.ExecTx(
-				ctx, tx,
-				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"), d.oOlCnt, allLocal,
-			); err != nil {
-				return err
-			}
-			if _, err := n.insertNewOrder.ExecTx(
-				ctx, tx, d.oID, d.dID, d.wID,
-			); err != nil {
-				return err
-			}
 
 			// Update the stock table for each item.
 			if _, err := tx.ExecEx(
@@ -397,33 +426,37 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 				return err
 			}
 
+			// Insert row into the orders table.
+			if _, err := n.insertOrder.ExecTx(
+				ctx, tx,
+				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"), d.oOlCnt, allLocal,
+			); err != nil {
+				return err
+			}
+
+			// Insert row into the new orders table.
+			if _, err := n.insertNewOrder.ExecTx(
+				ctx, tx, d.oID, d.dID, d.wID,
+			); err != nil {
+				return err
+			}
+
 			// Insert a new order line for each item in the order.
-			olValsStrings := make([]string, d.oOlCnt)
+			olNumbers := make([]int64, d.oOlCnt)
+			olQuantities := make([]int64, d.oOlCnt)
+			olAmounts := make([]float64, d.oOlCnt)
 			for i := range d.items {
 				item := &d.items[i]
 				item.olAmount = float64(item.olQuantity) * item.iPrice
 				d.totalAmount += item.olAmount
 
-				olValsStrings[i] = fmt.Sprintf("(%d,%d,%d,%d,%d,%d,%d,%f,'%s')",
-					d.oID,            // ol_o_id
-					d.dID,            // ol_d_id
-					d.wID,            // ol_w_id
-					item.olNumber,    // ol_number
-					item.olIID,       // ol_i_id
-					item.olSupplyWID, // ol_supply_w_id
-					item.olQuantity,  // ol_quantity
-					item.olAmount,    // ol_amount
-					distInfos[i],     // ol_dist_info
-				)
+				olNumbers[i] = int64(item.olNumber)
+				olQuantities[i] = int64(item.olQuantity)
+				olAmounts[i] = item.olAmount
 			}
-			if _, err := tx.ExecEx(
-				ctx,
-				fmt.Sprintf(`
-					INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
-					VALUES %s`,
-					strings.Join(olValsStrings, ", "),
-				),
-				nil, /* options */
+			if _, err := n.insertOrderLine.ExecTx(
+				ctx, tx, d.oID, d.dID, d.wID, itemIDs, supplyWIDs,
+				olNumbers, olQuantities, olAmounts, distInfos,
 			); err != nil {
 				return err
 			}
