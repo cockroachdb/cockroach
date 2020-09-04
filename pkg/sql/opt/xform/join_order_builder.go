@@ -312,8 +312,9 @@ func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
 // Reorder adds all valid orderings of the given join to the memo.
 func (jb *JoinOrderBuilder) Reorder(join memo.RelExpr) {
 	switch t := join.(type) {
-	case *memo.InnerJoinExpr, *memo.SemiJoinExpr, *memo.AntiJoinExpr,
-		*memo.LeftJoinExpr, *memo.FullJoinExpr:
+	case *memo.InnerJoinExpr, *memo.InnerJoinApplyExpr, *memo.SemiJoinExpr,
+		*memo.SemiJoinApplyExpr, *memo.AntiJoinExpr, *memo.AntiJoinApplyExpr,
+		*memo.LeftJoinExpr, *memo.LeftJoinApplyExpr, *memo.FullJoinExpr:
 		flags := join.Private().(*memo.JoinPrivate).Flags
 		if !flags.Empty() {
 			panic(errors.AssertionFailedf("join with hints cannot be reordered"))
@@ -352,8 +353,9 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 	startEdges := jb.allEdges()
 
 	switch t := rel.(type) {
-	case *memo.InnerJoinExpr, *memo.SemiJoinExpr, *memo.AntiJoinExpr,
-		*memo.LeftJoinExpr, *memo.FullJoinExpr:
+	case *memo.InnerJoinExpr, *memo.InnerJoinApplyExpr, *memo.SemiJoinExpr,
+		*memo.SemiJoinApplyExpr, *memo.AntiJoinExpr, *memo.AntiJoinApplyExpr,
+		*memo.LeftJoinExpr, *memo.LeftJoinApplyExpr, *memo.FullJoinExpr:
 		jb.joinCount++
 
 		flags := t.Private().(*memo.JoinPrivate).Flags
@@ -380,7 +382,7 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 		// any joins higher up in the join tree. A pointer to the operator will be
 		// stored on the edge(s) that are constructed with it.
 		op := &operator{
-			joinType:      t.Op(),
+			joinType:      mapApplyToRegular(t.Op()),
 			leftVertexes:  leftVertexes,
 			rightVertexes: rightVertexes,
 			leftEdges:     leftEdges,
@@ -388,7 +390,7 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 		}
 
 		// Create hyperedges for the join graph using this join's ON condition.
-		if t.Op() == opt.InnerJoinOp {
+		if op.joinType == opt.InnerJoinOp {
 			jb.makeInnerEdge(op, on)
 		} else {
 			jb.makeNonInnerEdge(op, on)
@@ -469,13 +471,13 @@ func (jb *JoinOrderBuilder) dpSube() {
 	}
 }
 
-// addJoins iterates through the edges of the join graph and checks whether any
-// joins can be constructed between the memo groups for the two given sets of
-// base relations without creating an invalid plan or introducing cross joins.
-// If any valid joins are found, they are added to the memo.
+// addJoins iterates through the edges of the join graph and checks whether a
+// join can be constructed between the memo groups for the two given sets of
+// base relations without creating an invalid plan or introducing a cross join.
+// If a valid join is found, it is added to the memo.
 func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 	if jb.plans[s1] == nil || jb.plans[s2] == nil {
-		// Both inputs must have plans.
+		// Both inputs must have a plan.
 		return
 	}
 
@@ -589,7 +591,7 @@ func (jb *JoinOrderBuilder) makeTransitiveEdge(col1, col2 opt.ColumnID) {
 	// construct the TES for this edge. Note that this is possible because each
 	// edge contains a record of all base relations that were in the left and
 	// right inputs of the original join operators from which they were formed.
-	relations := jb.getRelations(opt.MakeColSet(col1, col2))
+	relations := jb.getRelations(opt.MakeColSet(col1, col2), jb.allVertexes())
 	for i, ok := jb.innerEdges.Next(0); ok; i, ok = jb.innerEdges.Next(i + 1) {
 		currEdge := &jb.edges[i]
 		if relations.isSubsetOf(currEdge.op.leftVertexes.union(currEdge.op.rightVertexes)) &&
@@ -652,6 +654,19 @@ func (jb *JoinOrderBuilder) hasEqEdge(leftCol, rightCol opt.ColumnID) bool {
 func (jb *JoinOrderBuilder) addJoin(
 	op opt.Operator, s1, s2 vertexSet, joinFilters, selectFilters memo.FiltersExpr,
 ) {
+	left := jb.plans[s1]
+	right := jb.plans[s2]
+	union := s1.union(s2)
+
+	if left.Relational().OuterCols.Intersects(right.Relational().OutputCols) {
+		// The left input cannot reference the right input. Don't add this join.
+		return
+	}
+	if right.Relational().OuterCols.Intersects(left.Relational().OutputCols) {
+		// This should be an apply-join.
+		op = mapRegularToApply(op)
+	}
+
 	if s1.intersects(s2) {
 		panic(errors.AssertionFailedf("sets are not disjoint"))
 	}
@@ -660,9 +675,6 @@ func (jb *JoinOrderBuilder) addJoin(
 		jb.callOnAddJoinFunc(s1, s2, joinFilters, op)
 	}
 
-	left := jb.plans[s1]
-	right := jb.plans[s2]
-	union := s1.union(s2)
 	if jb.plans[union] != nil {
 		jb.addToGroup(op, left, right, joinFilters, selectFilters, jb.plans[union])
 	} else {
@@ -731,6 +743,15 @@ func (jb *JoinOrderBuilder) addToGroup(
 		}
 		jb.f.Memo().AddInnerJoinToGroup(newJoin, grp)
 
+	case opt.InnerJoinApplyOp:
+		newJoin := &memo.InnerJoinApplyExpr{
+			Left:        left,
+			Right:       right,
+			On:          on,
+			JoinPrivate: memo.JoinPrivate{},
+		}
+		jb.f.Memo().AddInnerJoinApplyToGroup(newJoin, grp)
+
 	case opt.SemiJoinOp:
 		newJoin := &memo.SemiJoinExpr{
 			Left:        left,
@@ -739,6 +760,15 @@ func (jb *JoinOrderBuilder) addToGroup(
 			JoinPrivate: memo.JoinPrivate{},
 		}
 		jb.f.Memo().AddSemiJoinToGroup(newJoin, grp)
+
+	case opt.SemiJoinApplyOp:
+		newJoin := &memo.SemiJoinApplyExpr{
+			Left:        left,
+			Right:       right,
+			On:          on,
+			JoinPrivate: memo.JoinPrivate{},
+		}
+		jb.f.Memo().AddSemiJoinApplyToGroup(newJoin, grp)
 
 	case opt.AntiJoinOp:
 		newJoin := &memo.AntiJoinExpr{
@@ -749,6 +779,15 @@ func (jb *JoinOrderBuilder) addToGroup(
 		}
 		jb.f.Memo().AddAntiJoinToGroup(newJoin, grp)
 
+	case opt.AntiJoinApplyOp:
+		newJoin := &memo.AntiJoinApplyExpr{
+			Left:        left,
+			Right:       right,
+			On:          on,
+			JoinPrivate: memo.JoinPrivate{},
+		}
+		jb.f.Memo().AddAntiJoinApplyToGroup(newJoin, grp)
+
 	case opt.LeftJoinOp:
 		newJoin := &memo.LeftJoinExpr{
 			Left:        left,
@@ -757,6 +796,15 @@ func (jb *JoinOrderBuilder) addToGroup(
 			JoinPrivate: memo.JoinPrivate{},
 		}
 		jb.f.Memo().AddLeftJoinToGroup(newJoin, grp)
+
+	case opt.LeftJoinApplyOp:
+		newJoin := &memo.LeftJoinApplyExpr{
+			Left:        left,
+			Right:       right,
+			On:          on,
+			JoinPrivate: memo.JoinPrivate{},
+		}
+		jb.f.Memo().AddLeftJoinApplyToGroup(newJoin, grp)
 
 	case opt.FullJoinOp:
 		newJoin := &memo.FullJoinExpr{
@@ -783,14 +831,26 @@ func (jb *JoinOrderBuilder) memoize(
 	case opt.InnerJoinOp:
 		join = jb.f.Memo().MemoizeInnerJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
 
+	case opt.InnerJoinApplyOp:
+		join = jb.f.Memo().MemoizeInnerJoinApply(left, right, on, &memo.JoinPrivate{WasReordered: true})
+
 	case opt.SemiJoinOp:
 		join = jb.f.Memo().MemoizeSemiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+
+	case opt.SemiJoinApplyOp:
+		join = jb.f.Memo().MemoizeSemiJoinApply(left, right, on, &memo.JoinPrivate{WasReordered: true})
 
 	case opt.AntiJoinOp:
 		join = jb.f.Memo().MemoizeAntiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
 
+	case opt.AntiJoinApplyOp:
+		join = jb.f.Memo().MemoizeAntiJoinApply(left, right, on, &memo.JoinPrivate{WasReordered: true})
+
 	case opt.LeftJoinOp:
 		join = jb.f.Memo().MemoizeLeftJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+
+	case opt.LeftJoinApplyOp:
+		join = jb.f.Memo().MemoizeLeftJoinApply(left, right, on, &memo.JoinPrivate{WasReordered: true})
 
 	case opt.FullJoinOp:
 		join = jb.f.Memo().MemoizeFullJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
@@ -804,15 +864,15 @@ func (jb *JoinOrderBuilder) memoize(
 	return join
 }
 
-// getRelations returns a vertexSet containing all relations with output
-// columns in the given ColSet.
-func (jb *JoinOrderBuilder) getRelations(cols opt.ColSet) (rels vertexSet) {
+// getRelations returns a vertexSet containing each relation from the given
+// vertexSet which has one or more output columns that are in the given ColSet.
+func (jb *JoinOrderBuilder) getRelations(cols opt.ColSet, from vertexSet) (rels vertexSet) {
 	if cols.Empty() {
 		return rels
 	}
-	for i := range jb.vertexes {
+	for i, ok := from.next(0); ok; i, ok = from.next(i + 1) {
 		if jb.vertexes[i].Relational().OutputCols.Intersects(cols) {
-			rels = rels.add(vertexIndex(i))
+			rels = rels.add(i)
 		}
 	}
 	return rels
@@ -899,7 +959,7 @@ func (jb *JoinOrderBuilder) callOnAddJoinFunc(
 		jb.getRelationSlice(s1),
 		jb.getRelationSlice(s2),
 		jb.getRelationSlice(s1.union(s2)),
-		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(edges))),
+		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(edges), jb.allVertexes())),
 		op,
 	)
 }
@@ -991,8 +1051,8 @@ type conflictRule struct {
 	to   vertexSet
 }
 
-// calcNullRejectedRels initializes the notNullRels vertex set of the edge with
-// all relations on which nulls are rejected by the edge's filters.
+// calcNullRejectedRels initializes the nullRejectedRels vertex set of the edge
+// with all relations on which nulls are rejected by the edge's filters.
 func (e *edge) calcNullRejectedRels(jb *JoinOrderBuilder) {
 	var nullRejectedCols opt.ColSet
 	for i := range e.filters {
@@ -1000,10 +1060,10 @@ func (e *edge) calcNullRejectedRels(jb *JoinOrderBuilder) {
 			nullRejectedCols.UnionWith(constraints.ExtractNotNullCols(jb.evalCtx))
 		}
 	}
-	e.nullRejectedRels = jb.getRelations(nullRejectedCols)
+	e.nullRejectedRels = jb.getRelations(nullRejectedCols, jb.allVertexes())
 }
 
-// calcSES initializes the ses vertex set of the edge with all relations
+// calcSES initializes the ses relation set of the edge with all input relations
 // referenced by the edge's predicate (syntactic eligibility set from paper). If
 // a join uses a predicate in its ON condition, all relations in the SES must be
 // part of the join's inputs. For example, in this query:
@@ -1027,10 +1087,11 @@ func (e *edge) calcSES(jb *JoinOrderBuilder) {
 	// Get the columns referenced by the predicate.
 	freeVars := jb.getFreeVars(e.filters)
 
-	// Add all relations referenced by the predicate to the SES vertexSet.
-	// Columns that do not come from a base relation (outer to the join tree) will
-	// be treated as constant, and therefore will not be referenced in the SES.
-	e.ses = jb.getRelations(freeVars)
+	// Add all input relations referenced by the predicate to the SES vertexSet.
+	// Columns that do not come from an input relation (outer to the operator)
+	// will be treated as constant, and therefore will not be referenced in the
+	// SES.
+	e.ses = jb.getRelations(freeVars, e.op.leftVertexes.union(e.op.rightVertexes))
 }
 
 // calcTES initializes the total eligibility set of this edge using the
@@ -1615,4 +1676,50 @@ func (s bitSet) next(startVal uint64) (elem uint64, ok bool) {
 // len returns the number of elements in the set.
 func (s bitSet) len() int {
 	return bits.OnesCount64(uint64(s))
+}
+
+// mapApplyToRegular returns the non-dependent version of the given join
+// operator. If the operator is already non-dependent, the same operator type is
+// returned.
+func mapApplyToRegular(op opt.Operator) opt.Operator {
+	switch op {
+	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+		return opt.InnerJoinOp
+
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
+		return opt.SemiJoinOp
+
+	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		return opt.AntiJoinOp
+
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+		return opt.LeftJoinOp
+
+	case opt.FullJoinOp:
+		return opt.FullJoinOp
+
+	default:
+		panic(errors.AssertionFailedf("invalid operator: %v", op))
+	}
+}
+
+// mapRegularToApply returns the dependent (apply-join) version of the given
+// join operator.
+func mapRegularToApply(op opt.Operator) opt.Operator {
+	switch op {
+	case opt.InnerJoinOp:
+		return opt.InnerJoinApplyOp
+
+	case opt.SemiJoinOp:
+		return opt.SemiJoinApplyOp
+
+	case opt.AntiJoinOp:
+		return opt.AntiJoinApplyOp
+
+	case opt.LeftJoinOp:
+		return opt.LeftJoinApplyOp
+
+	default:
+		panic(errors.AssertionFailedf("invalid operator: %v", op))
+	}
 }

@@ -9,7 +9,8 @@
 #
 # Citations: [8]
 [ReorderJoins, Explore]
-(InnerJoin | SemiJoin | AntiJoin | LeftJoin | FullJoin
+(InnerJoin | InnerJoinApply | SemiJoin | SemiJoinApply | AntiJoin
+        | AntiJoinApply | LeftJoin | LeftJoinApply | FullJoin
     * & (ShouldReorderJoins (Root))
 )
 =>

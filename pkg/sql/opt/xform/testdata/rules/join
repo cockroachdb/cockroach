@@ -522,10 +522,7 @@ inner-join (lookup stu)
  │    └── filters (true)
  └── filters (true)
 
-# The apply join at the top of the tree should not be reordered. However, the
-# lower-level inner join can be reordered despite the fact that it has outer
-# columns.
-memo expect=ReorderJoins
+exploretrace rule=ReorderJoins format=hide-all
 SELECT *
 FROM abc
 INNER JOIN LATERAL (
@@ -536,51 +533,77 @@ INNER JOIN LATERAL (
 )
 ON a = v
 ----
-memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,v:6,s:7,t:8,u:9])
- ├── G1: (inner-join-apply G2 G3 G4)
- │    └── [presentation: a:1,b:2,c:3,v:6,s:7,t:8,u:9]
- │         ├── best: (inner-join-apply G2 G3 G4)
- │         └── cost: 1164.53
- ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
- │    └── []
- │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1070.02
- ├── G3: (inner-join G5 G6 G7) (inner-join G6 G5 G7) (lookup-join G5 G8 stu,keyCols=[6],outCols=(6-9)) (merge-join G6 G5 G8 inner-join,+7,+6)
- │    └── []
- │         ├── best: (lookup-join G5 G8 stu,keyCols=[6],outCols=(6-9))
- │         └── cost: 81.44
- ├── G4: (filters G9)
- ├── G5: (values G10 id=v1)
- │    ├── [ordering: +6]
- │    │    ├── best: (sort G5)
- │    │    └── cost: 0.12
- │    └── []
- │         ├── best: (values G10 id=v1)
- │         └── cost: 0.03
- ├── G6: (scan stu,cols=(7-9)) (scan stu@uts,cols=(7-9))
- │    ├── [ordering: +7]
- │    │    ├── best: (scan stu,cols=(7-9))
- │    │    └── cost: 10600.02
- │    └── []
- │         ├── best: (scan stu,cols=(7-9))
- │         └── cost: 10600.02
- ├── G7: (filters G11)
- ├── G8: (filters)
- ├── G9: (eq G12 G13)
- ├── G10: (scalar-list G14 G15)
- ├── G11: (eq G16 G13)
- ├── G12: (variable a)
- ├── G13: (variable column1)
- ├── G14: (tuple G17)
- ├── G15: (tuple G18)
- ├── G16: (variable s)
- ├── G17: (scalar-list G19)
- ├── G18: (scalar-list G20)
- ├── G19: (plus G12 G21)
- ├── G20: (mult G22 G23)
- ├── G21: (const 1)
- ├── G22: (variable b)
- └── G23: (const 2)
+----
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  inner-join-apply
+   ├── scan abc
+   ├── inner-join (hash)
+   │    ├── values
+   │    │    ├── (a + 1,)
+   │    │    └── (b * 2,)
+   │    ├── scan stu
+   │    └── filters
+   │         └── s = column1
+   └── filters
+        └── a = column1
+
+New expression 1 of 1:
+  inner-join-apply
+   ├── scan abc
+   ├── inner-join (hash)
+   │    ├── scan stu
+   │    ├── values
+   │    │    ├── (a + 1,)
+   │    │    └── (b * 2,)
+   │    └── filters
+   │         └── s = column1
+   └── filters
+        └── a = column1
+
+================================================================================
+ReorderJoins
+================================================================================
+Source expression:
+  inner-join-apply
+   ├── scan abc
+   ├── inner-join (lookup stu)
+   │    ├── values
+   │    │    ├── (a + 1,)
+   │    │    └── (b * 2,)
+   │    └── filters (true)
+   └── filters
+        └── a = column1
+
+New expression 1 of 2:
+  inner-join (hash)
+   ├── inner-join-apply
+   │    ├── scan abc
+   │    ├── values
+   │    │    ├── (a + 1,)
+   │    │    └── (b * 2,)
+   │    └── filters
+   │         └── a = column1
+   ├── scan stu
+   └── filters
+        └── s = column1
+
+New expression 2 of 2:
+  inner-join (hash)
+   ├── scan stu
+   ├── inner-join-apply
+   │    ├── scan abc
+   │    ├── values
+   │    │    ├── (a + 1,)
+   │    │    └── (b * 2,)
+   │    └── filters
+   │         └── a = column1
+   └── filters
+        └── s = column1
+----
+----
 
 # Only commutation is possible for a single join.
 exploretrace rule=ReorderJoins format=hide-all
@@ -606,6 +629,64 @@ New expression 1 of 1:
 ----
 ----
 
+# InnerJoinApply case.
+opt expect=ReorderJoins format=hide-all
+SELECT *
+FROM abc
+INNER JOIN LATERAL (SELECT * FROM (VALUES (a+1), (b*2)) f(v))
+ON a = v
+----
+inner-join-apply
+ ├── scan abc
+ ├── values
+ │    ├── (a + 1,)
+ │    └── (b * 2,)
+ └── filters
+      └── a = column1
+
+# LeftJoinApply case.
+opt expect=ReorderJoins format=hide-all
+SELECT *
+FROM abc
+LEFT JOIN LATERAL (SELECT * FROM (VALUES (a+1), (b*2)) f(v))
+ON a = v
+----
+left-join-apply
+ ├── scan abc
+ ├── values
+ │    ├── (a + 1,)
+ │    └── (b * 2,)
+ └── filters
+      └── a = column1
+
+# SemiJoinApply case.
+opt expect=ReorderJoins format=hide-all
+SELECT *
+FROM abc
+WHERE EXISTS (SELECT * FROM (VALUES (a+1), (b*2)) f(v) WHERE a = v)
+----
+semi-join-apply
+ ├── scan abc
+ ├── values
+ │    ├── (a + 1,)
+ │    └── (b * 2,)
+ └── filters
+      └── a = column1
+
+# AntiJoinApply case.
+opt expect=ReorderJoins format=hide-all
+SELECT *
+FROM abc
+WHERE NOT EXISTS (SELECT * FROM (VALUES (a+1), (b*2)) f(v) WHERE a = v)
+----
+anti-join-apply
+ ├── scan abc
+ ├── values
+ │    ├── (a + 1,)
+ │    └── (b * 2,)
+ └── filters
+      └── a = column1
+
 # No-op case because the joins have join flags.
 opt expect-not=ReorderJoins format=hide-all
 SELECT *
@@ -626,21 +707,6 @@ inner-join (merge)
  │              └── a = s
  ├── scan xyz@xy
  └── filters (true)
-
-# No-op case because InnerJoinApply is not matched.
-opt expect-not=ReorderJoins format=hide-all
-SELECT *
-FROM abc
-INNER JOIN LATERAL (SELECT * FROM (VALUES (a+1), (b*2)) f(v))
-ON a = v
-----
-inner-join-apply
- ├── scan abc
- ├── values
- │    ├── (a + 1,)
- │    └── (b * 2,)
- └── filters
-      └── a = column1
 
 opt expect=ReorderJoins format=hide-all
 SELECT *

@@ -1203,8 +1203,6 @@ inner-join (hash)
 ----
 ----
 
-# Ignore the apply join. However, all other joins can be reordered despite the
-# presence of outer columns.
 reorderjoins format=hide-all
 SELECT * FROM bx
 INNER JOIN LATERAL
@@ -1342,6 +1340,120 @@ D ABC    refs [] [inner]
 ABC D    refs [] [inner]
 
 Joins Considered: 14
+--------------------------------------------------------------------------------
+----Join Tree #4----
+inner-join-apply
+ ├── scan bx
+ ├── inner-join (cross)
+ │    ├── values
+ │    │    └── (x,)
+ │    ├── inner-join (hash)
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── scan cy
+ │    │    │    ├── scan dz
+ │    │    │    └── filters
+ │    │    │         └── y = z
+ │    │    ├── scan abc
+ │    │    └── filters
+ │    │         └── z = a
+ │    └── filters (true)
+ └── filters
+      └── x = y
+
+----Vertexes----
+E:
+scan bx
+
+D:
+values
+ └── (x,)
+
+A:
+scan cy
+
+B:
+scan dz
+
+C:
+scan abc
+
+----Edges----
+y = z [inner]
+z = a [inner]
+cross [inner]
+x = y [inner]
+x = z [inner]
+x = a [inner]
+y = a [inner]
+
+----Joining EA----
+E A    refs [EA] [inner]
+A E    refs [EA] [inner]
+----Joining EB----
+E B    refs [EB] [inner]
+B E    refs [EB] [inner]
+----Joining AB----
+A B    refs [AB] [inner]
+B A    refs [AB] [inner]
+----Joining EAB----
+E AB    refs [EA] [inner]
+AB E    refs [EA] [inner]
+A EB    refs [AB] [inner]
+EB A    refs [AB] [inner]
+EA B    refs [AB] [inner]
+B EA    refs [AB] [inner]
+----Joining EC----
+E C    refs [EC] [inner]
+C E    refs [EC] [inner]
+----Joining AC----
+A C    refs [AC] [inner]
+C A    refs [AC] [inner]
+----Joining EAC----
+E AC    refs [EC] [inner]
+AC E    refs [EC] [inner]
+A EC    refs [AC] [inner]
+EC A    refs [AC] [inner]
+EA C    refs [EC] [inner]
+C EA    refs [EC] [inner]
+----Joining BC----
+B C    refs [BC] [inner]
+C B    refs [BC] [inner]
+----Joining EBC----
+E BC    refs [EB] [inner]
+BC E    refs [EB] [inner]
+B EC    refs [BC] [inner]
+EC B    refs [BC] [inner]
+EB C    refs [BC] [inner]
+C EB    refs [BC] [inner]
+----Joining ABC----
+A BC    refs [AB] [inner]
+BC A    refs [AB] [inner]
+B AC    refs [AB] [inner]
+AC B    refs [AB] [inner]
+AB C    refs [BC] [inner]
+C AB    refs [BC] [inner]
+----Joining EABC----
+E ABC    refs [EA] [inner]
+ABC E    refs [EA] [inner]
+A EBC    refs [AB] [inner]
+EBC A    refs [AB] [inner]
+EA BC    refs [AB] [inner]
+BC EA    refs [AB] [inner]
+B EAC    refs [AB] [inner]
+EAC B    refs [AB] [inner]
+EB AC    refs [AB] [inner]
+AC EB    refs [AB] [inner]
+AB EC    refs [BC] [inner]
+EC AB    refs [BC] [inner]
+EAB C    refs [BC] [inner]
+C EAB    refs [BC] [inner]
+----Joining DABC----
+D ABC    refs [] [inner]
+ABC D    refs [] [inner]
+----Joining EDABC----
+E DABC    refs [EA] [inner-apply]
+
+Joins Considered: 53
 --------------------------------------------------------------------------------
 ----Final Plan----
 inner-join-apply
