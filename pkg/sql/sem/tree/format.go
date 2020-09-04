@@ -119,14 +119,11 @@ const (
 
 	// FmtPGCatalog is used to produce expressions formatted in a way that's as
 	// close as possible to what clients expect to live in pg_catalog (e.g.
-	// pg_attrdef.adbin and pg_constraint.condef columns). Specifically, this
-	// strips type annotations, since Postgres doesn't know what those are, and
-	// adds cast expressions for non-numeric constants.
+	// pg_attrdef.adbin, pg_constraint.condef and pg_indexes.indexdef columns).
+	// Specifically, this strips type annotations (Postgres doesn't know what
+	// those are), adds cast expressions for non-numeric constants, and formats
+	// indexes in Postgres-specific syntax.
 	FmtPGCatalog
-
-	// FmtPGIndexDef is used to produce CREATE INDEX statements that are
-	// compatible with pg_get_indexdef.
-	FmtPGIndexDef
 
 	// If set, user defined types and datums of user defined types will be
 	// formatted in a way that is stable across changes to the underlying type.
