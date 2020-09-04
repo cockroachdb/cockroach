@@ -568,25 +568,24 @@ func newSourceNotFoundError(fmt string, args ...interface{}) error {
 }
 
 // CommonLookupFlags is the common set of flags for the various accessor interfaces.
-// TODO (lucy): Extract RequireMutable into the common flags.
 type CommonLookupFlags struct {
 	// if required is set, lookup will return an error if the item is not found.
 	Required bool
+	// RequireMutable specifies whether to return a mutable descriptor.
+	RequireMutable bool
 	// if AvoidCached is set, lookup will avoid the cache (if any).
 	AvoidCached bool
+	// IncludeOffline specifies if offline descriptors should be visible.
+	IncludeOffline bool
+	// IncludeOffline specifies if dropped descriptors should be visible.
+	IncludeDropped bool
 }
 
 // SchemaLookupFlags is the flag struct suitable for GetSchema().
-type SchemaLookupFlags struct {
-	CommonLookupFlags
-	RequireMutable bool
-}
+type SchemaLookupFlags = CommonLookupFlags
 
 // DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
-type DatabaseLookupFlags struct {
-	CommonLookupFlags
-	RequireMutable bool
-}
+type DatabaseLookupFlags = CommonLookupFlags
 
 // DatabaseListFlags is the flag struct suitable for GetObjectNames().
 type DatabaseListFlags struct {
@@ -650,10 +649,6 @@ func (r RequiredTableKind) String() string {
 // ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
 type ObjectLookupFlags struct {
 	CommonLookupFlags
-	// return a MutableTableDescriptor
-	RequireMutable         bool
-	IncludeOffline         bool
-	IncludeDropped         bool
 	AllowWithoutPrimaryKey bool
 	// Control what type of object is being requested.
 	DesiredObjectKind DesiredObjectKind

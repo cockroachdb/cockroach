@@ -89,7 +89,7 @@ func TestingGetDatabaseDescriptor(
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		desc, err := UncachedPhysicalAccessor{}.GetDatabaseDesc(
 			ctx, txn, codec, database, tree.DatabaseLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{Required: true, AvoidCached: true},
+				Required: true, AvoidCached: true,
 			})
 		if err != nil {
 			return err

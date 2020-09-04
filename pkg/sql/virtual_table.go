@@ -253,9 +253,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 		params.p.ExecCfg().Codec,
 		v.dbName,
 		tree.DatabaseLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required: true, AvoidCached: params.p.avoidCachedDescriptors,
-			},
+			Required: true, AvoidCached: params.p.avoidCachedDescriptors,
 		},
 	)
 	if err != nil {
