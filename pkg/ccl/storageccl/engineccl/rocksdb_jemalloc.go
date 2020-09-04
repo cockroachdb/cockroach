@@ -7,6 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 // +build !stdmalloc
+// +build !short
 
 package engineccl
 
