@@ -510,6 +510,9 @@ func makeSQLServerArgs(
 	const sqlInstanceID = base.SQLInstanceID(10001)
 	idContainer := base.NewSQLIDContainer(sqlInstanceID, &c, false /* exposed */)
 
+	runtime := status.NewRuntimeStatSampler(context.Background(), clock)
+	registry.AddMetricStruct(runtime)
+
 	// We don't need this for anything except some services that want a gRPC
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
@@ -539,7 +542,7 @@ func makeSQLServerArgs(
 		BaseConfig:               &baseCfg,
 		stopper:                  stopper,
 		clock:                    clock,
-		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
+		runtime:                  runtime,
 		rpcContext:               rpcContext,
 		nodeDescs:                tenantConnect,
 		systemConfigProvider:     tenantConnect,
@@ -674,6 +677,19 @@ func StartTenant(
 		socketFile = "" // no unix socket
 	)
 	orphanedLeasesTimeThresholdNanos := args.clock.Now().WallTime
+
+	// TODO(tbg): the log dir is not configurable at this point
+	// since it is integrated too tightly with the `./cockroach start` command.
+	if err := startSampleEnvironment(ctx, sampleEnvironmentCfg{
+		st:                   args.Settings,
+		stopper:              args.stopper,
+		minSampleInterval:    base.DefaultMetricsSampleInterval,
+		goroutineDumpDirName: args.GoroutineDumpDirName,
+		heapProfileDirName:   args.HeapProfileDirName,
+		runtime:              args.runtime,
+	}); err != nil {
+		return "", "", err
+	}
 
 	if err := s.start(ctx,
 		args.stopper,
