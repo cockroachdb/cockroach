@@ -56,15 +56,23 @@ func GetAllRevisions(
 
 		for ; ; iter.Next() {
 			if valid, err := iter.Valid(); !valid || err != nil {
+				if err != nil {
+					return nil, err
+				}
 				break
 			} else if iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 				break
 			}
 			key := iter.UnsafeKey()
+			keyCopy := make([]byte, len(key.Key))
+			copy(keyCopy, key.Key)
+			key.Key = keyCopy
+			value := make([]byte, len(iter.UnsafeValue()))
+			copy(value, iter.UnsafeValue())
 			if len(res) == 0 || !res[len(res)-1].Key.Equal(key.Key) {
 				res = append(res, VersionedValues{Key: key.Key})
 			}
-			res[len(res)-1].Values = append(res[len(res)-1].Values, roachpb.Value{Timestamp: key.Timestamp, RawBytes: iter.UnsafeValue()})
+			res[len(res)-1].Values = append(res[len(res)-1].Values, roachpb.Value{Timestamp: key.Timestamp, RawBytes: value})
 		}
 	}
 	return res, nil
