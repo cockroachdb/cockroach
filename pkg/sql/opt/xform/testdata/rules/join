@@ -2090,6 +2090,32 @@ left-join (merge)
  │    └── filters (true)
  └── filters (true)
 
+# Generate a merge join with two partial indexes.
+
+exec-ddl
+CREATE TABLE partial_a (a INT, INDEX (a) WHERE a > 0)
+----
+
+exec-ddl
+CREATE TABLE partial_b (b INT, INDEX (b) WHERE b > 0)
+----
+
+opt
+SELECT a, b FROM partial_a JOIN partial_b ON a = b WHERE a > 0 AND b > 0
+----
+inner-join (merge)
+ ├── columns: a:1!null b:4!null
+ ├── left ordering: +1
+ ├── right ordering: +4
+ ├── fd: (1)==(4), (4)==(1)
+ ├── scan partial_a@secondary,partial
+ │    ├── columns: a:1!null
+ │    └── ordering: +1
+ ├── scan partial_b@secondary,partial
+ │    ├── columns: b:4!null
+ │    └── ordering: +4
+ └── filters (true)
+
 # --------------------------------------------------
 # GenerateLookupJoins
 # --------------------------------------------------
