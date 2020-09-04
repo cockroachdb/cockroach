@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -465,8 +466,12 @@ func (s *statusServer) EngineStats(
 			EngineType:           store.Engine().Type(),
 		}
 
-		switch e := store.Engine().(type) {
-		case *storage.RocksDB:
+		switch store.Engine().Type() {
+		case enginepb.EngineTypeRocksDB:
+			type getTickersHistograms interface {
+				GetTickersAndHistograms() (*enginepb.TickersAndHistograms, error)
+			}
+			e := store.Engine().(getTickersHistograms)
 			tickersAndHistograms, err := e.GetTickersAndHistograms()
 			if err != nil {
 				return grpcstatus.Errorf(codes.Internal, err.Error())

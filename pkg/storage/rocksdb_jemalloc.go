@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 // +build !stdmalloc
+// +build !short
 
 package storage
 
