@@ -78,7 +78,8 @@ func (r *Replica) executeWriteBatch(
 	// at proposal time, not at application time, because the spanlatch manager
 	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
 	// cause this condition to change.
-	if err := r.checkExecutionCanProceed(ctx, ba, g, &st); err != nil {
+	mergeInProgress, err := r.checkExecutionCanProceed(ctx, ba, g, &st)
+	if err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
 
@@ -148,7 +149,7 @@ func (r *Replica) executeWriteBatch(
 	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI
 	// explicitly as a side effect of stepping up as leaseholder.
 	if maxLeaseIndex != 0 {
-		if r.mergeInProgress() {
+		if mergeInProgress {
 			// The correctness of range merges relies on the invariant that the
 			// LeaseAppliedIndex of the range is not bumped while a range is in its
 			// subsumed state. If this invariant is ever violated, the follower

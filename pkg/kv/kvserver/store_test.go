@@ -727,7 +727,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	st := &kvserverpb.LeaseStatus{Timestamp: repl1.Clock().Now()}
-	if err = repl1.checkExecutionCanProceed(ctx, &roachpb.BatchRequest{}, nil /* g */, st); !errors.Is(err, expErr) {
+	if _, err = repl1.checkExecutionCanProceed(ctx, &roachpb.BatchRequest{}, nil /* g */, st); !errors.Is(err, expErr) {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
 }
