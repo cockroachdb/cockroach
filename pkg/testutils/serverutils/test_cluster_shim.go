@@ -30,7 +30,7 @@ import (
 type TestClusterInterface interface {
 	// Start is used to start up the servers that were instantiated when
 	// creating this cluster.
-	Start(t testing.TB, args base.TestClusterArgs)
+	Start(t testing.TB)
 
 	// NumServers returns the number of servers this test cluster is configured
 	// with.
@@ -144,7 +144,7 @@ func StartNewTestCluster(
 	t testing.TB, numNodes int, args base.TestClusterArgs,
 ) TestClusterInterface {
 	cluster := NewTestCluster(t, numNodes, args)
-	cluster.Start(t, args)
+	cluster.Start(t)
 	return cluster
 }
 
