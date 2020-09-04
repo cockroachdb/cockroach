@@ -791,6 +791,7 @@ The underlying response type is something we're looking to get rid of.
 | alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | Number of currently allocated bytes in the session memory monitor. |
 | max_alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | High water mark of allocated bytes in the session memory monitor. |
 | active_txn | [TxnInfo](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.TxnInfo) |  | Information about the txn in progress on this session. Nil if the session doesn't currently have a transaction. |
+| last_active_query_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint of the last query executed on this session, compatible with StatementStatisticsKey. |
 
 
 
@@ -808,6 +809,7 @@ The underlying response type is something we're looking to get rid of.
 | is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. |
 | phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. |
 | progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  |  |
+| sql_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. |
 
 
 
@@ -825,6 +827,12 @@ The underlying response type is something we're looking to get rid of.
 | num_retries | [int32](#cockroach.server.serverpb.ListSessionsResponse-int32) |  | num_retries is the number of times that this transaction was retried. |
 | num_auto_retries | [int32](#cockroach.server.serverpb.ListSessionsResponse-int32) |  | num_retries is the number of times that this transaction was automatically retried by the SQL executor. |
 | deadline | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | The deadline by which the transaction must be committed. |
+| implicit | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | implicit is true if this transaction was an implicit SQL transaction. |
+| alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | Number of currently allocated bytes in the txn memory monitor. |
+| max_alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | High water mark of allocated bytes in the txn memory monitor. |
+| read_only | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  |
+| is_historical | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  |
+| priority | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  |
 
 
 
@@ -895,6 +903,7 @@ The underlying response type is something we're looking to get rid of.
 | alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | Number of currently allocated bytes in the session memory monitor. |
 | max_alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | High water mark of allocated bytes in the session memory monitor. |
 | active_txn | [TxnInfo](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.TxnInfo) |  | Information about the txn in progress on this session. Nil if the session doesn't currently have a transaction. |
+| last_active_query_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint of the last query executed on this session, compatible with StatementStatisticsKey. |
 
 
 
@@ -912,6 +921,7 @@ The underlying response type is something we're looking to get rid of.
 | is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. |
 | phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. |
 | progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  |  |
+| sql_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. |
 
 
 
@@ -929,6 +939,12 @@ The underlying response type is something we're looking to get rid of.
 | num_retries | [int32](#cockroach.server.serverpb.ListSessionsResponse-int32) |  | num_retries is the number of times that this transaction was retried. |
 | num_auto_retries | [int32](#cockroach.server.serverpb.ListSessionsResponse-int32) |  | num_retries is the number of times that this transaction was automatically retried by the SQL executor. |
 | deadline | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | The deadline by which the transaction must be committed. |
+| implicit | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | implicit is true if this transaction was an implicit SQL transaction. |
+| alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | Number of currently allocated bytes in the txn memory monitor. |
+| max_alloc_bytes | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | High water mark of allocated bytes in the txn memory monitor. |
+| read_only | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  |
+| is_historical | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  |
+| priority | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  |
 
 
 
@@ -949,7 +965,7 @@ The underlying response type is something we're looking to get rid of.
 
 ## CancelQuery
 
-`GET /_status/cancel_query/{node_id}`
+`POST /_status/cancel_query/{node_id}`
 
 
 
@@ -988,7 +1004,7 @@ The underlying response type is something we're looking to get rid of.
 
 ## CancelSession
 
-`GET /_status/cancel_session/{node_id}`
+`POST /_status/cancel_session/{node_id}`
 
 
 

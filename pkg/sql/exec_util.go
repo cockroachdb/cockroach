@@ -1250,12 +1250,12 @@ func (q *queryMeta) cancel() {
 
 // getStatement returns a cleaned version of the query associated
 // with this queryMeta.
-func (q *queryMeta) getStatement() string {
+func (q *queryMeta) getStatement() (tree.Statement, error) {
 	parsed, err := parser.ParseOne(q.rawStmt)
 	if err != nil {
-		return fmt.Sprintf("error retrieving statement: %+v", err)
+		return nil, err
 	}
-	return parsed.AST.String()
+	return parsed.AST, nil
 }
 
 // SessionDefaults mirrors fields in Session, for restoring default
@@ -1328,7 +1328,12 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 
 // CancelSession looks up the specified session in the session registry and
 // cancels it. The caller is responsible for all permission checks.
-func (r *SessionRegistry) CancelSession(sessionIDBytes []byte) (bool, error) {
+func (r *SessionRegistry) CancelSession(
+	sessionIDBytes []byte,
+) (*serverpb.CancelSessionResponse, error) {
+	if len(sessionIDBytes) != 16 {
+		return nil, errors.Errorf("invalid non-16-byte UUID %v", sessionIDBytes)
+	}
 	sessionID := BytesToClusterWideID(sessionIDBytes)
 
 	r.Lock()
@@ -1337,11 +1342,13 @@ func (r *SessionRegistry) CancelSession(sessionIDBytes []byte) (bool, error) {
 	for id, session := range r.sessions {
 		if id == sessionID {
 			session.cancelSession()
-			return true, nil
+			return &serverpb.CancelSessionResponse{Canceled: true}, nil
 		}
 	}
 
-	return false, fmt.Errorf("session ID %s not found", sessionID)
+	return &serverpb.CancelSessionResponse{
+		Error: fmt.Sprintf("session ID %s not found", sessionID),
+	}, nil
 }
 
 // SerializeAll returns a slice of all sessions in the registry, converted to serverpb.Sessions.
