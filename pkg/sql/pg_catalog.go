@@ -413,7 +413,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 				// pg_attrdef only expects rows for columns with default values.
 				return nil
 			}
-			displayExpr, err := schemaexpr.FormatExprForDisplayInPGCatalog(ctx, table, *column.DefaultExpr, &p.semaCtx)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.DefaultExpr, &p.semaCtx, tree.FmtPGCatalog)
 			if err != nil {
 				return err
 			}
@@ -969,7 +969,7 @@ func populateTableConstraints(
 			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
 				return err
 			}
-			displayExpr, err := schemaexpr.FormatExprForDisplayInPGCatalog(ctx, table, con.Details, &p.semaCtx)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Details, &p.semaCtx, tree.FmtPGCatalog)
 			if err != nil {
 				return err
 			}
