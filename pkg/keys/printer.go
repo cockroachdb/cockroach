@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -657,41 +658,6 @@ func init() {
 	roachpb.PrettyPrintRange = PrettyPrintRange
 }
 
-// MassagePrettyPrintedSpanForTest does some transformations on pretty-printed spans and keys:
-// - if dirs is not nil, replace all ints with their ones' complement for
-// descendingly-encoded columns.
-// - strips line numbers from error messages.
-func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) string {
-	var r string
-	colIdx := -1
-	for i := 0; i < len(span); i++ {
-		if dirs != nil {
-			var d int
-			if _, err := fmt.Sscanf(span[i:], "%d", &d); err != nil {
-				// We've managed to consume an int.
-				dir := dirs[colIdx]
-				i += len(strconv.Itoa(d)) - 1
-				x := d
-				if dir == encoding.Descending {
-					x = ^x
-				}
-				r += strconv.Itoa(x)
-				continue
-			}
-		}
-		r += string(span[i])
-		switch span[i] {
-		case '/':
-			colIdx++
-		case '-', ' ':
-			// We're switching from the start constraints to the end constraints,
-			// or starting another span.
-			colIdx = -1
-		}
-	}
-	return r
-}
-
 // PrettyPrintRange pretty prints a compact representation of a key range. The
 // output is of the form:
 //    commonPrefix{remainingStart-remainingEnd}
@@ -709,7 +675,7 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 		if len(prettyStart) <= maxChars {
 			return prettyStart
 		}
-		b.WriteString(prettyStart[:maxChars-1])
+		copyEscape(&b, prettyStart[:maxChars-1])
 		b.WriteRune('…')
 		return b.String()
 	}
@@ -724,7 +690,7 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 		if i > maxChars-1 {
 			i = maxChars - 1
 		}
-		b.WriteString(prettyStart[:i])
+		copyEscape(&b, prettyStart[:i])
 		b.WriteRune('…')
 		return b.String()
 	}
@@ -733,9 +699,9 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 
 	printTrunc := func(b *bytes.Buffer, what string, maxChars int) {
 		if len(what) <= maxChars {
-			b.WriteString(what)
+			copyEscape(b, what)
 		} else {
-			b.WriteString(what[:maxChars-1])
+			copyEscape(b, what[:maxChars-1])
 			b.WriteRune('…')
 		}
 	}
@@ -747,4 +713,33 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 	b.WriteByte('}')
 
 	return b.String()
+}
+
+// copyEscape copies the string to the buffer, and avoids writing
+// invalid UTF-8 sequences and control characters.
+func copyEscape(buf *bytes.Buffer, s string) {
+	buf.Grow(len(s))
+	// k is the index in s before which characters have already
+	// been copied into buf.
+	k := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < utf8.RuneSelf && strconv.IsPrint(rune(c)) {
+			continue
+		}
+		buf.WriteString(s[k:i])
+		l, width := utf8.DecodeRuneInString(s[i:])
+		if l == utf8.RuneError || l < 0x20 {
+			const hex = "0123456789abcdef"
+			buf.WriteByte('\\')
+			buf.WriteByte('x')
+			buf.WriteByte(hex[c>>4])
+			buf.WriteByte(hex[c&0xf])
+		} else {
+			buf.WriteRune(l)
+		}
+		k = i + width
+		i += width - 1
+	}
+	buf.WriteString(s[k:])
 }
