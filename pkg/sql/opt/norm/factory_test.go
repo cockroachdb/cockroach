@@ -137,6 +137,7 @@ func TestCopyAndReplaceWithScan(t *testing.T) {
 		"UPDATE child SET p=p+1 WHERE c > 1",
 		"UPDATE parent SET p=p+1 WHERE p > 1",
 		"DELETE FROM parent WHERE p < 10",
+		"WITH RECURSIVE cte(x) AS (VALUES (1) UNION ALL SELECT x+1 FROM cte WHERE x < 10) SELECT * FROM cte",
 	} {
 		t.Run(query, func(t *testing.T) {
 			var o xform.Optimizer

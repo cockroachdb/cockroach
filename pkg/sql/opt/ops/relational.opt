@@ -1009,9 +1009,20 @@ define WithScanPrivate {
 #    - the Recursive query (which refers to the working table using a specific
 #      WithID) is evaluated; the results are emitted and also saved into a new
 #      "working table" for the next iteration.
-[Relational]
+[Relational, WithBinding]
 define RecursiveCTE {
+    # Binding is a dummy relational expression that is associated with the
+    # WithID; its logical properties are used by WithScan.
+    # TODO(radu): this is a little hacky; investigate other ways to fill out the
+    # WithScan properties in this case.
+    Binding RelExpr
+
+    # Initial is the expression that is executed once and returns the initial
+    # set of rows for the "working table".
     Initial RelExpr
+
+    # Recursive is the expression that is executed repeatedly; it reads the
+    # "working table" using WithScan.
     Recursive RelExpr
     _ RecursiveCTEPrivate
 }
