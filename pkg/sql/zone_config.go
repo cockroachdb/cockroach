@@ -286,8 +286,9 @@ func (p *planner) resolveTableForZone(
 func resolveZone(ctx context.Context, txn *kv.Txn, zs *tree.ZoneSpecifier) (descpb.ID, error) {
 	errMissingKey := errors.New("missing key")
 	id, err := zonepb.ResolveZoneSpecifier(zs,
-		func(parentID uint32, name string) (uint32, error) {
-			found, id, err := catalogkv.LookupPublicTableID(ctx, txn, keys.SystemSQLCodec, descpb.ID(parentID), name)
+		func(parentID uint32, schemaID uint32, name string) (uint32, error) {
+			found, id, err := catalogkv.LookupObjectID(ctx, txn, keys.SystemSQLCodec,
+				descpb.ID(parentID), descpb.ID(schemaID), name)
 			if err != nil {
 				return 0, err
 			}
