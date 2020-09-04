@@ -101,6 +101,12 @@ func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	const getTablesQuery = `
+SELECT schema_name, table_name, type
+FROM [SHOW TABLES]
+ORDER BY table_name
+`
+
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -161,7 +167,7 @@ D
 d
 `,
 			err:       "duplicate key",
-			skipIssue: 51811,
+			skipIssue: 53956,
 		},
 		{
 			name: "duplicate PK at sst boundary",
@@ -262,7 +268,7 @@ d
 			query: map[string][][]string{
 				`SELECT s, count(*) FROM t GROUP BY s`: {{"1", "2000"}},
 			},
-			skipIssue: 51811,
+			skipIssue: 53957,
 		},
 		{
 			name:   "quotes are accepted in a quoted string",
@@ -281,13 +287,12 @@ d
 			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
 		},
 		{
-			name:      "strict quotes: bare quote in the middle of a field that is not quoted",
-			create:    `s string`,
-			typ:       "CSV",
-			with:      `WITH strict_quotes`,
-			data:      `abc"de`,
-			err:       `row 1: reading CSV record: parse error on line 1, column 3: bare " in non-quoted-field`,
-			skipIssue: 51811,
+			name:   "strict quotes: bare quote in the middle of a field that is not quoted",
+			create: `s string`,
+			typ:    "CSV",
+			with:   `WITH strict_quotes`,
+			data:   `abc"de`,
+			err:    `parse error on line 1, column 3: bare " in non-quoted-field`,
 		},
 		{
 			name:   "no matching quote in a quoted field",
@@ -297,13 +302,12 @@ d
 			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
 		},
 		{
-			name:      "strict quotes: bare quote in the middle of a quoted field is not ok",
-			create:    `s string`,
-			typ:       "CSV",
-			with:      `WITH strict_quotes`,
-			data:      `"abc"de"`,
-			err:       `row 1: reading CSV record: parse error on line 1, column 4: extraneous or missing " in quoted-field`,
-			skipIssue: 51811,
+			name:   "strict quotes: bare quote in the middle of a quoted field is not ok",
+			create: `s string`,
+			typ:    "CSV",
+			with:   `WITH strict_quotes`,
+			data:   `"abc"de"`,
+			err:    `parse error on line 1, column 4: extraneous or missing " in quoted-field`,
 		},
 		{
 			name:     "too many imported columns",
@@ -632,20 +636,18 @@ d
 
 		// PG COPY
 		{
-			name:      "unexpected escape x",
-			create:    `b bytes`,
-			typ:       "PGCOPY",
-			data:      `\x`,
-			err:       `row 1: unsupported escape sequence: \\x`,
-			skipIssue: 51811,
+			name:   "unexpected escape x",
+			create: `b bytes`,
+			typ:    "PGCOPY",
+			data:   `\x`,
+			err:    `unsupported escape sequence: \\x`,
 		},
 		{
-			name:      "unexpected escape 3",
-			create:    `b bytes`,
-			typ:       "PGCOPY",
-			data:      `\3`,
-			err:       `row 1: unsupported escape sequence: \\3`,
-			skipIssue: 51811,
+			name:   "unexpected escape 3",
+			create: `b bytes`,
+			typ:    "PGCOPY",
+			data:   `\3`,
+			err:    `unsupported escape sequence: \\3`,
 		},
 		{
 			name:   "escapes",
@@ -676,12 +678,11 @@ d
 			},
 		},
 		{
-			name:      "size out of range",
-			create:    `i int8`,
-			typ:       "PGCOPY",
-			with:      `WITH max_row_size = '10GB'`,
-			err:       "max_row_size out of range",
-			skipIssue: 51811,
+			name:   "size out of range",
+			create: `i int8`,
+			typ:    "PGCOPY",
+			with:   `WITH max_row_size = '10GB'`,
+			err:    "out of range: 10000000000",
 		},
 		{
 			name:   "line too long",
@@ -716,8 +717,7 @@ d
 				0
 				\.
 			`,
-			err:       `COPY columns do not match table columns for table t`,
-			skipIssue: 51811,
+			err: `targeted column "s" not found`,
 		},
 		{
 			name: "missing COPY done",
@@ -744,11 +744,10 @@ d
 			},
 		},
 		{
-			name:      "size out of range",
-			typ:       "PGDUMP",
-			with:      `WITH max_row_size = '10GB'`,
-			err:       "max_row_size out of range",
-			skipIssue: 51811,
+			name: "size out of range",
+			typ:  "PGDUMP",
+			with: `WITH max_row_size = '10GB'`,
+			err:  "out of range: 10000000000",
 		},
 		{
 			name: "line too long",
@@ -791,8 +790,7 @@ COPY t (a, b, c) FROM stdin;
 1	2	3
 \.
 			`,
-			err:       "expected 2 columns, got 3",
-			skipIssue: 51811,
+			err: `targeted column "c" not found`,
 		},
 		{
 			name: "out-of-order and omitted COPY columns",
@@ -817,7 +815,10 @@ END;
 			typ:  "PGDUMP",
 			data: testPgdumpFk,
 			query: map[string][][]string{
-				`SHOW TABLES`:              {{"public", "cities", "table"}, {"public", "weather", "table"}},
+				getTablesQuery: {
+					{"public", "cities", "table"},
+					{"public", "weather", "table"},
+				},
 				`SELECT city FROM cities`:  {{"Berkeley"}},
 				`SELECT city FROM weather`: {{"Berkeley"}},
 
@@ -835,14 +836,16 @@ END;
 				`SHOW CONSTRAINTS FROM weather
 				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities(city)", "false"}},
 			},
-			skipIssue: 51811,
 		},
 		{
 			name: "fk-circular",
 			typ:  "PGDUMP",
 			data: testPgdumpFkCircular,
 			query: map[string][][]string{
-				`SHOW TABLES`:        {{"public", "a", "table"}, {"public", "b", "table"}},
+				getTablesQuery: {
+					{"public", "a", "table"},
+					{"public", "b", "table"},
+				},
 				`SELECT i, k FROM a`: {{"2", "2"}},
 				`SELECT j FROM b`:    {{"2"}},
 
@@ -858,19 +861,18 @@ END;
 				WHERE descriptor_name in ('a', 'b')
 				ORDER BY descriptor_name
 				`: {{
-					`CREATE TABLE a (
+					`CREATE TABLE public.a (
 	i INT8 NOT NULL,
 	k INT8 NULL,
 	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
-	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES b(j),
-	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES a(i),
-	INDEX a_auto_index_a_k_fkey (k ASC),
+	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(j),
+	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES public.a(i),
 	FAMILY "primary" (i, k)
 )`}, {
-					`CREATE TABLE b (
+					`CREATE TABLE public.b (
 	j INT8 NOT NULL,
 	CONSTRAINT b_pkey PRIMARY KEY (j ASC),
-	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES a(i),
+	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES public.a(i),
 	FAMILY "primary" (j)
 )`,
 				}},
@@ -885,7 +887,6 @@ END;
 					{"b", "b_pkey", "PRIMARY KEY", "PRIMARY KEY (j ASC)", "true"},
 				},
 			},
-			skipIssue: 51811,
 		},
 		{
 			name: "fk-skip",
@@ -893,12 +894,14 @@ END;
 			data: testPgdumpFk,
 			with: `WITH skip_foreign_keys`,
 			query: map[string][][]string{
-				`SHOW TABLES`: {{"public", "cities", "table"}, {"public", "weather", "table"}},
+				getTablesQuery: {
+					{"public", "cities", "table"},
+					{"public", "weather", "table"},
+				},
 				// Verify the constraint is skipped.
 				`SELECT dependson_name FROM crdb_internal.backward_dependencies`: {},
 				`SHOW CONSTRAINTS FROM weather`:                                  {},
 			},
-			skipIssue: 51811,
 		},
 		{
 			name: "fk unreferenced",
@@ -912,9 +915,8 @@ END;
 			data: testPgdumpFk,
 			with: `WITH skip_foreign_keys`,
 			query: map[string][][]string{
-				`SHOW TABLES`: {{"public", "weather", "table"}},
+				getTablesQuery: {{"public", "weather", "table"}},
 			},
-			skipIssue: 51811,
 		},
 		{
 			name: "case sensitive table names",
@@ -946,7 +948,7 @@ END;
 				`SELECT nextval('i_seq')`:    {{"11"}},
 				`SHOW CREATE SEQUENCE i_seq`: {{"i_seq", "CREATE SEQUENCE i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1"}},
 			},
-			skipIssue: 51811,
+			skipIssue: 53958,
 		},
 		{
 			name: "ALTER COLUMN x SET NOT NULL",
@@ -997,14 +999,6 @@ END;
 			err:  `non-public schemas unsupported: s`,
 		},
 		{
-			name: "unsupported type",
-			typ:  "PGDUMP",
-			data: "create table t (t time with time zone)",
-			err: `create table t \(t time with time zone\)
-                                 \^`,
-			skipIssue: 51811,
-		},
-		{
 			name: "various create ignores",
 			typ:  "PGDUMP",
 			data: `
@@ -1024,9 +1018,8 @@ END;
 				CREATE TABLE t (i INT8);
 			`,
 			query: map[string][][]string{
-				`SHOW TABLES`: {{"public", "t", "table"}},
+				getTablesQuery: {{"public", "t", "table"}},
 			},
-			skipIssue: 51811,
 		},
 		{
 			name: "many tables",
@@ -1271,19 +1264,18 @@ func TestImportUserDefinedTypes(t *testing.T) {
 }
 
 const (
-	testPgdumpCreateCities = `CREATE TABLE cities (
+	testPgdumpCreateCities = `CREATE TABLE public.cities (
 	city VARCHAR(80) NOT NULL,
 	CONSTRAINT cities_pkey PRIMARY KEY (city ASC),
 	FAMILY "primary" (city)
 )`
-	testPgdumpCreateWeather = `CREATE TABLE weather (
+	testPgdumpCreateWeather = `CREATE TABLE public.weather (
 	city VARCHAR(80) NULL,
 	temp_lo INT8 NULL,
 	temp_hi INT8 NULL,
 	prcp FLOAT4 NULL,
 	date DATE NULL,
-	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities(city),
-	INDEX weather_auto_index_weather_city_fkey (city ASC),
+	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city),
 	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
 )`
 	testPgdumpFk = `
