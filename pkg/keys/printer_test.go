@@ -15,8 +15,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -270,22 +273,33 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey(ten5Codec.TablePrefix(42), roachpb.RKey([]byte{0xf7})), `/Tenant/5/Table/42/255/PrefixEnd`, revertSupportUnknown},
 		{makeKey(ten5Codec.TablePrefix(42), roachpb.RKey([]byte{0x12, 'a', 0x00, 0x02})), `/Tenant/5/Table/42/"a"/PrefixEnd`, revertSupportUnknown},
 		{makeKey(ten5Codec.TablePrefix(42), roachpb.RKey([]byte{0x12, 'a', 0x00, 0x03})), `/Tenant/5/Table/42/???`, revertSupportUnknown},
+
+		// Special characters.
+		{makeKey(tenSysCodec.TablePrefix(61),
+			encoding.EncodeBytesAscending(nil, []byte("☃⚠"))),
+			`/Table/61/"☃⚠"`, revertSupportUnknown,
+		},
+		// Invalid utf-8 sequence.
+		{makeKey(tenSysCodec.TablePrefix(61),
+			encoding.EncodeBytesAscending(nil, []byte{0xff, 0xff})),
+			`/Table/61/"\xff\xff"`, revertSupportUnknown,
+		},
 	}
 	for i, test := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			keyInfo := keys.MassagePrettyPrintedSpanForTest(keys.PrettyPrint(nil, /* valDirs */
-				test.key), nil)
-			exp := keys.MassagePrettyPrintedSpanForTest(test.exp, nil)
+			keyPP := keys.PrettyPrint(nil /* valDirs */, test.key)
+			keyInfo := massagePrettyPrintedSpanForTest(keyPP, nil)
+			exp := massagePrettyPrintedSpanForTest(test.exp, nil)
 			t.Logf(`---- test case #%d:
 input:  %q
 output: %s
 exp:    %s
 `, i+1, []byte(test.key), keyInfo, exp)
 			if exp != keyInfo {
-				t.Errorf("%d: expected %s, got %s", i, exp, keyInfo)
+				t.Errorf("%d: expected:\n%+v\ngot:\n%+v", i, []byte(exp), []byte(keyInfo))
 			}
 
-			if exp != keys.MassagePrettyPrintedSpanForTest(test.key.String(), nil) {
+			if exp != massagePrettyPrintedSpanForTest(test.key.String(), nil) {
 				t.Errorf("%d: from string expected %s, got %s", i, exp, test.key.String())
 			}
 
@@ -309,6 +323,54 @@ exp:    %s
 	}
 }
 
+// massagePrettyPrintedSpanForTest does some transformations on pretty-printed spans and keys:
+// - if dirs is not nil, replace all ints with their ones' complement for
+// descendingly-encoded columns.
+// - strips line numbers from error messages.
+func massagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) string {
+	var r strings.Builder
+	colIdx := -1
+	for i := 0; i < len(span); i++ {
+		if dirs != nil {
+			var d int
+			if _, err := fmt.Sscanf(span[i:], "%d", &d); err == nil {
+				// We've managed to consume an int.
+				dir := dirs[colIdx]
+				i += len(strconv.Itoa(d)) - 1
+				x := d
+				if dir == encoding.Descending {
+					x = ^x
+				}
+				r.WriteString(strconv.Itoa(x))
+				continue
+			}
+		}
+		switch {
+		case span[i] == '/':
+			colIdx++
+			r.WriteByte(span[i])
+		case span[i] == '-' || span[i] == ' ':
+			// We're switching from the start constraints to the end constraints,
+			// or starting another span.
+			colIdx = -1
+			r.WriteByte(span[i])
+		case span[i] < ' ':
+			fmt.Fprintf(&r, "\\x%02x", span[i])
+		case span[i] <= utf8.RuneSelf:
+			r.WriteByte(span[i])
+		default:
+			c, width := utf8.DecodeRuneInString(span[i:])
+			if c == utf8.RuneError {
+				fmt.Fprintf(&r, "\\x%02x", span[i])
+			} else {
+				r.WriteRune(c)
+			}
+			i += width - 1
+		}
+	}
+	return r.String()
+}
+
 func TestPrettyPrintRange(t *testing.T) {
 	tenSysCodec := keys.SystemSQLCodec
 	ten5Codec := keys.MakeSQLCodec(roachpb.MakeTenantID(5))
@@ -317,6 +379,10 @@ func TestPrettyPrintRange(t *testing.T) {
 	tableKey := makeKey(tenSysCodec.TablePrefix(61), encoding.EncodeVarintAscending(nil, 4))
 	tableKey2 := makeKey(tenSysCodec.TablePrefix(61), encoding.EncodeVarintAscending(nil, 500))
 	tenTableKey := makeKey(ten5Codec.TablePrefix(61), encoding.EncodeVarintAscending(nil, 999))
+	specialBytesKeyA := makeKey(tenSysCodec.TablePrefix(61), encoding.EncodeBytesAscending(nil, []byte("☃️")))
+	specialBytesKeyB := makeKey(tenSysCodec.TablePrefix(61), encoding.EncodeBytesAscending(nil, []byte("☃️⚠")))
+	specialBytesKeyC := makeKey(tenSysCodec.TablePrefix(61), encoding.EncodeBytesAscending(nil, []byte{0xff, 0x00}))
+	specialBytesKeyD := makeKey(tenSysCodec.TablePrefix(61), encoding.EncodeBytesAscending(nil, []byte{0xff, 0xfe}))
 
 	testCases := []struct {
 		start, end roachpb.Key
@@ -325,6 +391,26 @@ func TestPrettyPrintRange(t *testing.T) {
 	}{
 		{key, nil, 20, "a"},
 		{tableKey, nil, 10, "/Table/61…"},
+		{tableKey, specialBytesKeyB, 20, `/Table/61/{4-"\xe2…}`},
+		{tableKey, specialBytesKeyB, 30, `/Table/61/{4-"☃️…}`},
+		{tableKey, specialBytesKeyB, 50, `/Table/61/{4-"☃️⚠"}`},
+		{specialBytesKeyA, specialBytesKeyB, 20, `/Table/61/"☃️…`},
+		{specialBytesKeyA, specialBytesKeyB, 25, `/Table/61/"☃️{"-\xe2…}`},
+		{specialBytesKeyA, specialBytesKeyB, 30, `/Table/61/"☃️{"-⚠"}`},
+		// Note: the PrettyPrintRange() algorithm operates on the result
+		// of PrettyPrint(), which already turns special characters into
+		// hex sequences. Therefore, it can merge and truncate the hex
+		// codes. To improve this would require making PrettyPrint() take
+		// a bool flag to return un-escaped bytes, and let
+		// PrettyPrintRange() escape the output adequately.
+		//
+		// Since all of this is best-effort, we'll accept the status quo
+		// for now.
+		{specialBytesKeyC, specialBytesKeyD, 20, `/Table/61/"\xff\x…`},
+		{specialBytesKeyC, specialBytesKeyD, 30, `/Table/61/"\xff\x{00"-fe"}`},
+		{specialBytesKeyB, specialBytesKeyD, 20, `/Table/61/"{\xe2\x98…-\x…}`},
+		{specialBytesKeyB, specialBytesKeyD, 30, `/Table/61/"{☃️\xe2…-\xff\xf…}`},
+		{specialBytesKeyB, specialBytesKeyD, 50, `/Table/61/"{☃️⚠"-\xff\xfe"}`},
 		{tenTableKey, nil, 20, "/Tenant/5/Table/61/…"},
 		{key, key2, 20, "{a-z}"},
 		{keys.MinKey, tableKey, 8, "/{M…-T…}"},
@@ -351,7 +437,7 @@ func TestPrettyPrintRange(t *testing.T) {
 	for i, tc := range testCases {
 		str := keys.PrettyPrintRange(tc.start, tc.end, tc.maxChars)
 		if str != tc.expected {
-			t.Errorf("%d: expected \"%s\", got \"%s\"", i, tc.expected, str)
+			t.Errorf("%d: expected:\n%s\ngot:\n%s", i, tc.expected, str)
 		}
 	}
 }
