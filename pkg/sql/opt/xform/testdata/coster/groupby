@@ -9,13 +9,13 @@ group-by
  ├── columns: max:6!null min:7!null i:2 s:3
  ├── grouping columns: i:2 s:3
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- ├── cost: 1130.04
+ ├── cost: 1134.04
  ├── key: (2,3)
  ├── fd: (2,3)-->(6,7)
  ├── scan a
  │    ├── columns: k:1!null i:2 s:3
  │    ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- │    ├── cost: 1070.02
+ │    ├── cost: 1074.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── aggregations

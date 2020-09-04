@@ -204,13 +204,13 @@ distinct-on
  ├── grouping columns: u:1 v:2
  ├── internal-ordering: +1
  ├── stats: [rows=20.0617284, distinct(1,2)=20.0617284, null(1,2)=0]
- ├── cost: 37.7306173
+ ├── cost: 41.7306173
  ├── key: (1,2)
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
       ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, distinct(1,2)=20.0617284, null(1,2)=0]
-      ├── cost: 36.6766667
+      ├── cost: 40.6766667
       ├── ordering: +1
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -226,13 +226,13 @@ distinct-on
  ├── grouping columns: u:1 v:2
  ├── internal-ordering: +1
  ├── stats: [rows=33.3333333, distinct(1,2)=33.3333333, null(1,2)=0]
- ├── cost: 37.8633333
+ ├── cost: 41.8633333
  ├── key: (1,2)
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
       ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, distinct(1,2)=33.3333333, null(1,2)=0]
-      ├── cost: 36.6766667
+      ├── cost: 40.6766667
       ├── ordering: +1
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -248,7 +248,7 @@ distinct-on
  ├── grouping columns: u:1 v:2
  ├── internal-ordering: +1
  ├── stats: [rows=100, distinct(1,2)=100, null(1,2)=0]
- ├── cost: 113.53
+ ├── cost: 117.53
  ├── key: (1,2)
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
@@ -256,7 +256,7 @@ distinct-on
       ├── stats: [rows=100, distinct(1)=20, null(1)=0, distinct(1,2)=100, null(1,2)=0]
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
-      ├── cost: 110.01
+      ├── cost: 114.01
       ├── ordering: +1
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -272,7 +272,7 @@ distinct-on
  ├── grouping columns: u:1 v:2
  ├── internal-ordering: +1
  ├── stats: [rows=25, distinct(1,2)=25, null(1,2)=0]
- ├── cost: 112.78
+ ├── cost: 116.78
  ├── key: (1,2)
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
@@ -280,7 +280,7 @@ distinct-on
       ├── stats: [rows=100, distinct(1)=20, null(1)=0, distinct(1,2)=25, null(1,2)=0]
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
-      ├── cost: 110.01
+      ├── cost: 114.01
       ├── ordering: +1
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -301,20 +301,20 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 222.06
+ ├── cost: 226.06
  ├── key: ()
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=10]
- │    ├── cost: 222.04
+ │    ├── cost: 226.04
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── scan tj
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    │    ├── cost: 212.02
+ │    │    ├── cost: 216.02
  │    │    ├── limit hint: 100.00
  │    │    └── prune: (1)
  │    └── filters
@@ -332,20 +332,20 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 5.41
+ ├── cost: 9.41
  ├── key: ()
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=1]
- │    ├── cost: 5.39
+ │    ├── cost: 9.39
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── scan tj
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1]
- │    │    ├── cost: 5.32
+ │    │    ├── cost: 9.32
  │    │    ├── limit hint: 5.00
  │    │    └── prune: (1)
  │    └── filters
