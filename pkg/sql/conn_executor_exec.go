@@ -279,10 +279,18 @@ func (ex *connExecutor) execStmtInOpenState(
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
 		if res != nil && ctx.Err() != nil && res.Err() != nil {
+			// Even in the cases where the error is a retryable error, we want to
+			// intercept the event and payload returned here to ensure that the query
+			// is not retried.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(stmt.AST)),
+			}
 			if queryTimedOut {
 				res.SetError(sqlerrors.QueryTimeoutError)
+				retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 			} else {
 				res.SetError(cancelchecker.QueryCanceledError)
+				retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 			}
 		}
 	}
@@ -374,9 +382,21 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
+	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
+		ev, payload := ex.makeErrEvent(err, stmt.AST)
+		return ev, payload, nil
+	}
+
 	if ex.sessionData.StmtTimeout > 0 {
+		timerDuration := ex.sessionData.StmtTimeout - timeutil.Since(ex.phaseTimes[sessionQueryReceived])
+		// There's no need to proceed with execution if the timer has already expired.
+		if timerDuration < 0 {
+			ex.cancelQuery(stmt.queryID)
+			queryTimedOut = true
+			return makeErrEvent(sqlerrors.QueryTimeoutError)
+		}
 		timeoutTicker = time.AfterFunc(
-			ex.sessionData.StmtTimeout-timeutil.Since(ex.phaseTimes[sessionQueryReceived]),
+			timerDuration,
 			func() {
 				ex.cancelQuery(stmt.queryID)
 				queryTimedOut = true
@@ -402,11 +422,6 @@ func (ex *connExecutor) execStmtInOpenState(
 			return
 		}
 	}()
-
-	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, stmt.AST)
-		return ev, payload, nil
-	}
 
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -607,7 +608,6 @@ func TestIdleInSessionTimeout(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	var err error
 	conn, err := tc.ServerConn(0).Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -846,6 +846,54 @@ func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
 		t.Fatal("expected the connection to be killed " +
 			"but the connection is still alive")
 	}
+}
+
+func TestStatementTimeoutRetryableErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.QueryContext(ctx,
+		`SET statement_timeout = '0.1s'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	timer := time.AfterFunc(1*time.Second, func() {
+		t.Fatal("expected the query to error out due to the statement_timeout.")
+	})
+
+	_, err = conn.QueryContext(ctx, `SELECT crdb_internal.force_retry('2s')`)
+	if !testutils.IsError(err, "pq: query execution canceled due to statement timeout") {
+		t.Fatalf("expected query to fail with error: %s, but got error: %s",
+			sqlerrors.QueryTimeoutError, err)
+	}
+
+	timer.Stop()
+
+	// Same test as above, except in an explicit transaction.
+	timer = time.AfterFunc(1*time.Second, func() {
+		t.Fatal("expected the query to error out due to the statement_timeout.")
+	})
+
+	_, err = conn.QueryContext(ctx, `BEGIN; SELECT crdb_internal.force_retry('2s'); COMMIT`)
+	if !testutils.IsError(err, "pq: query execution canceled due to statement timeout") {
+		t.Fatalf("expected query to fail with error: %s, but got error: %s",
+			sqlerrors.QueryTimeoutError, err)
+	}
+
+	timer.Stop()
 }
 
 func getUserConn(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
