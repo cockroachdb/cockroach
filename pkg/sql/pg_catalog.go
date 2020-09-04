@@ -1835,7 +1835,21 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Interleave = intlDef
 	}
-	fmtCtx := tree.NewFmtCtx(tree.FmtPGIndexDef)
+	if index.IsPartial() {
+		// Format the raw predicate for display in order to resolve user-defined
+		// types to a human readable form.
+		//
+		// TODO(mgartner): Avoid the parsing he predicate expression twice. It
+		// is parsed in schemaexpr.FormatExprForDisplay and again here.
+		formattedPred, err := schemaexpr.FormatExprForDisplayWithoutTypeAnnotations(ctx, table, index.Predicate, p.SemaCtx())
+
+		pred, err := parser.ParseExpr(formattedPred)
+		if err != nil {
+			return "", nil
+		}
+		indexDef.Predicate = pred
+	}
+	fmtCtx := tree.NewFmtCtx(tree.FmtPGIndexDef | tree.FmtPGAttrdefAdbin)
 	fmtCtx.FormatNode(&indexDef)
 	return fmtCtx.String(), nil
 }
