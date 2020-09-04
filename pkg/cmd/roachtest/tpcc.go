@@ -385,7 +385,7 @@ func registerTPCC(r *testRegistry) {
 		CPUs:  4,
 
 		LoadWarehouses: 1000,
-		EstimatedMax:   gceOrAws(cloud, 400, 600),
+		EstimatedMax:   gceOrAws(cloud, 650, 800),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
