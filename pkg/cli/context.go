@@ -89,9 +89,9 @@ func setServerContextDefaults() {
 
 	serverCfg.ClockDevicePath = ""
 	serverCfg.ExternalIODirConfig = base.ExternalIODirConfig{}
+	serverCfg.GoroutineDumpDirName = ""
+	serverCfg.HeapProfileDirName = ""
 
-	serverCfg.KVConfig.GoroutineDumpDirName = ""
-	serverCfg.KVConfig.HeapProfileDirName = ""
 	serverCfg.AutoInitializeCluster = false
 	serverCfg.KVConfig.ReadyFn = nil
 	serverCfg.KVConfig.DelayedBootstrapFn = nil

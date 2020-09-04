@@ -54,7 +54,7 @@ const (
 	defaultScanMinIdleTime   = 10 * time.Millisecond
 	defaultScanMaxIdleTime   = 1 * time.Second
 
-	defaultStorePath = "cockroach-data"
+	DefaultStorePath = "cockroach-data"
 	// TempDirPrefix is the filename prefix of any temporary subdirectory
 	// created.
 	TempDirPrefix = "cockroach-temp"
@@ -121,6 +121,14 @@ type BaseConfig struct {
 	// failures, and increase the frequency and impact of
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
+
+	// GoroutineDumpDirName is the directory name for goroutine dumps using
+	// goroutinedumper.
+	GoroutineDumpDirName string
+
+	// HeapProfileDirName is the directory name for heap profiles using
+	// heapprofiler. If empty, no heap profiles will be collected.
+	HeapProfileDirName string
 
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
@@ -194,14 +202,6 @@ type KVConfig struct {
 	// TimeSeriesServerConfig contains configuration specific to the time series
 	// server.
 	TimeSeriesServerConfig ts.ServerConfig
-
-	// GoroutineDumpDirName is the directory name for goroutine dumps using
-	// goroutinedumper.
-	GoroutineDumpDirName string
-
-	// HeapProfileDirName is the directory name for heap profiles using
-	// heapprofiler. If empty, no heap profiles will be collected.
-	HeapProfileDirName string
 
 	// Parsed values.
 
@@ -384,7 +384,7 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 
 // MakeConfig returns a Config for the system tenant with default values.
 func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
-	storeSpec, err := base.NewStoreSpec(defaultStorePath)
+	storeSpec, err := base.NewStoreSpec(DefaultStorePath)
 	if err != nil {
 		panic(err)
 	}
