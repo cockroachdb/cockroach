@@ -843,8 +843,10 @@ var varGen = map[string]sessionVar{
 					// TODO(knz): if/when we want to support this, we'll need to change
 					// the interface between GetStringVal() and Set() to take string
 					// arrays instead of a single string.
-					return "", unimplemented.Newf("schema names containing commas in search_path",
-						"schema name %q not supported in search_path", s)
+					return "",
+						errors.WithHintf(unimplemented.NewWithIssuef(53971,
+							`schema name %q has commas so is not supported in search_path.`, s),
+							`Did you mean to omit quotes? SET search_path = %s`, s)
 				}
 				buf.WriteString(comma)
 				buf.WriteString(s)
