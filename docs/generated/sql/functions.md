@@ -2038,6 +2038,12 @@ The paths themselves are given in the direction of the first geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_simplifypreservetopology"></a><code>st_simplifypreservetopology(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.</p>
 </span></td></tr>
+<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, origin_x: <a href="float.html">float</a>, origin_y: <a href="float.html">float</a>, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y based on an origin of (origin_x, origin_y).</p>
+</span></td></tr>
+<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of the given size.</p>
+</span></td></tr>
+<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y.</p>
+</span></td></tr>
 <tr><td><a name="st_srid"></a><code>st_srid(geography: geography) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the Spatial Reference Identifier (SRID) for the ST_Geography as defined in spatial_ref_sys table.</p>
 </span></td></tr>
 <tr><td><a name="st_srid"></a><code>st_srid(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the Spatial Reference Identifier (SRID) for the ST_Geometry as defined in spatial_ref_sys table.</p>
