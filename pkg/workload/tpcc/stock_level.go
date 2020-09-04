@@ -67,19 +67,15 @@ func createStockLevel(
 
 	// Count the number of recently sold items that have a stock level below
 	// the threshold.
-	// TODO(radu): we use count(DISTINCT s_i_id) because DISTINCT inside
-	// aggregates was not supported by the optimizer. This can be cleaned up.
 	s.countRecentlySold = s.sr.Define(`
-		SELECT count(*) FROM (
-			SELECT DISTINCT s_i_id
-			FROM order_line
-			JOIN stock
-			ON s_i_id=ol_i_id AND s_w_id=ol_w_id
-			WHERE ol_w_id = $1
-				AND ol_d_id = $2
-				AND ol_o_id BETWEEN $3 - 20 AND $3 - 1
-				AND s_quantity < $4
-		)`,
+		SELECT count(DISTINCT s_i_id)
+		FROM order_line
+		JOIN stock
+		ON s_w_id = $1 AND s_i_id = ol_i_id
+		WHERE ol_w_id = $1
+		  AND ol_d_id = $2
+		  AND ol_o_id BETWEEN $3 - 20 AND $3 - 1
+		  AND s_quantity < $4`,
 	)
 
 	if err := s.sr.Init(ctx, "stock-level", mcp, config.connFlags); err != nil {
