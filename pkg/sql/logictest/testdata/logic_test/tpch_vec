@@ -567,8 +567,7 @@ EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_
             │       └ *colexec.selEQBytesBytesConstOp
             │         └ *colfetcher.ColBatchScan
             └ *rowexec.joinReader
-              └ *colexec.mergeJoinInnerOp
-                ├ *colfetcher.ColBatchScan
+              └ *rowexec.joinReader
                 └ *colexec.selEQBytesBytesConstOp
                   └ *colfetcher.ColBatchScan
 
@@ -691,8 +690,7 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
           │           │ ├ *colfetcher.ColBatchScan
           │           │ └ *colexec.hashJoiner
           │           │   ├ *rowexec.joinReader
-          │           │   │ └ *colexec.mergeJoinInnerOp
-          │           │   │   ├ *colfetcher.ColBatchScan
+          │           │   │ └ *rowexec.joinReader
           │           │   │   └ *colexec.selEQBytesBytesConstOp
           │           │   │     └ *colfetcher.ColBatchScan
           │           │   └ *rowexec.joinReader

@@ -571,14 +571,21 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		}
 	}
 
+	numSpans := 1
+	if scan.Constraint != nil {
+		numSpans = scan.Constraint.Spans.Count()
+	} else if scan.InvertedConstraint != nil {
+		numSpans = len(scan.InvertedConstraint)
+	}
+	baseCost := memo.Cost(numSpans * randIOCostFactor)
+
 	// Add a small cost if the scan is unconstrained, so all else being equal, we
 	// will prefer a constrained scan. This is important if our row count
 	// estimate turns out to be smaller than the actual row count.
-	var preferConstrainedScanCost memo.Cost
 	if scan.IsUnfiltered(c.mem.Metadata()) {
-		preferConstrainedScanCost = cpuCostFactor
+		baseCost += cpuCostFactor
 	}
-	return memo.Cost(rowCount)*(seqIOCostFactor+perRowCost) + preferConstrainedScanCost
+	return baseCost + memo.Cost(rowCount)*(seqIOCostFactor+perRowCost)
 }
 
 func (c *coster) computeSelectCost(sel *memo.SelectExpr) memo.Cost {

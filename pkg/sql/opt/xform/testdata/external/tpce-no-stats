@@ -57,46 +57,11 @@ sort
       │    ├── project
       │    │    ├── columns: column48:48!null b_name:44!null
       │    │    ├── immutable
-      │    │    ├── inner-join (hash)
+      │    │    ├── inner-join (lookup broker)
       │    │    │    ├── columns: sc_id:1!null sc_name:2!null in_id:4!null in_sc_id:6!null co_id:8!null co_in_id:11!null s_symb:18!null s_co_id:23!null tr_s_symb:37!null tr_qty:38!null tr_bid_price:39!null tr_b_id:40!null b_id:42!null b_name:44!null
-      │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │    │    ├── key columns: [40] = [42]
+      │    │    │    ├── lookup columns are key
       │    │    │    ├── fd: ()-->(1,2,6), (8)-->(11), (18)-->(23), (42)-->(44), (44)-->(42), (40)==(42), (42)==(40), (18)==(37), (37)==(18), (8)==(23), (23)==(8), (4)==(11), (11)==(4), (1)==(6), (6)==(1)
-      │    │    │    ├── scan broker@secondary
-      │    │    │    │    ├── columns: b_id:42!null b_name:44!null
-      │    │    │    │    ├── constraint: /44
-      │    │    │    │    │    ├── [/'Broker1' - /'Broker1']
-      │    │    │    │    │    ├── [/'Broker10' - /'Broker10']
-      │    │    │    │    │    ├── [/'Broker11' - /'Broker11']
-      │    │    │    │    │    ├── [/'Broker12' - /'Broker12']
-      │    │    │    │    │    ├── [/'Broker13' - /'Broker13']
-      │    │    │    │    │    ├── [/'Broker14' - /'Broker14']
-      │    │    │    │    │    ├── [/'Broker15' - /'Broker15']
-      │    │    │    │    │    ├── [/'Broker16' - /'Broker16']
-      │    │    │    │    │    ├── [/'Broker17' - /'Broker17']
-      │    │    │    │    │    ├── [/'Broker18' - /'Broker18']
-      │    │    │    │    │    ├── [/'Broker19' - /'Broker19']
-      │    │    │    │    │    ├── [/'Broker2' - /'Broker2']
-      │    │    │    │    │    ├── [/'Broker20' - /'Broker20']
-      │    │    │    │    │    ├── [/'Broker21' - /'Broker21']
-      │    │    │    │    │    ├── [/'Broker22' - /'Broker22']
-      │    │    │    │    │    ├── [/'Broker23' - /'Broker23']
-      │    │    │    │    │    ├── [/'Broker24' - /'Broker24']
-      │    │    │    │    │    ├── [/'Broker25' - /'Broker25']
-      │    │    │    │    │    ├── [/'Broker26' - /'Broker26']
-      │    │    │    │    │    ├── [/'Broker27' - /'Broker27']
-      │    │    │    │    │    ├── [/'Broker28' - /'Broker28']
-      │    │    │    │    │    ├── [/'Broker29' - /'Broker29']
-      │    │    │    │    │    ├── [/'Broker3' - /'Broker3']
-      │    │    │    │    │    ├── [/'Broker30' - /'Broker30']
-      │    │    │    │    │    ├── [/'Broker4' - /'Broker4']
-      │    │    │    │    │    ├── [/'Broker5' - /'Broker5']
-      │    │    │    │    │    ├── [/'Broker6' - /'Broker6']
-      │    │    │    │    │    ├── [/'Broker7' - /'Broker7']
-      │    │    │    │    │    ├── [/'Broker8' - /'Broker8']
-      │    │    │    │    │    └── [/'Broker9' - /'Broker9']
-      │    │    │    │    ├── cardinality: [0 - 30]
-      │    │    │    │    ├── key: (42)
-      │    │    │    │    └── fd: (42)-->(44), (44)-->(42)
       │    │    │    ├── inner-join (lookup trade_request@secondary)
       │    │    │    │    ├── columns: sc_id:1!null sc_name:2!null in_id:4!null in_sc_id:6!null co_id:8!null co_in_id:11!null s_symb:18!null s_co_id:23!null tr_s_symb:37!null tr_qty:38!null tr_bid_price:39!null tr_b_id:40!null
       │    │    │    │    ├── key columns: [18] = [37]
@@ -137,7 +102,7 @@ sort
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters (true)
       │    │    │    └── filters
-      │    │    │         └── tr_b_id:40 = b_id:42 [outer=(40,42), constraints=(/40: (/NULL - ]; /42: (/NULL - ]), fd=(40)==(42), (42)==(40)]
+      │    │    │         └── b_name:44 IN ('Broker1', 'Broker10', 'Broker11', 'Broker12', 'Broker13', 'Broker14', 'Broker15', 'Broker16', 'Broker17', 'Broker18', 'Broker19', 'Broker2', 'Broker20', 'Broker21', 'Broker22', 'Broker23', 'Broker24', 'Broker25', 'Broker26', 'Broker27', 'Broker28', 'Broker29', 'Broker3', 'Broker30', 'Broker4', 'Broker5', 'Broker6', 'Broker7', 'Broker8', 'Broker9') [outer=(44), constraints=(/44: [/'Broker1' - /'Broker1'] [/'Broker10' - /'Broker10'] [/'Broker11' - /'Broker11'] [/'Broker12' - /'Broker12'] [/'Broker13' - /'Broker13'] [/'Broker14' - /'Broker14'] [/'Broker15' - /'Broker15'] [/'Broker16' - /'Broker16'] [/'Broker17' - /'Broker17'] [/'Broker18' - /'Broker18'] [/'Broker19' - /'Broker19'] [/'Broker2' - /'Broker2'] [/'Broker20' - /'Broker20'] [/'Broker21' - /'Broker21'] [/'Broker22' - /'Broker22'] [/'Broker23' - /'Broker23'] [/'Broker24' - /'Broker24'] [/'Broker25' - /'Broker25'] [/'Broker26' - /'Broker26'] [/'Broker27' - /'Broker27'] [/'Broker28' - /'Broker28'] [/'Broker29' - /'Broker29'] [/'Broker3' - /'Broker3'] [/'Broker30' - /'Broker30'] [/'Broker4' - /'Broker4'] [/'Broker5' - /'Broker5'] [/'Broker6' - /'Broker6'] [/'Broker7' - /'Broker7'] [/'Broker8' - /'Broker8'] [/'Broker9' - /'Broker9']; tight)]
       │    │    └── projections
       │    │         └── tr_qty:38::INT8 * tr_bid_price:39::DECIMAL [as=column48:48, outer=(38,39), immutable]
       │    └── aggregations
