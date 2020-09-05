@@ -154,6 +154,14 @@ type cliContext struct {
 	// extraConnURLOptions contains any additional query URL options
 	// specified in --url that do not have discrete equivalents.
 	extraConnURLOptions url.Values
+
+	// allowUnencryptedClientPassword enables the CLI commands to use
+	// password authentication over non-TLS TCP connections. This is
+	// disallowed by default: the user must opt-in and understand that
+	// CockroachDB does not guarantee confidentiality of a password
+	// provided this way.
+	// TODO(knz): Relax this when SCRAM is implemented.
+	allowUnencryptedClientPassword bool
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
@@ -184,6 +192,7 @@ func setCliContextDefaults() {
 	cliCtx.sqlConnPasswd = ""
 	cliCtx.sqlConnDBName = ""
 	cliCtx.extraConnURLOptions = nil
+	cliCtx.allowUnencryptedClientPassword = false
 }
 
 // sqlCtx captures the command-line parameters of the `sql` command.
