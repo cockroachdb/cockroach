@@ -26,8 +26,6 @@ system "$argv start-single-node --insecure --pid-file=server_pid --socket-dir=. 
         $argv sql --insecure -e 'select 1'"
 
 spawn $argv sql --url "postgresql://?host=$mywd&port=26257"
-eexpect "Enter password"
-send "insecure\r"
 eexpect root@
 send_eof
 eexpect eof
