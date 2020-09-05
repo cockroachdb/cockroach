@@ -26,7 +26,15 @@ func (ctx *SecurityContext) LoadSecurityOptions(options url.Values, username str
 		options.Del("sslkey")
 	} else {
 		sslMode := options.Get("sslmode")
-		if sslMode == "" || sslMode == "disable" {
+		if sslMode == "disable" {
+			// TLS explicitly disabled by client. Nothing to do here.
+			options.Del("sslrootcert")
+			options.Del("sslcert")
+			options.Del("sslkey")
+			return nil
+		}
+		// Default is to verify the server's identity.
+		if sslMode == "" {
 			options.Set("sslmode", "verify-full")
 		}
 

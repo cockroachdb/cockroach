@@ -692,7 +692,6 @@ func init() {
 			_ = f.MarkHidden(cliflags.ClientHost.Name)
 			stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
 			_ = f.MarkHidden(cliflags.ClientPort.Name)
-
 		}
 
 		if cmd == sqlShellCmd {

@@ -274,8 +274,12 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyNonSQL, []string{"--url=postgresql://b:12345"}, []string{"--host=b", "--port=12345"}, "", ""},
 		{anyNonSQL, []string{"--url=postgresql://b:c"}, nil, `invalid port ":c" after host`, ""},
 
-		{anyCmd, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo", "--insecure"}, "", ""},
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo", "--insecure"}, "", ""},
+		{anySQL, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo"}, "", ""},
+
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
+		{anySQL, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo"}, "", ""},
+
 		{anySQL, []string{"--url=postgresql://foo?sslmode=require"}, []string{"--host=foo", "--insecure=false"}, "", ""},
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=require"}, nil, "command .* only supports sslmode=disable or sslmode=verify-full", ""},
 		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, "", ""},
@@ -287,8 +291,10 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--port=baz"}, "", `invalid port ":baz" after host`},
 		{sqlShell, []string{"--database=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--database=baz"}, "", ""},
 		{anySQL, []string{"--user=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--user=baz"}, "", ""},
+
 		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure=false"}, "", ""},
-		{anyCmd, []string{"--insecure", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure"}, "", ""},
+		// Only non-SQL lets --insecure bleed into a URL that does not specify sslmode.
+		{anyNonSQL, []string{"--insecure", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure"}, "", ""},
 
 		// URL overrides previous flags if component specified.
 		{anyCmd, []string{"--host=baz", "--url=postgresql://bar"}, []string{"--host=bar"}, "", ""},
@@ -296,8 +302,11 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:bar"}, nil, `invalid port ":bar" after host`, ""},
 		{sqlShell, []string{"--database=baz", "--url=postgresql://foo/bar"}, []string{"--host=foo", "--database=bar"}, "", ""},
 		{anySQL, []string{"--user=baz", "--url=postgresql://bar@foo"}, []string{"--host=foo", "--user=bar"}, "", ""},
-		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
+
+		{anyNonSQL, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
 		{anyCmd, []string{"--insecure", "--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo", "--insecure=false"}, "", ""},
+		// SQL is special case: specifying sslmode= does not imply insecure mode. So the insecure bit does not get reset.
+		{anySQL, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo"}, "", ""},
 
 		// Discrete flag overrides URL if specified afterwards.
 		{anyCmd, []string{"--url=postgresql://bar", "--host=baz"}, []string{"--host=baz"}, "", ""},
@@ -306,8 +315,9 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--url=postgresql://foo:bar", "--port=baz"}, nil, `invalid port ":bar" after host`, ""},
 		{sqlShell, []string{"--url=postgresql://foo/bar", "--database=baz"}, []string{"--host=foo", "--database=baz"}, "", ""},
 		{anySQL, []string{"--url=postgresql://bar@foo", "--user=baz"}, []string{"--host=foo", "--user=baz"}, "", ""},
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable", "--insecure=false"}, []string{"--host=foo", "--insecure=false"}, "", ""},
-		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full", "--insecure"}, []string{"--host=foo", "--insecure"}, "", ""},
+
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=disable", "--insecure=false"}, []string{"--host=foo", "--insecure=false"}, "", ""},
+		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full", "--insecure"}, []string{"--host=foo", "--insecure"}, "", ""},
 
 		// Check that the certs dir is extracted properly.
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=" + testCertsDirPath + "/ca.crt"}, []string{"--host=foo", "--certs-dir=" + testCertsDirPath}, "", ""},
@@ -346,9 +356,9 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		}
 	}
 
-	for _, test := range testData {
+	for testNum, test := range testData {
 		for _, cmdName := range test.cmds {
-			t.Run(fmt.Sprintf("%s/%s", cmdName, strings.Join(test.flags, " ")), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%d/%s/%s", testNum+1, cmdName, strings.Join(test.flags, " ")), func(t *testing.T) {
 				cmd, _, _ := cockroachCmd.Find([]string{cmdName})
 
 				// Parse using the URL.
@@ -386,6 +396,15 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 				// Verify that parsing the URL produces the same parameters as parsing the discrete flags.
 				if urlParams != discreteParams {
 					t.Fatalf("mismatch: URL %q parses\n%+v,\ndiscrete parses\n%+v", resultURL, urlParams, discreteParams)
+				}
+
+				// For SQL commands only, test that reconstructing the URL
+				// from discrete flags yield equivalent connection parameters.
+				// (RPC commands never reconstruct a URL.)
+				for _, s := range anyNonSQL {
+					if cmdName == s {
+						return
+					}
 				}
 
 				// Re-parse using the derived URL.
