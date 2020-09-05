@@ -10,7 +10,20 @@
 
 package serverpb
 
-import "github.com/cockroachdb/cockroach/pkg/util/errorutil"
+import (
+	context "context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+)
+
+// SQLStatusServer is a smaller version of the serverpb.StatusInterface which
+// includes only the methods used by the SQL subsystem.
+type SQLStatusServer interface {
+	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	ListLocalSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	CancelQuery(context.Context, *CancelQueryRequest) (*CancelQueryResponse, error)
+	CancelSession(context.Context, *CancelSessionRequest) (*CancelSessionResponse, error)
+}
 
 // OptionalStatusServer is a StatusServer that is only optionally present inside
 // the SQL subsystem. In practice, it is present on the system tenant, and not
