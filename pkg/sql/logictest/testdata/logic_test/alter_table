@@ -1401,4 +1401,3 @@ ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT v_unique TO 
 
 statement error relation idx_v already exists
 ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT "primary" TO idx_v;
-

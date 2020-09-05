@@ -626,6 +626,12 @@ func (r *fkSelfResolver) LookupObject(
 // aliased as tableLookupFn below.
 //
 // It only reveals physical descriptors (not virtual descriptors).
+// It also implements catalog.DescGetter for table validation. In this scenario
+// it may fall back to utilizing the fallback DescGetter to resolve references
+// outside of the dbContext in which it was initialized.
+//
+// TODO(ajwerner): remove in 21.2 or whenever cross-database references are
+// fully removed.
 type internalLookupCtx struct {
 	dbNames     map[descpb.ID]string
 	dbIDs       []descpb.ID
@@ -635,6 +641,42 @@ type internalLookupCtx struct {
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]*typedesc.Immutable
 	typIDs      []descpb.ID
+
+	// fallback is utilized in GetDesc
+	fallback catalog.DescGetter
+}
+
+func (l *internalLookupCtx) GetDesc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
+	if desc, ok := l.dbDescs[id]; ok {
+		return desc, nil
+	}
+	if desc, ok := l.schemaDescs[id]; ok {
+		return desc, nil
+	}
+	if desc, ok := l.typDescs[id]; ok {
+		return desc, nil
+	}
+	if desc, ok := l.tbDescs[id]; ok {
+		return desc, nil
+	}
+	if l.fallback != nil {
+		return l.fallback.GetDesc(ctx, id)
+	}
+	return nil, nil
+}
+
+func (l *internalLookupCtx) GetDescs(
+	ctx context.Context, reqs []descpb.ID,
+) ([]catalog.Descriptor, error) {
+	ret := make([]catalog.Descriptor, len(reqs))
+	for i := 0; i < len(reqs); i++ {
+		var err error
+		ret[i], err = l.GetDesc(ctx, reqs[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ret, nil
 }
 
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding
@@ -662,15 +704,20 @@ func newInternalLookupCtxFromDescriptors(
 			descriptors[i] = schemadesc.NewImmutable(*t.Schema)
 		}
 	}
-	lCtx := newInternalLookupCtx(ctx, descriptors, prefix)
+	lCtx := newInternalLookupCtx(ctx, descriptors, prefix, nil /* fallback */)
 	if err := descs.HydrateGivenDescriptors(ctx, descriptors); err != nil {
 		return nil, err
 	}
 	return lCtx, nil
 }
 
+// newInternalLookupCtx provides cached access to a set of descriptors for use
+// in virtual tables.
 func newInternalLookupCtx(
-	ctx context.Context, descs []catalog.Descriptor, prefix *dbdesc.Immutable,
+	ctx context.Context,
+	descs []catalog.Descriptor,
+	prefix *dbdesc.Immutable,
+	fallback catalog.DescGetter,
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
@@ -713,8 +760,11 @@ func newInternalLookupCtx(
 		tbIDs:       tbIDs,
 		dbIDs:       dbIDs,
 		typIDs:      typIDs,
+		fallback:    fallback,
 	}
 }
+
+var _ catalog.DescGetter = (*internalLookupCtx)(nil)
 
 func (l *internalLookupCtx) getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error) {
 	db, ok := l.dbDescs[id]
