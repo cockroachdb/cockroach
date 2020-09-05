@@ -149,8 +149,10 @@ var (
 // Config is embedded by server.Config. A base config is not meant to be used
 // directly, but embedding configs should call cfg.InitDefaults().
 type Config struct {
-	// Insecure specifies whether to use SSL or not.
+	// Insecure specifies whether to disable security checks throughout
+	// the code base.
 	// This is really not recommended.
+	// See: https://github.com/cockroachdb/cockroach/issues/53404
 	Insecure bool
 
 	// SSLCAKey is used to sign new certs.
