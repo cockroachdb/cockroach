@@ -53,6 +53,9 @@ import (
 //       security mode. (The default is `config secure insecure` i.e.
 //       the test file is applicable to both.)
 //
+// accept_sql_without_tls
+//       Enable TCP connections without TLS in secure mode.
+//
 // set_hba
 // <hba config>
 //       Load the provided HBA configuration via the cluster setting
@@ -156,7 +159,8 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// Enable conn/auth logging.
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
-		s.(*server.TestServer).PGServer().TestingEnableConnAuthLogging()
+		testServer := s.(*server.TestServer)
+		testServer.PGServer().TestingEnableConnAuthLogging()
 
 		pgServer := s.(*server.TestServer).PGServer()
 
@@ -188,6 +192,9 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					if !allowed {
 						skip.IgnoreLint(t, "Test file not applicable at this security level.")
 					}
+
+				case "accept_sql_without_tls":
+					testServer.Cfg.AcceptSQLWithoutTLS = true
 
 				case "set_hba":
 					_, err := conn.ExecContext(context.Background(),

@@ -155,6 +155,13 @@ type Config struct {
 	// See: https://github.com/cockroachdb/cockroach/issues/53404
 	Insecure bool
 
+	// AcceptSQLWithoutTLS, when set, makes it possible for SQL
+	// clients to authenticate without TLS on a secure cluster.
+	//
+	// Authentication is, as usual, subject to the HBA configuration: in
+	// the default case, password authentication is still mandatory.
+	AcceptSQLWithoutTLS bool
+
 	// SSLCAKey is used to sign new certs.
 	SSLCAKey string
 	// SSLCertsDir is the path to the certificate/key directory.
@@ -262,6 +269,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
+	cfg.AcceptSQLWithoutTLS = false
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of
