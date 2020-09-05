@@ -119,6 +119,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTransactionStatsTableID:     crdbInternalTransactionStatisticsTable,
 		catconstants.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
 		catconstants.CrdbInternalZonesTableID:                crdbInternalZonesTable,
+		catconstants.CrdbInternalInvalidDescriptorsTableID:   crdbInternalInvalidDescriptorsTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -3646,5 +3647,40 @@ CREATE TABLE crdb_internal.predefined_comments (
 		}
 
 		return nil
+	},
+}
+
+var crdbInternalInvalidDescriptorsTable = virtualSchemaTable{
+	comment: `virtual table to validate descriptors`,
+	schema: `
+CREATE TABLE crdb_internal.invalid_tables (
+  id     				INT,
+  database_name STRING,
+  schema_name   STRING,
+  obj_name 	    STRING,
+  error         STRING
+)`,
+	populate: func(
+		ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error,
+	) error {
+		// The internalLookupContext will only have descriptors in the current
+		// database. To deal with this, we fall through.
+		// TODO(spaskob): we can also validate type descriptors. Add a new function
+		// `forEachTypeDescAllWithTableLookup` and the results to this table.
+		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, func(
+			dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, fn tableLookupFn,
+		) error {
+			err := descriptor.Validate(ctx, fn)
+			if err == nil {
+				return nil
+			}
+			return addRow(
+				tree.NewDInt(tree.DInt(descriptor.GetID())),
+				tree.NewDString(dbDesc.GetName()),
+				tree.NewDString(schema),
+				tree.NewDString(descriptor.GetName()),
+				tree.NewDString(err.Error()),
+			)
+		})
 	},
 }
