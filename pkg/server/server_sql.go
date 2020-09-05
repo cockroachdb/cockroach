@@ -101,8 +101,8 @@ type sqlServer struct {
 // respective object is available. When it is not, return
 // UnsupportedWithMultiTenancy.
 type sqlServerOptionalKVArgs struct {
-	// statusServer gives access to the Status service.
-	statusServer serverpb.OptionalStatusServer
+	// nodesStatusServer gives access to the NodesStatus service.
+	nodesStatusServer serverpb.OptionalNodesStatusServer
 	// Narrowed down version of *NodeLiveness. Used by jobs and DistSQLPlanner
 	nodeLiveness optionalnodeliveness.Container
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
@@ -191,6 +191,9 @@ type sqlServerArgs struct {
 
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
+
+	// Used to list sessions and cancel sessions/queries.
+	sqlStatusServer serverpb.SQLStatusServer
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
@@ -436,7 +439,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		LeaseManager:            leaseMgr,
 		Clock:                   cfg.clock,
 		DistSQLSrv:              distSQLServer,
-		StatusServer:            cfg.statusServer,
+		NodesStatusServer:       cfg.nodesStatusServer,
+		SQLStatusServer:         cfg.sqlStatusServer,
 		SessionRegistry:         cfg.sessionRegistry,
 		SQLLivenessReader:       cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
@@ -615,7 +619,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		codec,
 		cfg.registry,
 		distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
-		cfg.statusServer,
+		cfg.sqlStatusServer,
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
 	)
