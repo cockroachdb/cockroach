@@ -573,7 +573,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 
-			ss, err := params.extendedEvalCtx.StatusServer.OptionalErr(multitenancyZoneCfgIssueNo)
+			ss, err := params.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(multitenancyZoneCfgIssueNo)
 			if err != nil {
 				return err
 			}

@@ -522,12 +522,13 @@ func makeSQLServerArgs(
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
 	dummyRPCServer := grpc.NewServer()
+	sessionRegistry := sql.NewSessionRegistry()
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
-			statusServer: serverpb.MakeOptionalStatusServer(nil),
-			nodeLiveness: optionalnodeliveness.MakeContainer(nil),
-			gossip:       gossip.MakeOptionalGossip(nil),
-			grpcServer:   dummyRPCServer,
+			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
+			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
+			gossip:            gossip.MakeOptionalGossip(nil),
+			grpcServer:        dummyRPCServer,
 			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
@@ -556,10 +557,13 @@ func makeSQLServerArgs(
 		db:                       db,
 		registry:                 registry,
 		recorder:                 recorder,
-		sessionRegistry:          sql.NewSessionRegistry(),
+		sessionRegistry:          sessionRegistry,
 		circularInternalExecutor: circularInternalExecutor,
 		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
+		sqlStatusServer: newTenantStatusServer(
+			baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: circularInternalExecutor}, sessionRegistry, baseCfg.Settings,
+		),
 	}, nil
 }
 
