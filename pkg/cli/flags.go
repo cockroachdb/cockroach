@@ -693,6 +693,7 @@ func init() {
 			stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
 			_ = f.MarkHidden(cliflags.ClientPort.Name)
 
+			boolFlag(f, &cliCtx.allowUnencryptedClientPassword, cliflags.AllowUnencryptedClientPassword)
 		}
 
 		if cmd == sqlShellCmd {

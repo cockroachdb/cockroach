@@ -19,6 +19,9 @@ stop_server $argv
 
 start_test "Check that the unix socket can be used simply."
 
+# The following connection works even if `--insecure` is not passed on the command line.
+set ::env(COCKROACH_INSECURE) "false"
+
 # Start a server with a socket listener.
 set mywd [pwd]
 

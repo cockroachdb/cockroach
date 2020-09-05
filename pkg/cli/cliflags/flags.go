@@ -547,6 +547,20 @@ apply. This flag is experimental.
 `,
 	}
 
+	AllowUnencryptedClientPassword = FlagInfo{
+		Name: "allow-unencrypted-passwords",
+		Description: `
+When this flag is specified, the CLI client command becomes able
+to authentify to a server using passwords, even when the connection
+is not protected by TLS. Passwords can be sent in cleartext
+to the server. To ensure good security, the system administrator
+must provide network-level confidentiality by other means.
+
+It is not safe to use this option when connecting over the internet
+or a public network.
+`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
