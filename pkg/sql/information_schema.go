@@ -1733,7 +1733,8 @@ func forEachTypeDesc(
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(ctx, descs, dbContext)
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 	for _, id := range lCtx.typIDs {
 		typ := lCtx.typDescs[id]
 		dbDesc, parentExists := lCtx.dbDescs[typ.ParentID]
@@ -1771,7 +1772,6 @@ func forEachTableDesc(
 	p *planner,
 	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
-	// TODO(ajwerner): Introduce TableDescriptor.
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor) error,
 ) error {
 	return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts, func(
@@ -1902,7 +1902,8 @@ func forEachTableDescWithTableLookupInternal(
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(ctx, descs, dbContext)
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 
 	if virtualOpts == virtualMany || virtualOpts == virtualOnce {
 		// Virtual descriptors first.

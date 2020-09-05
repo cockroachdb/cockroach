@@ -438,3 +438,63 @@ VALUES ($1, 'StatusRunning', repeat('a', $2)::BYTES, repeat('a', $2)::BYTES)`, i
 		}
 	})
 }
+
+// TestInvalidObjects table descriptors that don't validate will show up in
+// table `crdb_internal.invalid_objects`.
+func TestInvalidObjects(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	var id int
+	var dbName, schemaName, objName, errStr string
+	// No inconsistency should be found so this should return ErrNoRow.
+	require.Error(t, sqlDB.QueryRow(`SELECT * FROM "".crdb_internal.invalid_objects`).
+		Scan(&id, dbName, schemaName, objName, errStr))
+
+	// Now introduce an inconsistency.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT);
+CREATE TABLE fktbl (id INT PRIMARY KEY);
+CREATE TABLE tbl (customer INT NOT NULL REFERENCES fktbl (id));
+INSERT INTO system.users VALUES ('node', NULL, true);
+GRANT node TO root;
+DELETE FROM system.descriptor WHERE id=52;
+DELETE FROM system.descriptor WHERE id=54;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	require.NoError(t, sqlDB.QueryRow(`SELECT id FROM system.descriptor ORDER BY id DESC LIMIT 1`).
+		Scan(&id))
+	require.Equal(t, 55, id)
+
+	rows, err := sqlDB.Query(`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
+	require.Equal(t, 53, id)
+	require.Equal(t, "", dbName)
+	require.Equal(t, "", schemaName)
+	require.Equal(t, "desc 53: parentID 52 does not exist", errStr)
+
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
+	require.Equal(t, 55, id)
+	require.Equal(t, "defaultdb", dbName)
+	require.Equal(t, "public", schemaName)
+	require.Equal(t, "desc 55: invalid foreign key: missing table=54: descriptor not found", errStr)
+
+	require.False(t, rows.Next())
+}

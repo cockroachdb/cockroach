@@ -27,6 +27,7 @@ crdb_internal  gossip_liveness              table  NULL
 crdb_internal  gossip_network               table  NULL
 crdb_internal  gossip_nodes                 table  NULL
 crdb_internal  index_columns                table  NULL
+crdb_internal  invalid_objects              table  NULL
 crdb_internal  jobs                         table  NULL
 crdb_internal  kv_node_status               table  NULL
 crdb_internal  kv_store_status              table  NULL
