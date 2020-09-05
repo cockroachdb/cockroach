@@ -120,6 +120,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTransactionStatsTableID:     crdbInternalTransactionStatisticsTable,
 		catconstants.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
 		catconstants.CrdbInternalZonesTableID:                crdbInternalZonesTable,
+		catconstants.CrdbInternalInvalidDescriptorsTableID:   crdbInternalInvalidDescriptorsTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -262,7 +263,7 @@ CREATE TABLE crdb_internal.tables (
 	generator: func(ctx context.Context, p *planner, dbDesc *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
 		worker := func(pusher rowPusher) error {
-			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
 			if err != nil {
 				return err
 			}
@@ -425,7 +426,7 @@ CREATE TABLE crdb_internal.schema_changes (
   direction     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
 		if err != nil {
 			return err
 		}
@@ -2160,7 +2161,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
 		interleaveDep := tree.NewDString("interleave")
-		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
+		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, true, /* validate */
 			/* virtual tables have no backward/forward dependencies*/
 			func(db *dbdesc.Immutable, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn) error {
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
@@ -2437,7 +2438,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, nil, err
 		}
-		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -3651,5 +3652,49 @@ CREATE TABLE crdb_internal.predefined_comments (
 		}
 
 		return nil
+	},
+}
+
+var crdbInternalInvalidDescriptorsTable = virtualSchemaTable{
+	comment: `virtual table to validate descriptors`,
+	schema: `
+CREATE TABLE crdb_internal.invalid_objects (
+  id            INT,
+  database_name STRING,
+  schema_name   STRING,
+  obj_name      STRING,
+  error         STRING
+)`,
+	populate: func(
+		ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error,
+	) error {
+		// The internalLookupContext will only have descriptors in the current
+		// database. To deal with this, we fall through.
+		// TODO(spaskob): we can also validate type descriptors. Add a new function
+		// `forEachTypeDescAllWithTableLookup` and the results to this table.
+		return forEachTableDescAllWithTableLookup(
+			ctx, p, dbContext, hideVirtual, false, /* validate */
+			func(
+				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, fn tableLookupFn,
+			) error {
+				if descriptor == nil {
+					return nil
+				}
+				err := descriptor.Validate(ctx, fn)
+				if err == nil {
+					return nil
+				}
+				var dbName string
+				if dbDesc != nil {
+					dbName = dbDesc.GetName()
+				}
+				return addRow(
+					tree.NewDInt(tree.DInt(descriptor.GetID())),
+					tree.NewDString(dbName),
+					tree.NewDString(schema),
+					tree.NewDString(descriptor.GetName()),
+					tree.NewDString(err.Error()),
+				)
+			})
 	},
 }

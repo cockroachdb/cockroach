@@ -1443,7 +1443,7 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	if desc.Dropped() {
 		return nil
 	}
-	return desc.validateCrossReferences(ctx, dg)
+	return errors.Wrapf(desc.validateCrossReferences(ctx, dg), "desc %d", desc.GetID())
 }
 
 // validateTableIfTesting is similar to validateTable, except it is only invoked
