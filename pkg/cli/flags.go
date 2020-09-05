@@ -349,6 +349,10 @@ func init() {
 		stringFlag(f, &serverSocketDir, cliflags.SocketDir)
 		boolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
 
+		// The following flag is planned to become non-experimental in 21.1.
+		boolFlag(f, &serverCfg.AllowSecureSQLWithoutTLS, cliflags.AllowSecureSQLWithoutTLS)
+		_ = f.MarkHidden(cliflags.AllowSecureSQLWithoutTLS.Name)
+
 		// Backward-compatibility flags.
 
 		// These are deprecated but until we have qualitatively new
