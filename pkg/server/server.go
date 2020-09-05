@@ -542,7 +542,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	sAdmin := newAdminServer(lateBoundServer)
+	sAdmin := newAdminServer(lateBoundServer, internalExecutor)
 	sessionRegistry := sql.NewSessionRegistry()
 
 	sStatus := newStatusServer(
