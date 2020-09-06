@@ -3856,6 +3856,50 @@ The matrix transformation will be applied as follows for each coordinate:
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_removerepeatedpoints": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"tolerance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				tolerance := float64(tree.MustBeDFloat(args[1]))
+
+				ret, err := geomfn.RemoveRepeatedPoints(g.Geometry, tolerance)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a geometry with repeated points removed, within the given distance tolerance.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				ret, err := geomfn.RemoveRepeatedPoints(g.Geometry, 0)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a geometry with repeated points removed.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_reverse": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -4683,7 +4727,6 @@ Bottom Left.`,
 	"st_polygon":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49010}),
 	"st_polygonize":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
 	"st_quantizecoordinates":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
-	"st_removerepeatedpoints":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49017}),
 	"st_seteffectivearea":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
 	"st_shiftlongitude":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49034}),
 	"st_simplifyvw":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
