@@ -558,6 +558,7 @@ node_queries                       NULL
 node_runtime_info                  NULL
 node_sessions                      NULL
 node_statement_statistics          NULL
+node_transaction_statistics        NULL
 node_transactions                  NULL
 node_txn_stats                     NULL
 partitions                         NULL
