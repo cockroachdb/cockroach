@@ -50,3 +50,13 @@ func coordNorm(c geom.Coord) float64 {
 func coordEqual(a geom.Coord, b geom.Coord) bool {
 	return a.X() == b.X() && a.Y() == b.Y()
 }
+
+// coordMag2 returns the magnitude^2 of a coordinate if the coord was a vector.
+func coordMag2(c geom.Coord) float64 {
+	return coordDot(c, c)
+}
+
+// coordMag returns the magnitude of a coordinate if the coord was a vector.
+func coordMag(c geom.Coord) float64 {
+	return math.Sqrt(coordMag2(c))
+}

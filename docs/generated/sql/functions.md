@@ -1989,6 +1989,10 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td></tr>
 <tr><td><a name="st_removepoint"></a><code>st_removepoint(line_string: geometry, index: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Removes the Point at the given 0-based index and returns the modified LineString geometry.</p>
 </span></td></tr>
+<tr><td><a name="st_removerepeatedpoints"></a><code>st_removerepeatedpoints(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry with repeated points removed.</p>
+</span></td></tr>
+<tr><td><a name="st_removerepeatedpoints"></a><code>st_removerepeatedpoints(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry with repeated points removed, within the given distance tolerance.</p>
+</span></td></tr>
 <tr><td><a name="st_reverse"></a><code>st_reverse(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified geometry by reversing the order of its vertices.</p>
 </span></td></tr>
 <tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, angle_radians: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated around the origin by a rotation angle.</p>
