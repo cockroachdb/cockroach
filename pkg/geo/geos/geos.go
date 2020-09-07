@@ -352,6 +352,19 @@ func Normalize(a geopb.EWKB) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+// LineMerge merges multilinestring constituents.
+func LineMerge(a geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_LineMerge(g, goToCSlice(a), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
 // IsSimple returns whether the EWKB is simple.
 func IsSimple(ewkb geopb.EWKB) (bool, error) {
 	g, err := ensureInitInternal()
