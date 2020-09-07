@@ -97,7 +97,7 @@ func (p *planner) SetClusterSetting(
 			case *settings.FloatSetting:
 				requiredType = types.Float
 			case *settings.EnumSetting:
-				requiredType = types.Any
+				requiredType = types.String
 			case *settings.DurationSetting:
 				requiredType = types.Interval
 			case *settings.DurationSettingWithExplicitUnit:

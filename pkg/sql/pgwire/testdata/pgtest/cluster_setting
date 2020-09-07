@@ -1,0 +1,51 @@
+# Start of test.
+
+send crdb_only
+Query {"String": "SET CLUSTER SETTING sql.defaults.serial_normalization = 'rowid'"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 83 = ASCII 'S' for Statement
+# [114, 111, 119, 105, 100] = 'rowid'
+send crdb_only
+Parse {"Name": "s1", "Query": "SET CLUSTER SETTING sql.defaults.serial_normalization = $1"}
+Describe {"ObjectType": 83, "Name": "s1"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [1], "Parameters": [[114, 111, 119, 105, 100]]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[25]}
+{"Type":"NoData"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 83 = ASCII 'S' for Statement
+# [48] = '0'
+send crdb_only
+Parse {"Name": "s2", "Query": "SET CLUSTER SETTING sql.defaults.serial_normalization = $1"}
+Describe {"ObjectType": 83, "Name": "s2"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [1], "Parameters": [[48]]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[25]}
+{"Type":"NoData"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
