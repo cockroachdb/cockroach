@@ -1083,10 +1083,25 @@ CREATE TABLE crdb_internal.cluster_settings (
   description   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.cluster_settings"); err != nil {
+		hasAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
 			return err
 		}
+		if !hasAdmin {
+			hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
+			if err != nil {
+				return err
+			}
+			if !hasModify {
+				return pgerror.Newf(pgcode.InsufficientPrivilege,
+					"only users with the %s privilege are allowed to read "+
+						"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING)
+			}
+		}
 		for _, k := range settings.Keys() {
+			if !hasAdmin && settings.AdminOnly(k) {
+				continue
+			}
 			setting, _ := settings.Lookup(k, settings.LookupForLocalAccess)
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public

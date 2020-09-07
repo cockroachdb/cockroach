@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -309,6 +310,13 @@ func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
 // RequireAdminRole is part of the cat.Catalog interface.
 func (oc *optCatalog) RequireAdminRole(ctx context.Context, action string) error {
 	return oc.planner.RequireAdminRole(ctx, action)
+}
+
+// HasRoleOption is part of the cat.Catalog interface.
+func (oc *optCatalog) HasRoleOption(
+	ctx context.Context, roleOption roleoption.Option,
+) (bool, error) {
+	return oc.planner.HasRoleOption(ctx, roleOption)
 }
 
 // FullyQualifiedName is part of the cat.Catalog interface.
