@@ -2430,6 +2430,43 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_linefrommultipoint": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				line, err := geomfn.LineStringFromMultiPoint(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: line}, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Creates a LineString from a MultiPoint geometry.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_linemerge": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				line, err := geomfn.LineMerge(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: line}, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns a LineString or MultiLineString by joining together constituents of a ` +
+					`MultiLineString with matching endpoints. If the input is not a MultiLineString or LineString, ` +
+					`an empty GeometryCollection is returned.`,
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Unary predicates
@@ -4667,9 +4704,7 @@ Bottom Left.`,
 	"st_length2dspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
 	"st_lengthspheroid":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
 	"st_linecrossingdirection":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
-	"st_linefrommultipoint":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48970}),
 	"st_linelocatepoint":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48973}),
-	"st_linemerge":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48974}),
 	"st_linesubstring":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48975}),
 	"st_memsize":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48985}),
 	"st_minimumboundingcircle":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),

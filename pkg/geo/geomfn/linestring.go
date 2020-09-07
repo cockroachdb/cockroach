@@ -12,9 +12,45 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
+
+// LineStringFromMultiPoint generates a linestring from a multipoint.
+func LineStringFromMultiPoint(g geo.Geometry) (geo.Geometry, error) {
+	t, err := g.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	mp, ok := t.(*geom.MultiPoint)
+	if !ok {
+		return geo.Geometry{}, errors.Wrap(geom.ErrUnsupportedType{Value: t},
+			"geometry must be a MultiPoint")
+	}
+	if mp.NumPoints() == 1 {
+		return geo.Geometry{}, errors.Newf("a LineString must have at least 2 points")
+	}
+	lineString := geom.NewLineString(mp.Layout()).SetSRID(mp.SRID())
+	lineString, err = lineString.SetCoords(mp.Coords())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.MakeGeometryFromGeomT(lineString)
+}
+
+// LineMerge merges multilinestring constituents.
+func LineMerge(g geo.Geometry) (geo.Geometry, error) {
+	// Mirrors PostGIS behavior
+	if g.Empty() {
+		return g, nil
+	}
+	ret, err := geos.LineMerge(g.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.ParseGeometryFromEWKB(ret)
+}
 
 // AddPoint adds a point to a LineString at the given 0-based index. -1 appends.
 func AddPoint(lineString geo.Geometry, index int, point geo.Geometry) (geo.Geometry, error) {
