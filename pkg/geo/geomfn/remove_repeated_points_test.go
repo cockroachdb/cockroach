@@ -32,8 +32,7 @@ func TestRemoveRepeatedPoints(t *testing.T) {
 		{"MULTIPOINT (1 2, 1 2, 3 4)", "MULTIPOINT (1 2, 3 4)"},
 		{"MULTIPOINT (1 2, 3 4, 1 2)", "MULTIPOINT (1 2, 3 4, 1 2)"},
 		{"MULTIPOINT (1 2, 1 2, 1 2, 1 2)", "MULTIPOINT (1 2)"},
-		// FIXME https://github.com/cockroachdb/cockroach/issues/53997
-		//{"MULTIPOINT (1 2, EMPTY, 3 4)", "MULTIPOINT (1 2, EMPTY, 3 4)"},
+		{"MULTIPOINT (1 2, EMPTY, 3 4)", "MULTIPOINT (1 2, EMPTY, 3 4)"},
 		{"LINESTRING EMPTY", "LINESTRING EMPTY"},
 		{"LINESTRING (1 2, 3 4)", "LINESTRING (1 2, 3 4)"},
 		{"LINESTRING (1 2, 1 2, 3 4)", "LINESTRING (1 2, 3 4)"},
@@ -56,11 +55,10 @@ func TestRemoveRepeatedPoints(t *testing.T) {
 			"POLYGON ((1 2, 3 4, 5 6, 1 2), (1 2, 3 4, 5 6, 1 2))",
 		},
 		{"POLYGON ((1 2, 1 2, 1 2, 1 2, 1 2, 1 2))", "POLYGON ((1 2, 1 2, 1 2, 1 2))"},
-		// FIXME https://github.com/cockroachdb/cockroach/issues/53998
-		//{
-		//	"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), EMPTY, ((1 2, 1 2, 3 4, 5 6, 1 2)))",
-		//	"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), EMPTY, ((1 2, 3 4, 5 6, 1 2)))",
-		//},
+		{
+			"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), EMPTY, ((1 2, 1 2, 3 4, 5 6, 1 2)))",
+			"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), EMPTY, ((1 2, 3 4, 5 6, 1 2)))",
+		},
 		{"MULTIPOLYGON EMPTY", "MULTIPOLYGON EMPTY"},
 		{
 			"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2), (1 2, 1 2, 3 4, 5 6, 1 2)))",
