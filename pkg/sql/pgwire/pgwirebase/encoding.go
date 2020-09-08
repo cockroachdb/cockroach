@@ -48,10 +48,12 @@ const (
 	minReadBufferMessageSize        = 1 << 14
 )
 
+const readBufferMaxMessageSizeClusterSettingName = "sql.conn.max_read_buffer_message_size"
+
 // ReadBufferMaxMessageSizeClusterSetting is the cluster setting for configuring
 // ReadBuffer default message sizes.
 var ReadBufferMaxMessageSizeClusterSetting = settings.RegisterValidatedByteSizeSetting(
-	"sql.conn.max_read_buffer_message_size",
+	readBufferMaxMessageSizeClusterSettingName,
 	"maximum buffer size to allow for ingesting sql statements. Connections must be restarted for this to take effect.",
 	defaultMaxReadBufferMessageSize,
 	func(val int64) error {
@@ -141,6 +143,9 @@ func (b *ReadBuffer) reset(size int) {
 // was one. The number of bytes returned can be non-zero even with an error
 // (e.g. if data was read but didn't validate) so that we can more accurately
 // measure network traffic.
+//
+// If the error is related to consuming a buffer that is larger than the
+// maxMessageSize, the remaining bytes will be read but discarded.
 func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 	nread, err := io.ReadFull(rd, b.tmp[:])
 	if err != nil {
@@ -150,16 +155,47 @@ func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 	// size includes itself.
 	size -= 4
 	if size > b.maxMessageSize || size < 0 {
-		return nread, NewProtocolViolationErrorf(
-			"message size %d out of bounds (0..%d)",
-			size,
-			b.maxMessageSize,
+		err := errors.WithHintf(
+			NewProtocolViolationErrorf(
+				"message size %s bigger than maximum allowed message size %s",
+				humanize.IBytes(uint64(size)),
+				humanize.IBytes(uint64(b.maxMessageSize)),
+			),
+			"the maximum message size can be configured using the %s cluster setting",
+			readBufferMaxMessageSizeClusterSettingName,
 		)
+		if size > 0 {
+			err = withMessageTooBigError(err, size)
+		}
+		return nread, err
 	}
 
 	b.reset(size)
 	n, err := io.ReadFull(rd, b.Msg)
 	return nread + n, err
+}
+
+// SlurpBytes will consume n bytes from the read buffer, using the existing
+// buffer to ingest the message.
+func (b *ReadBuffer) SlurpBytes(rd io.Reader, n int) (int, error) {
+	var nRead int
+	if b.maxMessageSize > 0 {
+		sizeRemaining := n
+		for sizeRemaining > 0 {
+			toRead := sizeRemaining
+			if b.maxMessageSize < sizeRemaining {
+				toRead = b.maxMessageSize
+			}
+			b.reset(toRead)
+			readBatch, err := io.ReadFull(rd, b.Msg)
+			nRead += readBatch
+			sizeRemaining -= readBatch
+			if err != nil {
+				return nRead, err
+			}
+		}
+	}
+	return nRead, nil
 }
 
 // ReadTypedMsg reads a message from the provided reader, returning its type code and body.
