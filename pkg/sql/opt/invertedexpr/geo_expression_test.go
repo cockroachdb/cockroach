@@ -28,13 +28,13 @@ func TestUnionKeySpansToSpanExpr(t *testing.T) {
 	cases := []testCase{
 		{
 			uks: []geoindex.KeySpan{{Start: 5, End: 5}, {Start: 10, End: 10}, {Start: 1, End: 3}},
-			expected: "spans_to_read:<start:\"\\215\" end:\"\\216\" > " +
-				"spans_to_read:<start:\"\\222\" end:\"\\223\" > " +
-				"spans_to_read:<start:\"\\211\" end:\"\\214\" > " +
+			expected: "spans_to_read:<start:\"B\\215\" end:\"B\\216\" > " +
+				"spans_to_read:<start:\"B\\222\" end:\"B\\223\" > " +
+				"spans_to_read:<start:\"B\\211\" end:\"B\\214\" > " +
 				"node:<" +
-				"factored_union_spans:<start:\"\\215\" end:\"\\216\" > " +
-				"factored_union_spans:<start:\"\\222\" end:\"\\223\" > " +
-				"factored_union_spans:<start:\"\\211\" end:\"\\214\" > > ",
+				"factored_union_spans:<start:\"B\\215\" end:\"B\\216\" > " +
+				"factored_union_spans:<start:\"B\\222\" end:\"B\\223\" > " +
+				"factored_union_spans:<start:\"B\\211\" end:\"B\\214\" > > ",
 		},
 		{
 			uks:      nil,
@@ -62,27 +62,27 @@ func TestRPKeyExprToSpanExpr(t *testing.T) {
 		{
 			// Union of two keys.
 			rpx: []geoindex.RPExprElement{geoindex.Key(5), geoindex.Key(10), geoindex.RPSetUnion},
-			expected: "spans_to_read:<start:\"\\215\" end:\"\\216\" > " +
-				"spans_to_read:<start:\"\\222\" end:\"\\223\" > " +
+			expected: "spans_to_read:<start:\"B\\215\" end:\"B\\216\" > " +
+				"spans_to_read:<start:\"B\\222\" end:\"B\\223\" > " +
 				"node:<" +
-				"factored_union_spans:<start:\"\\215\" end:\"\\216\" > " +
-				"factored_union_spans:<start:\"\\222\" end:\"\\223\" > > ",
+				"factored_union_spans:<start:\"B\\215\" end:\"B\\216\" > " +
+				"factored_union_spans:<start:\"B\\222\" end:\"B\\223\" > > ",
 		},
 		{
 			// Intersection of two keys.
 			rpx: []geoindex.RPExprElement{geoindex.Key(5), geoindex.Key(10), geoindex.RPSetIntersection},
-			expected: "spans_to_read:<start:\"\\215\" end:\"\\216\" > " +
-				"spans_to_read:<start:\"\\222\" end:\"\\223\" > " +
+			expected: "spans_to_read:<start:\"B\\215\" end:\"B\\216\" > " +
+				"spans_to_read:<start:\"B\\222\" end:\"B\\223\" > " +
 				"node:<" +
 				"operator:SetIntersection " +
-				"left:<factored_union_spans:<start:\"\\222\" end:\"\\223\" > > " +
-				"right:<factored_union_spans:<start:\"\\215\" end:\"\\216\" > > > ",
+				"left:<factored_union_spans:<start:\"B\\222\" end:\"B\\223\" > > " +
+				"right:<factored_union_spans:<start:\"B\\215\" end:\"B\\216\" > > > ",
 		},
 		{
 			// Single key.
 			rpx: []geoindex.RPExprElement{geoindex.Key(5)},
-			expected: "spans_to_read:<start:\"\\215\" end:\"\\216\" > " +
-				"node:<factored_union_spans:<start:\"\\215\" end:\"\\216\" > > ",
+			expected: "spans_to_read:<start:\"B\\215\" end:\"B\\216\" > " +
+				"node:<factored_union_spans:<start:\"B\\215\" end:\"B\\216\" > > ",
 		},
 		{
 			// Malformed.
@@ -102,23 +102,23 @@ func TestRPKeyExprToSpanExpr(t *testing.T) {
 				geoindex.Key(7),
 				geoindex.RPSetIntersection,
 			},
-			expected: "spans_to_read:<start:\"\\211\" end:\"\\212\" > " +
-				"spans_to_read:<start:\"\\212\" end:\"\\213\" > " +
-				"spans_to_read:<start:\"\\213\" end:\"\\214\" > " +
-				"spans_to_read:<start:\"\\214\" end:\"\\215\" > " +
-				"spans_to_read:<start:\"\\215\" end:\"\\216\" > " +
-				"spans_to_read:<start:\"\\217\" end:\"\\220\" > " +
-				"spans_to_read:<start:\"\\222\" end:\"\\223\" > " +
+			expected: "spans_to_read:<start:\"B\\211\" end:\"B\\212\" > " +
+				"spans_to_read:<start:\"B\\212\" end:\"B\\213\" > " +
+				"spans_to_read:<start:\"B\\213\" end:\"B\\214\" > " +
+				"spans_to_read:<start:\"B\\214\" end:\"B\\215\" > " +
+				"spans_to_read:<start:\"B\\215\" end:\"B\\216\" > " +
+				"spans_to_read:<start:\"B\\217\" end:\"B\\220\" > " +
+				"spans_to_read:<start:\"B\\222\" end:\"B\\223\" > " +
 				"node:<operator:SetIntersection " +
-				"left:<factored_union_spans:<start:\"\\217\" end:\"\\220\" > > " +
+				"left:<factored_union_spans:<start:\"B\\217\" end:\"B\\220\" > > " +
 				"right:<" +
-				"factored_union_spans:<start:\"\\213\" end:\"\\214\" > " +
-				"factored_union_spans:<start:\"\\214\" end:\"\\215\" > " +
-				"factored_union_spans:<start:\"\\215\" end:\"\\216\" > " +
-				"factored_union_spans:<start:\"\\222\" end:\"\\223\" > " +
+				"factored_union_spans:<start:\"B\\213\" end:\"B\\214\" > " +
+				"factored_union_spans:<start:\"B\\214\" end:\"B\\215\" > " +
+				"factored_union_spans:<start:\"B\\215\" end:\"B\\216\" > " +
+				"factored_union_spans:<start:\"B\\222\" end:\"B\\223\" > " +
 				"operator:SetIntersection " +
-				"left:<factored_union_spans:<start:\"\\212\" end:\"\\213\" > > " +
-				"right:<factored_union_spans:<start:\"\\211\" end:\"\\212\" > > > > ",
+				"left:<factored_union_spans:<start:\"B\\212\" end:\"B\\213\" > > " +
+				"right:<factored_union_spans:<start:\"B\\211\" end:\"B\\212\" > > > > ",
 		},
 	}
 	for _, c := range cases {
