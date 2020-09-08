@@ -99,9 +99,11 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 				isLive: liveness.IsLive(now),
 			}
 
+			// NB: this code path should never be hit on tenants.
+			nodeID, _ := r.nodeID.OptionalNodeID()
 			// Don't try to start any more jobs unless we're really live,
 			// otherwise we'd just immediately cancel them.
-			if liveness.NodeID == r.nodeID.DeprecatedNodeID(multiTenancyIssueNo) {
+			if liveness.NodeID == nodeID {
 				if !liveness.IsLive(r.clock.Now().GoTime()) {
 					return errors.Errorf(
 						"trying to adopt jobs on node %d which is not live", liveness.NodeID)
@@ -289,7 +291,8 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 }
 
 func (r *Registry) deprecatedNewLease() *jobspb.Lease {
-	nodeID := r.nodeID.DeprecatedNodeID(multiTenancyIssueNo)
+	// This code path should never be hit on tenants.
+	nodeID, _ := r.nodeID.OptionalNodeID()
 	if nodeID == 0 {
 		panic("jobs.Registry has empty node ID")
 	}

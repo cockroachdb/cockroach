@@ -100,21 +100,14 @@ type SQLIDContainer struct {
 	sqlInstanceID SQLInstanceID
 }
 
-// NewSQLIDContainer sets up an SQLIDContainer wrapping the (positive) SQLInstanceID
-// and a NodeID. See errorutil.TenantSQLDeprecatedWrapper for an explanation of
-// the nodeIDExposed parameter.
+// NewSQLIDContainer sets up an SQLIDContainer. It is handed either a positive SQLInstanceID
+// (on tenants) or a positive NodeID, but not both.
 //
-// As a special case, a zero sqlInstanceID in conjunction with
-// nodeIDExposed==true falls back to the NodeID in SQLInstanceID(). This is used
-// in single-tenant deployments.
-func NewSQLIDContainer(
-	sqlInstanceID SQLInstanceID, nodeID *NodeIDContainer, nodeIDExposed bool,
-) *SQLIDContainer {
-	if !nodeIDExposed && sqlInstanceID == 0 {
-		panic("sqlInstanceID must not be zero")
-	}
+// A zero sqlInstanceID falls back to the NodeID in SQLInstanceID().
+// This is used in single-tenant deployments.
+func NewSQLIDContainer(sqlInstanceID SQLInstanceID, nodeID *NodeIDContainer) *SQLIDContainer {
 	return &SQLIDContainer{
-		w:             errorutil.MakeTenantSQLDeprecatedWrapper(nodeID, nodeIDExposed),
+		w:             errorutil.MakeTenantSQLDeprecatedWrapper(nodeID, nodeID != nil),
 		sqlInstanceID: sqlInstanceID,
 	}
 }
@@ -139,14 +132,6 @@ func (c *SQLIDContainer) OptionalNodeIDErr(issueNos ...int) (roachpb.NodeID, err
 	return v.(*NodeIDContainer).Get(), nil
 }
 
-// DeprecatedNodeID returns the NodeID. This call is deprecated: removal of all
-// call sites is the goal, at which point this method will be removed. Calls to
-// this method reflect essential functionality which needs to be reworked in
-// order to enable multi-tenancy.
-func (c *SQLIDContainer) DeprecatedNodeID(issueNo int) roachpb.NodeID {
-	return c.w.Deprecated(issueNo).(*NodeIDContainer).Get()
-}
-
 // SQLInstanceID returns the wrapped SQLInstanceID.
 func (c *SQLIDContainer) SQLInstanceID() SQLInstanceID {
 	if n, ok := c.OptionalNodeID(); ok {
@@ -155,22 +140,10 @@ func (c *SQLIDContainer) SQLInstanceID() SQLInstanceID {
 	return c.sqlInstanceID
 }
 
-// Get is a temporary method to aid refactoring.
-//
-// TODO(tbg): remove.
-func (c *SQLIDContainer) Get() roachpb.NodeID {
-	// Silence staticcheck.
-	var _ = (*SQLIDContainer)(nil).OptionalNodeID
-	var _ = (*SQLIDContainer)(nil).OptionalNodeIDErr
-	var _ = (*SQLIDContainer)(nil).SQLInstanceID
-	return c.DeprecatedNodeID(-12131415)
-
-}
-
 // TestingIDContainer is an SQLIDContainer with hard-coded SQLInstanceID of 10 and
 // NodeID of 1.
 var TestingIDContainer = func() *SQLIDContainer {
 	var c NodeIDContainer
 	c.Set(context.Background(), 1)
-	return NewSQLIDContainer(10, &c, true /* exposed */)
+	return NewSQLIDContainer(10, &c)
 }()

@@ -273,7 +273,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nodeIDContainer := &base.NodeIDContainer{}
 	cfg.AmbientCtx.AddLogTag("n", nodeIDContainer)
 	const sqlInstanceID = base.SQLInstanceID(0)
-	idContainer := base.NewSQLIDContainer(sqlInstanceID, nodeIDContainer, true /* exposed */)
+	idContainer := base.NewSQLIDContainer(sqlInstanceID, nodeIDContainer)
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
