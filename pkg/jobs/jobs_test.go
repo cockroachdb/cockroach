@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/google/go-cmp/cmp"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
@@ -2373,4 +2374,12 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 	case <-time.After(aLongTime):
 		t.Fatal("job was not adopted")
 	}
+}
+
+func TestStatusSafeFormatter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	redacted := string(redact.Sprint(jobs.StatusCanceled).Redact())
+	expected := string(jobs.StatusCanceled)
+	require.Equal(t, expected, redacted)
 }

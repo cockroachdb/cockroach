@@ -4007,6 +4007,77 @@ The calculations are done on a sphere.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_snaptogrid": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"size", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				size := float64(tree.MustBeDFloat(args[1]))
+				ret, err := geomfn.SnapToGrid(g.Geometry, geom.Coord{0, 0, 0, 0}, geom.Coord{size, size, size, size})
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Snap a geometry to a grid of the given size.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"size_x", types.Float},
+				{"size_y", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				sizeX := float64(tree.MustBeDFloat(args[1]))
+				sizeY := float64(tree.MustBeDFloat(args[2]))
+				ret, err := geomfn.SnapToGrid(g.Geometry, geom.Coord{0, 0, 0, 0}, geom.Coord{sizeX, sizeY, 0, 0})
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"origin_x", types.Float},
+				{"origin_y", types.Float},
+				{"size_x", types.Float},
+				{"size_y", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				originX := float64(tree.MustBeDFloat(args[1]))
+				originY := float64(tree.MustBeDFloat(args[2]))
+				sizeX := float64(tree.MustBeDFloat(args[3]))
+				sizeY := float64(tree.MustBeDFloat(args[4]))
+				ret, err := geomfn.SnapToGrid(g.Geometry, geom.Coord{originX, originY, 0, 0}, geom.Coord{sizeX, sizeY, 0, 0})
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y based on an origin of (origin_x, origin_y).",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_buffer": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -4766,7 +4837,6 @@ Bottom Left.`,
 	"st_shiftlongitude":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49034}),
 	"st_simplifyvw":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
 	"st_snap":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49040}),
-	"st_snaptogrid":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49042}),
 	"st_split":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
 	"st_subdivide":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49048}),
 	"st_swapordinates":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49050}),

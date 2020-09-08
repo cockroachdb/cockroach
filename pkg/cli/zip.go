@@ -749,7 +749,16 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	// the profiles.
 	{
 		if err := z.createRaw(base+"/pprof-summary.sh", []byte(`#!/bin/sh
-find . -name cpu.pprof | xargs go tool pprof -tags
+find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
+`)); err != nil {
+			return err
+		}
+	}
+
+	// A script to summarize the hottest ranges.
+	{
+		if err := z.createRaw(base+"/hot-ranges.sh", []byte(`#!/bin/sh
+find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20
 `)); err != nil {
 			return err
 		}
