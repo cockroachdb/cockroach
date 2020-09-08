@@ -203,7 +203,7 @@ func (b *Builder) buildCTE(
 		OutCols:       colsToColList(outScope.cols),
 	}
 
-	expr := b.factory.ConstructRecursiveCTE(initialScope.expr, recursiveScope.expr, &private)
+	expr := b.factory.ConstructRecursiveCTE(cteSrc.expr, initialScope.expr, recursiveScope.expr, &private)
 	return expr, cteSrc.cols
 }
 

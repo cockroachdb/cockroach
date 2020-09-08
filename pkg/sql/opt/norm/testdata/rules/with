@@ -813,6 +813,9 @@ with &2 (t)
  │    ├── recursive columns: "?column?":4
  │    ├── cardinality: [1 - ]
  │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: column1:1
+ │    │    └── cardinality: [1 - ]
  │    ├── values
  │    │    ├── columns: column1:1!null
  │    │    ├── cardinality: [1 - 1]
@@ -868,6 +871,9 @@ scalar-group-by
  │    │    ├── recursive columns: "?column?":4
  │    │    ├── cardinality: [1 - ]
  │    │    ├── immutable
+ │    │    ├── fake-rel
+ │    │    │    ├── columns: column1:1
+ │    │    │    └── cardinality: [1 - ]
  │    │    ├── values
  │    │    │    ├── columns: column1:1!null
  │    │    │    ├── cardinality: [1 - 1]

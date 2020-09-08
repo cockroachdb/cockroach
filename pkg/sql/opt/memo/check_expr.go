@@ -338,7 +338,11 @@ func checkOutputCols(e opt.Expr) {
 			continue
 		}
 
-		// The output columns of child expressions cannot overlap.
+		// The output columns of child expressions cannot overlap. The only
+		// exception is the first child of RecursiveCTE.
+		if e.Op() == opt.RecursiveCTEOp && i == 0 {
+			continue
+		}
 		cols := rel.Relational().OutputCols
 		if set.Intersects(cols) {
 			panic(errors.AssertionFailedf(

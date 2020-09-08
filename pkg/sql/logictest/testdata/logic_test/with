@@ -587,3 +587,20 @@ aabb
 babb
 abbb
 bbbb
+
+# Regression test for #53951: placeholder inside a recursive CTE.
+statement ok
+PREPARE
+  ctestmt
+AS
+  (WITH RECURSIVE cte (x) AS (VALUES (1) UNION ALL SELECT x + $1 FROM cte WHERE x < 50) SELECT * FROM cte)
+
+query I rowsort
+EXECUTE ctestmt (10)
+----
+1
+11
+21
+31
+41
+51

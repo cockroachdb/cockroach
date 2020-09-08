@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 type backgroundFn func(ctx context.Context, u *versionUpgradeTest) error
@@ -56,7 +57,7 @@ func (s *backgroundStepper) launch(ctx context.Context, _ *test, u *versionUpgra
 func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgradeTest) {
 	s.m.cancel()
 	// We don't care about the workload failing since we only use it to produce a
-	// few `IMPORT` jobs. And indeed workload will fail because it does not
+	// few `RESTORE` jobs. And indeed workload will fail because it does not
 	// tolerate pausing of its jobs.
 	_ = s.m.WaitE()
 	db := u.conn(ctx, t, 1)
@@ -87,27 +88,40 @@ func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgrade
 	}
 
 	t.l.Printf("Waiting for jobs to complete...")
-	q := "SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS]);"
-	_, err := db.ExecContext(ctx, q)
+	var err error
+	for {
+		q := "SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS]);"
+		_, err = db.ExecContext(ctx, q)
+		if testutils.IsError(err, "pq: restart transaction:.*") {
+			t.l.Printf("SHOW JOBS WHEN COMPLETE returned %s, retrying", err.Error())
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		break
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func backgroundTPCCWorkload(warehouses int, tpccDB string) backgroundStepper {
+func backgroundTPCCWorkload(t *test, warehouses int, tpccDB string) backgroundStepper {
 	return makeBackgroundStepper(func(ctx context.Context, u *versionUpgradeTest) error {
 		cmd := []string{
-			"./workload fixtures import tpcc",
+			"./workload fixtures load tpcc",
 			fmt.Sprintf("--warehouses=%d", warehouses),
 			fmt.Sprintf("--db=%s", tpccDB),
 		}
 		// The workload has to run on one of the nodes of the cluster.
 		err := u.c.RunE(ctx, u.c.Node(1), cmd...)
 		if ctx.Err() != nil {
-			// If the context is canceled, that's probably why the workload  returned
+			// If the context is canceled, that's probably why the workload returned
 			// so swallow error. (This is how the harness tells us to shut down the
 			// workload).
+			t.l.Printf("Restore failed with %s", err.Error())
 			return nil
+		}
+		if err != nil {
+			t.l.Printf("Restore failed with %s", err.Error())
 		}
 		return err
 	})
@@ -206,7 +220,7 @@ func runJobsMixedVersions(
 	// `cockroach` will be used.
 	const mainVersion = ""
 	roachNodes := c.All()
-	backgroundTPCC := backgroundTPCCWorkload(warehouses, "tpcc")
+	backgroundTPCC := backgroundTPCCWorkload(t, warehouses, "tpcc")
 	resumeAllJobsAndWaitStep := makeResumeAllJobsAndWaitStep(10 * time.Second)
 	c.Put(ctx, workload, "./workload", c.Node(1))
 
@@ -307,17 +321,13 @@ func registerJobsMixedVersions(r *testRegistry) {
 		// is to to test the state transitions of jobs from paused to resumed and
 		// vice versa in order to detect regressions in the work done for 20.1.
 		MinVersion: "v20.1.0",
-		Skip:       "https://github.com/cockroachdb/cockroach/issues/51699",
 		Cluster:    makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)
 			}
-			warehouses := 200
-			if local {
-				warehouses = 20
-			}
+			warehouses := 10
 			runJobsMixedVersions(ctx, t, c, warehouses, predV)
 		},
 	})
