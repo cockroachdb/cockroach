@@ -544,8 +544,7 @@ func (b *backupResumer) Resume(
 		}
 	}
 
-	err = b.clearStats(ctx, p.ExecCfg().DB)
-	if err != nil {
+	if err := b.clearStats(ctx, p.ExecCfg().DB); err != nil {
 		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)
 	}
 	b.deleteCheckpoint(ctx, p.ExecCfg())
@@ -610,6 +609,9 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
 
 	cfg := phs.(sql.PlanHookState).ExecCfg()
+	if err := b.clearStats(ctx, cfg.DB); err != nil {
+		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)
+	}
 	b.deleteCheckpoint(ctx, cfg)
 	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return b.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
