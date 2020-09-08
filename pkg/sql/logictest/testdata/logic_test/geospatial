@@ -4782,3 +4782,25 @@ POINT EMPTY                                            POINT EMPTY              
 POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((0.1 -0, -1 0, -1 -1, 0.1 -1, 0.1 -0))        POLYGON ((-0.070710678118655 -0.070710678118655, 0.707106781186548 0.707106781186547, 0 1.414213562373095, -0.777817459305202 0.636396103067893, -0.070710678118655 -0.070710678118655))
 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((1 -0, 0 0, -0 -1, 1 -1, 1 -0))               POLYGON ((-0.707106781186548 -0.707106781186547, 0 0, -0.707106781186547 0.707106781186548, -1.414213562373095 0, -0.707106781186548 -0.707106781186547))
 POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, -1 0, -1 -1, -0 -1, 0 0))               POLYGON ((0 0, 0.707106781186548 0.707106781186547, 0 1.414213562373095, -0.707106781186547 0.707106781186548, 0 0))
+
+query TTTT
+SELECT
+  ST_AsText(a.geom) d,
+  ST_AsEWKT(ST_SnapToGrid(a.geom, 0.1)),
+  ST_AsEWKT(ST_SnapToGrid(a.geom, 0.1, 0.01)),
+  ST_AsEWKT(ST_SnapToGrid(a.geom, 0.05, 0.05, 0.1, 0.01))
+FROM geom_operators_test a
+ORDER BY d ASC
+----
+NULL                                                   NULL                                                   NULL                                                   NULL
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0.05 0)))
+GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY
+LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (-0.55 0.5, 0.45 0.5)
+LINESTRING EMPTY                                       LINESTRING EMPTY                                       LINESTRING EMPTY                                       LINESTRING EMPTY
+POINT (-0.5 0.5)                                       POINT (-0.5 0.5)                                       POINT (-0.5 0.5)                                       POINT (-0.55 0.5)
+POINT (0.5 0.5)                                        POINT (0.5 0.5)                                        POINT (0.5 0.5)                                        POINT (0.45 0.5)
+POINT (5 5)                                            POINT (5 5)                                            POINT (5 5)                                            POINT (5.05 5)
+POINT EMPTY                                            POINT EMPTY                                            POINT EMPTY                                            POINT EMPTY
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((-0.15 0, 0.95 0, 0.95 1, -0.15 1, -0.15 0))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((-0.95 0, 0.05 0, 0.05 1, -0.95 1, -0.95 0))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0.05 0, 0.95 0, 0.95 1, 0.05 1, 0.05 0))
