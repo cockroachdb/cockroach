@@ -873,6 +873,16 @@ func (p *PhysicalPlan) GenerateFlowSpecs(
 	return flows
 }
 
+// SetRowEstimates updates p according to the row estimates of left and right
+// plans.
+func (p *PhysicalPlan) SetRowEstimates(left, right *PhysicalPlan) {
+	p.TotalEstimatedScannedRows = left.TotalEstimatedScannedRows + right.TotalEstimatedScannedRows
+	p.MaxEstimatedRowCount = left.MaxEstimatedRowCount
+	if right.MaxEstimatedRowCount > p.MaxEstimatedRowCount {
+		p.MaxEstimatedRowCount = right.MaxEstimatedRowCount
+	}
+}
+
 // MergePlans merges the processors and streams of two plan into a new plan.
 // The result routers for each side are also returned (they point at processors
 // in the merged plan).
@@ -913,13 +923,7 @@ func MergePlans(
 		rightRouters[i] += rightProcStart
 	}
 
-	mergedPlan.TotalEstimatedScannedRows = left.TotalEstimatedScannedRows + right.TotalEstimatedScannedRows
-	// NB(dt): AFAIK no one looks at the MaxEstimatedRowCount of the overall plan
-	// but it is maintained here too just for completeness.
-	mergedPlan.MaxEstimatedRowCount = left.MaxEstimatedRowCount
-	if right.MaxEstimatedRowCount > left.MaxEstimatedRowCount {
-		mergedPlan.MaxEstimatedRowCount = left.MaxEstimatedRowCount
-	}
+	mergedPlan.SetRowEstimates(left, right)
 
 	return mergedPlan, leftRouters, rightRouters
 }

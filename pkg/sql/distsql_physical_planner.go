@@ -2937,6 +2937,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	}
 
 	var p PhysicalPlan
+	p.SetRowEstimates(&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
 
 	// Merge the plans' PlanToStreamColMap, which we know are equivalent.
 	p.PlanToStreamColMap = planToStreamColMap
