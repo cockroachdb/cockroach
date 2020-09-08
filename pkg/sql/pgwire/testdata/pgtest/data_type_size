@@ -1,0 +1,85 @@
+# This test verifies that the DataTypeSize field in the RowDescription and
+# DataRow messages both agree when using the MAX aggregate on an INT4 column.
+
+# Prepare the environment.
+send
+Query {"String": "DROP TABLE IF EXISTS max_test"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE max_test (id INT8 PRIMARY KEY, b INT4)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "INSERT INTO max_test (id, b) VALUES (1, 1000), (2, 250)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT max(b) FROM max_test"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"max","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1000"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 80 = ASCII 'P' for Portal
+send
+Parse {"Name": "s1", "Query": "SELECT max(b) FROM max_test"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1"}
+Describe {"ObjectType": 80, "Name": "p1"}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"max","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1000"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 80 = ASCII 'P' for Portal
+# ResultFormatCodes [1] = FormatBinary
+send
+Parse {"Name": "s2", "Query": "SELECT max(b) FROM max_test"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ResultFormatCodes": [1]}
+Describe {"ObjectType": 80, "Name": "p2"}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"max","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":1}]}
+{"Type":"DataRow","Values":[{"binary":"000003e8"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

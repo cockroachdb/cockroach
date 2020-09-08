@@ -11,13 +11,11 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"strings"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type minMaxTmplInfo struct {
@@ -39,14 +37,7 @@ func (a minMaxTmplInfo) AggNameTitle() string {
 }
 
 func (a minMaxTmplInfo) CopyValMaybeCast(dest, src string) string {
-	switch a.lastArgTypeOverload.CanonicalTypeFamily {
-	case types.IntFamily:
-		// Minimum and maximum on integers always return INT8, so we need to
-		// make sure to perform the cast because 'dest' is of int64 type.
-		return fmt.Sprintf("%s = int64(%s)", dest, src)
-	default:
-		return copyVal(a.lastArgTypeOverload.CanonicalTypeFamily, dest, src)
-	}
+	return copyVal(a.lastArgTypeOverload.CanonicalTypeFamily, dest, src)
 }
 
 // Avoid unused warning for functions which are only used in templates.
@@ -95,14 +86,6 @@ func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 				retGoTypeSlice := widthOv.GoTypeSliceName()
 				retGoType := widthOv.GoType
 				retVecMethod := widthOv.VecMethod
-				if ov.CanonicalTypeFamily == types.IntFamily {
-					// Minimum and maximum on integers always return INT8, so
-					// we need to override the return type parameters from the
-					// default ones.
-					retGoTypeSlice = goTypeSliceName(types.IntFamily, anyWidth)
-					retGoType = toPhysicalRepresentation(types.IntFamily, anyWidth)
-					retVecMethod = toVecMethod(types.IntFamily, anyWidth)
-				}
 				tmplInfos = append(tmplInfos, minMaxTmplInfo{
 					lastArgWidthOverload: widthOv,
 					Agg:                  agg,

@@ -85,93 +85,93 @@
 </span></td></tr>
 <tr><td><a name="jsonb_object_agg"></a><code>jsonb_object_agg(arg1: <a href="string.html">string</a>, arg2: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Aggregates values as a JSON or JSONB object.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="bool.html">bool</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="bytes.html">bytes</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="date.html">date</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="date.html">date</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="decimal.html">decimal</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="float.html">float</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="inet.html">inet</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="inet.html">inet</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="int.html">int</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="interval.html">interval</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="interval.html">interval</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="string.html">string</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="time.html">time</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="time.html">time</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="timestamp.html">timestamp</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="timestamp.html">timestamptz</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: <a href="uuid.html">uuid</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: anyenum) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: box2d) &rarr; box2d</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: box2d) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: collatedstring{*}) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: geography) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: geometry) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: oid) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: timetz) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: varbit) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="bool.html">bool</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="bytes.html">bytes</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="date.html">date</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="date.html">date</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="decimal.html">decimal</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="float.html">float</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="inet.html">inet</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="inet.html">inet</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="int.html">int</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="interval.html">interval</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="interval.html">interval</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="string.html">string</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="time.html">time</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="time.html">time</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="timestamp.html">timestamp</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="timestamp.html">timestamptz</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: <a href="uuid.html">uuid</a>) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: anyenum) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: box2d) &rarr; box2d</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: box2d) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: collatedstring{*}) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: geography) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: geometry) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: oid) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: timetz) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: varbit) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><a name="percentile_cont"></a><code>percentile_cont(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Continuous percentile: returns a float corresponding to the specified fraction in the ordering, interpolating between adjacent input floats if needed.</p>
 </span></td></tr>
