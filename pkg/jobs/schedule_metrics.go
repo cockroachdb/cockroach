@@ -42,7 +42,10 @@ type SchedulerMetrics struct {
 	// Number of schedules rescheduled due to WAIT policy.
 	RescheduleWait *metric.Gauge
 	// Number of schedules that could not be processed due to an error.
-	NumBadSchedules *metric.Counter
+	NumErrSchedules *metric.Gauge
+	// Number of schedules that are malformed: that is, the schedules
+	// we cannot parse, or even attempt to execute.
+	NumMalformedSchedules *metric.Gauge
 }
 
 // MakeSchedulerMetrics returns metrics for scheduled job daemon.
@@ -83,9 +86,16 @@ func MakeSchedulerMetrics() SchedulerMetrics {
 			Unit:        metric.Unit_COUNT,
 		}),
 
-		NumBadSchedules: metric.NewCounter(metric.Metadata{
-			Name:        "schedules.corrupt",
-			Help:        "Number of corrupt/bad schedules",
+		NumErrSchedules: metric.NewGauge(metric.Metadata{
+			Name:        "schedules.error",
+			Help:        "Number of schedules which did not execute successfully",
+			Measurement: "Schedules",
+			Unit:        metric.Unit_COUNT,
+		}),
+
+		NumMalformedSchedules: metric.NewGauge(metric.Metadata{
+			Name:        "schedules.malformed",
+			Help:        "Number of malformed schedules",
 			Measurement: "Schedules",
 			Unit:        metric.Unit_COUNT,
 		}),
