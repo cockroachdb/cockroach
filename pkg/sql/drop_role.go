@@ -152,8 +152,6 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	}
 
 	lCtx := newInternalLookupCtx(params.ctx, descs, nil /*prefix - we want all descriptors */)
-	// TODO(richardjcai): Also need to add privilege checking for types and
-	// user defined schemas when they are added.
 	// privileges are added.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
@@ -161,11 +159,15 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			continue
 		}
 		if _, ok := userNames[table.GetPrivileges().Owner]; ok {
+			tn, err := getTableNameFromTableDescriptor(lCtx, table, "")
+			if err != nil {
+				return err
+			}
 			userNames[table.GetPrivileges().Owner] = append(
 				userNames[table.GetPrivileges().Owner],
 				objectAndType{
 					ObjectType: "table",
-					ObjectName: table.GetName(),
+					ObjectName: tn.String(),
 				})
 		}
 		for _, u := range table.GetPrivileges().Users {
@@ -178,6 +180,29 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				f.FormatNode(&tn)
 				break
 			}
+		}
+	}
+	for _, schemaDesc := range lCtx.schemaDescs {
+		// TODO(arul): What's the deal with the visibility check above for Tables?
+		//  is that required for schema descs/types? GetState() seems to be only
+		//  for table descriptors, so not sure here.
+		if _, ok := userNames[schemaDesc.GetPrivileges().Owner]; ok {
+			userNames[schemaDesc.GetPrivileges().Owner] = append(
+				userNames[schemaDesc.GetPrivileges().Owner],
+				objectAndType{
+					ObjectType: "schema",
+					ObjectName: schemaDesc.GetName(),
+				})
+		}
+	}
+	for _, typDesc := range lCtx.typDescs {
+		if _, ok := userNames[typDesc.GetPrivileges().Owner]; ok {
+			userNames[typDesc.GetPrivileges().Owner] = append(
+				userNames[typDesc.GetPrivileges().Owner],
+				objectAndType{
+					ObjectType: "type",
+					ObjectName: typDesc.GetName(),
+				})
 		}
 	}
 
