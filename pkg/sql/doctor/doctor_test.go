@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -58,15 +59,15 @@ var validTableDesc = &descpb.Descriptor{
 	},
 }
 
-func TestExamine(t *testing.T) {
+func toBytes(t *testing.T, pb protoutil.Message) []byte {
+	res, err := protoutil.Marshal(pb)
+	require.NoError(t, err)
+	return res
+}
+
+func TestExamineDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	toBytes := func(desc *descpb.Descriptor) []byte {
-		res, err := protoutil.Marshal(desc)
-		require.NoError(t, err)
-		return res
-	}
 
 	tests := []struct {
 		descTable      doctor.DescriptorTable
@@ -88,7 +89,7 @@ func TestExamine(t *testing.T) {
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Table{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Table{
 						Table: &descpb.TableDescriptor{ID: 2},
 					}}),
 				},
@@ -101,7 +102,7 @@ func TestExamine(t *testing.T) {
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Table{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Table{
 						Table: &descpb.TableDescriptor{Name: "foo", ID: 1, State: descpb.DescriptorState_DROP},
 					}}),
 				},
@@ -114,7 +115,7 @@ func TestExamine(t *testing.T) {
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Table{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Table{
 						Table: &descpb.TableDescriptor{Name: "foo", ID: 1},
 					}}),
 				},
@@ -130,7 +131,7 @@ func TestExamine(t *testing.T) {
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
 						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 1},
 					}}),
 				},
@@ -141,10 +142,10 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 		},
 		{
 			descTable: doctor.DescriptorTable{
-				{ID: 1, DescBytes: toBytes(validTableDesc)},
+				{ID: 1, DescBytes: toBytes(t, validTableDesc)},
 				{
 					ID: 2,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
 						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
 					}}),
 				},
@@ -162,7 +163,7 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Schema{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Schema{
 						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 1, ParentID: 2},
 					}}),
 				},
@@ -178,7 +179,7 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Type{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Type{
 						Type: &descpb.TypeDescriptor{Name: "type", ID: 1},
 					}}),
 				},
@@ -212,10 +213,10 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 		{
 			valid: true,
 			descTable: doctor.DescriptorTable{
-				{ID: 1, DescBytes: toBytes(validTableDesc)},
+				{ID: 1, DescBytes: toBytes(t, validTableDesc)},
 				{
 					ID: 2,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
 						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
 					}}),
 				},
@@ -231,7 +232,7 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
 						Database: &descpb.DatabaseDescriptor{
 							ID:            1,
 							Name:          "db",
@@ -252,7 +253,7 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
 						Database: &descpb.DatabaseDescriptor{
 							ID:            1,
 							Name:          "db",
@@ -274,7 +275,7 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names f
 
 	for i, test := range tests {
 		var buf bytes.Buffer
-		valid, err := doctor.Examine(
+		valid, err := doctor.ExamineDescriptors(
 			context.Background(), test.descTable, test.namespaceTable, false, &buf)
 		msg := fmt.Sprintf("Test %d failed!", i+1)
 		if test.errStr != "" {
@@ -283,6 +284,73 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names f
 			require.NoErrorf(t, err, msg)
 		}
 		require.Equalf(t, test.valid, valid, msg)
+		require.Equalf(t, test.expected, buf.String(), msg)
+	}
+}
+
+func TestExamineJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		descTable doctor.DescriptorTable
+		jobsTable doctor.JobsTable
+		valid     bool
+		errStr    string
+		expected  string
+	}{
+		{
+			jobsTable: doctor.JobsTable{
+				{
+					ID:      1,
+					Payload: &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.BackupDetails{})},
+				},
+			},
+			valid:    true,
+			expected: "Examining 1 running jobs...\n",
+		},
+		{
+			descTable: doctor.DescriptorTable{
+				{
+					ID: 2,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Table{
+						Table: &descpb.TableDescriptor{ID: 2},
+					}}),
+				},
+			},
+			jobsTable: doctor.JobsTable{
+				{
+					ID:      100,
+					Payload: &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeGCDetails{})},
+					Progress: &jobspb.Progress{Details: jobspb.WrapProgressDetails(
+						jobspb.SchemaChangeGCProgress{
+							Tables: []jobspb.SchemaChangeGCProgress_TableProgress{
+								{ID: 1, Status: jobspb.SchemaChangeGCProgress_DELETED},
+								{ID: 2, Status: jobspb.SchemaChangeGCProgress_DELETING},
+								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
+							},
+						})},
+				},
+			},
+			expected: `Examining 1 running jobs...
+job 100: schema change GC refers to missing table descriptor(s) [3]
+`,
+		},
+	}
+
+	for i, test := range tests {
+		var buf bytes.Buffer
+		valid, err := doctor.ExamineJobs(
+			context.Background(), test.descTable, test.jobsTable, false, &buf)
+		msg := fmt.Sprintf("Test %d failed!", i+1)
+		if test.errStr != "" {
+			require.Containsf(t, err.Error(), test.errStr, msg)
+		} else {
+			require.NoErrorf(t, err, msg)
+		}
+		if test.valid != valid {
+			t.Errorf("%s valid\n\texpected: %v\n\tactual: %v", msg, test.valid, valid)
+		}
 		require.Equalf(t, test.expected, buf.String(), msg)
 	}
 }

@@ -23,12 +23,15 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -70,11 +73,13 @@ Run doctor tool reading system data from a live cluster specified by --url.
 }
 
 func wrapExamine(
-	descTable []doctor.DescriptorTableRow, namespaceTable []doctor.NamespaceTableRow,
+	descTable doctor.DescriptorTable,
+	namespaceTable doctor.NamespaceTable,
+	jobsTable doctor.JobsTable,
 ) error {
 	// TODO(spaskob): add --verbose flag.
 	valid, err := doctor.Examine(
-		context.Background(), descTable, namespaceTable, false, os.Stdout)
+		context.Background(), descTable, namespaceTable, jobsTable, false, os.Stdout)
 	if err != nil {
 		return &cliError{exitCode: 2, cause: errors.Wrap(err, "examine failed")}
 	}
@@ -185,7 +190,30 @@ FROM system.namespace`
 		return err
 	}
 
-	return wrapExamine(descTable, namespaceTable)
+	stmt = `SELECT id, status, payload, progress FROM system.jobs`
+	jobsTable := make(doctor.JobsTable, 0)
+
+	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
+		md := jobs.JobMetadata{}
+		md.ID = vals[0].(int64)
+		md.Status = jobs.Status(vals[1].(string))
+		md.Payload = &jobspb.Payload{}
+		if err := protoutil.Unmarshal(vals[2].([]byte), md.Payload); err != nil {
+			return err
+		}
+		md.Progress = &jobspb.Progress{}
+		if err := protoutil.Unmarshal(vals[3].([]byte), md.Progress); err != nil {
+			return err
+		}
+		if md.Status == jobs.StatusRunning {
+			jobsTable = append(jobsTable, md)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return wrapExamine(descTable, namespaceTable, jobsTable)
 }
 
 // runZipDirDoctor runs the doctors tool reading data from a debug zip dir.
@@ -198,7 +226,7 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 	defer descFile.Close()
-	descTable := make([]doctor.DescriptorTableRow, 0)
+	descTable := make(doctor.DescriptorTable, 0)
 
 	if err := tableMap(descFile, func(row string) error {
 		fields := strings.Fields(row)
@@ -224,7 +252,8 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 	defer namespaceFile.Close()
-	namespaceTable := make([]doctor.NamespaceTableRow, 0)
+
+	namespaceTable := make(doctor.NamespaceTable, 0)
 	if err := tableMap(namespaceFile, func(row string) error {
 		fields := strings.Fields(row)
 		parID, err := strconv.Atoi(fields[0])
@@ -255,7 +284,52 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
-	return wrapExamine(descTable, namespaceTable)
+	jobsFile, err := os.Open(path.Join(args[0], "system.jobs.txt"))
+	if err != nil {
+		return err
+	}
+	defer jobsFile.Close()
+	jobsTable := make(doctor.JobsTable, 0)
+
+	if err := tableMap(jobsFile, func(row string) error {
+		fields := strings.Fields(row)
+		md := jobs.JobMetadata{}
+		md.Status = jobs.Status(fields[1])
+		if md.Status != jobs.StatusRunning {
+			return nil
+		}
+
+		id, err := strconv.Atoi(fields[0])
+		if err != nil {
+			return errors.Errorf("failed to parse job id %s: %v", fields[0], err)
+		}
+		md.ID = int64(id)
+
+		last := len(fields) - 1
+		payloadBytes, err := hx.DecodeString(fields[last-1])
+		if err != nil {
+			return errors.Errorf("job %d: failed to decode hex payload: %v", id, err)
+		}
+		md.Payload = &jobspb.Payload{}
+		if err := protoutil.Unmarshal(payloadBytes, md.Payload); err != nil {
+			return errors.Wrap(err, "failed unmarshalling job payload")
+		}
+		progressBytes, err := hx.DecodeString(fields[last])
+		if err != nil {
+			return errors.Errorf("job %d: failed to decode hex progress: %v", id, err)
+		}
+		md.Progress = &jobspb.Progress{}
+		if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
+			return errors.Wrap(err, "failed unmarshalling job progress")
+		}
+
+		jobsTable = append(jobsTable, md)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return wrapExamine(descTable, namespaceTable, jobsTable)
 }
 
 // tableMap applies `fn` to all rows in `in`.

@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -25,11 +26,14 @@ func TestDoctorCluster(t *testing.T) {
 
 	// Introduce a corruption in the descriptor table by adding a table and
 	// removing its parent.
-	c.RunWithArgs([]string{"sql", "-e", `
-	CREATE TABLE t (id INT);
-	INSERT INTO system.users VALUES ('node', NULL, true);
-	GRANT node TO root;
-	DELETE FROM system.descriptor WHERE id = 50;`,
+	c.RunWithArgs([]string{"sql", "-e", strings.Join([]string{
+		"CREATE TABLE to_drop (id INT)",
+		"DROP TABLE to_drop",
+		"CREATE TABLE foo (id INT)",
+		"INSERT INTO system.users VALUES ('node', NULL, true)",
+		"GRANT node TO root",
+		"DELETE FROM system.namespace WHERE name = 'foo'",
+	}, ";\n"),
 	})
 
 	out, err := c.RunWithCapture("debug doctor cluster")

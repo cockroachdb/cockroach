@@ -1,7 +1,7 @@
 doctor cluster
 ----
 debug doctor cluster
-Examining 32 descriptors and 36 namespace entries...
-   Table  52: ParentID  50, ParentSchemaID 29, Name 't': parentID 50 does not exist
-Descriptor 50: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:defaultdb}] but no descriptor
+Examining 34 descriptors and 35 namespace entries...
+   Table  53: ParentID  50, ParentSchemaID 29, Name 'foo': not being dropped but no namespace entry found
+Examining 1 running jobs...
 ERROR: validation failed
