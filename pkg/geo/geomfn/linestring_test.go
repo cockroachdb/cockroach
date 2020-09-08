@@ -27,10 +27,9 @@ func TestLineStringFromMultiPoint(t *testing.T) {
 	}{
 		{"MULTIPOINT EMPTY", "LINESTRING EMPTY"},
 		{"MULTIPOINT (1 2, 3 4, 5 6)", "LINESTRING (1 2, 3 4, 5 6)"},
-		// The following test case mirrors PostGIS behavior of duplicating the previous point for
-		// EMPTY points, although the correct behavior would probably be to omit the duplicate.
-		// FIXME https://github.com/cockroachdb/cockroach/issues/53997
-		//{"MULTIPOINT (1 2, EMPTY, 3 4)", "LINESTRING (1 2, 1 2, 3 4)"},
+		{"MULTIPOINT (1 2, EMPTY, 3 4)", "LINESTRING (1 2, 1 2, 3 4)"},
+		{"MULTIPOINT (EMPTY, 1 2, EMPTY, 3 4)", "LINESTRING (0 0, 1 2, 1 2, 3 4)"},
+		{"MULTIPOINT (EMPTY, EMPTY, 1 2, EMPTY, 3 4)", "LINESTRING (0 0, 0 0, 1 2, 1 2, 3 4)"},
 	}
 
 	for _, tc := range testCases {
