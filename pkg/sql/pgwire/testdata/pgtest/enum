@@ -2,7 +2,7 @@
 
 # Prepare the environment.
 send noncrdb_only
-Query {"String": "DROP TYPE IF EXISTS te"}
+Query {"String": "DROP TYPE IF EXISTS te CASCADE"}
 ----
 
 until noncrdb_only ignore=NoticeResponse
@@ -73,14 +73,14 @@ ReadyForQuery
 
 # Prepare a query and type hint a user defined type. Then bind this prepared
 # statement with a user defined type argument ([104, 105] = 'hi').
-send
+send crdb_only
 Parse {"Name": "s1", "Query": "INSERT INTO tb VALUES ($1)", "ParameterOIDs": [100052]}
 Bind {"DestinationPortal": "p", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [[104, 105]]}
 Execute {"Portal": "p"}
 Sync
 ----
 
-until
+until crdb_only
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
@@ -89,21 +89,12 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Ensure that our value was successfully inserted.
-send
+send crdb_only
 Query {"String": "SELECT * FROM tb"}
 ----
 
-until ignore_table_oids ignore_type_oids noncrdb_only
-RowDescription
-----
-{"Type":"RowDescription","Fields":[{"Name":"x","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":0,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
-
 until crdb_only
-RowDescription
-----
-{"Type":"RowDescription","Fields":[{"Name":"x","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":100052,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
-
-until
 DataRow
 ----
+{"Type":"RowDescription","Fields":[{"Name":"x","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":100052,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"hi"}]}
