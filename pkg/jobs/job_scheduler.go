@@ -115,6 +115,7 @@ const recheckRunningAfter = 1 * time.Minute
 type loopStats struct {
 	rescheduleWait, rescheduleSkip, started int64
 	readyToRun, jobsRunning                 int64
+	malformed                               int64
 }
 
 func (s *loopStats) updateMetrics(m *SchedulerMetrics) {
@@ -123,6 +124,7 @@ func (s *loopStats) updateMetrics(m *SchedulerMetrics) {
 	m.NumRunning.Update(s.jobsRunning)
 	m.RescheduleSkip.Update(s.rescheduleSkip)
 	m.RescheduleWait.Update(s.rescheduleWait)
+	m.NumMalformedSchedules.Update(s.malformed)
 }
 
 func (s *jobScheduler) processSchedule(
@@ -290,7 +292,7 @@ func (s *jobScheduler) executeSchedules(
 	for _, row := range rows {
 		schedule, numRunning, err := s.unmarshalScheduledJob(row, cols)
 		if err != nil {
-			s.metrics.NumBadSchedules.Inc(1)
+			stats.malformed++
 			log.Errorf(ctx, "error parsing schedule: %+v", row)
 			continue
 		}
@@ -303,7 +305,7 @@ func (s *jobScheduler) executeSchedules(
 			}
 
 			// Failed to process schedule.
-			s.metrics.NumBadSchedules.Inc(1)
+			s.metrics.NumErrSchedules.Inc(1)
 			log.Errorf(ctx,
 				"error processing schedule %d: %+v", schedule.ScheduleID(), processErr)
 
