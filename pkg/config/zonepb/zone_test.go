@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -808,16 +809,24 @@ func TestZoneSpecifiers(t *testing.T) {
 	type namespaceEntry struct {
 		parentID uint32
 		name     string
+		schemaID uint32
 	}
 	namespace := map[namespaceEntry]uint32{
-		{0, "db"}:               50,
-		{50, "tbl"}:             51,
-		{0, "carl"}:             55,
-		{55, "toys"}:            56,
-		{9000, "broken_parent"}: 57,
+		{parentID: 0, name: "db"}: 50,
+		{parentID: 50, name: "tbl",
+			schemaID: keys.PublicSchemaID,
+		}: 51,
+		{parentID: 0, name: "carl"}:                                            55,
+		{parentID: 55, name: "toys", schemaID: keys.PublicSchemaID}:            56,
+		{parentID: 9000, name: "broken_parent", schemaID: keys.PublicSchemaID}: 57,
+		{parentID: 55, name: "test_schema"}:                                    58,
+		// Test that a table with the same name as another table in a public
+		// schema works properly.
+		{parentID: 55, name: "toys", schemaID: 58}: 59,
 	}
-	resolveName := func(parentID uint32, name string) (uint32, error) {
-		key := namespaceEntry{parentID, name}
+
+	resolveName := func(parentID uint32, schemaID uint32, name string) (uint32, error) {
+		key := namespaceEntry{parentID: parentID, schemaID: schemaID, name: name}
 		if id, ok := namespace[key]; ok {
 			return id, nil
 		}
@@ -850,6 +859,11 @@ func TestZoneSpecifiers(t *testing.T) {
 		{tree.ZoneSpecifier{Database: "tbl"}, -1, `"tbl" not found`},
 		{tree.ZoneSpecifier{Database: "carl"}, 55, ""},
 		{tableSpecifier("carl", "toys", "", ""), 56, ""},
+		{tree.ZoneSpecifier{
+			TableOrIndex: tree.TableIndexName{
+				Table: tree.MakeTableNameWithSchema("carl", "test_schema", "toys"),
+			},
+		}, 59, ""},
 		{tableSpecifier("carl", "love", "", ""), -1, `"love" not found`},
 	} {
 		t.Run(fmt.Sprintf("resolve-specifier=%s", tc.specifier.String()), func(t *testing.T) {
@@ -882,7 +896,7 @@ func TestZoneSpecifiers(t *testing.T) {
 		{55, "DATABASE carl", ""},
 		{56, "TABLE carl.public.toys", ""},
 		{57, "", "9000 not found"},
-		{58, "", "58 not found"},
+		{600, "", "600 not found"},
 	} {
 		t.Run(fmt.Sprintf("resolve-id=%d", tc.id), func(t *testing.T) {
 			zs, err := ZoneSpecifierFromID(tc.id, resolveID)
