@@ -127,7 +127,7 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	if node.Unique {
 		ctx.WriteString("UNIQUE ")
 	}
-	if node.Inverted && !ctx.HasFlags(FmtPGIndexDef) {
+	if node.Inverted && !ctx.HasFlags(FmtPGCatalog) {
 		ctx.WriteString("INVERTED ")
 	}
 	ctx.WriteString("INDEX ")
@@ -143,7 +143,7 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString("ON ")
 	ctx.FormatNode(&node.Table)
-	if ctx.HasFlags(FmtPGIndexDef) {
+	if ctx.HasFlags(FmtPGCatalog) {
 		ctx.WriteString(" USING")
 		if node.Inverted {
 			ctx.WriteString(" gin")

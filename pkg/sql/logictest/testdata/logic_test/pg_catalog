@@ -2535,24 +2535,63 @@ primary    CREATE UNIQUE INDEX "primary" ON test.public.geospatial_table USING b
 idxa       CREATE INDEX idxa ON test.public.geospatial_table USING gin (a ASC)
 idxb       CREATE INDEX idxb ON test.public.geospatial_table USING gin (b ASC)
 
+subtest partial_index
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE TYPE testenum AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
+CREATE TABLE partial_index_table (
+  a INT,
+  b testenum,
+  UNIQUE INDEX (a) WHERE a > 0
+)
+
+statement ok
+CREATE UNIQUE INDEX ON partial_index_table (a) WHERE b IN ('foo', 'bar')
+
+query TT colnames
+SELECT indexname, indexdef
+FROM pg_catalog.pg_indexes
+WHERE tablename = 'partial_index_table'
+----
+indexname                   indexdef
+primary                     CREATE UNIQUE INDEX "primary" ON test.public.partial_index_table USING btree (rowid ASC)
+partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE a > 0
+partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE b IN ('foo'::public.testenum, 'bar'::public.testenum)
+
+query TT colnames
+SELECT conname, condef
+FROM pg_catalog.pg_constraint c JOIN pg_catalog.pg_class t
+ON c.conrelid = t.oid
+WHERE t.relname = 'partial_index_table'
+ORDER BY conname
+----
+conname                     condef
+partial_index_table_a_key   UNIQUE (a ASC) WHERE a > 0
+partial_index_table_a_key1  UNIQUE (a ASC) WHERE b IN ('foo'::public.testenum, 'bar'::public.testenum)
+
 subtest regression_46799
 statement ok
-CREATE TABLE t(x INT DEFAULT 1, y INT DEFAULT 1);
+CREATE TABLE t46799 (x INT DEFAULT 1, y INT DEFAULT 1);
 
 query I
-SELECT adnum FROM pg_attrdef WHERE adrelid = 91
+SELECT adnum FROM pg_attrdef WHERE adrelid = 't46799'::REGCLASS
 ----
 1
 2
 3
 
 statement ok
-ALTER TABLE t DROP COLUMN y;
-ALTER TABLE t ADD COLUMN y INT DEFAULT 1;
+ALTER TABLE t46799 DROP COLUMN y;
+ALTER TABLE t46799 ADD COLUMN y INT DEFAULT 1;
 
 # Make sure after adding and dropping the same column, the adnum for the re-added column increases.
 query I
-select adnum from pg_attrdef WHERE adrelid = 91
+select adnum from pg_attrdef WHERE adrelid = 't46799'::REGCLASS
 ----
 1
 3
@@ -2565,13 +2604,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-92  92  jt
+95  95  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1   NULL  NULL
-92  92    jt
+95  95    jt
 
 subtest regression_49207
 statement ok

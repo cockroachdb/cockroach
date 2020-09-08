@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
@@ -961,6 +962,14 @@ func populateTableConstraints(
 			f.WriteString("UNIQUE (")
 			con.Index.ColNamesFormat(f)
 			f.WriteByte(')')
+			if con.Index.IsPartial() {
+				pred, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Index.Predicate, p.SemaCtx(), tree.FmtPGCatalog)
+				if err != nil {
+					return err
+				}
+				f.WriteString(" WHERE ")
+				f.WriteString(pred)
+			}
 			condef = tree.NewDString(f.CloseAndGetString())
 
 		case descpb.ConstraintTypeCheck:
@@ -1203,7 +1212,7 @@ CREATE TABLE pg_catalog.pg_conversion (
 	conforencoding INT4,
 	contoencoding INT4,
 	conproc OID,
-  condefault BOOL
+	condefault BOOL
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
@@ -1826,7 +1835,24 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Interleave = intlDef
 	}
-	fmtCtx := tree.NewFmtCtx(tree.FmtPGIndexDef)
+	if index.IsPartial() {
+		// Format the raw predicate for display in order to resolve user-defined
+		// types to a human readable form.
+		//
+		// TODO(mgartner): Avoid parsing the predicate expression twice. It is
+		// parsed in schemaexpr.FormatExprForDisplay and again here.
+		formattedPred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.Predicate, p.SemaCtx(), tree.FmtPGCatalog)
+		if err != nil {
+			return "", err
+		}
+
+		pred, err := parser.ParseExpr(formattedPred)
+		if err != nil {
+			return "", err
+		}
+		indexDef.Predicate = pred
+	}
+	fmtCtx := tree.NewFmtCtx(tree.FmtPGCatalog)
 	fmtCtx.FormatNode(&indexDef)
 	return fmtCtx.String(), nil
 }

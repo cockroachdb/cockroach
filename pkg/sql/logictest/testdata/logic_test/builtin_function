@@ -2064,12 +2064,32 @@ SELECT pg_catalog.pg_get_indexdef(0)
 NULL
 
 statement ok
-CREATE TABLE test.pg_indexdef_test (a INT, UNIQUE INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC))
+CREATE TYPE testenum AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
+CREATE TABLE test.pg_indexdef_test (
+    a INT,
+    e testenum,
+    UNIQUE INDEX pg_indexdef_idx (a ASC),
+    INDEX pg_indexdef_partial_idx (a) WHERE a > 0,
+    INDEX pg_indexdef_partial_enum_idx (a) WHERE e IN ('foo', 'bar'),
+    INDEX other (a DESC)
+)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))
 ----
 CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test USING btree (a ASC)
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_idx'))
+----
+CREATE INDEX pg_indexdef_partial_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE a > 0
+
+query T
+SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_enum_idx'))
+----
+CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE e IN ('foo'::public.testenum, 'bar'::public.testenum)
 
 query T
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -2155,6 +2175,8 @@ CREATE TABLE test.pg_constraintdef_test (
   a int,
   b int unique,
   c int check (c > a),
+  d string,
+  UNIQUE INDEX (a) WHERE d = 'foo',
   FOREIGN KEY(a) REFERENCES test.pg_indexdef_test(a) ON DELETE CASCADE
 )
 
@@ -2164,6 +2186,7 @@ FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
 UNIQUE (b ASC)
+UNIQUE (a ASC) WHERE d = 'foo'::STRING
 FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
 CHECK ((c > a))
 
@@ -2543,12 +2566,12 @@ NULL
 query I
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
 ----
-61
+63
 
 query I
 SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
 ----
-62
+64
 
 query T
 SELECT crdb_internal.get_zone_config(-1)::string
@@ -2598,12 +2621,12 @@ user testuser
 query I
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
 ----
-61
+63
 
 query I
 SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
 ----
-62
+64
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
