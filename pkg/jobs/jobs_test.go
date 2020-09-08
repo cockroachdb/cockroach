@@ -147,17 +147,16 @@ type counters struct {
 }
 
 type registryTestSuite struct {
-	ctx               context.Context
-	oldAdoptInterval  time.Duration
-	oldCancelInterval time.Duration
-	s                 serverutils.TestServerInterface
-	outerDB           *gosql.DB
-	sqlDB             *sqlutils.SQLRunner
-	registry          *jobs.Registry
-	done              chan struct{}
-	mockJob           jobs.Record
-	job               *jobs.Job
-	mu                struct {
+	ctx             context.Context
+	cleanupSettings func()
+	s               serverutils.TestServerInterface
+	outerDB         *gosql.DB
+	sqlDB           *sqlutils.SQLRunner
+	registry        *jobs.Registry
+	done            chan struct{}
+	mockJob         jobs.Record
+	job             *jobs.Job
+	mu              struct {
 		syncutil.Mutex
 		a counters
 		e counters
@@ -180,10 +179,7 @@ func noopPauseRequestFunc(
 }
 
 func (rts *registryTestSuite) setUp(t *testing.T) {
-	rts.oldAdoptInterval = jobs.DefaultAdoptInterval
-	rts.oldCancelInterval = jobs.DefaultCancelInterval
-	jobs.DefaultAdoptInterval = time.Millisecond
-	jobs.DefaultCancelInterval = 2 * time.Millisecond
+	rts.cleanupSettings = jobs.TestingSetAdoptAndCancelIntervals(time.Millisecond, 2*time.Millisecond)
 	rts.ctx = context.Background()
 	rts.s, rts.outerDB, _ = serverutils.StartServer(t, base.TestServerArgs{})
 	rts.sqlDB = sqlutils.MakeSQLRunner(rts.outerDB)
@@ -273,8 +269,7 @@ func (rts *registryTestSuite) tearDown() {
 	close(rts.resumeCheckCh)
 	close(rts.done)
 	rts.s.Stopper().Stop(rts.ctx)
-	jobs.DefaultAdoptInterval = rts.oldAdoptInterval
-	jobs.DefaultCancelInterval = rts.oldCancelInterval
+	rts.cleanupSettings()
 	jobs.ResetConstructors()()
 }
 
