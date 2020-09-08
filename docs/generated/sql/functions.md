@@ -1790,6 +1790,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_linefrommultipoint"></a><code>st_linefrommultipoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a LineString from a MultiPoint geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_linefromtext"></a><code>st_linefromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not LineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_linefromtext"></a><code>st_linefromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not LineString, NULL is returned.</p>
@@ -1807,6 +1809,9 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_lineinterpolatepoints"></a><code>st_lineinterpolatepoints(geometry: geometry, fraction: <a href="float.html">float</a>, repeat: <a href="bool.html">bool</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns one or more points along the LineString which is at an integral multiples of given fraction of LineString’s total length. If repeat is false (default true) then it returns first point.</p>
 <p>Note If the result has zero or one points, it will be returned as a POINT. If it has two or more points, it will be returned as a MULTIPOINT.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_linemerge"></a><code>st_linemerge(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a LineString or MultiLineString by joining together constituents of a MultiLineString with matching endpoints. If the input is not a MultiLineString or LineString, an empty GeometryCollection is returned.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_linestringfromtext"></a><code>st_linestringfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not LineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
@@ -1988,6 +1993,10 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 <tr><td><a name="st_relatematch"></a><code>st_relatematch(intersection_matrix: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the given DE-9IM intersection matrix satisfies the given pattern.</p>
 </span></td></tr>
 <tr><td><a name="st_removepoint"></a><code>st_removepoint(line_string: geometry, index: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Removes the Point at the given 0-based index and returns the modified LineString geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_removerepeatedpoints"></a><code>st_removerepeatedpoints(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry with repeated points removed.</p>
+</span></td></tr>
+<tr><td><a name="st_removerepeatedpoints"></a><code>st_removerepeatedpoints(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry with repeated points removed, within the given distance tolerance.</p>
 </span></td></tr>
 <tr><td><a name="st_reverse"></a><code>st_reverse(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified geometry by reversing the order of its vertices.</p>
 </span></td></tr>
