@@ -798,7 +798,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="generate_subscripts"></a><code>generate_subscripts(array: anyelement[], dim: <a href="int.html">int</a>, reverse: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
 <p>When reverse is true, the series is returned in reverse order.</p>
 </span></td></tr>
-<tr><td><a name="information_schema._pg_expandarray"></a><code>information_schema._pg_expandarray(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows with an index</p>
+<tr><td><a name="information_schema._pg_expandarray"></a><code>information_schema._pg_expandarray(input: anyelement[]) &rarr; tuple{anyelement AS x, int AS n}</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows with an index</p>
 </span></td></tr>
 <tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
 </span></td></tr>
@@ -822,7 +822,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="pg_get_keywords"></a><code>pg_get_keywords() &rarr; tuple{string AS word, string AS catcode, string AS catdesc}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the keywords known to the SQL parser.</p>
 </span></td></tr>
-<tr><td><a name="unnest"></a><code>unnest(anyelement[], anyelement[], anyelement[]...) &rarr; tuple</code></td><td><span class="funcdesc"><p>Returns the input arrays as a set of rows</p>
+<tr><td><a name="unnest"></a><code>unnest(anyelement[], anyelement[], anyelement[]...) &rarr; tuple{anyelement AS unnest, anyelement AS unnest, anyelement AS unnest}</code></td><td><span class="funcdesc"><p>Returns the input arrays as a set of rows</p>
 </span></td></tr>
 <tr><td><a name="unnest"></a><code>unnest(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows</p>
 </span></td></tr></tbody>

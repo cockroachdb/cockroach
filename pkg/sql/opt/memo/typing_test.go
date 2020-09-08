@@ -202,14 +202,21 @@ func TestTypingAggregateAssumptions(t *testing.T) {
 
 			// Check for fixed return types.
 			retType := overload.ReturnType(nil)
-			if retType == tree.UnknownReturnType {
-				t.Errorf("return type is not fixed for %s: %+v", name, overload.Types.Types())
-			}
 
+			// As per rule 3, max and min have slightly different rules. We allow
+			// max and min to have non-fixed return types to allow defining aggregate
+			// overloads that have container types as arguments.
 			if name == "min" || name == "max" {
-				if retType != overload.Types.Types()[0] {
+				// Evaluate the return typer.
+				types := overload.Types.Types()
+				retType = overload.InferReturnTypeFromInputArgTypes(types)
+				if retType != types[0] {
 					t.Errorf("return type differs from arg type for %s: %+v", name, overload.Types.Types())
 				}
+				continue
+			}
+			if retType == tree.UnknownReturnType {
+				t.Errorf("return type is not fixed for %s: %+v", name, overload.Types.Types())
 			}
 		}
 	}
