@@ -509,9 +509,9 @@ type minInt16HashAgg struct {
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
-	curAgg int64
+	curAgg int16
 	// col points to the output vector we are updating.
-	col coldata.Int64s
+	col coldata.Int16s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
@@ -524,7 +524,7 @@ var _ aggregateFunc = &minInt16HashAgg{}
 func (a *minInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
-	a.col = vec.Int64()
+	a.col = vec.Int16()
 	a.Reset()
 }
 
@@ -551,7 +551,7 @@ func (a *minInt16HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -575,7 +575,7 @@ func (a *minInt16HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -588,7 +588,7 @@ func (a *minInt16HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -612,7 +612,7 @@ func (a *minInt16HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -661,9 +661,9 @@ type minInt32HashAgg struct {
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
-	curAgg int64
+	curAgg int32
 	// col points to the output vector we are updating.
-	col coldata.Int64s
+	col coldata.Int32s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
@@ -676,7 +676,7 @@ var _ aggregateFunc = &minInt32HashAgg{}
 func (a *minInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
-	a.col = vec.Int64()
+	a.col = vec.Int32()
 	a.Reset()
 }
 
@@ -703,7 +703,7 @@ func (a *minInt32HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -727,7 +727,7 @@ func (a *minInt32HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -740,7 +740,7 @@ func (a *minInt32HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -764,7 +764,7 @@ func (a *minInt32HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -855,7 +855,7 @@ func (a *minInt64HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -879,7 +879,7 @@ func (a *minInt64HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -892,7 +892,7 @@ func (a *minInt64HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -916,7 +916,7 @@ func (a *minInt64HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -1967,9 +1967,9 @@ type maxInt16HashAgg struct {
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
-	curAgg int64
+	curAgg int16
 	// col points to the output vector we are updating.
-	col coldata.Int64s
+	col coldata.Int16s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
@@ -1982,7 +1982,7 @@ var _ aggregateFunc = &maxInt16HashAgg{}
 func (a *maxInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
-	a.col = vec.Int64()
+	a.col = vec.Int16()
 	a.Reset()
 }
 
@@ -2009,7 +2009,7 @@ func (a *maxInt16HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -2033,7 +2033,7 @@ func (a *maxInt16HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -2046,7 +2046,7 @@ func (a *maxInt16HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -2070,7 +2070,7 @@ func (a *maxInt16HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -2119,9 +2119,9 @@ type maxInt32HashAgg struct {
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
-	curAgg int64
+	curAgg int32
 	// col points to the output vector we are updating.
-	col coldata.Int64s
+	col coldata.Int32s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
@@ -2134,7 +2134,7 @@ var _ aggregateFunc = &maxInt32HashAgg{}
 func (a *maxInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
-	a.col = vec.Int64()
+	a.col = vec.Int32()
 	a.Reset()
 }
 
@@ -2161,7 +2161,7 @@ func (a *maxInt32HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -2185,7 +2185,7 @@ func (a *maxInt32HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -2198,7 +2198,7 @@ func (a *maxInt32HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -2222,7 +2222,7 @@ func (a *maxInt32HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -2313,7 +2313,7 @@ func (a *maxInt64HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -2337,7 +2337,7 @@ func (a *maxInt64HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
@@ -2350,7 +2350,7 @@ func (a *maxInt64HashAgg) Compute(
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
 								val := col.Get(i)
-								a.curAgg = int64(val)
+								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
@@ -2374,7 +2374,7 @@ func (a *maxInt64HashAgg) Compute(
 								}
 
 								if cmp {
-									a.curAgg = int64(candidate)
+									a.curAgg = candidate
 								}
 							}
 						}
