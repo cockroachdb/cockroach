@@ -111,11 +111,11 @@
 </span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: anyenum) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: anyenum) &rarr; anyenum</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: box2d) &rarr; box2d</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><a name="max"></a><code>max(arg1: collatedstring{*}) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><a name="max"></a><code>max(arg1: collatedstring{*}) &rarr; collatedstring{*}</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
 <tr><td><a name="max"></a><code>max(arg1: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
@@ -155,11 +155,11 @@
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: anyenum) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: anyenum) &rarr; anyenum</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: box2d) &rarr; box2d</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><a name="min"></a><code>min(arg1: collatedstring{*}) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><a name="min"></a><code>min(arg1: collatedstring{*}) &rarr; collatedstring{*}</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><a name="min"></a><code>min(arg1: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
