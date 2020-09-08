@@ -18,6 +18,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -27,9 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/sortkeys"
 )
 
-// DescriptorTableRow represents a descriptor from table system.descriptor.
+// DescriptorTableRow represents a descriptor from table `system.descriptor`.
 type DescriptorTableRow struct {
 	ID        int64
 	DescBytes []byte
@@ -51,6 +54,9 @@ type NamespaceTable []NamespaceTableRow
 // namespaceReverseMap is the inverse of the namespace map stored in table
 // `system.namespace`.
 type namespaceReverseMap map[int64][]descpb.NameInfo
+
+// JobsTable represents data read from `system.jobs`.
+type JobsTable []jobs.JobMetadata
 
 func newDescGetter(ctx context.Context, rows []DescriptorTableRow) (catalog.MapDescGetter, error) {
 	pg := catalog.MapDescGetter{}
@@ -78,8 +84,28 @@ func newNamespaceMap(rows []NamespaceTableRow) namespaceReverseMap {
 	return res
 }
 
-// Examine runs a suite of consistency checks over the descriptor table.
+// Examine runs a suite of consistency checks over system tables.
 func Examine(
+	ctx context.Context,
+	descTable DescriptorTable,
+	namespaceTable NamespaceTable,
+	jobsTable JobsTable,
+	verbose bool,
+	stdout io.Writer,
+) (ok bool, err error) {
+	descOk, err := ExamineDescriptors(ctx, descTable, namespaceTable, verbose, stdout)
+	if err != nil {
+		return false, err
+	}
+	jobsOk, err := ExamineJobs(ctx, descTable, jobsTable, verbose, stdout)
+	if err != nil {
+		return false, err
+	}
+	return descOk && jobsOk, nil
+}
+
+// ExamineDescriptors runs a suite of checks over the descriptor table.
+func ExamineDescriptors(
 	ctx context.Context,
 	descTable DescriptorTable,
 	namespaceTable NamespaceTable,
@@ -218,6 +244,47 @@ func Examine(
 		fmt.Fprintf(
 			stdout, "Descriptor %d: has namespace row(s) %+v but no descriptor\n", id, ni)
 		problemsFound = true
+	}
+	return !problemsFound, err
+}
+
+// ExamineJobs runs a suite of consistency checks over the system.jobs table.
+func ExamineJobs(
+	ctx context.Context,
+	descTable DescriptorTable,
+	jobsTable JobsTable,
+	verbose bool,
+	stdout io.Writer,
+) (ok bool, err error) {
+	fmt.Fprintf(stdout, "Examining %d running jobs...\n", len(jobsTable))
+	descGetter, err := newDescGetter(ctx, descTable)
+	if err != nil {
+		return false, err
+	}
+	problemsFound := false
+	for _, j := range jobsTable {
+		if verbose {
+			fmt.Fprintf(stdout, "Processing job %d\n", j.ID)
+		}
+		if j.Payload.Type() != jobspb.TypeSchemaChangeGC {
+			continue
+		}
+		missingTables := make([]int64, 0)
+		for _, table := range j.Progress.GetSchemaChangeGC().Tables {
+			if table.Status == jobspb.SchemaChangeGCProgress_DELETED {
+				continue
+			}
+			_, tableExists := descGetter[table.ID]
+			if !tableExists {
+				missingTables = append(missingTables, int64(table.ID))
+			}
+		}
+		if len(missingTables) > 0 {
+			problemsFound = true
+			sortkeys.Int64s(missingTables)
+			fmt.Fprintf(stdout, "job %d: schema change GC refers to missing table descriptor(s) %+v\n",
+				j.ID, missingTables)
+		}
 	}
 	return !problemsFound, nil
 }
