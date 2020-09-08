@@ -412,3 +412,35 @@ user root
 
 statement ok
 USE defaultdb
+
+# Ensure that when we create a schema, we do not modify the database privileges.
+subtest create_schema_does_not_modify_db_privileges
+
+user root
+
+statement ok
+CREATE DATABASE new_db
+
+statement ok
+USE new_db
+
+user testuser
+
+statement ok
+USE new_db
+
+statement error user testuser does not have CREATE privilege on database new_db
+CREATE TABLE new_db.public.bar()
+
+user root
+
+statement ok
+CREATE SCHEMA AUTHORIZATION testuser
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database new_db
+CREATE TABLE new_db.public.bar()
+
+statement ok
+CREATE TABLE new_db.testuser.bar()
