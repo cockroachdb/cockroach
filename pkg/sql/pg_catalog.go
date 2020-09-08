@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
@@ -414,19 +413,11 @@ CREATE TABLE pg_catalog.pg_attrdef (
 				// pg_attrdef only expects rows for columns with default values.
 				return nil
 			}
-			var defSrc *tree.DString
-			expr, err := parser.ParseExpr(*column.DefaultExpr)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.DefaultExpr, &p.semaCtx, tree.FmtPGCatalog)
 			if err != nil {
-				defSrc = tree.NewDString(*column.DefaultExpr)
-			} else {
-				expr, err := expr.TypeCheck(ctx, &p.semaCtx, column.Type)
-				if err != nil {
-					return err
-				}
-				ctx := tree.NewFmtCtx(tree.FmtPGAttrdefAdbin)
-				ctx.FormatNode(expr)
-				defSrc = tree.NewDString(ctx.String())
+				return err
 			}
+			defSrc := tree.NewDString(displayExpr)
 			return addRow(
 				h.ColumnOid(table.GetID(), column.ID),               // oid
 				tableOid(table.GetID()),                             // adrelid
@@ -978,7 +969,7 @@ func populateTableConstraints(
 			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
 				return err
 			}
-			displayExpr, err := schemaexpr.FormatExprForDisplayWithoutTypeAnnotations(ctx, table, con.Details, &p.semaCtx)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, con.Details, &p.semaCtx, tree.FmtPGCatalog)
 			if err != nil {
 				return err
 			}

@@ -1957,7 +1957,7 @@ CREATE TABLE crdb_internal.table_columns (
 						col := &columns[i]
 						defStr := tree.DNull
 						if col.DefaultExpr != nil {
-							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *col.DefaultExpr, &p.semaCtx)
+							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *col.DefaultExpr, &p.semaCtx, tree.FmtParsable)
 							if err != nil {
 								return err
 							}

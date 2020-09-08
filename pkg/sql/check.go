@@ -44,7 +44,7 @@ func validateCheckExpr(
 	ie *InternalExecutor,
 	txn *kv.Txn,
 ) error {
-	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx)
+	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, tree.FmtParsable)
 	if err != nil {
 		return err
 	}
@@ -357,7 +357,7 @@ func checkMutationInput(
 		} else if !res && checkVals[colIdx] != tree.DNull {
 			// Failed to satisfy CHECK constraint, so unwrap the serialized
 			// check expression to display to the user.
-			expr, err := schemaexpr.FormatExprForDisplay(ctx, tabDesc, checks[i].Expr, semaCtx)
+			expr, err := schemaexpr.FormatExprForDisplay(ctx, tabDesc, checks[i].Expr, semaCtx, tree.FmtParsable)
 			if err != nil {
 				// If we ran into an error trying to read the check constraint, wrap it
 				// and return.

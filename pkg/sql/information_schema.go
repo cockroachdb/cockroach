@@ -391,7 +391,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				}
 				colDefault := tree.DNull
 				if column.DefaultExpr != nil {
-					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.DefaultExpr, &p.semaCtx)
+					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.DefaultExpr, &p.semaCtx, tree.FmtParsable)
 					if err != nil {
 						return err
 					}
@@ -399,7 +399,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				}
 				colComputed := emptyString
 				if column.ComputeExpr != nil {
-					colExpr, err := schemaexpr.FormatExprForDisplayWithoutTypeAnnotations(ctx, table, *column.ComputeExpr, &p.semaCtx)
+					colExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *column.ComputeExpr, &p.semaCtx, tree.FmtSimple)
 					if err != nil {
 						return err
 					}

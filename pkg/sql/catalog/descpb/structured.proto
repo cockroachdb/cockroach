@@ -113,8 +113,8 @@ message ColumnDescriptor {
   // Default expression to use to populate the column on insert if no
   // value is provided. Note that it is not correct to use DefaultExpr
   // as output to display to a user. User defined types within DefaultExpr
-  // have been serialized in a internal format. Instead, format the result
-  // of DeserializeTableDescExpr.
+  // have been serialized in a internal format. Instead, use one of the
+  // schemaexpr.FormatExpr* functions.
   optional string default_expr = 5;
   reserved 9;
   optional bool hidden = 6 [(gogoproto.nullable) = false];
@@ -126,8 +126,8 @@ message ColumnDescriptor {
   // Expression to use to compute the value of this column if this is a
   // computed column. Note that it is not correct to use ComputeExpr
   // as output to display to a user. User defined types within ComputeExpr
-  // have been serialized in a internal format. Instead, format the result
-  // of DeserializeTableDescExpr.
+  // have been serialized in a internal format. Instead, use one of the
+  // schemaexpr.FormatExpr* functions.
   optional string compute_expr = 11;
   // PGAttributeNum must be accessed through the accessor, since it is set
   // lazily, it is incorrect to access it directly.
@@ -851,8 +851,8 @@ message TableDescriptor {
     // Expr is the expression that this check constraint represents.
     // Note that it is not correct to use Expr as output to display
     // to a user. User defined types within Expr have been serialized
-    // in a internal format. Instead, format the result of
-    // DeserializeTableDescExpr.
+    // in a internal format. Instead, use one of the schemaexpr.FormatExpr*
+    // functions.
     optional string expr = 1 [(gogoproto.nullable) = false];
     optional string name = 2 [(gogoproto.nullable) = false];
     optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];

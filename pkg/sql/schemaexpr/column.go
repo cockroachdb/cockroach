@@ -94,7 +94,7 @@ func FormatColumnForDisplay(
 	}
 	if desc.DefaultExpr != nil {
 		f.WriteString(" DEFAULT ")
-		defExpr, err := FormatExprForDisplay(ctx, tbl, *desc.DefaultExpr, semaCtx)
+		defExpr, err := FormatExprForDisplay(ctx, tbl, *desc.DefaultExpr, semaCtx, tree.FmtParsable)
 		if err != nil {
 			return "", err
 		}
@@ -102,7 +102,7 @@ func FormatColumnForDisplay(
 	}
 	if desc.IsComputed() {
 		f.WriteString(" AS (")
-		compExpr, err := FormatExprForDisplay(ctx, tbl, *desc.ComputeExpr, semaCtx)
+		compExpr, err := FormatExprForDisplay(ctx, tbl, *desc.ComputeExpr, semaCtx, tree.FmtParsable)
 		if err != nil {
 			return "", err
 		}
