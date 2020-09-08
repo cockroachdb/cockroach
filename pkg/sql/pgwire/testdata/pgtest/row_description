@@ -300,18 +300,22 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-send
+send crdb_only
 Query {"String": "SET enable_experimental_alter_column_type_general = true"}
 ----
 
-until
+until crdb_only
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-send
+send crdb_only
 Query {"String": "ALTER TABLE tab3 ALTER COLUMN b TYPE STRING"}
+----
+
+send noncrdb_only
+Query {"String": "ALTER TABLE tab3 ALTER COLUMN b TYPE TEXT"}
 ----
 
 until
@@ -341,7 +345,7 @@ BindComplete
 until noncrdb_only ignore_table_oids
 RowDescription
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
 
 until crdb_only
 RowDescription
