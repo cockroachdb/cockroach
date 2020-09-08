@@ -31,11 +31,23 @@ func LineStringFromMultiPoint(g geo.Geometry) (geo.Geometry, error) {
 	if mp.NumPoints() == 1 {
 		return geo.Geometry{}, errors.Newf("a LineString must have at least 2 points")
 	}
-	lineString := geom.NewLineString(mp.Layout()).SetSRID(mp.SRID())
-	lineString, err = lineString.SetCoords(mp.Coords())
-	if err != nil {
-		return geo.Geometry{}, err
+	flatCoords := make([]float64, 0, mp.NumCoords()*mp.Stride())
+	var prevPoint *geom.Point
+	for i := 0; i < mp.NumPoints(); i++ {
+		p := mp.Point(i)
+		// Empty points in multipoints are replaced by the previous point.
+		// If the previous point does not exist, we append (0, 0, ...) coordinates.
+		if p.Empty() {
+			if prevPoint == nil {
+				prevPoint = geom.NewPointFlat(mp.Layout(), make([]float64, mp.Stride()))
+			}
+			flatCoords = append(flatCoords, prevPoint.FlatCoords()...)
+			continue
+		}
+		flatCoords = append(flatCoords, p.FlatCoords()...)
+		prevPoint = p
 	}
+	lineString := geom.NewLineStringFlat(mp.Layout(), flatCoords).SetSRID(mp.SRID())
 	return geo.MakeGeometryFromGeomT(lineString)
 }
 
