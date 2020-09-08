@@ -314,6 +314,17 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	}
 }
 
+func TestBackupRestoreSingleUserfile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
+	defer cleanupFn()
+
+	backupAndRestore(ctx, t, tc, []string{"userfile:///a"}, []string{"userfile:///a"}, numAccounts)
+}
+
 func TestBackupRestoreSingleNodeLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -831,12 +842,20 @@ func backupAndRestore(
 		}
 	}
 
-	// Start a new cluster to restore into.
-	{
+	uri, err := url.Parse(backupURIs[0])
+	require.NoError(t, err)
+	if uri.Scheme == "userfile" {
+		sqlDB.Exec(t, `CREATE DATABASE foo`)
+		sqlDB.Exec(t, `USE foo`)
+		sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
+		restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
+		restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM %s", restoreURIFmtString)
+		verifyRestoreData(t, sqlDB, restoreQuery, restoreURIArgs, numAccounts)
+	} else {
+		// Start a new cluster to restore into.
 		// If the backup is on nodelocal, we need to determine which node it's on.
 		// Othewise, default to 0.
 		backupNodeID := 0
-		uri, err := url.Parse(backupURIs[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -859,42 +878,53 @@ func backupAndRestore(
 		// Force the ID of the restored bank table to be different.
 		sqlDBRestore.Exec(t, `CREATE TABLE other.empty (a INT PRIMARY KEY)`)
 
-		var unused string
-		var restored struct {
-			rows, idx, bytes int64
-		}
-
 		restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
 		restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM %s", restoreURIFmtString)
-		sqlDBRestore.QueryRow(t, restoreQuery, restoreURIArgs...).Scan(
-			&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
-		)
-		approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
-		if max := approxBytes * 3; restored.bytes < approxBytes || restored.bytes > max {
-			t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, restored.bytes)
-		}
-		if expected := int64(numAccounts); restored.rows != expected {
-			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, restored.rows)
-		}
-		if expected := int64(numAccounts); restored.idx != expected {
-			t.Fatalf("expected %d idx rows for %d accounts, got %d", expected, numAccounts, restored.idx)
-		}
+		verifyRestoreData(t, sqlDBRestore, restoreQuery, restoreURIArgs, numAccounts)
+	}
+}
 
-		var rowCount int64
-		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
-		if rowCount != int64(numAccounts) {
-			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
-		}
+func verifyRestoreData(
+	t *testing.T,
+	sqlDB *sqlutils.SQLRunner,
+	restoreQuery string,
+	restoreURIArgs []interface{},
+	numAccounts int,
+) {
+	var unused string
+	var restored struct {
+		rows, idx, bytes int64
+	}
+	sqlDB.QueryRow(t, restoreQuery, restoreURIArgs...).Scan(
+		&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
+	)
 
-		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.bank@balance_idx`).Scan(&rowCount)
-		if rowCount != int64(numAccounts) {
-			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
-		}
+	approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
+	if max := approxBytes * 3; restored.bytes < approxBytes || restored.bytes > max {
+		t.Errorf("expected data size in [%d,%d] but was %d", approxBytes, max, restored.bytes)
+	}
+	if expected := int64(numAccounts); restored.rows != expected {
+		t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, restored.rows)
+	}
+	if expected := int64(numAccounts); restored.idx != expected {
+		t.Fatalf("expected %d idx rows for %d accounts, got %d", expected, numAccounts, restored.idx)
+	}
 
-		// Verify there's no /Table/51 - /Table/51/1 empty span.
-		{
-			var count int
-			sqlDBRestore.QueryRow(t, `
+	var rowCount int64
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
+	if rowCount != int64(numAccounts) {
+		t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
+	}
+
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank@balance_idx`).Scan(&rowCount)
+	if rowCount != int64(numAccounts) {
+		t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
+	}
+
+	// Verify there's no /Table/51 - /Table/51/1 empty span.
+	{
+		var count int
+		sqlDB.QueryRow(t, `
 			SELECT count(*) FROM crdb_internal.ranges
 			WHERE start_pretty = (
 				('/Table/' ||
@@ -904,9 +934,8 @@ func backupAndRestore(
 				'/1'
 			)
 		`, "data", "bank").Scan(&count)
-			if count != 0 {
-				t.Fatal("unexpected span start at primary index")
-			}
+		if count != 0 {
+			t.Fatal("unexpected span start at primary index")
 		}
 	}
 }
