@@ -2949,19 +2949,19 @@ SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
     ARRAY[
       ST_GeomFromText('MULTIPOINT(50 70, 70 70, 70 50, 50 50, 50 70)')
-    ]);
+    ])
 
 statement error argument must be LINESTRING geometries
 SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
     ARRAY[
       'MULTIPOINT(50 70, 70 70, 70 50, 50 50, 50 70)'
-    ]);
+    ])
 
 statement error argument must be LINESTRING geometries
 SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
-    ARRAY['abc']);
+    ARRAY['abc'])
 
 # SRID set on shell but not interior rings
 statement error mixed SRIDs are not allowed
@@ -2969,7 +2969,7 @@ SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326),
     ARRAY[
       ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)')
-    ]);
+    ])
 
 # SRIDs on shell and interior ring are unmatched
 statement error mixed SRIDs are not allowed
@@ -2977,7 +2977,7 @@ SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326),
     ARRAY[
       ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)', 3857)
-    ]);
+    ])
 
 # SRIDs on interior rings are unmatched
 statement error mixed SRIDs are not allowed
@@ -2986,35 +2986,35 @@ SELECT ST_MakePolygon(
     ARRAY[
       ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)', 4326),
       ST_GeomFromText('LINESTRING(60 60, 75 60, 75 45, 60 45, 60 60)', 3857)
-    ]);
+    ])
 
 statement error Polygon LinearRing at position 1 is not closed
-SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 70)'));
+SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 70)'))
 
 statement error Polygon LinearRing must have at least 4 points, found 3 at position 1
-SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 40 80)'));
+SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 40 80)'))
 
 statement error Polygon LinearRing at position 2 is not closed
 SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
     ARRAY[
       ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 60)')
-    ]);
+    ])
 
 statement error Polygon LinearRing must have at least 4 points, found 3 at position 2
 SELECT ST_MakePolygon(
     ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
     ARRAY[
       ST_GeomFromText('LINESTRING(50 70, 70 70, 50 70)')
-    ]);
+    ])
 
 query T
-SELECT ST_AsEWKT(ST_MakePolygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)')));
+SELECT ST_AsEWKT(ST_MakePolygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)')))
 ----
 POLYGON ((75 29, 77 29, 77 29, 75 29))
 
 query T
-SELECT ST_AsEWKT(ST_MakePolygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)', 4326)));
+SELECT ST_AsEWKT(ST_MakePolygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)', 4326)))
 ----
 SRID=4326;POLYGON ((75 29, 77 29, 77 29, 75 29))
 
@@ -3023,7 +3023,7 @@ SELECT ST_AsEWKT(ST_MakePolygon(
       ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
       ARRAY[
         ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)')
-      ]));
+      ]))
 ----
 POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70))
 
@@ -3033,7 +3033,7 @@ SELECT ST_AsEWKT(ST_MakePolygon(
       ARRAY[
         ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)'),
         ST_GeomFromText('LINESTRING(60 60, 75 60, 75 45, 60 45, 60 60)')
-      ]));
+      ]))
 ----
 POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70), (60 60, 75 60, 75 45, 60 45, 60 60))
 
@@ -3042,7 +3042,7 @@ SELECT ST_AsEWKT(ST_MakePolygon(
       ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326),
       ARRAY[
         ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)', 4326)
-      ]));
+      ]))
 ----
 SRID=4326;POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70))
 
@@ -4610,7 +4610,7 @@ FROM ( VALUES
   ('LINESTRING(0 0, 1 1, 2 2)', 'POINT(5 5)', 3),
   ('LINESTRING(0 0, 1 1, 2 2)', 'POINT(5 5)', -1)
   )
- t(ls, p, i) ;
+ t(ls, p, i)
 ----
 LINESTRING (5 5, 0 0, 1 1, 2 2)
 LINESTRING (0 0, 1 1, 5 5, 2 2)
@@ -4623,7 +4623,7 @@ SELECT
 FROM ( VALUES
   ('LINESTRING(0 0, 1 1, 2 2)', 'POINT(5 5)')
   )
- t(ls, p) ;
+ t(ls, p)
 ----
 LINESTRING (0 0, 1 1, 2 2, 5 5)
 
@@ -4639,7 +4639,7 @@ FROM ( VALUES
   ('LINESTRING(0 0, 1 1, 2 2, 3 3)', -1, 'POINT(10 10)'),
   ('LINESTRING(0 0, 1 1, 2 2, 3 3)', -4, 'POINT(10 10)')
   )
- t(ls, i, p) ;
+ t(ls, i, p)
 ----
 LINESTRING (10 10, -1 3)
 LINESTRING (0 0, 1 1, 10 10)
@@ -4656,7 +4656,7 @@ FROM ( VALUES
   ('LINESTRING(0 0, 1 1, 2 2, 3 3)', 0),
   ('LINESTRING(0 0, 1 1, 2 2, 3 3)', 1)
   )
- t(ls, i) ;
+ t(ls, i)
 ----
 LINESTRING (0 0, 1 1)
 LINESTRING (1 1, 2 2, 3 3)
@@ -4673,7 +4673,7 @@ FROM ( VALUES
   ('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4, 5 5)', 1.5),
   ('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4, 5 5)', 3.0)
   )
- t(ls, i) ;
+ t(ls, i)
 ----
 LINESTRING (0 0, 1 1, 2 2, 3 3, 4 4)
 LINESTRING (0 0, 1 1, 2 2, 3 3, 4 4, 5 5)
@@ -4711,7 +4711,7 @@ FROM ( VALUES
   ('MULTIPOINT EMPTY'),
   ('MULTIPOINT (1 1, 2 2, 3 3)')
   )
- t(mp) ;
+ t(mp)
 ----
 LINESTRING EMPTY
 LINESTRING (1 1, 2 2, 3 3)
@@ -4726,7 +4726,7 @@ FROM ( VALUES
   ('MULTILINESTRING ((1 2, 3 4), (5 6, 7 8)))'),
   ('POINT (1 2)')
   )
- t(g) ;
+ t(g)
 ----
 LINESTRING (1 2, 3 4, 5 6)
 MULTILINESTRING ((1 2, 3 4), (5 6, 7 8))
