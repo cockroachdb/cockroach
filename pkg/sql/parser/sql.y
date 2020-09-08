@@ -30,6 +30,7 @@ import (
     "go/constant"
 
     "github.com/cockroachdb/cockroach/pkg/geo/geopb"
+    "github.com/cockroachdb/cockroach/pkg/roachpb"
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -5169,8 +5170,8 @@ targets:
   {
     tenID := uint64($2.int64())
     if tenID == 0 {
-		  return setErr(sqllex, errors.New("invalid tenant ID"))
-	  }
+      return setErr(sqllex, errors.New("invalid tenant ID"))
+    }
     $$.val = tree.TargetList{Tenant: roachpb.MakeTenantID(tenID)}
   }
 | DATABASE name_list
