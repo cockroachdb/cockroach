@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
@@ -108,12 +109,21 @@ func isBadGeogCovering(cu s2.CellUnion) bool {
 }
 
 // InvertedIndexKeys implements the GeographyIndex interface.
-func (i *s2GeographyIndex) InvertedIndexKeys(c context.Context, g geo.Geography) ([]Key, error) {
+func (i *s2GeographyIndex) InvertedIndexKeys(
+	c context.Context, g geo.Geography,
+) ([]Key, geopb.BoundingBox, error) {
 	r, err := g.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
-		return nil, err
+		return nil, geopb.BoundingBox{}, err
 	}
-	return invertedIndexKeys(c, geogCovererWithBBoxFallback{rc: i.rc, g: g}, r), nil
+	rect := g.BoundingRect()
+	bbox := geopb.BoundingBox{
+		LoX: rect.Lng.Lo,
+		HiX: rect.Lng.Hi,
+		LoY: rect.Lat.Lo,
+		HiY: rect.Lat.Hi,
+	}
+	return invertedIndexKeys(c, geogCovererWithBBoxFallback{rc: i.rc, g: g}, r), bbox, nil
 }
 
 // Covers implements the GeographyIndex interface.

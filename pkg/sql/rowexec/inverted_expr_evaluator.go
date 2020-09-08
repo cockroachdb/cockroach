@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/errors"
 )
 
 // The abstractions in this file help with evaluating (batches of)
@@ -218,13 +219,27 @@ type exprAndSetIndex struct {
 	setIndex int
 }
 
+type exprAndSetIndexSorter []exprAndSetIndex
+
+// Implement sort.Interface. Sorts in increasing order of exprIndex.
+func (esis exprAndSetIndexSorter) Len() int      { return len(esis) }
+func (esis exprAndSetIndexSorter) Swap(i, j int) { esis[i], esis[j] = esis[j], esis[i] }
+func (esis exprAndSetIndexSorter) Less(i, j int) bool {
+	return esis[i].exprIndex < esis[j].exprIndex
+}
+
 // invertedSpanRoutingInfo contains the list of exprAndSetIndex pairs that
 // need rows from the inverted index span. A []invertedSpanRoutingInfo with
 // spans that are sorted and non-overlapping is used to route an added row to
 // all the expressions and sets that need that row.
 type invertedSpanRoutingInfo struct {
-	span                invertedSpan
+	span invertedSpan
+	// Sorted in increasing order of exprIndex.
 	exprAndSetIndexList []exprAndSetIndex
+	// A de-duped and sorted list of exprIndex values from exprAndSetIndexList.
+	// Used for pre-filtering, since the pre-filter is applied on a per
+	// exprIndex basis.
+	exprIndexList []int
 }
 
 // invertedSpanRoutingInfosByEndKey is a slice of invertedSpanRoutingInfo that
@@ -240,18 +255,35 @@ func (s invertedSpanRoutingInfosByEndKey) Less(i, j int) bool {
 	return bytes.Compare(s[i].span.End, s[j].span.End) < 0
 }
 
+// preFilterer is the single method from DatumsToInvertedExpr that is relevant here.
+type preFilterer interface {
+	PreFilter(enc invertedexpr.EncInvertedVal, preFilters []interface{}, result []bool) (bool, error)
+}
+
 // batchedInvertedExprEvaluator is for evaluating one or more expressions. The
 // batched evaluator can be reused by calling reset(). In the build phase,
 // append expressions directly to exprs. A nil expression is permitted, and is
 // just a placeholder that will result in a nil []KeyIndex in evaluate().
-// init() must be called before calls to addIndexRow() -- it builds the
+// init() must be called before calls to {prepare}addIndexRow() -- it builds the
 // fragmentedSpans used for routing the added rows.
 type batchedInvertedExprEvaluator struct {
-	exprs []*invertedexpr.SpanExpressionProto
+	filterer preFilterer
+	exprs    []*invertedexpr.SpanExpressionProto
+
+	// The pre-filtering state for each expression. When pre-filtering, this
+	// is the same length as exprs.
+	preFilterState []interface{}
+	// The parameters and result of pre-filtering for an inverted row are
+	// kept in this temporary state.
+	tempPreFilters      []interface{}
+	tempPreFilterResult []bool
+
 	// The evaluators for all the exprs.
 	exprEvals []*invertedExprEvaluator
 	// Spans here are in sorted order and non-overlapping.
 	fragmentedSpans []invertedSpanRoutingInfo
+	// The routing index computed by prepareAddIndexRow
+	routingIndex int
 
 	// Temporary state used during initialization.
 	routingSpans       []invertedSpanRoutingInfo
@@ -337,6 +369,17 @@ func (b *batchedInvertedExprEvaluator) fragmentPendingSpans(
 			// All spans in pendingSpans contribute to exprAndSetIndexList.
 			nextSpan.exprAndSetIndexList =
 				append(nextSpan.exprAndSetIndexList, pendingSpans[i].exprAndSetIndexList...)
+		}
+		// Sort the exprAndSetIndexList, since we need to use it to initialize the
+		// exprIndexList before we push nextSpan onto b.fragmentedSpans.
+		sort.Sort(exprAndSetIndexSorter(nextSpan.exprAndSetIndexList))
+		nextSpan.exprIndexList = make([]int, 0, len(nextSpan.exprAndSetIndexList))
+		for i := range nextSpan.exprAndSetIndexList {
+			length := len(nextSpan.exprIndexList)
+			exprIndex := nextSpan.exprAndSetIndexList[i].exprIndex
+			if length == 0 || nextSpan.exprIndexList[length-1] != exprIndex {
+				nextSpan.exprIndexList = append(nextSpan.exprIndexList, exprIndex)
+			}
 		}
 		b.fragmentedSpans = append(b.fragmentedSpans, nextSpan)
 		pendingSpans = pendingSpans[removeSize:]
@@ -436,18 +479,65 @@ func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 	return b.coveringSpans
 }
 
+// prepareAddIndexRow must be called prior to addIndexRow to do any
+// pre-filtering. The return value indicates whether addIndexRow should be
+// called.
 // TODO(sumeer): if this will be called in non-decreasing order of enc,
 // use that to optimize the binary search.
-func (b *batchedInvertedExprEvaluator) addIndexRow(
-	enc invertedexpr.EncInvertedVal, keyIndex KeyIndex,
-) {
+func (b *batchedInvertedExprEvaluator) prepareAddIndexRow(
+	enc invertedexpr.EncInvertedVal,
+) (bool, error) {
 	i := sort.Search(len(b.fragmentedSpans), func(i int) bool {
 		return bytes.Compare(b.fragmentedSpans[i].span.Start, enc) > 0
 	})
 	i--
-	for _, elem := range b.fragmentedSpans[i].exprAndSetIndexList {
-		b.exprEvals[elem.exprIndex].addIndexRow(elem.setIndex, keyIndex)
+	b.routingIndex = i
+	if b.filterer != nil {
+		exprIndexList := b.fragmentedSpans[i].exprIndexList
+		if len(exprIndexList) > cap(b.tempPreFilters) {
+			b.tempPreFilters = make([]interface{}, len(exprIndexList))
+			b.tempPreFilterResult = make([]bool, len(exprIndexList))
+		} else {
+			b.tempPreFilters = b.tempPreFilters[:len(exprIndexList)]
+			b.tempPreFilterResult = b.tempPreFilterResult[:len(exprIndexList)]
+		}
+		for j := range exprIndexList {
+			b.tempPreFilters[j] = b.preFilterState[exprIndexList[j]]
+		}
+		return b.filterer.PreFilter(enc, b.tempPreFilters, b.tempPreFilterResult)
 	}
+	return true, nil
+}
+
+// addIndexRow must be called iff prepareAddIndexRow returned true.
+func (b *batchedInvertedExprEvaluator) addIndexRow(keyIndex KeyIndex) error {
+	i := b.routingIndex
+	if b.filterer != nil {
+		exprIndexes := b.fragmentedSpans[i].exprIndexList
+		exprSetIndexes := b.fragmentedSpans[i].exprAndSetIndexList
+		if len(exprIndexes) != len(b.tempPreFilterResult) {
+			return errors.Errorf("non-matching lengths of tempPreFilterResult and exprIndexes")
+		}
+		// Coordinated iteration over exprIndexes and exprSetIndexes.
+		j := 0
+		for k := range exprSetIndexes {
+			elem := exprSetIndexes[k]
+			if elem.exprIndex > exprIndexes[j] {
+				j++
+				if exprIndexes[j] != elem.exprIndex {
+					return errors.Errorf("non-matching expr indexes")
+				}
+			}
+			if b.tempPreFilterResult[j] {
+				b.exprEvals[elem.exprIndex].addIndexRow(elem.setIndex, keyIndex)
+			}
+		}
+	} else {
+		for _, elem := range b.fragmentedSpans[i].exprAndSetIndexList {
+			b.exprEvals[elem.exprIndex].addIndexRow(elem.setIndex, keyIndex)
+		}
+	}
+	return nil
 }
 
 func (b *batchedInvertedExprEvaluator) evaluate() [][]KeyIndex {
@@ -463,6 +553,7 @@ func (b *batchedInvertedExprEvaluator) evaluate() [][]KeyIndex {
 
 func (b *batchedInvertedExprEvaluator) reset() {
 	b.exprs = b.exprs[:0]
+	b.preFilterState = b.preFilterState[:0]
 	b.exprEvals = b.exprEvals[:0]
 	b.fragmentedSpans = b.fragmentedSpans[:0]
 	b.routingSpans = b.routingSpans[:0]
