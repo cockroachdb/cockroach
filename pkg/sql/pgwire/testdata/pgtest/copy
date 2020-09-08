@@ -1,4 +1,14 @@
 send
+Query {"String": "DROP TABLE IF EXISTS t"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
 Query {"String": "CREATE TABLE t (i INT8, t TEXT)"}
 ----
 
