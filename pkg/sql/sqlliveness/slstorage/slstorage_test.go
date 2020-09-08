@@ -12,13 +12,16 @@ package slstorage_test
 
 import (
 	"context"
+	"math/rand"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -28,8 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -286,4 +292,143 @@ func TestStorage(t *testing.T) {
 		require.Truef(t, now.Before(maxTime), "%v < %v", now, maxTime)
 		require.Truef(t, !now.Equal(noJitterTime), "%v != %v", now, noJitterTime)
 	})
+}
+
+func TestConcurrentAccessesAndEvictions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	dbName := t.Name()
+	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
+	schema := strings.Replace(systemschema.SqllivenessTableSchema,
+		`CREATE TABLE system.sqlliveness`,
+		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
+	tDB.Exec(t, schema)
+
+	timeSource := timeutil.NewManualTime(t0)
+	clock := hlc.NewClock(func() int64 {
+		return timeSource.Now().UnixNano()
+	}, base.DefaultMaxClockOffset)
+	settings := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	slstorage.CacheSize.Override(&settings.SV, 10)
+	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
+		dbName, timeSource.NewTimer)
+
+	const (
+		runsPerWorker   = 100
+		workers         = 100
+		expiration      = time.Minute
+		controllerSteps = 100
+	)
+	type session struct {
+		id         sqlliveness.SessionID
+		expiration hlc.Timestamp
+	}
+	var (
+		state = struct {
+			syncutil.RWMutex
+			liveSessions map[int]struct{}
+			sessions     []session
+		}{
+			liveSessions: make(map[int]struct{}),
+		}
+		makeSession = func(t *testing.T) {
+			state.Lock()
+			defer state.Unlock()
+			s := session{
+				id:         sqlliveness.SessionID(uuid.MakeV4().String()),
+				expiration: clock.Now().Add(expiration.Nanoseconds(), 0),
+			}
+			require.NoError(t, storage.Insert(ctx, s.id, s.expiration))
+			state.liveSessions[len(state.sessions)] = struct{}{}
+			state.sessions = append(state.sessions, s)
+		}
+		updateSession = func(t *testing.T) {
+			state.Lock()
+			defer state.Unlock()
+			now := clock.Now()
+			i := -1
+			for i = range state.liveSessions {
+			}
+			if i == -1 {
+				return
+			}
+			newExp := now.Add(expiration.Nanoseconds(), 0)
+			s := &state.sessions[i]
+			s.expiration = newExp
+			alive, err := storage.Update(ctx, s.id, s.expiration)
+			require.True(t, alive)
+			require.NoError(t, err)
+		}
+		moveTimeForward = func(t *testing.T) {
+			dur := time.Duration((1.25 - rand.Float64()) * float64(expiration.Nanoseconds()))
+			state.Lock()
+			defer state.Unlock()
+			timeSource.Advance(dur)
+			now := clock.Now()
+			for i := range state.liveSessions {
+				if state.sessions[i].expiration.Less(now) {
+					delete(state.liveSessions, i)
+				}
+			}
+		}
+		step = func(t *testing.T) {
+			r := rand.Float64()
+			switch {
+			case r < .5:
+				makeSession(t)
+			case r < .75:
+				updateSession(t)
+			default:
+				moveTimeForward(t)
+			}
+		}
+		pickSession = func() (int, sqlliveness.SessionID) {
+			state.RLock()
+			defer state.RUnlock()
+			i := rand.Intn(len(state.sessions))
+			return i, state.sessions[i].id
+		}
+		// checkIsAlive verifies that if false was returned that the session really
+		// no longer is alive.
+		checkIsAlive = func(t *testing.T, i int, isAlive bool) {
+			state.RLock()
+			defer state.RUnlock()
+			now := clock.Now()
+			if exp := state.sessions[i].expiration; !isAlive && !exp.Less(now) {
+				t.Errorf("expiration for %v (%v) is not less than %v %v", i, exp, now, isAlive)
+			}
+		}
+		wg        sync.WaitGroup
+		runWorker = func() {
+			defer wg.Done()
+			for i := 0; i < runsPerWorker; i++ {
+				time.Sleep(time.Microsecond)
+				i, id := pickSession()
+				isAlive, err := storage.IsAlive(ctx, id)
+				assert.NoError(t, err)
+				checkIsAlive(t, i, isAlive)
+			}
+		}
+	)
+
+	// Ensure that there's at least one session.
+	makeSession(t)
+	// Run the workers.
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go runWorker()
+	}
+	// Step the random steps.
+	for i := 0; i < controllerSteps; i++ {
+		step(t)
+	}
+	wg.Wait()
 }

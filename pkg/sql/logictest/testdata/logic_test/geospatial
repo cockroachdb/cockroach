@@ -4662,6 +4662,23 @@ LINESTRING (0 0, 1 1)
 LINESTRING (1 1, 2 2, 3 3)
 LINESTRING (0 0, 2 2, 3 3)
 
+subtest remove_repeated_points_test
+
+query T
+SELECT
+  ST_AsText(ST_RemoveRepeatedPoints(ls::geometry, i::float))
+FROM ( VALUES
+  ('LINESTRING(0 0, 0 0, 1 1, 2 2, 3 3, 4 4)', 0.0),
+  ('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4, 5 5)', 1.4),
+  ('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4, 5 5)', 1.5),
+  ('LINESTRING(0 0, 1 1, 2 2, 3 3, 4 4, 5 5)', 3.0)
+  )
+ t(ls, i) ;
+----
+LINESTRING (0 0, 1 1, 2 2, 3 3, 4 4)
+LINESTRING (0 0, 1 1, 2 2, 3 3, 4 4, 5 5)
+LINESTRING (0 0, 2 2, 4 4)
+LINESTRING (0 0, 3 3)
 
 subtest reverse_test
 
@@ -4684,6 +4701,36 @@ POINT EMPTY                                            POINT EMPTY
 POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
 POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
+
+subtest linefrommultipoint_test
+
+query T
+SELECT
+  ST_AsText(ST_LineFromMultiPoint(mp::geometry))
+FROM ( VALUES
+  ('MULTIPOINT EMPTY'),
+  ('MULTIPOINT (1 1, 2 2, 3 3)')
+  )
+ t(mp) ;
+----
+LINESTRING EMPTY
+LINESTRING (1 1, 2 2, 3 3)
+
+subtest linemerge
+
+query T
+SELECT
+  ST_AsText(ST_LineMerge(g::geometry))
+FROM ( VALUES
+  ('MULTILINESTRING ((1 2, 3 4), (3 4, 5 6))'),
+  ('MULTILINESTRING ((1 2, 3 4), (5 6, 7 8)))'),
+  ('POINT (1 2)')
+  )
+ t(g) ;
+----
+LINESTRING (1 2, 3 4, 5 6)
+MULTILINESTRING ((1 2, 3 4), (5 6, 7 8))
+GEOMETRYCOLLECTION EMPTY
 
 subtest public_schema_resolution
 

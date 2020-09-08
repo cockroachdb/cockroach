@@ -82,7 +82,7 @@ type Storage struct {
 	newTimer   func() timeutil.TimerI
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		started bool
 		// liveSessions caches the current view of expirations of live sessions.
 		liveSessions *cache.UnorderedCache
@@ -168,9 +168,9 @@ func (s *Storage) Start(ctx context.Context) {
 // true, the session may no longer be alive, but if it returns false, the
 // session definitely is not alive.
 func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive bool, err error) {
-	s.mu.RLock()
+	s.mu.Lock()
 	if _, ok := s.mu.deadSessions.Get(sid); ok {
-		s.mu.RUnlock()
+		s.mu.Unlock()
 		s.metrics.IsAliveCacheHits.Inc(1)
 		return false, nil
 	}
@@ -179,7 +179,7 @@ func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive
 		expiration := expiration.(hlc.Timestamp)
 		// The record exists and is valid.
 		if s.clock.Now().Less(expiration) {
-			s.mu.RUnlock()
+			s.mu.Unlock()
 			s.metrics.IsAliveCacheHits.Inc(1)
 			return true, nil
 		}
@@ -213,7 +213,7 @@ func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive
 		}
 		return live, nil
 	})
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	res := <-resChan
 	if res.Err != nil {
 		return false, err

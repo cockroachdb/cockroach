@@ -15,9 +15,112 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
+
+func TestLineStringFromMultiPoint(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected string
+	}{
+		{"MULTIPOINT EMPTY", "LINESTRING EMPTY"},
+		{"MULTIPOINT (1 2, 3 4, 5 6)", "LINESTRING (1 2, 3 4, 5 6)"},
+		// The following test case mirrors PostGIS behavior of duplicating the previous point for
+		// EMPTY points, although the correct behavior would probably be to omit the duplicate.
+		// FIXME https://github.com/cockroachdb/cockroach/issues/53997
+		//{"MULTIPOINT (1 2, EMPTY, 3 4)", "LINESTRING (1 2, 1 2, 3 4)"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			srid := geopb.SRID(4000)
+			g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.wkt), srid, true)
+			require.NoError(t, err)
+
+			result, err := LineStringFromMultiPoint(g)
+			require.NoError(t, err)
+			wkt, err := geo.SpatialObjectToWKT(result.SpatialObject(), 0)
+			require.NoError(t, err)
+			require.EqualValues(t, tc.expected, wkt)
+			require.EqualValues(t, srid, result.SRID())
+		})
+	}
+
+	errorTestCases := []struct {
+		wkt string
+	}{
+		{"MULTIPOINT (1 1)"},
+		{"POINT EMPTY"},
+		{"POINT (1 1)"},
+		{"LINESTRING (1 1, 2 2)"},
+		{"MULTILINESTRING ((1 1, 2 2))"},
+		{"POLYGON ((1 2, 3 4, 5 6, 1 2))"},
+		{"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)))"},
+		{"GEOMETRYCOLLECTION (MULTIPOINT (1 1, 2 2))"},
+	}
+
+	t.Run("Errors on invalid input", func(t *testing.T) {
+		for _, tc := range errorTestCases {
+			t.Run(tc.wkt, func(t *testing.T) {
+				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.wkt), geopb.DefaultGeometrySRID, true)
+				require.NoError(t, err)
+
+				_, err = LineStringFromMultiPoint(g)
+				require.Error(t, err)
+			})
+		}
+	})
+}
+
+func TestLineMerge(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected string
+	}{
+		{"MULTILINESTRING EMPTY", "MULTILINESTRING EMPTY"},
+		{
+			"MULTILINESTRING ((1 2, 2 3, 3 4), (3 4, 4 5, 5 6), (5 6, 6 7, 7 8))",
+			"LINESTRING (1 2, 2 3, 3 4, 4 5, 5 6, 6 7, 7 8)",
+		},
+		{
+			"MULTILINESTRING ((1 2, 2 3, 3 4), EMPTY, (3 4, 4 5, 5 6), EMPTY, (5 6, 6 7, 7 8))",
+			"LINESTRING (1 2, 2 3, 3 4, 4 5, 5 6, 6 7, 7 8)",
+		},
+		{
+			"MULTILINESTRING ((1 2, 2 3, 3 4), (3 4, 4 5, 5 6), (6 7, 7 8, 8 9), (8 9, 9 10, 10 11))",
+			"MULTILINESTRING ((1 2, 2 3, 3 4, 4 5, 5 6), (6 7, 7 8, 8 9, 9 10, 10 11))",
+		},
+		{"POINT EMPTY", "POINT EMPTY"},
+		{"POINT (1 1)", "GEOMETRYCOLLECTION EMPTY"},
+		{"MULTIPOINT EMPTY", "MULTIPOINT EMPTY"},
+		{"MULTIPOINT (1 1, 2 2)", "GEOMETRYCOLLECTION EMPTY"},
+		{"LINESTRING EMPTY", "LINESTRING EMPTY"},
+		{"LINESTRING (1 2, 3 4)", "LINESTRING (1 2, 3 4)"},
+		{"POLYGON EMPTY", "POLYGON EMPTY"},
+		{"POLYGON ((1 2, 3 4, 5 6, 1 2))", "GEOMETRYCOLLECTION EMPTY"},
+		{"MULTIPOLYGON EMPTY", "MULTIPOLYGON EMPTY"},
+		{"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)))", "GEOMETRYCOLLECTION EMPTY"},
+		{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION EMPTY"},
+		{"GEOMETRYCOLLECTION (MULTILINESTRING ((1 2, 2 3, 3 4)))", "GEOMETRYCOLLECTION EMPTY"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			srid := geopb.SRID(4000)
+			g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.wkt), srid, true)
+			require.NoError(t, err)
+
+			result, err := LineMerge(g)
+			require.NoError(t, err)
+			wkt, err := geo.SpatialObjectToWKT(result.SpatialObject(), 0)
+			require.NoError(t, err)
+			require.EqualValues(t, tc.expected, wkt)
+			require.EqualValues(t, srid, result.SRID())
+		})
+	}
+}
 
 func TestAddPoint(t *testing.T) {
 	testCases := []struct {
