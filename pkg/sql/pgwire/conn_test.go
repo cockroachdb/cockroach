@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -183,6 +184,174 @@ func TestConn(t *testing.T) {
 	if err := g.Wait(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestConnMessageTooBig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	// Form a 1MB string.
+	longStr := "a"
+	for len(longStr) < 1<<20 {
+		longStr += longStr
+	}
+	shortStr := "b"
+
+	testCases := []struct {
+		desc                           string
+		shortStrAction                 func(*pgx.Conn) error
+		longStrAction                  func(*pgx.Conn) error
+		expectedErrRegex               string
+		expectConnectionUsableAfterErr bool
+	}{
+		{
+			desc: "simple query",
+			shortStrAction: func(c *pgx.Conn) error {
+				_, err := c.Exec(fmt.Sprintf(`SELECT '%s'`, shortStr))
+				return err
+			},
+			longStrAction: func(c *pgx.Conn) error {
+				_, err := c.Exec(fmt.Sprintf(`SELECT '%s'`, longStr))
+				return err
+			},
+			expectedErrRegex:               "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
+			expectConnectionUsableAfterErr: true,
+		},
+		{
+			desc: "prepared statement has string",
+			shortStrAction: func(c *pgx.Conn) error {
+				_, err := c.Prepare("short_statement", fmt.Sprintf("SELECT $1::string, '%s'", shortStr))
+				if err != nil {
+					return err
+				}
+				r := c.QueryRow("short_statement", shortStr)
+				var str string
+				return r.Scan(&str, &str)
+			},
+			longStrAction: func(c *pgx.Conn) error {
+				_, err := c.Prepare("long_statement", fmt.Sprintf("SELECT $1::string, '%s'", longStr))
+				if err != nil {
+					return err
+				}
+				r := c.QueryRow("long_statement", shortStr)
+				var str string
+				return r.Scan(&str, &str)
+			},
+			expectedErrRegex:               "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
+			expectConnectionUsableAfterErr: false,
+		},
+		{
+			desc: "prepared statement with argument",
+			shortStrAction: func(c *pgx.Conn) error {
+				_, err := c.Prepare("short_arg", "SELECT $1::string")
+				if err != nil {
+					return err
+				}
+				r := c.QueryRow("short_arg", shortStr)
+				var str string
+				return r.Scan(&str)
+			},
+			longStrAction: func(c *pgx.Conn) error {
+				_, err := c.Prepare("long_arg", "SELECT $1::string")
+				if err != nil {
+					return err
+				}
+				r := c.QueryRow("long_arg", longStr)
+				var str string
+				return r.Scan(&str)
+			},
+			expectedErrRegex:               "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
+			expectConnectionUsableAfterErr: false,
+		},
+	}
+
+	pgURL, cleanup := sqlutils.PGUrl(
+		t,
+		s.ServingSQLAddr(),
+		"TestBigClientMessage",
+		url.User(security.RootUser),
+	)
+	defer cleanup()
+
+	t.Run("allow big messages", func(t *testing.T) {
+		for _, tc := range testCases {
+			t.Run(tc.desc, func(t *testing.T) {
+				conf, err := pgx.ParseConnectionString(pgURL.String())
+				require.NoError(t, err)
+
+				t.Run("short string", func(t *testing.T) {
+					c, err := pgx.Connect(conf)
+					require.NoError(t, err)
+					defer func() { _ = c.Close() }()
+					require.NoError(t, tc.shortStrAction(c))
+				})
+
+				t.Run("long string", func(t *testing.T) {
+					c, err := pgx.Connect(conf)
+					require.NoError(t, err)
+					defer func() { _ = c.Close() }()
+					require.NoError(t, tc.longStrAction(c))
+				})
+			})
+		}
+	})
+
+	// Set the cluster setting to be less than 1MB.
+	_, err := mainDB.Exec(`SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '32 KiB'`)
+	require.NoError(t, err)
+
+	t.Run("disallow big messages", func(t *testing.T) {
+		for _, tc := range testCases {
+			t.Run(tc.desc, func(t *testing.T) {
+				conf, err := pgx.ParseConnectionString(pgURL.String())
+				require.NoError(t, err)
+
+				t.Run("short string", func(t *testing.T) {
+					c, err := pgx.Connect(conf)
+					require.NoError(t, err)
+					defer func() { _ = c.Close() }()
+					require.NoError(t, tc.shortStrAction(c))
+				})
+
+				t.Run("long string", func(t *testing.T) {
+					var gotErr error
+					var c *pgx.Conn
+					defer func() {
+						if c != nil {
+							_ = c.Close()
+						}
+					}()
+					// Allow the cluster setting to propagate.
+					testutils.SucceedsSoon(t, func() error {
+						var err error
+						c, err = pgx.Connect(conf)
+						require.NoError(t, err)
+
+						err = tc.longStrAction(c)
+						if err != nil {
+							gotErr = err
+							return nil
+						}
+						defer func() { _ = c.Close() }()
+						return errors.Newf("expected error")
+					})
+
+					// We should still be able to use the connection afterwards.
+					require.Error(t, gotErr)
+					require.Regexp(t, tc.expectedErrRegex, gotErr.Error())
+
+					if tc.expectConnectionUsableAfterErr {
+						_, err = c.Exec("SELECT 1")
+						require.NoError(t, err)
+					}
+				})
+			})
+		}
+	})
 }
 
 // processPgxStartup processes the first few queries that the pgx driver
