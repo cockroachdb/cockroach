@@ -240,7 +240,16 @@ func (bc *baseCache) Get(key interface{}) (value interface{}, ok bool) {
 		bc.access(e)
 		return e.Value, true
 	}
-	return
+	return nil, false
+}
+
+// StealthyGet looks up a key's value from the cache but does not consider it an
+// "access" (with respect to the policy).
+func (bc *baseCache) StealthyGet(key interface{}) (value interface{}, ok bool) {
+	if e := bc.store.get(key); e != nil {
+		return e.Value, true
+	}
+	return nil, false
 }
 
 // Del removes the provided key from the cache.
