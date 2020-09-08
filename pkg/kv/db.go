@@ -188,7 +188,7 @@ func DefaultDBContext(stopper *stop.Stopper) DBContext {
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
 		// TODO(tbg): this is ugly. Force callers to pass in an SQLIDContainer.
-		NodeID:  base.NewSQLIDContainer(0, &c, true /* exposed */),
+		NodeID:  base.NewSQLIDContainer(0, &c),
 		Stopper: stopper,
 	}
 }

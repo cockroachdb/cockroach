@@ -3348,7 +3348,11 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDInt(tree.DInt(ctx.NodeID.Get())), nil
+				dNodeID := tree.DNull
+				if nodeID, ok := ctx.NodeID.OptionalNodeID(); ok {
+					dNodeID = tree.NewDInt(tree.DInt(nodeID))
+				}
+				return dNodeID, nil
 			},
 			Info:       "Returns the node ID.",
 			Volatility: tree.VolatilityStable,
