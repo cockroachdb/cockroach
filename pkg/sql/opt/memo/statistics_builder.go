@@ -640,7 +640,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// unconstrained scan over a partial index. The selectivity of the partial
 	// index predicate expression must be applied to the underlying table stats.
 	if scan.Constraint == nil && scan.InvertedConstraint == nil {
-		notNullCols := relProps.NotNullCols
+		notNullCols := relProps.NotNullCols.Copy()
 		// Add any not-null columns from the predicate constraints.
 		for i := range pred {
 			if c := pred[i].ScalarProps().Constraints; c != nil {
@@ -761,7 +761,7 @@ func (sb *statisticsBuilder) constrainScan(
 
 	// Set null counts to 0 for non-nullable columns
 	// ---------------------------------------------
-	notNullCols := relProps.NotNullCols
+	notNullCols := relProps.NotNullCols.Copy()
 	if constraint != nil {
 		// Add any not-null columns from this constraint.
 		notNullCols.UnionWith(constraint.ExtractNotNullCols(sb.evalCtx))
