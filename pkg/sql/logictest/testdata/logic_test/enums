@@ -465,6 +465,22 @@ SELECT * FROM enum_default
 1 hello true
 2 hello true
 
+query T
+SELECT
+  pg_get_expr(d.adbin, d.adrelid)
+FROM
+  pg_attribute AS a
+  LEFT JOIN pg_attrdef AS d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+  LEFT JOIN pg_type AS t ON a.atttypid = t.oid
+  LEFT JOIN pg_collation AS c ON
+    a.attcollation = c.oid AND a.attcollation != t.typcollation
+WHERE
+  a.attrelid = 'enum_default'::REGCLASS
+  AND NOT a.attisdropped
+  AND attname = 'y'
+----
+'hello'::public.greeting
+
 # Test that enum default values are formatted in human readable ways.
 query TT
 SHOW CREATE enum_default

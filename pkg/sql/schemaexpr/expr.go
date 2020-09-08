@@ -111,29 +111,21 @@ func ExtractColumnIDs(desc catalog.TableDescriptor, rootExpr tree.Expr) (TableCo
 	return colIDs, err
 }
 
-// FormatExprForDisplay formats a schema expression string for display by adding
-// type annotations and resolving user defined types.
+// FormatExprForDisplay formats a schema expression string for display. It
+// accepts formatting flags to control things like showing type annotations or
+// type casts.
 func FormatExprForDisplay(
-	ctx context.Context, desc catalog.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	exprStr string,
+	semaCtx *tree.SemaContext,
+	fmtFlags tree.FmtFlags,
 ) (string, error) {
 	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx)
 	if err != nil {
 		return "", err
 	}
-	return tree.SerializeForDisplay(expr), nil
-}
-
-// FormatExprForDisplayWithoutTypeAnnotations formats a schema expression string
-// for display, similar to FormatExprForDisplay, but does not add type
-// annotations.
-func FormatExprForDisplayWithoutTypeAnnotations(
-	ctx context.Context, desc catalog.TableDescriptor, exprStr string, semaCtx *tree.SemaContext,
-) (string, error) {
-	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, semaCtx)
-	if err != nil {
-		return "", err
-	}
-	return tree.AsString(expr), nil
+	return tree.AsStringWithFlags(expr, fmtFlags), nil
 }
 
 func deserializeExprForFormatting(

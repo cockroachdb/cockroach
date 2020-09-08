@@ -620,7 +620,7 @@ WHERE n.nspname = 'public'
 oid         relname  adrelid  adnum  adbin           adsrc           pg_get_expr
 1666782879  t1       55       4      12              12              12
 841178406   t2       56       2      unique_rowid()  unique_rowid()  unique_rowid()
-2186255414  t3       57       3      'FOO'           'FOO'           'FOO'
+2186255414  t3       57       3      'FOO'::STRING   'FOO'::STRING   'FOO'::STRING
 2186255409  t3       57       4      unique_rowid()  unique_rowid()  unique_rowid()
 581442133   mv1      59       2      unique_rowid()  unique_rowid()  unique_rowid()
 
@@ -839,7 +839,7 @@ WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
 oid         conname    connamespace  contype  condef
-370295511   check_c    2332901747    c        CHECK ((c != ''))
+370295511   check_c    2332901747    c        CHECK ((c != ''::STRING))
 2143281868  fk         2332901747    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
 2792001267  check_b    2332901747    c        CHECK ((b > 11))
 3572320190  primary    2332901747    p        PRIMARY KEY (p ASC)
@@ -919,12 +919,12 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
-conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin     consrc     condef
-check_c    NULL     NULL       NULL       NULL       NULL       (c != '')  (c != '')  CHECK ((c != ''))
-check_b    NULL     NULL       NULL       NULL       NULL       (b > 11)   (b > 11)   CHECK ((b > 11))
-primary    NULL     NULL       NULL       NULL       NULL       NULL       NULL       PRIMARY KEY (p ASC)
-t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL       NULL       UNIQUE (a ASC)
-index_key  NULL     NULL       NULL       NULL       NULL       NULL       NULL       UNIQUE (b ASC, c ASC)
+conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin             consrc             condef
+check_c    NULL     NULL       NULL       NULL       NULL       (c != ''::STRING)  (c != ''::STRING)  CHECK ((c != ''::STRING))
+check_b    NULL     NULL       NULL       NULL       NULL       (b > 11)           (b > 11)           CHECK ((b > 11))
+primary    NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
+t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
+index_key  NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (b ASC, c ASC)
 
 query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
@@ -2080,7 +2080,7 @@ WHERE n.nspname = 'public'
 ----
 1666782879  t1   12
 841178406   t2   unique_rowid()
-2186255414  t3   'FOO'
+2186255414  t3   'FOO'::STRING
 2186255409  t3   unique_rowid()
 581442133   mv1  unique_rowid()
 
@@ -2699,7 +2699,7 @@ WHERE
   AND NOT a.attisdropped
   AND attname = 'x'
 ----
-'howdy'
+'howdy'::STRING
 
 # Regression test for limits on virtual index scans. (#53522)
 
