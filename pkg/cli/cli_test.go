@@ -1423,7 +1423,6 @@ Available Commands:
   statement-diag    commands for managing statement diagnostics bundles
   auth-session      log in and out of HTTP sessions
   node              list, inspect, drain or remove nodes
-  dump              dump sql tables
 
   nodelocal         upload and delete nodelocal files
   userfile          upload, list and delete user scoped files

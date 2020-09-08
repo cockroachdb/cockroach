@@ -49,6 +49,8 @@ Dump SQL tables of a cockroach database. If the table name
 is omitted, dump all tables in the database.
 `,
 	RunE: MaybeDecorateGRPCError(runDump),
+	Deprecated: "cockroach dump will be removed in a subsequent release.\n" +
+		"For details, see: https://github.com/cockroachdb/cockroach/issues/54040",
 }
 
 // We accept versions that are strictly newer than v2.1.0-alpha.20180416
