@@ -195,6 +195,57 @@
     (MakeWithPrivate $id)
 )
 
+# ConvertAntiToLeftJoin converts an anti join to a left join with the same
+# ON condition, wraps the expression in a Select to remove rows that matched
+# the ON condition, and then projects out the left side columns.
+# For example (assuming x is a not-null column in b):
+#
+#   SELECT * FROM a WHERE NOT EXISTS (
+#     SELECT * FROM b WHERE ST_Intersects(a.geom, b.geom)
+#   );
+#
+# is converted to:
+#
+#   SELECT a.* FROM a LEFT JOIN b ON ST_Intersects(a.geom, b.geom)
+#   WHERE b.x IS NULL;
+#
+# Note that this transformation is not desirable in the general case, but it
+# is useful if there is a possibility of creating an inverted join (such as in
+# the above example). For this reason, we only perform this transformation if
+# CanGenerateInvertedJoin returns true.
+#
+# TODO(rytaft): It is possible that this transformation may be desirable in
+# more cases than just spatial queries. For example, it could enable the use
+# of a lookup join with a non-covering index.
+[ConvertAntiToLeftJoin, Explore]
+(AntiJoin
+    $left:*
+    $right:*
+    $on:* & (CanGenerateInvertedJoin $right $on)
+    $private:* & (NoJoinHints $private)
+)
+=>
+(Project
+    (Select
+        (LeftJoin
+            $left
+            $newRight:(EnsureNotNullColFromFilteredScan $right)
+            $on
+            $private
+        )
+        [
+            (FiltersItem
+                (Is
+                    $variable:(Variable (NotNullCol $newRight))
+                    (Null (TypeOf $variable))
+                )
+            )
+        ]
+    )
+    []
+    (OutputCols $left)
+)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]
@@ -218,9 +269,11 @@
 # GenerateInvertedJoins creates InvertedJoin operators for all inverted
 # indexes (of the Scan table) which allow it. See the GenerateInvertedJoins
 # custom function for more details.
-# TODO(rytaft): Add support for LeftJoin.
+# TODO(rytaft): Add support for LeftJoin, SemiJoin, and AntiJoin. Currently
+# these are supported by first converting them to InnerJoin using the rules
+# ConvertSemiToInnerJoin, ConvertLeftToInnerJoin, and ConvertAntiToLeftJoin.
 [GenerateInvertedJoins, Explore]
-(InnerJoin | SemiJoin | AntiJoin
+(InnerJoin
     $left:*
     (Scan $scanPrivate:*) &
         (IsCanonicalScan $scanPrivate) &
@@ -233,9 +286,8 @@
 
 # GenerateInvertedJoinsFromSelect is similar to GenerateInvertedJoins, but
 # applies when the input is a Select.
-# TODO(rytaft): Add support for LeftJoin.
 [GenerateInvertedJoinsFromSelect, Explore]
-(InnerJoin | SemiJoin | AntiJoin
+(InnerJoin
     $left:*
     (Select
         (Scan $scanPrivate:*) &
