@@ -44,12 +44,6 @@ func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
-// _COPYVAL_MAYBE_CAST is the template function for copying the second argument
-// into the first one, possibly performing a cast in the process.
-func _COPYVAL_MAYBE_CAST(_, _ string) bool {
-	colexecerror.InternalError(errors.AssertionFailedf(""))
-}
-
 // */}}
 
 func newMin_AGGKINDAggAlloc(
@@ -279,14 +273,14 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _H
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
 			val := col.Get(i)
-			_COPYVAL_MAYBE_CAST(a.curAgg, val)
+			execgen.COPYVAL(a.curAgg, val)
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
 			candidate := col.Get(i)
 			_ASSIGN_CMP(cmp, candidate, a.curAgg, _, col, _)
 			if cmp {
-				_COPYVAL_MAYBE_CAST(a.curAgg, candidate)
+				execgen.COPYVAL(a.curAgg, candidate)
 			}
 		}
 	}
