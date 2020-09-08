@@ -162,7 +162,6 @@ var enabledDjangoTests = []string{
 }
 
 var djangoBlocklists = blocklistsForVersion{
-	{"v19.2", "djangoBlocklist19_2", djangoBlocklist19_2, "djangoIgnoreList19_2", djangoIgnoreList19_2},
 	{"v20.1", "djangoBlocklist20_1", djangoBlocklist20_1, "djangoIgnoreList20_1", djangoIgnoreList20_1},
 	{"v20.2", "djangoBlocklist20_2", djangoBlocklist20_2, "djangoIgnoreList20_2", djangoIgnoreList20_2},
 }
@@ -172,50 +171,9 @@ var djangoBlocklist20_2 = blocklist{}
 
 var djangoBlocklist20_1 = blocklist{}
 
-var djangoBlocklist19_2 = blocklist{
-	// TODO (rohany): The postgres_tests suite within Django is not in a automatically
-	//  runnable state right now.
-	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_and_empty_result":                                 "41334",
-	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_and_general":                                      "41334",
-	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_and_on_only_false_values":                         "41334",
-	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_and_on_only_true_values":                          "41334",
-	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_or_empty_result":                                  "41334",
-	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_or_general":                                       "41334",
-	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_or_on_only_false_values":                          "41334",
-	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_or_on_only_true_values":                           "41334",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_corr_empty_result":                                 "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_corr_general":                                      "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_covar_pop_empty_result":                            "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_covar_pop_general":                                 "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_covar_pop_sample":                                  "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_covar_pop_sample_empty_result":                     "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_avgx_empty_result":                            "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_avgx_general":                                 "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_avgx_with_related_obj_and_number_as_argument": "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_avgy_empty_result":                            "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_avgy_general":                                 "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_count_empty_result":                           "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_count_general":                                "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_intercept_empty_result":                       "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_intercept_general":                            "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_r2_empty_result":                              "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_r2_general":                                   "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_slope_empty_result":                           "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_slope_general":                                "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_sxx_empty_result":                             "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_sxx_general":                                  "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_sxy_empty_result":                             "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_sxy_general":                                  "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_syy_empty_result":                             "41274",
-	//"postgres_tests.test_aggregates.TestStatisticsAggregate.test_regr_syy_general":                                  "41274",
-	//"postgres_tests.test_array.TestOtherTypesExactQuerying.test_exact_decimals":                                     "23468",
-}
-
 var djangoIgnoreList20_2 = djangoIgnoreList20_1
 
-var djangoIgnoreList20_1 = djangoIgnoreList19_2
-
-var djangoIgnoreList19_2 = blocklist{
+var djangoIgnoreList20_1 = blocklist{
 	"expressions.tests.BasicExpressionsTests.test_boolean_expression_combined":   "unknown",
 	"inspectdb.tests.InspectDBTestCase.test_attribute_name_not_python_keyword":   "unknown",
 	"inspectdb.tests.InspectDBTestCase.test_digits_column_name_introspection":    "unknown",
