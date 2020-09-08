@@ -28,6 +28,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var validTableDesc = &descpb.Descriptor{
+	Union: &descpb.Descriptor_Table{
+		Table: &descpb.TableDescriptor{
+			Name: "t", ID: 1, ParentID: 2,
+			Columns: []descpb.ColumnDescriptor{
+				{Name: "col", ID: 1, Type: types.Int},
+			},
+			NextColumnID: 2,
+			Families: []descpb.ColumnFamilyDescriptor{
+				{ID: 0, Name: "f", ColumnNames: []string{"col"}, ColumnIDs: []descpb.ColumnID{1}, DefaultColumnID: 1},
+			},
+			NextFamilyID: 1,
+			PrimaryIndex: descpb.IndexDescriptor{
+				Name:             tabledesc.PrimaryKeyIndexName,
+				ID:               1,
+				Unique:           true,
+				ColumnNames:      []string{"col"},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				ColumnIDs:        []descpb.ColumnID{1},
+				Version:          descpb.SecondaryIndexFamilyFormatVersion,
+			},
+			NextIndexID: 2,
+			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+				descpb.SystemAllowedPrivileges[keys.SqllivenessID], security.NodeUser),
+			FormatVersion:  descpb.InterleavedFormatVersion,
+			NextMutationID: 1,
+		},
+	},
+}
+
 func TestExamine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -111,36 +141,7 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 		},
 		{
 			descTable: doctor.DescriptorTable{
-				{
-					ID: 1,
-					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Table{
-						Table: &descpb.TableDescriptor{
-							Name: "t", ID: 1, ParentID: 2,
-							Columns: []descpb.ColumnDescriptor{
-								{Name: "col", ID: 1, Type: types.Int},
-							},
-							NextColumnID: 2,
-							Families: []descpb.ColumnFamilyDescriptor{
-								{ID: 0, Name: "f", ColumnNames: []string{"col"}, ColumnIDs: []descpb.ColumnID{1}, DefaultColumnID: 1},
-							},
-							NextFamilyID: 1,
-							PrimaryIndex: descpb.IndexDescriptor{
-								Name:             tabledesc.PrimaryKeyIndexName,
-								ID:               1,
-								Unique:           true,
-								ColumnNames:      []string{"col"},
-								ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-								ColumnIDs:        []descpb.ColumnID{1},
-								Version:          descpb.SecondaryIndexFamilyFormatVersion,
-							},
-							NextIndexID: 2,
-							Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-								descpb.SystemAllowedPrivileges[keys.SqllivenessID], security.NodeUser),
-							FormatVersion:  descpb.InterleavedFormatVersion,
-							NextMutationID: 1,
-						},
-					}}),
-				},
+				{ID: 1, DescBytes: toBytes(validTableDesc)},
 				{
 					ID: 2,
 					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
@@ -153,6 +154,7 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
+   Table   1: ParentID   2, ParentSchemaID 29, Name 't': namespace entry {ParentID:0 ParentSchemaID:29 Name:t} not found in draining names
    Table   1: ParentID   2, ParentSchemaID 29, Name 't': could not find name in namespace table
 `,
 		},
@@ -205,6 +207,67 @@ Descriptor 2: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:causes_err
 			},
 			expected: `Examining 0 descriptors and 1 namespace entries...
 Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
+`,
+		},
+		{
+			valid: true,
+			descTable: doctor.DescriptorTable{
+				{ID: 1, DescBytes: toBytes(validTableDesc)},
+				{
+					ID: 2,
+					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+					}}),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+			},
+			expected: "Examining 2 descriptors and 2 namespace entries...\n",
+		},
+		{
+			valid: true,
+			descTable: doctor.DescriptorTable{
+				{
+					ID: 1,
+					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{
+							ID:            1,
+							Name:          "db",
+							DrainingNames: []descpb.NameInfo{{Name: "db1"}, {Name: "db2"}},
+						},
+					}}),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db1"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 1},
+			},
+			expected: "Examining 1 descriptors and 3 namespace entries...\n",
+		},
+		{
+			valid: false,
+			descTable: doctor.DescriptorTable{
+				{
+					ID: 1,
+					DescBytes: toBytes(&descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{
+							ID:            1,
+							Name:          "db",
+							DrainingNames: []descpb.NameInfo{{Name: "db1"}, {Name: "db2"}, {Name: "db3"}},
+						},
+					}}),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db1"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 1},
+			},
+			expected: `Examining 1 descriptors and 3 namespace entries...
+Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names found [{ParentID:0 ParentSchemaID:0 Name:db3}]
 `,
 		},
 	}

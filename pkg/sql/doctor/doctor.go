@@ -154,19 +154,46 @@ func Examine(
 		// descriptor table.
 		delete(nMap, row.ID)
 
+		drainingNames := desc.GetDrainingNames()
 		var found bool
 		for _, n := range names {
 			if n.Name == desc.GetName() &&
 				n.ParentSchemaID == desc.GetParentSchemaID() &&
 				n.ParentID == desc.GetParentID() {
 				found = true
-				break
+				continue
+			}
+			var foundInDraining bool
+			for i, drain := range drainingNames {
+				// If the namespace entry does not correspond to the current descriptor
+				// name then it must be found in the descriptor draining names.
+				if drain.Name == n.Name &&
+					drain.ParentID == n.ParentID &&
+					drain.ParentSchemaID == n.ParentSchemaID {
+					// Delete this draining names entry from the list.
+					last := len(drainingNames) - 1
+					drainingNames[last], drainingNames[i] = drainingNames[i], drainingNames[last]
+					drainingNames = drainingNames[:last]
+					foundInDraining = true
+					break
+				}
+			}
+			if !foundInDraining {
+				fmt.Fprint(
+					stdout,
+					reportMsg(desc, "namespace entry %+v not found in draining names", n),
+				)
+				problemsFound = true
 			}
 		}
 		if !found {
 			fmt.Fprint(stdout, reportMsg(desc, "could not find name in namespace table"))
 			problemsFound = true
 			continue
+		}
+		if len(drainingNames) > 0 {
+			fmt.Fprint(stdout, reportMsg(desc, "extra draining names found %+v", drainingNames))
+			problemsFound = true
 		}
 		if verbose {
 			fmt.Fprint(stdout, reportMsg(desc, "processed"))
