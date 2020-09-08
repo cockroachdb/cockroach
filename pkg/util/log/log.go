@@ -80,6 +80,18 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 	logDepth(ctx, 1, Severity_INFO, format, args)
 }
 
+// VInfof logs to the INFO log depending on whether the specified verbosity
+// level is active.
+//
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf; a newline is
+// appended.
+func VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if V(level) {
+		logDepth(ctx, 1, Severity_INFO, format, args)
+	}
+}
+
 // Info logs to the INFO log.
 // It extracts log tags from the context and logs them along with the given
 // message.
