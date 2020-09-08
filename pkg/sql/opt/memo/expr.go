@@ -552,6 +552,11 @@ func (w *WithExpr) WithBindingID() opt.WithID {
 	return w.ID
 }
 
+// WithBindingID is used by factory.Replace as a uniform way to get the with ID.
+func (r *RecursiveCTEExpr) WithBindingID() opt.WithID {
+	return r.WithID
+}
+
 // initUnexportedFields is called when a project expression is created.
 func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 	inputProps := prj.Input.Relational()
