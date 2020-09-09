@@ -908,6 +908,13 @@ func createImportingDescriptors(
 		typesByID[types[i].GetID()] = types[i]
 	}
 
+	// Collect all databases, for doing lookups of whether a database is new when
+	// updating schema references later on.
+	dbsByID := make(map[descpb.ID]catalog.DatabaseDescriptor)
+	for i := range databases {
+		dbsByID[databases[i].GetID()] = databases[i]
+	}
+
 	if !details.PrepareCompleted {
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			if len(details.Tenants) > 0 {
@@ -930,7 +937,7 @@ func createImportingDescriptors(
 			existingDBsWithNewSchemas := make(map[descpb.ID][]catalog.SchemaDescriptor)
 			for _, sc := range writtenSchemas {
 				parentID := sc.GetParentID()
-				if _, ok := details.DescriptorRewrites[parentID]; !ok {
+				if _, ok := dbsByID[parentID]; !ok {
 					existingDBsWithNewSchemas[parentID] = append(existingDBsWithNewSchemas[parentID], sc)
 				}
 			}
