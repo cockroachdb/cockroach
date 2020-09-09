@@ -174,7 +174,7 @@ func (oc *optCatalog) ResolveSchema(
 	if !found {
 		if !name.ExplicitSchema && !name.ExplicitCatalog {
 			return nil, cat.SchemaName{}, pgerror.New(
-				pgcode.InvalidName, "no database specified",
+				pgcode.InvalidName, "no database or schema specified",
 			)
 		}
 		return nil, cat.SchemaName{}, pgerror.Newf(

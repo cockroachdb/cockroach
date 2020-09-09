@@ -1,7 +1,7 @@
 statement ok
 SET DATABASE = ""
 
-statement error no database specified
+statement error no database or schema specified
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement error invalid table name: test.""
