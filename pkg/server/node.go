@@ -377,6 +377,12 @@ func (n *Node) start(
 		log.Infof(ctxWithSpan, "new node allocated ID %d", newID)
 		span.Finish()
 		nodeID = newID
+
+		// We're joining via gossip, so we don't have a liveness record for
+		// ourselves yet. Let's create one while here.
+		if err := n.storeCfg.NodeLiveness.CreateLivenessRecord(ctx, nodeID); err != nil {
+			return err
+		}
 	}
 
 	// Inform the RPC context of the node ID.
@@ -1128,10 +1134,6 @@ func (n *Node) GossipSubscription(
 // Join implements the roachpb.InternalServer service. This is the
 // "connectivity" API; individual CRDB servers are passed in a --join list and
 // the join targets are addressed through this API.
-//
-// TODO(irfansharif): Perhaps we could opportunistically create a liveness
-// record here so as to no longer have to worry about the liveness record not
-// existing for a given node.
 func (n *Node) Join(
 	ctx context.Context, req *roachpb.JoinNodeRequest,
 ) (*roachpb.JoinNodeResponse, error) {
@@ -1150,6 +1152,18 @@ func (n *Node) Join(
 
 	storeID, err := allocateStoreIDs(ctx, nodeID, 1, n.storeCfg.DB)
 	if err != nil {
+		return nil, err
+	}
+
+	// We create a liveness record here for the joining node while here. We do
+	// so to maintain the invariant that there's always a liveness record for a
+	// given node. See `WriteInitialClusterData` for the other codepath where we
+	// manually create a liveness record to maintain this same invariant.
+	//
+	// NB: This invariant will be required for when we introduce long running
+	// migrations. See https://github.com/cockroachdb/cockroach/pull/48843 for
+	// details.
+	if err := n.storeCfg.NodeLiveness.CreateLivenessRecord(ctx, nodeID); err != nil {
 		return nil, err
 	}
 
