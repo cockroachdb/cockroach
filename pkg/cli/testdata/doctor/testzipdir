@@ -11,4 +11,6 @@ Examining 38 descriptors and 43 namespace entries...
 Descriptor 52: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:movr}] but no descriptor
 Examining 1 running jobs...
 job 587337426984566785: schema change GC refers to missing table descriptor(s) [59]
+	existing descriptors that still need to be dropped []
+	job 587337426984566785 can be safely deleted
 ERROR: validation failed
