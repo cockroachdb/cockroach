@@ -159,6 +159,49 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 	verifyEpochIncremented(t, mtc, 0)
 }
 
+// TestNodeLivenessAppearsAtStart tests that liveness records are written right
+// when nodes are added to the cluster (during bootstrap, and when connecting to
+// a bootstrapped node). The test verifies that the liveness records found are
+// what we expect them to be.
+func TestNodeLivenessAppearsAtStart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	// At this point StartTestCluster has waited for all nodes to become live.
+
+	// Verify liveness records exist for all nodes.
+	for i := 0; i < tc.NumServers(); i++ {
+		nodeID := tc.Server(i).NodeID()
+		nl := tc.Server(i).NodeLiveness().(*kvserver.NodeLiveness)
+
+		if live, err := nl.IsLive(nodeID); err != nil {
+			t.Fatal(err)
+		} else if !live {
+			t.Fatalf("node %d not live", nodeID)
+		}
+
+		livenessRec, err := nl.GetLiveness(nodeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if livenessRec.NodeID != nodeID {
+			t.Fatalf("expected node ID %d, got %d", nodeID, livenessRec.NodeID)
+		}
+		// We expect epoch=1 as nodes first create a liveness record at epoch=0,
+		// and then increment it during their first heartbeat.
+		if livenessRec.Epoch != 1 {
+			t.Fatalf("expected epoch=1, got epoch=%d", livenessRec.Epoch)
+		}
+		if !livenessRec.Membership.Active() {
+			t.Fatalf("expected membership=active, got membership=%s", livenessRec.Membership)
+		}
+	}
+}
+
 func verifyEpochIncremented(t *testing.T, mtc *multiTestContext, nodeIdx int) {
 	testutils.SucceedsSoon(t, func() error {
 		liveness, err := mtc.nodeLivenesses[nodeIdx].GetLiveness(mtc.gossips[nodeIdx].NodeID.Get())

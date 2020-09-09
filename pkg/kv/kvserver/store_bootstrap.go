@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -96,16 +97,34 @@ func WriteInitialClusterData(
 		roachpb.KeyValue{Key: keys.BootstrapVersionKey, Value: bootstrapVal})
 
 	// Initialize various sequence generators.
-	var nodeIDVal, storeIDVal, rangeIDVal roachpb.Value
-	nodeIDVal.SetInt(1) // This node has id 1.
+	var nodeIDVal, storeIDVal, rangeIDVal, livenessVal roachpb.Value
+
+	const firstNodeID = 1 // This node has id 1.
+	nodeIDVal.SetInt(firstNodeID)
 	// The caller will initialize the stores with ids 1..numStores.
 	storeIDVal.SetInt(int64(numStores))
 	// The last range has id = len(splits) + 1
 	rangeIDVal.SetInt(int64(len(splits) + 1))
+
+	// We're the the first node in the cluster, let's seed our liveness record.
+	// It's crucial that we do to maintain the invariant that there's always a
+	// liveness record for a given node. We'll do something similar through the
+	// join RPC when adding new nodes to an already bootstrapped cluster [1].
+	//
+	// We start off at epoch=0; when nodes heartbeat their liveness records for
+	// the first time it'll get incremented to epoch=1 [2].
+	//
+	// [1]: See `CreateLivenessRecord` and usages for where that happens.
+	// [2]: See `StartHeartbeat` for where that happens.
+	livenessRecord := kvserverpb.Liveness{NodeID: 1, Epoch: 0}
+	if err := livenessVal.SetProto(&livenessRecord); err != nil {
+		return err
+	}
 	initialValues = append(initialValues,
 		roachpb.KeyValue{Key: keys.NodeIDGenerator, Value: nodeIDVal},
 		roachpb.KeyValue{Key: keys.StoreIDGenerator, Value: storeIDVal},
-		roachpb.KeyValue{Key: keys.RangeIDGenerator, Value: rangeIDVal})
+		roachpb.KeyValue{Key: keys.RangeIDGenerator, Value: rangeIDVal},
+		roachpb.KeyValue{Key: keys.NodeLivenessKey(firstNodeID), Value: livenessVal})
 
 	// firstRangeMS is going to accumulate the stats for the first range, as we
 	// write the meta records for all the other ranges.

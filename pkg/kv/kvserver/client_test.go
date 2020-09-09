@@ -1009,6 +1009,15 @@ func (m *multiTestContext) addStore(idx int) {
 	}{
 		ch: make(chan struct{}),
 	}
+	if idx != 0 {
+		// Given multiTestContext does not make use of the join RPC, we have to
+		// manually write out liveness records for each node to maintain the
+		// invariant that all nodes have liveness records present before they
+		// start heartbeating.
+		if err := m.nodeLivenesses[idx].CreateLivenessRecord(ctx, nodeID); err != nil {
+			m.t.Fatal(err)
+		}
+	}
 	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, m.engines[idx:idx+1], func(ctx context.Context) {
 		now := clock.Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
