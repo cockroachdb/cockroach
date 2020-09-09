@@ -952,7 +952,7 @@ SET DATABASE = ""
 statement error at or near "@": syntax error
 GRANT ALL ON a.t@xyz TO readwrite
 
-statement error no database specified
+statement error no database or schema specified
 GRANT ALL ON * TO readwrite
 
 statement error pgcode 42P01 relation "a.tt" does not exist
