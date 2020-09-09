@@ -1818,6 +1818,7 @@ func columnBackfillInTxn(
 	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc); err != nil {
 		return err
 	}
+	defer backfiller.Close(ctx)
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error
@@ -1848,6 +1849,7 @@ func indexBackfillInTxn(
 	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc); err != nil {
 		return err
 	}
+	defer backfiller.Close(ctx)
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // columnBackfiller is a processor for backfilling columns.
@@ -30,6 +31,8 @@ type columnBackfiller struct {
 	backfill.ColumnBackfiller
 
 	desc *tabledesc.Immutable
+
+	columnBackfillerMon *mon.BytesMonitor
 }
 
 var _ execinfra.Processor = &columnBackfiller{}
@@ -43,6 +46,8 @@ func newColumnBackfiller(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*columnBackfiller, error) {
+	columnBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
+		"column-backfill-mon")
 	cb := &columnBackfiller{
 		desc: tabledesc.NewImmutable(spec.Table),
 		backfiller: backfiller{
@@ -53,17 +58,23 @@ func newColumnBackfiller(
 			output:      output,
 			spec:        spec,
 		},
+		columnBackfillerMon: columnBackfillerMon,
 	}
 	cb.backfiller.chunks = cb
 
-	if err := cb.ColumnBackfiller.InitForDistributedUse(ctx, flowCtx, cb.desc); err != nil {
+	if err := cb.ColumnBackfiller.InitForDistributedUse(ctx, flowCtx, cb.desc,
+		columnBackfillerMon); err != nil {
 		return nil, err
 	}
 
 	return cb, nil
 }
 
-func (cb *columnBackfiller) close(ctx context.Context) {}
+func (cb *columnBackfiller) close(ctx context.Context) {
+	cb.ColumnBackfiller.Close(ctx)
+	cb.columnBackfillerMon.Stop(ctx)
+}
+
 func (cb *columnBackfiller) prepare(ctx context.Context) error {
 	return nil
 }
