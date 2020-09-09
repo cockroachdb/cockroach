@@ -67,14 +67,7 @@ type phaseTimes [sessionNumPhases]time.Time
 // getServiceLatency returns the time between a query being received and the end
 // of run.
 func (p *phaseTimes) getServiceLatency() time.Duration {
-	// To have an accurate representation of how long it took to service this
-	// single query, we ignore the time between when parsing ends and planning
-	// begins. This avoids the latency being inflated in a few different cases:
-	// when there are internal transaction retries, and when multiple statements
-	// are submitted together, e.g. "SELECT 1; SELECT 2".
-	parseLatency := p[sessionEndParse].Sub(p[sessionQueryReceived])
-	planAndExecuteLatency := p[plannerEndExecStmt].Sub(p[plannerStartLogicalPlan])
-	return parseLatency + planAndExecuteLatency
+	return p[plannerEndExecStmt].Sub(p[sessionQueryReceived])
 }
 
 // getRunLatency returns the time between a query execution starting and ending.
