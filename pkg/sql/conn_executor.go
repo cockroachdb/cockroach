@@ -695,6 +695,11 @@ func (s *Server) newConnExecutorWithTxn(
 	appStats *appStats,
 ) *connExecutor {
 	ex := s.newConnExecutor(ctx, sd, sdDefaults, stmtBuf, clientComm, memMetrics, srvMetrics, appStats)
+	if txn.Type() == kv.LeafTxn {
+		// If the txn is a leaf txn it is not allowed to perform mutations. For
+		// sanity, set read only on the session.
+		ex.dataMutator.SetReadOnly(true)
+	}
 
 	// The new transaction stuff below requires active monitors and traces, so
 	// we need to activate the executor now.
@@ -712,7 +717,7 @@ func (s *Server) newConnExecutorWithTxn(
 		explicitTxn,
 		txn.ReadTimestamp().GoTime(),
 		nil, /* historicalTimestamp */
-		txn.UserPriority(),
+		roachpb.UnspecifiedUserPriority,
 		tree.ReadWrite,
 		txn,
 		ex.transitionCtx)
