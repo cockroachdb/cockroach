@@ -192,8 +192,8 @@ func (ie *InternalExecutor) initConnEx(
 //
 // If txn is not nil, the statement will be executed in the respective txn.
 //
-// Query is deprecated because it may transparently execute a query as root. Use
-// QueryEx instead.
+// Deprecated: Query is deprecated because it may transparently execute a query
+// as root. Use QueryEx instead.
 func (ie *InternalExecutor) Query(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, error) {

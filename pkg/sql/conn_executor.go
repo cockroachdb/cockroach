@@ -712,7 +712,7 @@ func (s *Server) newConnExecutorWithTxn(
 		explicitTxn,
 		txn.ReadTimestamp().GoTime(),
 		nil, /* historicalTimestamp */
-		txn.UserPriority(),
+		roachpb.UnspecifiedUserPriority,
 		tree.ReadWrite,
 		txn,
 		ex.transitionCtx)

@@ -558,7 +558,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// set / RETURNING can be used instead. However this is not relevant
 	// here.)
 
-	// We first ensure stepping mode is enabled.
+	// We first ensure stepping mode is enabled if the txn is not a leaf txn.
 	//
 	// This ought to be done just once when a txn gets initialized;
 	// unfortunately, there are too many places where the txn object
@@ -572,30 +572,32 @@ func (ex *connExecutor) execStmtInOpenState(
 	// that all uses of SQL execution initialize the client.Txn using a
 	// single/common function. That would be where the stepping mode
 	// gets enabled once for all SQL statements executed "underneath".
-	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-	defer func() { _ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode) }()
+	if ex.state.mu.txn.Type() != kv.LeafTxn {
+		prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+		defer func() { _ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode) }()
 
-	// Then we create a sequencing point.
-	//
-	// This is not the only place where a sequencing point is
-	// placed. There are also sequencing point after every stage of
-	// constraint checks and cascading actions at the _end_ of a
-	// statement's execution.
-	//
-	// TODO(knz): At the time of this writing CockroachDB performs
-	// cascading actions and the corresponding FK existence checks
-	// interleaved with mutations. This is incorrect; the correct
-	// behavior, as described in issue
-	// https://github.com/cockroachdb/cockroach/issues/33475, is to
-	// execute cascading actions no earlier than after all the "main
-	// effects" of the current statement (including all its CTEs) have
-	// completed. There should be a sequence point between the end of
-	// the main execution and the start of the cascading actions, as
-	// well as in-between very stage of cascading actions.
-	// This TODO can be removed when the cascading code is reorganized
-	// accordingly and the missing call to Step() is introduced.
-	if err := ex.state.mu.txn.Step(ctx); err != nil {
-		return makeErrEvent(err)
+		// Then we create a sequencing point.
+		//
+		// This is not the only place where a sequencing point is
+		// placed. There are also sequencing point after every stage of
+		// constraint checks and cascading actions at the _end_ of a
+		// statement's execution.
+		//
+		// TODO(knz): At the time of this writing CockroachDB performs
+		// cascading actions and the corresponding FK existence checks
+		// interleaved with mutations. This is incorrect; the correct
+		// behavior, as described in issue
+		// https://github.com/cockroachdb/cockroach/issues/33475, is to
+		// execute cascading actions no earlier than after all the "main
+		// effects" of the current statement (including all its CTEs) have
+		// completed. There should be a sequence point between the end of
+		// the main execution and the start of the cascading actions, as
+		// well as in-between very stage of cascading actions.
+		// This TODO can be removed when the cascading code is reorganized
+		// accordingly and the missing call to Step() is introduced.
+		if err := ex.state.mu.txn.Step(ctx); err != nil {
+			return makeErrEvent(err)
+		}
 	}
 
 	if err := p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders); err != nil {
@@ -615,7 +617,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	txn := ex.state.mu.txn
 
-	if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
+	if !os.ImplicitTxn.Get() && (txn.Type() != kv.LeafTxn && txn.IsSerializablePushAndRefreshNotPossible()) {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		if canAutoRetry {
 			ev := eventRetriableErr{
