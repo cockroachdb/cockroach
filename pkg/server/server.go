@@ -1400,11 +1400,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// one, make sure it's the clusterID we already know (and are guaranteed to
 	// know) at this point. If it's not the same, explode.
 	//
-	// TODO(tbg): remove this when we have changed ServeAndWait() to join an
-	// existing cluster via a one-off RPC, at which point we can create gossip
-	// (and thus the RPC layer) only after the clusterID is already known. We
-	// can then rely on the RPC layer's protection against cross-cluster
-	// communication.
+	// TODO(irfansharif): The above is no longer applicable; in 21.1 we can
+	// always assume that the RPC layer will always get set up after having
+	// found out what the cluster ID is. The checks below can be removed then.
 	{
 		// We populated this above, so it should still be set. This is just to
 		// demonstrate that we're not doing anything functional here (and to
