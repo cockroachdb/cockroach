@@ -54,6 +54,7 @@ func registerAcceptance(r *testRegistry) {
 		{name: "status-server", fn: runStatusServer},
 		{
 			name: "version-upgrade",
+			skip: "https://github.com/cockroachdb/cockroach/issues/54079",
 			fn: func(ctx context.Context, t *test, c *cluster) {
 				runVersionUpgrade(ctx, t, c, r.buildVersion)
 			},
