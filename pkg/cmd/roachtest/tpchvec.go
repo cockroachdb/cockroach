@@ -331,9 +331,18 @@ func (p *tpchVecPerfTest) postTestRunHook(
 			// "catch" the slowness).
 			for setupIdx, setup := range runConfig.clusterSetups {
 				performClusterSetup(t, conn, setup)
+				// performClusterSetup has changed the cluster settings;
+				// however, the session variables might contain the old values,
+				// so we will open up new connections for each of the setups in
+				// order to get the correct cluster setup on each.
+				tempConn := c.Conn(ctx, 1)
+				defer tempConn.Close()
+				if _, err := tempConn.Exec("USE tpch;"); err != nil {
+					t.Fatal(err)
+				}
 				for i := 0; i < runConfig.numRunsPerQuery; i++ {
 					t.Status(fmt.Sprintf("\nRunning EXPLAIN ANALYZE (DEBUG) for setup=%s\n", runConfig.setupNames[setupIdx]))
-					rows, err := conn.Query(fmt.Sprintf(
+					rows, err := tempConn.Query(fmt.Sprintf(
 						"EXPLAIN ANALYZE (DEBUG) %s;", tpch.QueriesByNumber[queryNum],
 					))
 					if err != nil {
