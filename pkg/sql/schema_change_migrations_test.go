@@ -1036,3 +1036,71 @@ func TestMissingMutation(t *testing.T) {
 	err = g.Wait()
 	require.Regexp(t, fmt.Sprintf("mutation %d not found for MutationJob %d", 1, schemaChangeJobID), err)
 }
+
+// TestMissingTable tests that a missing table descriptor for the referenced
+// table causes a (single-table) schema change job to be marked as failed.
+func TestMissingTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	schemaChangeBlocked, descriptorDeleted := make(chan struct{}), make(chan struct{})
+	migratedJob := false
+	var schemaChangeJobID int64
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLMigrationManager = &sqlmigrations.MigrationManagerTestingKnobs{
+		AlwaysRunJobMigration: true,
+	}
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		RunBeforeResume: func(jobID int64) error {
+			if !migratedJob {
+				migratedJob = true
+				schemaChangeJobID = jobID
+				close(schemaChangeBlocked)
+			}
+
+			<-descriptorDeleted
+			return jobs.NewRetryJobError("stop this job until cluster upgrade")
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	_, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test(k INT PRIMARY KEY, v INT);`)
+	require.NoError(t, err)
+
+	g := ctxgroup.WithContext(context.Background())
+	// Start a schema change on the table in a separate goroutine.
+	g.GoCtx(func(ctx context.Context) error {
+		if _, err := sqlDB.ExecContext(ctx, `ALTER TABLE t.test ADD COLUMN a INT;`); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	<-schemaChangeBlocked
+
+	// Rewrite the job to be a 19.2-style job.
+	require.NoError(t, migrateJobToOldFormat(kvDB, registry, schemaChangeJobID, AddColumn))
+
+	ctx := context.Background()
+	// Delete the table descriptor.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc.Mutations = nil
+	require.NoError(
+		t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
+			return kvDB.Del(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()))
+		}),
+	)
+
+	// Run the migration.
+	migMgr := s.MigrationManager().(*sqlmigrations.Manager)
+	require.NoError(t, migMgr.StartSchemaChangeJobMigration(ctx))
+
+	close(descriptorDeleted)
+
+	err = g.Wait()
+	require.Regexp(t, "descriptor not found", err)
+}
