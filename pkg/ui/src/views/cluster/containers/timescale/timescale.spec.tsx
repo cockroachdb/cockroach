@@ -102,6 +102,8 @@ describe("<TimeScaleDropdown>", function () {
     assert.deepEqual(title, { title: "Past 10 Minutes" });
   });
 
+  // Skipped: failed in https://teamcity.cockroachdb.com/viewLog.html?buildId=2254357.
+  // TODO(dhartunian): why is there an identically named test case just below?
   it("getTimeRangeTitle must return custom Title", () => {
     const currentScale = { ...state.currentScale, key: "Custom" };
     const title = getTimeRangeTitle(state.currentWindow, currentScale);
