@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -105,6 +106,13 @@ func init() {
 
 // Status represents the status of a job in the system.jobs table.
 type Status string
+
+// SafeFormat implements redact.SafeFormatter.
+func (s Status) SafeFormat(sp redact.SafePrinter, verb rune) {
+	sp.SafeString(redact.SafeString(s))
+}
+
+var _ redact.SafeFormatter = Status("")
 
 // RunningStatus represents the more detailed status of a running job in
 // the system.jobs table.
