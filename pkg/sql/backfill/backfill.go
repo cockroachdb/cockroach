@@ -14,6 +14,7 @@ package backfill
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/pkg/errors"
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.
@@ -65,6 +68,9 @@ type ColumnBackfiller struct {
 	updateCols  []descpb.ColumnDescriptor
 	updateExprs []tree.TypedExpr
 	evalCtx     *tree.EvalContext
+
+	mon          *mon.BytesMonitor
+	boundAccount mon.BoundAccount
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
@@ -91,6 +97,7 @@ func (cb *ColumnBackfiller) init(
 	defaultExprs []tree.TypedExpr,
 	computedExprs []tree.TypedExpr,
 	desc *tabledesc.Immutable,
+	mon *mon.BytesMonitor,
 ) error {
 	cb.evalCtx = evalCtx
 	cb.updateCols = append(cb.added, cb.dropped...)
@@ -121,6 +128,13 @@ func (cb *ColumnBackfiller) init(
 		Cols:            desc.Columns,
 		ValNeededForCol: valNeededForCol,
 	}
+
+	// Create a bound account associated with the column backfiller.
+	if mon != nil {
+		cb.mon = mon
+		cb.boundAccount = mon.MakeBoundAccount()
+	}
+
 	return cb.fetcher.Init(
 		evalCtx.Context,
 		evalCtx.Codec,
@@ -129,8 +143,7 @@ func (cb *ColumnBackfiller) init(
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&cb.alloc,
-		// TODO(bulkio): plumb a memory monitor into here, and make sure to call cb.fetcher.Close().
-		nil, /* memMonitor */
+		mon,
 		tableArgs,
 	)
 }
@@ -143,6 +156,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 	desc *tabledesc.Immutable,
+	mon *mon.BytesMonitor,
 ) error {
 	cb.initCols(desc)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(
@@ -162,7 +176,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	if err != nil {
 		return err
 	}
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc)
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon)
 }
 
 // InitForDistributedUse initializes a ColumnBackfiller for use as part of a
@@ -171,7 +185,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 // necessary due to the different procedure for accessing user defined type
 // metadata as part of a distributed flow.
 func (cb *ColumnBackfiller) InitForDistributedUse(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *tabledesc.Immutable,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *tabledesc.Immutable, mon *mon.BytesMonitor,
 ) error {
 	cb.initCols(desc)
 	evalCtx := flowCtx.NewEvalCtx()
@@ -214,7 +228,14 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	// entire backfill process.
 	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
 
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc)
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon)
+}
+
+// Close frees the resources used by the ColumnBackfiller.
+func (cb *ColumnBackfiller) Close(ctx context.Context) {
+	cb.boundAccount.Close(ctx)
+	cb.fetcher.Close(ctx)
+	cb.mon.Stop(ctx)
 }
 
 // RunColumnBackfillChunk runs column backfill over a chunk of the table using
@@ -370,6 +391,9 @@ type IndexBackfiller struct {
 	// It is a field of IndexBackfiller to avoid allocating a slice for each row
 	// backfilled.
 	indexesToEncode []*descpb.IndexDescriptor
+
+	mon          *mon.BytesMonitor
+	boundAccount mon.BoundAccount
 }
 
 // ContainsInvertedIndex returns true if backfilling an inverted index.
@@ -390,6 +414,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 	desc *tabledesc.Immutable,
+	mon *mon.BytesMonitor,
 ) error {
 	// Initialize ib.cols and ib.colIdxMap.
 	ib.initCols(desc)
@@ -416,7 +441,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 		valNeededForCol.Add(ib.colIdxMap[col])
 	})
 
-	return ib.init(evalCtx, predicates, valNeededForCol, desc)
+	return ib.init(evalCtx, predicates, valNeededForCol, desc, mon)
 }
 
 // InitForDistributedUse initializes an IndexBackfiller for use as part of a
@@ -425,7 +450,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 // due to the different procedure for accessing user defined type metadata as
 // part of a distributed flow.
 func (ib *IndexBackfiller) InitForDistributedUse(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *tabledesc.Immutable,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *tabledesc.Immutable, mon *mon.BytesMonitor,
 ) error {
 	// Initialize ib.cols and ib.colIdxMap.
 	ib.initCols(desc)
@@ -451,7 +476,8 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 
 		// Convert any partial index predicate strings into expressions.
 		var err error
-		predicates, predicateRefColIDs, err = schemaexpr.MakePartialIndexExprs(ctx, ib.added, ib.cols, desc, evalCtx, &semaCtx)
+		predicates, predicateRefColIDs, err =
+			schemaexpr.MakePartialIndexExprs(ctx, ib.added, ib.cols, desc, evalCtx, &semaCtx)
 		if err != nil {
 			return err
 		}
@@ -471,7 +497,14 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		valNeededForCol.Add(ib.colIdxMap[col])
 	})
 
-	return ib.init(evalCtx, predicates, valNeededForCol, desc)
+	return ib.init(evalCtx, predicates, valNeededForCol, desc, mon)
+}
+
+// Close releases the resources used by the IndexBackfiller.
+func (ib *IndexBackfiller) Close(ctx context.Context) {
+	ib.boundAccount.Close(ctx)
+	ib.fetcher.Close(ctx)
+	ib.mon.Stop(ctx)
 }
 
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
@@ -535,6 +568,7 @@ func (ib *IndexBackfiller) init(
 	predicateExprs map[descpb.IndexID]tree.TypedExpr,
 	valNeededForCol util.FastIntSet,
 	desc *tabledesc.Immutable,
+	mon *mon.BytesMonitor,
 ) error {
 	ib.evalCtx = evalCtx
 	ib.predicates = predicateExprs
@@ -560,6 +594,13 @@ func (ib *IndexBackfiller) init(
 		Cols:            ib.cols,
 		ValNeededForCol: valNeededForCol,
 	}
+
+	// Create a bound account associated with the index backfiller monitor.
+	if mon != nil {
+		ib.mon = mon
+		ib.boundAccount = mon.MakeBoundAccount()
+	}
+
 	return ib.fetcher.Init(
 		evalCtx.Context,
 		evalCtx.Codec,
@@ -568,8 +609,7 @@ func (ib *IndexBackfiller) init(
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
 		&ib.alloc,
-		// TODO(bulkio): plumb a memory monitor into here, and make sure to call cb.fetcher.Close().
-		nil, /* memMonitor */
+		mon, /* memMonitor */
 		tableArgs,
 	)
 }
@@ -587,6 +627,15 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// This ought to be chunkSize but in most tests we are actually building smaller
 	// indexes so use a smaller value.
 	const initBufferSize = 1000
+
+	isBytesMonitored := ib.boundAccount.Monitor() != nil
+	indexEntriesInChunkInitialBufferSize :=
+		int64(unsafe.Sizeof(rowenc.IndexEntry{})) * initBufferSize * int64(len(ib.added))
+	if err := ib.boundAccount.Grow(ctx,
+		indexEntriesInChunkInitialBufferSize); isBytesMonitored && err != nil {
+		return nil, nil, errors.Wrap(err,
+			"failed to initialize empty buffer to store the index entries of all rows in the chunk")
+	}
 	entries := make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
 	// Get the next set of rows.
@@ -610,6 +659,13 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	}
 	ib.evalCtx.IVarContainer = iv
 
+	indexEntriesPerRowInitialBufferSize := int64(len(ib.added)) *
+		int64(unsafe.Sizeof(rowenc.IndexEntry{}))
+	if err := ib.boundAccount.Grow(ctx, indexEntriesPerRowInitialBufferSize); isBytesMonitored &&
+		err != nil {
+		return nil, nil, errors.Wrap(err,
+			"failed to initialize empty buffer to store the index entries of a single row")
+	}
 	buffer := make([]rowenc.IndexEntry, len(ib.added))
 	for i := int64(0); i < chunkSize; i++ {
 		encRow, _, _, err := ib.fetcher.NextRow(ctx)
@@ -662,6 +718,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// not want to include empty k/v pairs while backfilling.
 		buffer = buffer[:0]
 		if buffer, err = rowenc.EncodeSecondaryIndexes(
+			ctx,
 			ib.evalCtx.Codec,
 			tableDesc,
 			ib.indexesToEncode,
@@ -669,16 +726,26 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			ib.rowVals,
 			buffer,
 			false, /* includeEmpty */
+			ib.boundAccount,
 		); err != nil {
 			return nil, nil, err
 		}
+
+		// If the number of index entries are going to cause the entries buffer to
+		// re-slice, we must account for this in the index memory account.
+		if cap(entries)-len(entries) < len(buffer) {
+			if err := ib.boundAccount.Grow(ctx, int64(cap(entries))); isBytesMonitored && err != nil {
+				return nil, nil, err
+			}
+		}
+
 		entries = append(entries, buffer...)
 	}
 	return entries, ib.fetcher.Key(), nil
 }
 
 // RunIndexBackfillChunk runs an index backfill over a chunk of the table
-// by tracversing the span sp provided. The backfill is run for the added
+// by traversing the span sp provided. The backfill is run for the added
 // indexes.
 func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	ctx context.Context,
@@ -689,7 +756,8 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp, chunkSize, traceKV)
+	entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp,
+		chunkSize, traceKV)
 	if err != nil {
 		return nil, err
 	}
@@ -708,5 +776,6 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	if err := writeBatch(ctx, batch); err != nil {
 		return nil, ConvertBackfillError(ctx, tableDesc, batch)
 	}
+
 	return key, nil
 }
