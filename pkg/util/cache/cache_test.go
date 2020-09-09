@@ -139,7 +139,11 @@ func TestCacheLRU(t *testing.T) {
 	if _, ok := mc.Get(testKey("a")); !ok {
 		t.Fatal("failed to get key a")
 	}
-	// Add another entry to evict; should evict key "b".
+	// Verify that a StealthyGet won't make b the most recently used.
+	if _, ok := mc.StealthyGet(testKey("b")); !ok {
+		t.Fatal("failed to get key b")
+	}
+	// Add another entry to cause an eviction; should evict key "b".
 	mc.Add(testKey("c"), 3)
 	// Verify eviction of least recently used key "b".
 	if _, ok := mc.Get(testKey("b")); ok {

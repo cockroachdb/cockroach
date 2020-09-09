@@ -162,7 +162,7 @@ func (sc *TableStatisticsCache) GetTableStats(
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	if found, e := sc.lookupStatsLocked(ctx, tableID); found {
+	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
 		return e.stats, e.err
 	}
 
@@ -176,10 +176,20 @@ func (sc *TableStatisticsCache) GetTableStats(
 //
 // Assumes that the caller holds sc.mu. Note that the mutex can be unlocked and
 // locked again if we need to wait (this can only happen when found=true).
+//
+// If stealthy=true, this is not considered an access with respect to the cache
+// eviction policy.
 func (sc *TableStatisticsCache) lookupStatsLocked(
-	ctx context.Context, tableID descpb.ID,
+	ctx context.Context, tableID descpb.ID, stealthy bool,
 ) (found bool, e *cacheEntry) {
-	eUntyped, ok := sc.mu.cache.Get(tableID)
+	var eUntyped interface{}
+	var ok bool
+
+	if !stealthy {
+		eUntyped, ok = sc.mu.cache.Get(tableID)
+	} else {
+		eUntyped, ok = sc.mu.cache.StealthyGet(tableID)
+	}
 	if !ok {
 		return false, nil
 	}
@@ -266,7 +276,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID d
 	// the refresh. If e.err is not nil, the stats are in the process of being
 	// removed from the cache (see addCacheEntryLocked), so don't refresh in this
 	// case either.
-	found, e := sc.lookupStatsLocked(ctx, tableID)
+	found, e := sc.lookupStatsLocked(ctx, tableID, true /* stealthy */)
 	if !found || e.err != nil {
 		return
 	}
