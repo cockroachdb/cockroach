@@ -95,15 +95,15 @@ it likes.
 	//  applying side-effects of command 3
 	//  applying side-effects of command 4
 	//  finishing command 1; rejected=false
-	//  finishing and acknowledging command 2; rejected=false
-	//  finishing and acknowledging command 3; rejected=true
+	//  acknowledging and finishing command 2; rejected=false
+	//  acknowledging and finishing command 3; rejected=true
 	//  finishing command 4; rejected=false
 	//  applying batch with commands=[5]
 	//  applying side-effects of command 5
-	//  finishing and acknowledging command 5; rejected=false
+	//  acknowledging and finishing command 5; rejected=false
 	//  applying batch with commands=[6 7]
 	//  applying side-effects of command 6
 	//  applying side-effects of command 7
-	//  finishing and acknowledging command 6; rejected=true
-	//  finishing and acknowledging command 7; rejected=false
+	//  acknowledging and finishing command 6; rejected=true
+	//  acknowledging and finishing command 7; rejected=false
 }
