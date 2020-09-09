@@ -150,6 +150,9 @@ message MVCCStatsDelta {
   sint64 sys_bytes = 12;
   sint64 sys_count = 13;
   sint64 abort_span_bytes = 15;
+
+  // WARNING: Do not add any PII-holding fields here, as this
+  // whole message is marked as safe for log redaction.
 }
 
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable

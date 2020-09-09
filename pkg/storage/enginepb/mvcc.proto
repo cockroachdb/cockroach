@@ -184,6 +184,9 @@ message MVCCStats {
   // abort_span_bytes is the number of bytes stored in a range's
   // abort span. These bytes are a subset of sys_bytes.
   optional sfixed64 abort_span_bytes = 15 [(gogoproto.nullable) = false];
+
+  // WARNING: Do not add any PII-holding fields here, as this
+  // whole message is marked as safe for log redaction.
 }
 
 // MVCCStatsLegacyRepresentation is almost identical to MVCCStats, except
