@@ -227,6 +227,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	defer log.TestingSetRedactable(true)()
+
 	if testing.Short() {
 		// Takes 30s as of 2020/07. The test uses on-disk stores because nodes get
 		// killed, and for some reason using the on-disk stores seems to cause
