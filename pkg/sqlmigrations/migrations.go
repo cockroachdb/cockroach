@@ -1318,7 +1318,7 @@ func migrateMutationJobForTable(
 	// If the job isn't in MutationJobs or GCMutations, it's likely just a
 	// failed or canceled job that was successfully cleaned up. Check for this,
 	// and return an error if this is not the case.
-	status, err := job.CurrentStatus(ctx)
+	status, err := job.WithTxn(txn).CurrentStatus(ctx)
 	if err != nil {
 		return err
 	}
