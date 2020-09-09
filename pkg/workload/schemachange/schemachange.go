@@ -19,8 +19,10 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -125,6 +127,8 @@ const (
 	setColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> SET DEFAULT <expr>
 	setColumnNotNull // ALTER TABLE <table> ALTER [COLUMN] <column> SET NOT NULL
 	setColumnType    // ALTER TABLE <table> ALTER [COLUMN] <column> [SET DATA] TYPE <type>
+
+	insertRow // INSERT INTO <table> (<cols>) VALUES (<values>)
 )
 
 var opWeights = []int{
@@ -152,6 +156,7 @@ var opWeights = []int{
 	setColumnDefault:  0, // TODO(spaskob): unimplemented
 	setColumnNotNull:  1,
 	setColumnType:     1,
+	insertRow:         1,
 }
 
 // Meta implements the workload.Generator interface.
@@ -433,6 +438,9 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 
 		case setColumnType:
 			stmt, err = w.setColumnType(tx)
+
+		case insertRow:
+			stmt, err = w.insertRow(tx)
 		}
 
 		// TODO(spaskob): use more fine-grained error reporting.
@@ -785,6 +793,77 @@ func (w *schemaChangeWorker) setColumnType(tx *pgx.Tx) (string, error) {
 	}
 	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" SET DATA TYPE %s`,
 		tableName, columnName, rowenc.RandSortingType(w.rng)), nil
+}
+
+func (w *schemaChangeWorker) insertRow(tx *pgx.Tx) (string, error) {
+	tableName, err := w.randTable(tx, 100)
+	if err != nil {
+		return "", errors.Wrapf(err, "error getting random table name")
+	}
+	cols, err := w.getTableColumns(tx, tableName)
+	if err != nil {
+		return "", errors.Wrapf(err, "error getting table columns for insert row")
+	}
+	colNames := []string{}
+	rows := []string{}
+	for _, col := range cols {
+		colNames = append(colNames, fmt.Sprintf(`"%s"`, col.name))
+	}
+	numRows := w.rng.Intn(10) + 1
+	for i := 0; i < numRows; i++ {
+		var row []string
+		for _, col := range cols {
+			d := rowenc.RandDatum(w.rng, col.typ, col.nullable)
+			row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
+		}
+		rows = append(rows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
+	}
+	return fmt.Sprintf(
+		`INSERT INTO "%s" (%s) VALUES %s`,
+		tableName,
+		strings.Join(colNames, ","),
+		strings.Join(rows, ","),
+	), nil
+}
+
+type column struct {
+	name     string
+	typ      *types.T
+	nullable bool
+}
+
+func (w *schemaChangeWorker) getTableColumns(tx *pgx.Tx, tableName string) ([]column, error) {
+	q := fmt.Sprintf(`
+  SELECT column_name, data_type, is_nullable
+    FROM [SHOW COLUMNS FROM "%s"]
+`, tableName)
+	rows, err := tx.Query(q)
+	if err != nil {
+		return nil, err
+	}
+	var ret []column
+	for rows.Next() {
+		var c column
+		var typName string
+		err := rows.Scan(&c.name, &typName, &c.nullable)
+		if err != nil {
+			return nil, err
+		}
+		stmt, err := parser.ParseOne(fmt.Sprintf("SELECT 'otan wuz here'::%s", typName))
+		if err != nil {
+			return nil, err
+		}
+		c.typ, err = tree.ResolveType(
+			context.Background(),
+			stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.CastExpr).Type,
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, c)
+	}
+	return ret, nil
 }
 
 func (w *schemaChangeWorker) randColumn(

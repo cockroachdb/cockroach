@@ -88,7 +88,7 @@ func TestRandomizedCast(t *testing.T) {
 		// getValidSet (when non-nil) is a function that returns a set of valid
 		// datums of fromTyp type that can be cast to toTyp type. The test
 		// harness will be randomly choosing a datum from this set. This
-		// function should be specified when sqlbase.RandDatum will take ages
+		// function should be specified when rowenc.RandDatum will take ages
 		// (if ever) to generate the datum that is valid for a cast.
 		getValidSet func() []tree.Datum
 		// Some types casting can fail, so retry if we generate a datum that is
