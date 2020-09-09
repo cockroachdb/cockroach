@@ -335,7 +335,8 @@ func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 // tableMap applies `fn` to all rows in `in`.
 func tableMap(in io.Reader, fn func(string) error) error {
 	firstLine := true
-	for sc := bufio.NewScanner(in); sc.Scan(); {
+	sc := bufio.NewScanner(in)
+	for sc.Scan() {
 		if firstLine {
 			firstLine = false
 			continue
@@ -344,7 +345,7 @@ func tableMap(in io.Reader, fn func(string) error) error {
 			return err
 		}
 	}
-	return nil
+	return sc.Err()
 }
 
 // selectRowsMap applies `fn` to all rows returned from a select statement.
