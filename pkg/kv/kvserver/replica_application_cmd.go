@@ -155,11 +155,25 @@ func (c *replicatedCmd) AckSuccess() error {
 
 // FinishAndAckOutcome implements the apply.AppliedCommand interface.
 func (c *replicatedCmd) FinishAndAckOutcome(ctx context.Context) error {
-	tracing.FinishSpan(c.sp)
 	if c.IsLocal() {
 		c.proposal.finishApplication(ctx, c.response)
 	}
+	c.finishTracingSpan()
 	return nil
+}
+
+// FinishNonLocal is like AckOutcomeAndFinish, but instead of acknowledging the
+// command's proposal if it is local, it asserts that the proposal is not local.
+func (c *replicatedCmd) FinishNonLocal(ctx context.Context) {
+	if c.IsLocal() {
+		log.Fatalf(ctx, "proposal unexpectedly local: %v", c.replicatedResult())
+	}
+	c.finishTracingSpan()
+}
+
+func (c *replicatedCmd) finishTracingSpan() {
+	tracing.FinishSpan(c.sp)
+	c.ctx, c.sp = nil, nil
 }
 
 // decode decodes the entry e into the decodedRaftEntry.
