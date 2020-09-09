@@ -15,6 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -841,7 +842,8 @@ func createImportingDescriptors(
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
 	// Assign new IDs to the database descriptors.
-	if err := rewriteDatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
+	dbDescsAreLeased := r.settings.Version.IsActive(ctx, clusterversion.VersionLeasedDatabaseDescriptors)
+	if err := rewriteDatabaseDescs(mutableDatabases, details.DescriptorRewrites, dbDescsAreLeased /* resetVersion */); err != nil {
 		return nil, nil, nil, err
 	}
 	databaseDescs := make([]*descpb.DatabaseDescriptor, len(mutableDatabases))
@@ -1251,14 +1253,12 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 				return err
 			}
 			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
-			existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, existingTable)
-			if err != nil {
+			if err := VerifyDescriptorVersion(ctx, txn, r.execCfg.Codec, existingTable); err != nil {
 				return errors.Wrap(err, "validating table descriptor has not changed")
 			}
-			b.CPut(
+			b.Put(
 				catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, newTableDesc.ID),
 				newTableDesc.DescriptorProto(),
-				existingDescVal,
 			)
 			newTables = append(newTables, newTableDesc.TableDesc())
 		}
@@ -1387,14 +1387,12 @@ func (r *restoreResumer) dropDescriptors(
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")
 		}
-		existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, prev)
-		if err != nil {
+		if err := VerifyDescriptorVersion(ctx, txn, r.execCfg.Codec, prev); err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
 		}
-		b.CPut(
+		b.Put(
 			catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableToDrop.ID),
 			tableToDrop.DescriptorProto(),
-			existingDescVal,
 		)
 	}
 
@@ -1663,6 +1661,24 @@ func (r *restoreResumer) restoreSystemTables(ctx context.Context, db *kv.DB) err
 		return errors.Wrap(err, "dropping temporary system db")
 	}
 
+	return nil
+}
+
+// VerifyDescriptorVersion validates that the supplied descriptor's version
+// matches that of the descriptor currently stored in kv. An error is returned
+// if this is not the case.
+func VerifyDescriptorVersion(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation catalog.Descriptor,
+) error {
+	existing, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, expectation.GetID(), catalogkv.Mutable)
+	if err != nil {
+		return err
+	}
+	if existing.GetVersion() != expectation.GetVersion() {
+		return errors.AssertionFailedf(
+			"unexpected version read from disk for restored descriptor: expected %d, got %d",
+			expectation.GetVersion(), existing.GetVersion())
+	}
 	return nil
 }
 

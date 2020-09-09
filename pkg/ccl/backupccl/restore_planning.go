@@ -715,13 +715,21 @@ func maybeUpgradeTableDescsInBackupManifests(
 
 // rewriteDatabaseDescs rewrites all ID's in the input slice of
 // DatabaseDescriptors using the input ID rewrite mapping.
-func rewriteDatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites DescRewriteMap) error {
+func rewriteDatabaseDescs(
+	databases []*dbdesc.Mutable, descriptorRewrites DescRewriteMap, resetVersion bool,
+) error {
 	for _, db := range databases {
 		rewrite, ok := descriptorRewrites[db.ID]
 		if !ok {
 			return errors.Errorf("missing rewrite for database %d", db.ID)
 		}
 		db.ID = rewrite.ID
+
+		if resetVersion {
+			// Reset the version and modification time on this new descriptor.
+			db.Version = 1
+			db.ModificationTime = hlc.Timestamp{}
+		}
 
 		// Rewrite the name-to-ID mapping for the database's child schemas.
 		newSchemas := make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
@@ -771,6 +779,10 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 		if !ok {
 			return errors.Errorf("missing rewrite for type %d", typ.ID)
 		}
+		// Reset the version and modification time on this new descriptor.
+		typ.Version = 1
+		typ.ModificationTime = hlc.Timestamp{}
+
 		typ.ID = rewrite.ID
 		typ.ParentSchemaID = maybeRewriteSchemaID(typ.ParentSchemaID, descriptorRewrites)
 		typ.ParentID = rewrite.ParentID
@@ -803,6 +815,10 @@ func rewriteSchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites DescRe
 		if !ok {
 			return errors.Errorf("missing rewrite for schema %d", sc.ID)
 		}
+		// Reset the version and modification time on this new descriptor.
+		sc.Version = 1
+		sc.ModificationTime = hlc.Timestamp{}
+
 		sc.ID = rewrite.ID
 		sc.ParentID = rewrite.ParentID
 	}
@@ -833,6 +849,10 @@ func RewriteTableDescs(
 		if !ok {
 			return errors.Errorf("missing table rewrite for table %d", table.ID)
 		}
+		// Reset the version and modification time on this new descriptor.
+		table.Version = 1
+		table.ModificationTime = hlc.Timestamp{}
+
 		if table.IsView() && overrideDB != "" {
 			// restore checks that all dependencies are also being restored, but if
 			// the restore is overriding the destination database, qualifiers in the
@@ -1484,7 +1504,7 @@ func doRestorePlan(
 	if err := RewriteTableDescs(tables, descriptorRewrites, intoDB); err != nil {
 		return err
 	}
-	if err := rewriteDatabaseDescs(databases, descriptorRewrites); err != nil {
+	if err := rewriteDatabaseDescs(databases, descriptorRewrites, false /* resetVersion */); err != nil {
 		return err
 	}
 	if err := rewriteSchemaDescs(schemas, descriptorRewrites); err != nil {
