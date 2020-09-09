@@ -59,8 +59,13 @@ type extendedEvalContext struct {
 	// tracing state should be done through the sessionDataMutator.
 	Tracing *SessionTracing
 
-	// StatusServer gives access to the Status service.
-	StatusServer serverpb.OptionalStatusServer
+	// NodesStatusServer gives access to the NodesStatus service. Unavailable to
+	// tenants.
+	NodesStatusServer serverpb.OptionalNodesStatusServer
+
+	// SQLStatusServer gives access to a subset of the serverpb.Status service
+	// that is available to both system and non-system tenants.
+	SQLStatusServer serverpb.SQLStatusServer
 
 	// MemMetrics represent the group of metrics to which execution should
 	// contribute.
@@ -375,14 +380,14 @@ func internalExtendedEvalCtx(
 			TxnTimestamp:     txnTimestamp,
 			InternalExecutor: execCfg.InternalExecutor,
 		},
-		SessionMutator:  dataMutator,
-		VirtualSchemas:  execCfg.VirtualSchemas,
-		Tracing:         &SessionTracing{},
-		StatusServer:    execCfg.StatusServer,
-		Descs:           tables,
-		ExecCfg:         execCfg,
-		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
-		DistSQLPlanner:  execCfg.DistSQLPlanner,
+		SessionMutator:    dataMutator,
+		VirtualSchemas:    execCfg.VirtualSchemas,
+		Tracing:           &SessionTracing{},
+		NodesStatusServer: execCfg.NodesStatusServer,
+		Descs:             tables,
+		ExecCfg:           execCfg,
+		schemaAccessors:   newSchemaInterface(tables, execCfg.VirtualSchemas),
+		DistSQLPlanner:    execCfg.DistSQLPlanner,
 	}
 }
 

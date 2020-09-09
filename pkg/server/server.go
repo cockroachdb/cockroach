@@ -542,7 +542,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	sAdmin := newAdminServer(lateBoundServer)
+	sAdmin := newAdminServer(lateBoundServer, internalExecutor)
 	sessionRegistry := sql.NewSessionRegistry()
 
 	sStatus := newStatusServer(
@@ -580,7 +580,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
-			statusServer:           serverpb.MakeOptionalStatusServer(sStatus),
+			nodesStatusServer:      serverpb.MakeOptionalNodesStatusServer(sStatus),
 			nodeLiveness:           optionalnodeliveness.MakeContainer(nodeLiveness),
 			gossip:                 gossip.MakeOptionalGossip(g),
 			grpcServer:             grpcServer.Server,
@@ -607,6 +607,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
+		sqlStatusServer:          sStatus,
 	})
 	if err != nil {
 		return nil, err

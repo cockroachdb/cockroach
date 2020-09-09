@@ -92,6 +92,7 @@ var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
+	*adminPrivilegeChecker
 	server     *Server
 	memMonitor *mon.BytesMonitor
 }
@@ -103,8 +104,11 @@ var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEW
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(s *Server) *adminServer {
-	server := &adminServer{server: s}
+func newAdminServer(s *Server, ie *sql.InternalExecutor) *adminServer {
+	server := &adminServer{
+		adminPrivilegeChecker: &adminPrivilegeChecker{ie: ie},
+		server:                s,
+	}
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
 	server.memMonitor = mon.NewUnlimitedMonitor(
@@ -2398,8 +2402,14 @@ func (s *adminServer) dialNode(
 	return serverpb.NewAdminClient(conn), nil
 }
 
-func (s *adminServer) requireAdminUser(ctx context.Context) (userName string, err error) {
-	userName, isAdmin, err := s.getUserAndRole(ctx)
+// adminPrivilegeChecker is a helper struct to check whether given usernames
+// have admin privileges.
+type adminPrivilegeChecker struct {
+	ie *sql.InternalExecutor
+}
+
+func (c *adminPrivilegeChecker) requireAdminUser(ctx context.Context) (userName string, err error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -2409,15 +2419,15 @@ func (s *adminServer) requireAdminUser(ctx context.Context) (userName string, er
 	return userName, nil
 }
 
-func (s *adminServer) requireViewActivityPermission(
+func (c *adminPrivilegeChecker) requireViewActivityPermission(
 	ctx context.Context,
 ) (userName string, err error) {
-	userName, isAdmin, err := s.getUserAndRole(ctx)
+	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
 		return "", err
 	}
 	if !isAdmin {
-		hasViewActivity, err := s.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
+		hasViewActivity, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
 		if err != nil {
 			return "", err
 		}
@@ -2430,23 +2440,23 @@ func (s *adminServer) requireViewActivityPermission(
 	return userName, nil
 }
 
-func (s *adminServer) getUserAndRole(
+func (c *adminPrivilegeChecker) getUserAndRole(
 	ctx context.Context,
 ) (userName string, isAdmin bool, err error) {
 	userName, err = userFromContext(ctx)
 	if err != nil {
 		return "", false, err
 	}
-	isAdmin, err = s.hasAdminRole(ctx, userName)
+	isAdmin, err = c.hasAdminRole(ctx, userName)
 	return userName, isAdmin, err
 }
 
-func (s *adminServer) hasAdminRole(ctx context.Context, user string) (bool, error) {
+func (c *adminPrivilegeChecker) hasAdminRole(ctx context.Context, user string) (bool, error) {
 	if user == security.RootUser {
 		// Shortcut.
 		return true, nil
 	}
-	rows, _, err := s.server.sqlServer.internalExecutor.QueryWithCols(
+	rows, _, err := c.ie.QueryWithCols(
 		ctx, "check-is-admin", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},
 		"SELECT crdb_internal.is_admin()")
@@ -2466,14 +2476,14 @@ func (s *adminServer) hasAdminRole(ctx context.Context, user string) (bool, erro
 	return bool(dbDatum), nil
 }
 
-func (s *adminServer) hasRoleOption(
+func (c *adminPrivilegeChecker) hasRoleOption(
 	ctx context.Context, user string, roleOption roleoption.Option,
 ) (bool, error) {
 	if user == security.RootUser {
 		// Shortcut.
 		return true, nil
 	}
-	rows, _, err := s.server.sqlServer.internalExecutor.QueryWithCols(
+	rows, _, err := c.ie.QueryWithCols(
 		ctx, "check-role-option", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},
 		"SELECT crdb_internal.has_role_option($1)", roleOption.String())
