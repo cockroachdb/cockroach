@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -522,7 +523,13 @@ func TestQueryProgress(t *testing.T) {
 	db.Exec(t, `CREATE STATISTICS __auto__ FROM t.test`)
 	const query = `SELECT count(*) FROM t.test WHERE x > $1 and x % 2 = 0`
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Invalidate the stats cache so that we can be sure to get the latest stats.
+	var tableID sqlbase.ID
+	ctx := context.Background()
+	require.NoError(t, rawDB.QueryRow(`SELECT id FROM system.namespace WHERE name = 'test'`).Scan(&tableID))
+	s.ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(ctx, tableID)
+
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	g := ctxgroup.WithContext(ctx)
@@ -558,8 +565,8 @@ func TestQueryProgress(t *testing.T) {
 	// Although we know we've scanned ~50% of what we'll scan, exactly when the
 	// meta makes its way back to the receiver vs when the progress is checked is
 	// non-deterministic so we could see 47% done or 53% done, etc. To avoid being
-	// flaky, we just make sure we see one of 4x% or 5x%
-	require.Regexp(t, `executing \([45]\d\.`, progress)
+	// flaky, we just make sure we see one of 3x%, 4x% or 5x%
+	require.Regexp(t, `executing \([345]\d\.`, progress)
 }
 
 // This test ensures that when in an explicit transaction, statement preparation
