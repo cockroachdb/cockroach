@@ -1682,8 +1682,8 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //                                       Input
 //
 //     For example:
-//      CREATE TABLE abc (a PRIMARY KEY, b INT, c INT)
-//      CREATE TABLE xyz (x PRIMARY KEY, y INT, z INT, INDEX (y))
+//      CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+//      CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, INDEX (y))
 //      SELECT * FROM abc JOIN xyz ON a=y
 //
 //     We want to first join abc with the index on y (which provides columns y, x)
@@ -1707,6 +1707,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		return
 	}
 	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
 	inputProps := input.Relational()
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
@@ -1717,10 +1718,24 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 	var pkCols opt.ColList
 
-	// TODO(mgartner): Use partial indexes for lookup joins when the predicate
-	// is implied by the on filter.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes|rejectPartialIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes)
 	for iter.Next() {
+		onFilters := on
+
+		// If the secondary index is a partial index, it must be implied by the
+		// ON filters.
+		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
+		if isPartialIndex {
+			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			remainingFilters, ok := c.im.FiltersImplyPredicate(onFilters, pred)
+			if !ok {
+				// The ON filters do not imply the predicate, so the partial
+				// index cannot be used.
+				continue
+			}
+			onFilters = remainingFilters
+		}
+
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
 		numIndexKeyCols := iter.Index().LaxKeyColumnCount()
@@ -1734,7 +1749,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// in most cases.
 		firstIdxCol := scanPrivate.Table.IndexColumnID(iter.Index(), 0)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			if _, _, ok := c.findConstantFilter(on, firstIdxCol); !ok {
+			if _, _, ok := c.findConstantFilter(onFilters, firstIdxCol); !ok {
 				continue
 			}
 		}
@@ -1763,7 +1778,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// value. We cannot use a NULL value because the lookup join implements
 			// logic equivalent to simple equality between columns (where NULL never
 			// equals anything).
-			foundVal, onIdx, ok := c.findConstantFilter(on, idxCol)
+			foundVal, onIdx, ok := c.findConstantFilter(onFilters, idxCol)
 			if !ok || foundVal == tree.DNull {
 				break
 			}
@@ -1788,7 +1803,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			needProjection = true
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
-			constFilters = append(constFilters, on[onIdx])
+			constFilters = append(constFilters, onFilters[onIdx])
 		}
 
 		if len(lookupJoin.KeyCols) == 0 {
@@ -1807,7 +1822,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		// Remove the redundant filters and update the lookup condition.
-		lookupJoin.On = memo.ExtractRemainingJoinFilters(on, lookupJoin.KeyCols, rightSideCols)
+		lookupJoin.On = memo.ExtractRemainingJoinFilters(onFilters, lookupJoin.KeyCols, rightSideCols)
 		lookupJoin.On.RemoveCommonFilters(constFilters)
 		lookupJoin.ConstFilters = constFilters
 
