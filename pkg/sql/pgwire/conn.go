@@ -325,6 +325,47 @@ Loop:
 		typ, n, err = c.readBuf.ReadTypedMsg(&c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
+			// Only perform this logic on ClientMsgSimpleQuery for v20.2.
+			// We cannot safely do the rest of this (i.e. for portals) without doing
+			// the todo message by jordan regarding error in extended protocol state
+			// below.
+			if pgwirebase.IsMessageTooBigError(err) && typ == pgwirebase.ClientMsgSimpleQuery {
+				log.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
+
+				// Slurp the remaining bytes.
+				slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
+				c.metrics.BytesInCount.Inc(int64(slurpN))
+				if slurpErr != nil {
+					log.VInfof(ctx, 1, "pgwire: error slurping remaining bytes: %s", slurpErr)
+					break Loop
+				}
+
+				// Write out the error over pgwire.
+				if err := writeErr(
+					ctx,
+					&sqlServer.GetExecutorConfig().Settings.SV,
+					err,
+					&c.msgBuilder,
+					&c.writerState.buf,
+				); err != nil {
+					log.VInfof(ctx, 1, "pgwire: error writing too big error message to the client")
+					break Loop
+				}
+
+				// We have to send the sync message back as well.
+				if err = c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
+					log.VInfof(ctx, 1, "pgwire: error writing sync to the client whilst message is too big")
+					break Loop
+				}
+
+				// We need to continue processing here for pgwire clients to be able to
+				// successfully read the error message off pgwire.
+				// If break here, we terminate the connection., The client will instead see that
+				// we terminated the connection prematurely (as opposed to seeing a ClientMsgTerminate
+				// packet) and instead return a broken pipe or io.EOF error message.
+				continue Loop
+			}
+			log.VEventf(ctx, 1, "pgwire: error reading input: %s", err)
 			break Loop
 		}
 		timeReceived := timeutil.Now()
