@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 //go:generate go run -tags gen-batch gen_batch.go
@@ -570,16 +569,6 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 		ba.Requests = ba.Requests[len(part):]
 	}
 	return parts
-}
-
-// RequestsSafe lists all the request types in the batch. Also see Summary().
-func (ba BatchRequest) RequestsSafe() redact.SafeString {
-	var sb strings.Builder
-	for _, arg := range ba.Requests {
-		req := arg.GetInner()
-		sb.WriteString(req.Method().String() + " ")
-	}
-	return redact.SafeString(sb.String())
 }
 
 // String gives a brief summary of the contained requests and keys in the batch.
