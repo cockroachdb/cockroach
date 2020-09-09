@@ -11,7 +11,6 @@
 package kvserver
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha512"
 	"encoding/binary"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
@@ -129,19 +129,19 @@ func (r *Replica) CheckConsistency(
 	// There is an inconsistency if and only if there is a minority SHA.
 
 	if minoritySHA != "" {
-		var buf bytes.Buffer
-		_, _ = fmt.Fprintf(&buf, "\n") // New line to align checksums below.
+		var buf redact.StringBuilder
+		buf.Printf("\n") // New line to align checksums below.
 		for sha, idxs := range shaToIdxs {
-			minority := ""
+			minority := redact.Safe("")
 			if sha == minoritySHA {
-				minority = " [minority]"
+				minority = redact.Safe(" [minority]")
 			}
 			for _, idx := range idxs {
-				_, _ = fmt.Fprintf(&buf, "%s: checksum %x%s\n"+
+				buf.Printf("%s: checksum %x%s\n"+
 					"- stats: %+v\n"+
 					"- stats.Sub(recomputation): %+v\n",
 					&results[idx].Replica,
-					sha,
+					redact.Safe(sha),
 					minority,
 					&results[idx].Response.Persisted,
 					&results[idx].Response.Delta,
@@ -154,13 +154,13 @@ func (r *Replica) CheckConsistency(
 				if report := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
 					report(*r.store.Ident, diff)
 				}
-				_, _ = fmt.Fprintf(&buf, "====== diff(%x, [minority]) ======\n", sha)
-				_, _ = diff.WriteTo(&buf)
+				buf.Printf("====== diff(%x, [minority]) ======\n", sha)
+				diff.WriteTo(&buf)
 			}
 		}
 
 		if isQueue {
-			log.Errorf(ctx, "%v", buf.String())
+			log.Errorf(ctx, "%v", buf.RedactableString())
 		}
 		res.Detail += buf.String()
 	} else {
@@ -284,7 +284,7 @@ func (r *Replica) CheckConsistency(
 	for _, idxs := range shaToIdxs[minoritySHA] {
 		args.Terminate = append(args.Terminate, results[idxs].Replica)
 	}
-	log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", args.Terminate)
+	log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", redact.Safe(args.Terminate))
 
 	// We've noticed in practice that if the snapshot diff is large, the log
 	// file in it is promptly rotated away, so up the limits while the diff
