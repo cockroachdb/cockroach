@@ -1094,7 +1094,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			newSchemaChangeJobs = append(newSchemaChangeJobs, newJobs...)
 			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
 			if err != nil {
-				return errors.Wrap(err, "validating table descriptor has not changed")
+				return errors.Wrapf(err, "validating table descriptor has not changed, expected: %v", tbl)
 			}
 			b.CPut(
 				sqlbase.MakeDescMetadataKey(tableDesc.ID),
