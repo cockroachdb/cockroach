@@ -206,7 +206,7 @@ func splitTxnAttempt(
 	{
 		b := txn.NewBatch()
 		leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-		if err := updateRangeDescriptor(b, leftDescKey, dbDescValue, leftDesc); err != nil {
+		if err := updateRangeDescriptor(ctx, b, leftDescKey, dbDescValue, leftDesc); err != nil {
 			return err
 		}
 		// Commit this batch first to ensure that the transaction record
@@ -230,7 +230,7 @@ func splitTxnAttempt(
 
 	// Write range descriptor for right hand side of the split.
 	rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
-	if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
+	if err := updateRangeDescriptor(ctx, b, rightDescKey, nil, rightDesc); err != nil {
 		return err
 	}
 
@@ -268,7 +268,7 @@ func splitTxnStickyUpdateAttempt(
 
 	b := txn.NewBatch()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
+	if err := updateRangeDescriptor(ctx, b, descKey, dbDescValue, &newDesc); err != nil {
 		return err
 	}
 	if err := updateRangeAddressing(b, &newDesc); err != nil {
@@ -481,7 +481,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
 
 		b := txn.NewBatch()
-		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
+		if err := updateRangeDescriptor(ctx, b, descKey, dbDescValue, &newDesc); err != nil {
 			return err
 		}
 		if err := updateRangeAddressing(b, &newDesc); err != nil {
@@ -678,7 +678,7 @@ func (r *Replica) AdminMerge(
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
 			if err := updateRangeDescriptor(
-				b, leftDescKey, dbOrigLeftDescValue, &updatedLeftDesc,
+				ctx, b, leftDescKey, dbOrigLeftDescValue, &updatedLeftDesc,
 			); err != nil {
 				return err
 			}
@@ -707,7 +707,7 @@ func (r *Replica) AdminMerge(
 		}
 
 		// Remove the range descriptor for the deleted range.
-		if err := updateRangeDescriptor(b, rightDescKey,
+		if err := updateRangeDescriptor(ctx, b, rightDescKey,
 			dbRightDescKV.Value.TagAndDataBytes(), /* oldValue */
 			nil,                                   /* newDesc */
 		); err != nil {
@@ -1658,7 +1658,7 @@ func execChangeReplicasTxn(
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, dbDescValue, crt.Desc); err != nil {
+			if err := updateRangeDescriptor(ctx, b, descKey, dbDescValue, crt.Desc); err != nil {
 				return err
 			}
 
@@ -2047,7 +2047,11 @@ func conditionalGetDescValueFromDB(
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
 func updateRangeDescriptor(
-	b *kv.Batch, descKey roachpb.Key, oldValue []byte, newDesc *roachpb.RangeDescriptor,
+	ctx context.Context,
+	b *kv.Batch,
+	descKey roachpb.Key,
+	oldValue []byte,
+	newDesc *roachpb.RangeDescriptor,
 ) error {
 	// This is subtle: []byte(nil) != interface{}(nil). A []byte(nil) refers to
 	// an empty value. An interface{}(nil) refers to a non-existent value. So
