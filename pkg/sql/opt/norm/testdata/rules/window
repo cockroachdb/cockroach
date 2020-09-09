@@ -92,6 +92,28 @@ project
       └── windows
            └── rank [type=int]
 
+# Do not simplify ordering column when in RANGE mode with an offset boundary of
+# PRECEDING, because execution requires a column in this case.
+norm expect-not=SimplifyWindowOrdering
+SELECT rank() OVER (ORDER BY k RANGE 1 PRECEDING) FROM a WHERE false
+----
+values
+ ├── columns: rank:6(int!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(6)
+
+# Do not simplify ordering column when in RANGE mode with an offset boundary of
+# FOLLOWING, because execution requires a column in this case.
+norm expect-not=SimplifyWindowOrdering
+SELECT rank() OVER (ORDER BY k RANGE BETWEEN 1 FOLLOWING AND 3 FOLLOWING) FROM a WHERE false
+----
+values
+ ├── columns: rank:6(int!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(6)
+
 # PushSelectIntoWindow
 
 norm expect=PushSelectIntoWindow

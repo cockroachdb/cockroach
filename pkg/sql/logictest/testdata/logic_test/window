@@ -3704,3 +3704,20 @@ NULL  7
 NULL  7
 NULL  7
 NULL  7
+
+# Regression test for #53442. Ordering columns are not pruned with RANGE mode
+# and an offset boundary of PRECEDING or FOLLOWING.
+
+statement ok
+CREATE TABLE t53442_a (a INT8 PRIMARY KEY);
+CREATE TABLE t53442_b (b INT2 PRIMARY KEY);
+
+statement ok
+SELECT max(b::INT8) OVER (PARTITION BY b ORDER BY b RANGE 1 PRECEDING)
+FROM t53442_b NATURAL JOIN t53442_a
+WHERE false
+
+statement ok
+SELECT max(b::INT8) OVER (PARTITION BY b ORDER BY a RANGE 1 PRECEDING)
+FROM t53442_b NATURAL JOIN t53442_a
+WHERE false
