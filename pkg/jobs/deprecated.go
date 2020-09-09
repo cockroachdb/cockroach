@@ -198,8 +198,9 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			}
 			nodeStatus, ok := nodeStatusMap[payload.Lease.NodeID]
 			if !ok {
-				// This case should never happen.
-				log.ReportOrPanic(ctx, nil, "job %d: skipping: no liveness record for the job's node %d",
+				// This case can happen when a node first starts up and runs schema
+				// migrations.
+				log.Warningf(ctx, "job %d: skipping: no liveness record for the job's node %d",
 					log.Safe(*id), payload.Lease.NodeID)
 				continue
 			}
