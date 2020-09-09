@@ -163,6 +163,7 @@ func mapCmdIter(
 	for iter.Valid() {
 		checked, err := fn(iter.Cur())
 		if err != nil {
+			ret.Close()
 			return nil, err
 		}
 		iter.Next()
@@ -183,6 +184,7 @@ func mapCheckedCmdIter(
 	for iter.Valid() {
 		applied, err := fn(iter.CurChecked())
 		if err != nil {
+			ret.Close()
 			return nil, err
 		}
 		iter.Next()
