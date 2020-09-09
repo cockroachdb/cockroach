@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -496,8 +496,6 @@ func TestQueryProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 51356)
-
 	const rows, kvBatchSize = 1000, 50
 
 	defer rowexec.TestingSetScannedRowProgressFrequency(rows / 60)()
@@ -550,7 +548,13 @@ func TestQueryProgress(t *testing.T) {
 	db.Exec(t, `CREATE STATISTICS __auto__ FROM t.test`)
 	const query = `SELECT count(*) FROM t.test WHERE x > $1 and x % 2 = 0`
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Invalidate the stats cache so that we can be sure to get the latest stats.
+	var tableID descpb.ID
+	ctx := context.Background()
+	require.NoError(t, rawDB.QueryRow(`SELECT id FROM system.namespace WHERE name = 'test'`).Scan(&tableID))
+	s.ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(ctx, tableID)
+
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	g := ctxgroup.WithContext(ctx)
