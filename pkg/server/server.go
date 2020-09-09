@@ -111,28 +111,6 @@ var (
 	)
 )
 
-// TODO(peter): Until go1.11, ServeMux.ServeHTTP was not safe to call
-// concurrently with ServeMux.Handle. So we provide our own wrapper with proper
-// locking. Slightly less efficient because it locks unnecessarily, but
-// safe. See TestServeMuxConcurrency. Should remove once we've upgraded to
-// go1.11.
-type safeServeMux struct {
-	mu  syncutil.RWMutex
-	mux http.ServeMux
-}
-
-func (mux *safeServeMux) Handle(pattern string, handler http.Handler) {
-	mux.mu.Lock()
-	mux.mux.Handle(pattern, handler)
-	mux.mu.Unlock()
-}
-
-func (mux *safeServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	mux.mu.RLock()
-	mux.mux.ServeHTTP(w, r)
-	mux.mu.RUnlock()
-}
-
 // Server is the cockroach server node.
 type Server struct {
 	// The following fields are populated in NewServer.
@@ -140,7 +118,7 @@ type Server struct {
 	nodeIDContainer *base.NodeIDContainer
 	cfg             Config
 	st              *cluster.Settings
-	mux             safeServeMux
+	mux             http.ServeMux
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
@@ -986,6 +964,13 @@ func (s *Server) startPersistingHLCUpperBound(
 	return nil
 }
 
+// getServerEndpointCounter returns a telemetry Counter corresponding to the
+// given grpc method.
+func getServerEndpointCounter(method string) telemetry.Counter {
+	const counterPrefix = "http.grpc-gateway"
+	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -1225,8 +1210,21 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
+
+	callCountInterceptor := func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		telemetry.Inc(getServerEndpointCounter(method))
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(append(
 		dialOpts,
+		grpc.WithUnaryInterceptor(callCountInterceptor)),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return loopback.Connect(ctx)
 		}),
