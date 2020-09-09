@@ -57,7 +57,7 @@ type replicatedCmd struct {
 	// ApplyCommittedEntries.
 	ctx context.Context
 	// sp is the tracing span corresponding to ctx. It is closed in
-	// FinishAndAckOutcome. This span "follows from" the proposer's span (even
+	// finishTracingSpan. This span "follows from" the proposer's span (even
 	// when the proposer is remote; we marshall tracing info through the
 	// proposal).
 	sp opentracing.Span
@@ -115,6 +115,16 @@ func (c *replicatedCmd) IsLocal() bool {
 	return c.proposal != nil
 }
 
+// AckErrAndFinish implements the apply.Command interface.
+func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
+	if c.IsLocal() {
+		c.response.Err = roachpb.NewError(
+			roachpb.NewAmbiguousResultError(
+				err.Error()))
+	}
+	return c.AckOutcomeAndFinish(ctx)
+}
+
 // Rejected implements the apply.CheckedCommand interface.
 func (c *replicatedCmd) Rejected() bool {
 	return c.forcedErr != nil
@@ -134,7 +144,7 @@ func (c *replicatedCmd) CanAckBeforeApplication() bool {
 }
 
 // AckSuccess implements the apply.CheckedCommand interface.
-func (c *replicatedCmd) AckSuccess() error {
+func (c *replicatedCmd) AckSuccess(_ context.Context) error {
 	if !c.IsLocal() {
 		return nil
 	}
@@ -153,8 +163,8 @@ func (c *replicatedCmd) AckSuccess() error {
 	return nil
 }
 
-// FinishAndAckOutcome implements the apply.AppliedCommand interface.
-func (c *replicatedCmd) FinishAndAckOutcome(ctx context.Context) error {
+// AckOutcomeAndFinish implements the apply.AppliedCommand interface.
+func (c *replicatedCmd) AckOutcomeAndFinish(ctx context.Context) error {
 	if c.IsLocal() {
 		c.proposal.finishApplication(ctx, c.response)
 	}
