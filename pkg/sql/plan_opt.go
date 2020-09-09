@@ -331,6 +331,7 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 		// If the memo doesn't have placeholders, then fully optimize it, since
 		// it can be reused without further changes to build the execution tree.
 		if !f.Memo().HasPlaceholders() {
+			opc.log(ctx, "optimizing (no placeholders)")
 			if _, err := opc.optimizer.Optimize(); err != nil {
 				return nil, err
 			}
@@ -424,6 +425,8 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 		opc.log(ctx, "query cache miss")
+	} else {
+		opc.log(ctx, "not using query cache")
 	}
 
 	// We are executing a statement for which there is no reusable memo
