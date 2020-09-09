@@ -40,7 +40,7 @@ SHOW database
 database
 ·
 
-statement error no database specified
+statement error no database or schema specified
 SHOW TABLES
 
 # Verify SHOW TABLES FROM works when there is no current database.
