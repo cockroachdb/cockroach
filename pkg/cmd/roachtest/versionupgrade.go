@@ -511,7 +511,7 @@ result:
 
 for i in 1 2 3 4; do
   mkdir -p pkg/cmd/roachtest/fixtures/${i} && \
-  mv artifacts/acceptance/version-upgrade/run_1/${i}.logs/checkpoint-*.tgz \
+  mv artifacts/acceptance/version-upgrade/run_1/logs/${i}.unredacted/checkpoint-*.tgz \
      pkg/cmd/roachtest/fixtures/${i}/
 done
 `)
