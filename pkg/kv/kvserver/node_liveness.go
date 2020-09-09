@@ -450,6 +450,54 @@ type livenessUpdate struct {
 	oldRaw []byte
 }
 
+// CreateLivenessRecord creates a liveness record for the node specified by the
+// given node ID. This is typically used when adding a new node to a running
+// cluster, or when bootstrapping a cluster through a given node.
+//
+// This is a pared down version of StartHeartbeat; it exists only to durably
+// persist a liveness to record the node's existence. Nodes will heartbeat their
+// records after starting up, and incrementing to epoch=2 when doing so, at
+// which point we'll set an appropriate expiration timestamp, gossip the
+// liveness record, and update our in-memory representation of it.
+func (nl *NodeLiveness) CreateLivenessRecord(ctx context.Context, nodeID roachpb.NodeID) error {
+	liveness := kvserverpb.Liveness{
+		NodeID: nodeID,
+		Epoch:  1,
+	}
+
+	// We skip adding an expiration, we only really care about the liveness
+	// record existing within KV.
+
+	v := new(roachpb.Value)
+	if err := nl.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		b := txn.NewBatch()
+		key := keys.NodeLivenessKey(nodeID)
+		if err := v.SetProto(&liveness); err != nil {
+			log.Fatalf(ctx, "failed to marshall proto: %s", err)
+		}
+		// Given we're looking to create a new liveness record here, we don't
+		// expect to find anything.
+		b.CPut(key, v, nil)
+
+		// We don't bother adding a gossip trigger, that'll happen with the
+		// first heartbeat. We still keep it as a 1PC commit to avoid leaving
+		// write intents.
+		b.AddRawRequest(&roachpb.EndTxnRequest{
+			Commit:     true,
+			Require1PC: true,
+		})
+		return txn.Run(ctx, b)
+	}); err != nil {
+		return err
+	}
+
+	// We'll learn about this liveness record through gossip eventually, so we
+	// don't bother updating our in-memory view of node liveness.
+
+	log.Infof(ctx, "created liveness record for n%d", nodeID)
+	return nil
+}
+
 func (nl *NodeLiveness) setMembershipStatusInternal(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
@@ -461,16 +509,10 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 	if oldLivenessRec.Liveness == (kvserverpb.Liveness{}) {
 		// Liveness record didn't previously exist, so we create one.
 		//
-		// TODO(irfansharif): This code feels a bit unwieldy because it's
-		// possible for a liveness record to not exist previously. It is just
-		// generally difficult to write it at startup. When a node joins the
-		// cluster, this completes before it has had a chance to write its
-		// liveness record. If it gets decommissioned immediately, there won't
-		// be one yet. The Connect RPC can solve this though, I think? We can
-		// bootstrap clusters with a liveness record for n1. Any other node at
-		// some point has to join the cluster for the first time via the Connect
-		// RPC, which as part of its job can make sure the liveness record
-		// exists before responding to the new node.
+		// TODO(irfansharif): The above is now no longer possible. We always
+		// create one (see CreateLivenessRecord, WriteInitialClusterData) when
+		// adding a node to the cluster. We should clean up all this logic that
+		// tries to work around the liveness record possibly not existing.
 		newLiveness = kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
@@ -737,7 +779,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 
 	// If we are not intending to increment the node's liveness epoch, detect
 	// whether this heartbeat is needed anymore. It is possible that we queued
-	// for long enough on the sempahore such that other heartbeat attempts ahead
+	// for long enough on the semaphore such that other heartbeat attempts ahead
 	// of us already incremented the expiration past what we wanted. Note that
 	// if we allowed the heartbeat to proceed in this case, we know that it
 	// would hit a ConditionFailedError and return a errNodeAlreadyLive down
