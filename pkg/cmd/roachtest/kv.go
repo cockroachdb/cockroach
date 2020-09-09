@@ -602,7 +602,7 @@ func registerKVRangeLookups(r *testRegistry) {
 			duration := " --duration=10m"
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is
-			// expected to create `result is ambiguous (removing replica)` errors.
+			// expected to create `result is ambiguous (replica removed)` errors.
 			cmd = fmt.Sprintf("./workload run kv --tolerate-errors"+
 				concurrency+duration+readPercent+
 				" {pgurl:1-%d}", nodes)
