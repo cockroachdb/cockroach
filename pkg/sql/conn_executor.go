@@ -695,6 +695,10 @@ func (s *Server) newConnExecutorWithTxn(
 	appStats *appStats,
 ) *connExecutor {
 	ex := s.newConnExecutor(ctx, sd, sdDefaults, stmtBuf, clientComm, memMetrics, srvMetrics, appStats)
+	if txn.Type() == kv.LeafTxn {
+		// Disable stepping on leaf txns since it is not supported.
+		ex.extraTxnState.transactionSteppingDisabled = true
+	}
 
 	// The new transaction stuff below requires active monitors and traces, so
 	// we need to activate the executor now.
@@ -712,7 +716,7 @@ func (s *Server) newConnExecutorWithTxn(
 		explicitTxn,
 		txn.ReadTimestamp().GoTime(),
 		nil, /* historicalTimestamp */
-		txn.UserPriority(),
+		roachpb.UnspecifiedUserPriority,
 		tree.ReadWrite,
 		txn,
 		ex.transitionCtx)
@@ -1054,6 +1058,11 @@ type connExecutor struct {
 		// still need the statementID hash to disambiguate beyond the capped
 		// statements.
 		transactionStatementsHash hash.Hash
+
+		// transactionSteppingDisabled specifies whether the conn executor should
+		// configure stepping on the associated transaction. Usually only true when
+		// executing in the context of a leaf txn.
+		transactionSteppingDisabled bool
 	}
 
 	// sessionData contains the user-configurable connection variables.

@@ -376,3 +376,23 @@ CREATE TEMPORARY TABLE foo();
 		require.NoError(t, err)
 	}
 }
+
+func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	rootTxn := kvDB.NewTxn(ctx, "root-txn")
+
+	ltis := rootTxn.GetLeafTxnInputState(ctx)
+	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), &ltis)
+
+	ie := s.InternalExecutor().(*InternalExecutor)
+	_, err := ie.QueryEx(
+		ctx, "leaf-query", leafTxn, ie.maybeRootSessionDataOverride("leaf-query"), "SELECT 1",
+	)
+	require.NoError(t, err)
+}
