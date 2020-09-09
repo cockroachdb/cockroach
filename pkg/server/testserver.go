@@ -292,6 +292,11 @@ func (ts *TestServer) Node() interface{} {
 	return ts.node
 }
 
+// NodeID returns the ID of this node within its cluster.
+func (ts *TestServer) NodeID() roachpb.NodeID {
+	return ts.rpcContext.NodeID.Get()
+}
+
 // Stopper returns the embedded server's Stopper.
 func (ts *TestServer) Stopper() *stop.Stopper {
 	return ts.stopper
