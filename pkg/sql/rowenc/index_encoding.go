@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
@@ -1225,6 +1226,7 @@ func writeColumnValues(
 // value (passed as a parameter so the caller can reuse between rows) and is
 // expected to be the same length as indexes.
 func EncodeSecondaryIndexes(
+	ctx context.Context,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexes []*descpb.IndexDescriptor,
@@ -1232,10 +1234,16 @@ func EncodeSecondaryIndexes(
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 	includeEmpty bool,
+	indexBoundAccount mon.BoundAccount,
 ) ([]IndexEntry, error) {
 	if len(secondaryIndexEntries) > 0 {
 		panic("Length of secondaryIndexEntries was non-zero")
 	}
+
+	if indexBoundAccount.Monitor() == nil {
+		panic("Memory monitor passed to EncodeSecondaryIndexes was nil")
+	}
+
 	for i := range indexes {
 		entries, err := EncodeSecondaryIndex(codec, tableDesc, indexes[i], colMap, values, includeEmpty)
 		if err != nil {
@@ -1244,6 +1252,23 @@ func EncodeSecondaryIndexes(
 		// Normally, each index will have exactly one entry. However, inverted
 		// indexes can have 0 or >1 entries, as well as secondary indexes which
 		// store columns from multiple column families.
+		//
+		// We must account for additional index entries in the index memory account
+		// if secondaryIndexEntries is going to get re-sliced.
+		if cap(entries)-len(secondaryIndexEntries) < len(entries) {
+			if err := indexBoundAccount.Grow(ctx, int64(cap(entries))); err != nil {
+				return nil, errors.Wrap(err, "failed to re-slice index entries buffer")
+			}
+		}
+
+		// The index keys can be large and so we must account for them in the index
+		// memory account.
+		for _, index := range entries {
+			if err := indexBoundAccount.Grow(ctx, int64(len(index.Key))); err != nil {
+				return nil, errors.Wrap(err, "failed to allocate space for index keys")
+			}
+		}
+
 		secondaryIndexEntries = append(secondaryIndexEntries, entries...)
 	}
 	return secondaryIndexEntries, nil
