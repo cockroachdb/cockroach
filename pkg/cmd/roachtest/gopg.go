@@ -24,6 +24,7 @@ import (
 
 // Currently, we're running a version like 'v9.0.1'.
 var gopgReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)(?:\.(?P<minor>\d+)(?:\.(?P<point>\d+))?)?$`)
+var gopgSupportedTag = "v10.0.1"
 
 // This test runs gopg full test suite against a single cockroach node.
 func registerGopg(r *testRegistry) {
@@ -55,11 +56,12 @@ func registerGopg(r *testRegistry) {
 		}
 
 		t.Status("cloning gopg and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, c, "go-pg", "pg", gopgReleaseTagRegex)
+		gopgLatestTag, err := repeatGetLatestTag(ctx, c, "go-pg", "pg", gopgReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest gopg release is %s.", latestTag)
+		c.l.Printf("Latest gopg release is %s.", gopgLatestTag)
+		c.l.Printf("Supported gopg release is %s.", gopgSupportedTag)
 
 		installLatestGolang(ctx, t, c, node)
 
@@ -86,7 +88,7 @@ func registerGopg(r *testRegistry) {
 			c,
 			"https://github.com/go-pg/pg.git",
 			destPath,
-			latestTag,
+			gopgSupportedTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -124,7 +126,7 @@ func registerGopg(r *testRegistry) {
 		// gopg test suite consists of multiple tests, some of them being a full
 		// test suites in themselves. Those are run with TestGinkgo test harness.
 		// First, we parse the result of running TestGinkgo.
-		if err := gormParseTestGinkgoOutput(
+		if err := gopgParseTestGinkgoOutput(
 			results, rawResults, expectedFailures, ignorelist,
 		); err != nil {
 			t.Fatal(err)
@@ -145,7 +147,7 @@ func registerGopg(r *testRegistry) {
 
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
 		results.summarizeFailed(
-			t, "gopg", blocklistName, expectedFailures, version, latestTag,
+			t, "gopg", blocklistName, expectedFailures, version, gopgSupportedTag,
 			0, /* notRunCount */
 		)
 	}
@@ -162,10 +164,10 @@ func registerGopg(r *testRegistry) {
 	})
 }
 
-// gormParseTestGinkgoOutput parses the summary of failures of running internal
+// gopgParseTestGinkgoOutput parses the summary of failures of running internal
 // test suites from gopg ORM tests. TestGinkgo is a test harness that runs
 // several test suites described by gopg.
-func gormParseTestGinkgoOutput(
+func gopgParseTestGinkgoOutput(
 	r *ormTestsResults, rawResults []byte, expectedFailures, ignorelist blocklist,
 ) (err error) {
 	var (
