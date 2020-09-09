@@ -444,6 +444,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 func TestBackupRestoreAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 54039, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
