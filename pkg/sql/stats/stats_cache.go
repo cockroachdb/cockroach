@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -170,11 +171,11 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 	if e.mustWait {
 		// We are in the process of grabbing stats for this table. Wait until
 		// that is complete, at which point e.stats will be populated.
-		if log.V(1) {
-			log.Infof(ctx, "waiting for statistics for table %d", tableID)
-		}
+		log.VEventf(ctx, 1, "waiting for statistics for table %d", tableID)
 		e.waitCond.Wait()
+		log.VEventf(ctx, 1, "finished waiting for statistics for table %d", tableID)
 	} else {
+		// This is the expected "fast" path; don't emit an event.
 		if log.V(2) {
 			log.Infof(ctx, "statistics for table %d found in cache", tableID)
 		}
@@ -193,10 +194,6 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 func (sc *TableStatisticsCache) addCacheEntryLocked(
 	ctx context.Context, tableID sqlbase.ID,
 ) (stats []*TableStatistic, err error) {
-	if log.V(1) {
-		log.Infof(ctx, "reading statistics for table %d", tableID)
-	}
-
 	// Add a cache entry that other queries can find and wait on until we have the
 	// stats.
 	e := &cacheEntry{
@@ -210,7 +207,9 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 		sc.mu.Unlock()
 		defer sc.mu.Lock()
 
+		log.VEventf(ctx, 1, "reading statistics for table %d", tableID)
 		stats, err = sc.getTableStatsFromDB(ctx, tableID)
+		log.VEventf(ctx, 1, "finished reading statistics for table %d", tableID)
 	}()
 
 	e.mustWait = false
@@ -240,10 +239,6 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID s
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	if log.V(1) {
-		log.Infof(ctx, "reading statistics for table %d", tableID)
-	}
-
 	// If the stats don't already exist in the cache, don't bother performing
 	// the refresh. If e.err is not nil, the stats are in the process of being
 	// removed from the cache (see addCacheEntryLocked), so don't refresh in this
@@ -269,7 +264,9 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID s
 			sc.mu.Unlock()
 			defer sc.mu.Lock()
 
+			log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
 			stats, err = sc.getTableStatsFromDB(ctx, tableID)
+			log.VEventf(ctx, 1, "done refreshing statistics for table %d", tableID)
 		}()
 		if !e.mustRefreshAgain {
 			break
@@ -289,11 +286,13 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID s
 // RefreshTableStats refreshes the cached statistics for the given table ID
 // by fetching the new stats from the database.
 func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID sqlbase.ID) {
-	if log.V(1) {
-		log.Infof(ctx, "refreshing statistics for table %d", tableID)
-	}
+	log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
+	ctx, span := tracing.ForkCtxSpan(ctx, "refresh-table-stats")
 	// Perform an asynchronous refresh of the cache.
-	go sc.refreshCacheEntry(ctx, tableID)
+	go func() {
+		defer tracing.FinishSpan(span)
+		sc.refreshCacheEntry(ctx, tableID)
+	}()
 }
 
 // InvalidateTableStats invalidates the cached statistics for the given table ID.
@@ -302,9 +301,7 @@ func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID s
 // This function is used only when we want to guarantee that the next query
 // uses updated stats.
 func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableID sqlbase.ID) {
-	if log.V(1) {
-		log.Infof(ctx, "evicting statistics for table %d", tableID)
-	}
+	log.VEventf(ctx, 1, "evicting statistics for table %d", tableID)
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	sc.mu.cache.Del(tableID)
