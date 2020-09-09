@@ -43,6 +43,8 @@ func newColumnBackfiller(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*columnBackfiller, error) {
+	columnBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
+		"column-backfill-mon")
 	cb := &columnBackfiller{
 		desc: tabledesc.NewImmutable(spec.Table),
 		backfiller: backfiller{
@@ -56,14 +58,18 @@ func newColumnBackfiller(
 	}
 	cb.backfiller.chunks = cb
 
-	if err := cb.ColumnBackfiller.InitForDistributedUse(ctx, flowCtx, cb.desc); err != nil {
+	if err := cb.ColumnBackfiller.InitForDistributedUse(ctx, flowCtx, cb.desc,
+		columnBackfillerMon); err != nil {
 		return nil, err
 	}
 
 	return cb, nil
 }
 
-func (cb *columnBackfiller) close(ctx context.Context) {}
+func (cb *columnBackfiller) close(ctx context.Context) {
+	cb.ColumnBackfiller.Close(ctx)
+}
+
 func (cb *columnBackfiller) prepare(ctx context.Context) error {
 	return nil
 }
