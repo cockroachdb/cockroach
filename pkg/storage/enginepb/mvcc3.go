@@ -12,6 +12,9 @@ package enginepb
 
 import "github.com/cockroachdb/errors"
 
+// SafeValue implements the redact.SafeValue interface.
+func (MVCCStatsDelta) SafeValue() {}
+
 // ToStats converts the receiver to an MVCCStats.
 func (ms *MVCCStatsDelta) ToStats() MVCCStats {
 	return MVCCStats(*ms)
@@ -26,6 +29,9 @@ func (ms *MVCCStats) ToStatsDelta() MVCCStatsDelta {
 func (ms *MVCCPersistentStats) ToStats() MVCCStats {
 	return MVCCStats(*ms)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (ms *MVCCStats) SafeValue() {}
 
 // ToPersistentStats converts the receiver to an MVCCPersistentStats.
 func (ms *MVCCStats) ToPersistentStats() MVCCPersistentStats {
