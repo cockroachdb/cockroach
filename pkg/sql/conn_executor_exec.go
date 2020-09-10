@@ -287,9 +287,10 @@ func (ex *connExecutor) execStmtInOpenState(
 			sp.Finish()
 			trace := tracing.GetRecording(sp)
 			ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
+			placeholders := p.extendedEvalCtx.Placeholders
 			if finishCollectionDiagnostics != nil {
 				bundle, collectionErr := buildStatementBundle(
-					origCtx, ex.server.cfg.DB, ie, &p.curPlan, trace,
+					origCtx, ex.server.cfg.DB, ie, &p.curPlan, trace, placeholders,
 				)
 				finishCollectionDiagnostics(origCtx, bundle.trace, bundle.zip, collectionErr)
 			} else {
@@ -297,7 +298,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				// If there was a communication error, no point in setting any results.
 				if retErr == nil {
 					retErr = setExplainBundleResult(
-						origCtx, res, stmt.AST, trace, &p.curPlan, ie, ex.server.cfg,
+						origCtx, res, stmt.AST, trace, &p.curPlan, placeholders, ie, ex.server.cfg,
 					)
 				}
 			}
