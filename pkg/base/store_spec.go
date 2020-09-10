@@ -413,8 +413,15 @@ const AuxiliaryDir = "auxiliary"
 
 // PreventedStartupFile is the filename (relative to 'dir') used for files that
 // can block server startup.
+// XXX: Can use something similar.
 func PreventedStartupFile(dir string) string {
 	return filepath.Join(dir, "_CRITICAL_ALERT.txt")
+}
+
+// DecommMarkerFile is the filename (relative to 'dir') used for files that
+// can block server startup because the node has been decommissioned
+func DecommMarkerFile(dir string) string {
+	return filepath.Join(dir, "DECOMMISSIONED.txt")
 }
 
 // PriorCriticalAlertError attempts to read the

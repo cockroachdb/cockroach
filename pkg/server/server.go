@@ -122,9 +122,10 @@ type Server struct {
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc         *grpcServer
-	gossip       *gossip.Gossip
-	nodeDialer   *nodedialer.Dialer
+	grpc       *grpcServer
+	gossip     *gossip.Gossip
+	nodeDialer *nodedialer.Dialer
+	// XXX:
 	nodeLiveness *kvserver.NodeLiveness
 	storePool    *kvserver.StorePool
 	tcsFactory   *kvcoord.TxnCoordSenderFactory
@@ -1942,6 +1943,27 @@ func (s *Server) Decommission(
 		}
 	}
 
+	// XXX: Consult our cache, return early if no-op. If we're attempting to
+	// mark a node as fully decommissioned, we want to send out a "prevent
+	// startup rpc" to it, which would persist a kill file.
+	if targetStatus.Decommissioned() {
+		for _, nodeID := range nodeIDs {
+			conn, err := s.nodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
+			if err != nil {
+				return err
+			}
+
+			client := serverpb.NewAdminClient(conn)
+			req := &serverpb.FinalizeDecommissionRequest{}
+			_, err = client.FinalizeDecommission(ctx, req)
+			_ = conn.Close()
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+
 	eventLogger := sql.MakeEventLogger(s.sqlServer.execCfg)
 	var eventType sql.EventLogType
 	if targetStatus.Decommissioning() {
@@ -1962,10 +1984,11 @@ func (s *Server) Decommission(
 		if statusChanged {
 			// If we die right now or if this transaction fails to commit, the
 			// membership event will not be recorded to the event log. While we
-			// could insert the event record in the same transaction as the liveness
-			// update, this would force a 2PC and potentially leave write intents in
-			// the node liveness range. Better to make the event logging best effort
-			// than to slow down future node liveness transactions.
+			// could insert the event record in the same transaction as the
+			// liveness update, this would force a 2PC and potentially leave
+			// write intents in the node liveness range. Better to make the
+			// event logging best effort than to slow down future node liveness
+			// transactions.
 			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return eventLogger.InsertEventRecord(
 					ctx, txn, eventType, int32(nodeID), int32(s.NodeID()), struct{}{},

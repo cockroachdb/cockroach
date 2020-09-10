@@ -465,6 +465,12 @@ message DecommissionStatusResponse {
   repeated Status status = 2 [(gogoproto.nullable) = false];
 }
 
+message FinalizeDecommissionRequest {
+}
+
+message FinalizeDecommissionResponse {
+}
+
 // SettingsRequest inquires what are the current settings in the cluster.
 message SettingsRequest {
   // The array of setting names to retrieve.
@@ -872,6 +878,9 @@ service Admin {
   // If this ever becomes exposed via HTTP, ensure that it performs
   // authorization. See #42567.
   rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
+  }
+
+  rpc FinalizeDecommission(FinalizeDecommissionRequest) returns (FinalizeDecommissionResponse) {
   }
 
   // DecommissionStatus retrieves the decommissioning status of the specified nodes.

@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"io"
 	"net/http"
 	"sort"
@@ -1706,7 +1707,10 @@ func (s *adminServer) DecommissionStatus(
 	return &res, nil
 }
 
-// Decommission sets the decommission flag to the specified value on the specified node(s).
+// Decommission sets the decommission flag to the specified value on the
+// specified node(s).
+//
+// XXX: This is where we start.
 func (s *adminServer) Decommission(
 	ctx context.Context, req *serverpb.DecommissionRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
@@ -1722,6 +1726,29 @@ func (s *adminServer) Decommission(
 		return nil, err
 	}
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
+}
+
+// XXX: FinalizeDecommission
+func (s *adminServer) FinalizeDecommission(
+	ctx context.Context, _ *serverpb.FinalizeDecommissionRequest,
+) (*serverpb.FinalizeDecommissionResponse, error) {
+	firstEng := s.server.engines[0]
+	auxDir := firstEng.GetAuxiliaryDir()
+	_ = firstEng.MkdirAll(auxDir)
+	path := base.DecommMarkerFile(auxDir)
+	preventStartupMsg := fmt.Sprintf(`YO:
+
+This node has been fully decommissioned.
+
+A file preventing this node from restarting was placed at:
+%s
+`, path)
+
+	if err := fs.WriteFile(firstEng, path, []byte(preventStartupMsg)); err != nil {
+		log.Warningf(ctx, "%v", err)
+	}
+
+	return &serverpb.FinalizeDecommissionResponse{}, nil
 }
 
 // DataDistribution returns a count of replicas on each node for each table.

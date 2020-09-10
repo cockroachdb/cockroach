@@ -284,6 +284,7 @@ var decommissionNodesColumnHeaders = []string{
 	"is_draining",
 }
 
+// XXX: This is where the CLI codepaths start.
 var decommissionNodeCmd = &cobra.Command{
 	Use:   "decommission { --self | <node id 1> [<node id 2> ...] }",
 	Short: "decommissions the node(s)",
@@ -452,6 +453,7 @@ func runDecommissionNodeImpl(
 
 		if !anyActive && replicaCount == 0 {
 			// We now mark the nodes as fully decommissioned.
+			// XXX: Let's piggy back off of this RPC to start off.
 			req := &serverpb.DecommissionRequest{
 				NodeIDs:          nodeIDs,
 				TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONED,
