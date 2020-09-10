@@ -25,6 +25,9 @@
 #   - no interleaved relationship (parent1 - parent2, parent2 - child1)
 #   - TODO(richardwu): sibling-sibling (child1 - child2)
 
+statement ok
+SET enable_interleaved_joins = true
+
 #################
 # Create tables #
 #################
