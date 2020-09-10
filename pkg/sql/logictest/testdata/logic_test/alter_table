@@ -1364,3 +1364,70 @@ statement ok
 CREATE TABLE t52816 (x INT, y INT);
 ALTER TABLE t52816 RENAME COLUMN x TO x2, RENAME COLUMN y TO y;
 SELECT x2, y FROM t52816
+
+# Regression test for #54196.
+statement ok
+CREATE TABLE IF NOT EXISTS regression_54196 (
+	col109_0
+		STRING NOT NULL,
+	col109_1
+		DECIMAL NULL,
+	col109_2
+		INET NULL,
+	col109_3
+		REGCLASS NOT NULL,
+	col109_4
+		REGNAMESPACE NOT NULL,
+	col109_5
+		BOX2D NOT NULL,
+	col109_6
+		BIT(28) NULL,
+	col109_7
+		BOX2D NOT NULL,
+	col109_8
+		STRING NOT NULL,
+	col109_9
+		BIT(44) NOT NULL,
+	col109_10
+		INT2 NOT NULL,
+	col109_11
+		"char" NOT NULL,
+	col109_12
+		INET NOT NULL,
+	col109_13
+		BOX2D NOT NULL,
+	col109_14
+		REGPROCEDURE NULL,
+	col109_15
+		INT2 NOT NULL,
+	col109_16
+		TIMESTAMPTZ[],
+	INDEX (
+		col109_7 ASC,
+		col109_12,
+		col109_15 DESC,
+		col109_8,
+		col109_10,
+		col109_1 ASC,
+		col109_11 DESC,
+		col109_14 ASC,
+		col109_0 ASC,
+		col109_13 DESC,
+		col109_5 ASC,
+		col109_6,
+		col109_4 DESC
+	)
+		STORING(col109_9, col109_16),
+	INDEX (
+		col109_5 ASC,
+		col109_15,
+		col109_9 DESC,
+		col109_1 DESC,
+		col109_12 ASC,
+		col109_10 ASC,
+		col109_14 ASC,
+		col109_7 ASC
+	)
+		STORING(col109_2, col109_3, col109_6, col109_16),
+	INDEX (col109_12 ASC, col109_4 DESC)
+); ALTER TABLE regression_54196 DROP COLUMN col109_15
