@@ -691,17 +691,18 @@ func (s *Server) maybeUpgradeToSecureConn(
 	if version != versionSSL {
 		// The client did not require a SSL connection.
 
-		if !s.cfg.Insecure && connType != hba.ConnLocal {
-			// Currently non-SSL connections are not allowed in secure
-			// mode. Ideally, we want to allow this and subject it to HBA
-			// rules ('hostssl' vs 'hostnossl').
-			//
-			// TODO(knz): revisit this when needed.
-			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
+		// Insecure mode: nothing to say, nothing to do.
+		// TODO(knz): Remove this condition - see
+		// https://github.com/cockroachdb/cockroach/issues/53404
+		if s.cfg.Insecure {
 			return
 		}
 
-		// Non-SSL in non-secure mode, all is well: no-op.
+		// Secure mode: disallow if TCP and the user did not opt into SQL
+		// conns.
+		if !s.cfg.AcceptSQLWithoutTLS && connType != hba.ConnLocal {
+			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
+		}
 		return
 	}
 

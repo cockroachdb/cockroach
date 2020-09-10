@@ -149,9 +149,18 @@ var (
 // Config is embedded by server.Config. A base config is not meant to be used
 // directly, but embedding configs should call cfg.InitDefaults().
 type Config struct {
-	// Insecure specifies whether to use SSL or not.
+	// Insecure specifies whether to disable security checks throughout
+	// the code base.
 	// This is really not recommended.
+	// See: https://github.com/cockroachdb/cockroach/issues/53404
 	Insecure bool
+
+	// AcceptSQLWithoutTLS, when set, makes it possible for SQL
+	// clients to authenticate without TLS on a secure cluster.
+	//
+	// Authentication is, as usual, subject to the HBA configuration: in
+	// the default case, password authentication is still mandatory.
+	AcceptSQLWithoutTLS bool
 
 	// SSLCAKey is used to sign new certs.
 	SSLCAKey string
@@ -260,6 +269,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
+	cfg.AcceptSQLWithoutTLS = false
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of
