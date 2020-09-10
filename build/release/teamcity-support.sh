@@ -59,5 +59,6 @@ configure_git_ssh_key() {
 }
 
 push_to_git() {
-  GIT_SSH_COMMAND="ssh -i .cockroach-teamcity-key" git push $1 $2
+  # $@ passes all arguments to this function to the command
+  GIT_SSH_COMMAND="ssh -i .cockroach-teamcity-key" git push "$@"
 }
