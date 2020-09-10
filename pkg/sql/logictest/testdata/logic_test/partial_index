@@ -1039,6 +1039,21 @@ SELECT m FROM join_small JOIN join_large ON n = i AND s = 'foo'
 ----
 1
 
+# A lookup semi-join is used when an expression in the semi-join filter exactly
+# matches the partial index predicate.
+query I rowsort
+SELECT m FROM join_small WHERE EXISTS (SELECT 1 FROM join_large WHERE n = i AND s IN ('foo', 'bar', 'baz'))
+----
+1
+3
+
+# A lookup anti-join is used when an expression in the anti-join filter exactly
+# matches the partial index predicate.
+query I rowsort
+SELECT m FROM join_small WHERE NOT EXISTS (SELECT 1 FROM join_large WHERE n = i AND s IN ('foo', 'bar', 'baz'))
+----
+2
+
 # Test partial indexes with an ENUM in the predicate.
 subtest enum
 

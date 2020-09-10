@@ -3198,25 +3198,19 @@ project
       └── filters
            └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
 
-# TODO: We can generate a lookup semi-join when the index does not cover "s" but
-# the reference to "s" no longer exists in the filters.
+# Generate a lookup semi-join when the index does not cover "s", but the
+# reference to "s" no longer exists in the filters.
 opt expect=GenerateLookupJoinsWithFilter
 SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', 'bar', 'baz') AND n = i)
 ----
 project
  ├── columns: m:1
- └── semi-join (hash)
+ └── semi-join (lookup partial_tab@partial_idx,partial)
       ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
       ├── scan small
       │    └── columns: m:1 n:2
-      ├── index-join partial_tab
-      │    ├── columns: i:6 s:7!null
-      │    └── scan partial_tab@partial_idx,partial
-      │         ├── columns: k:5!null i:6
-      │         ├── key: (5)
-      │         └── fd: (5)-->(6)
-      └── filters
-           └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      └── filters (true)
 
 # We should not generate a lookup semi-join when the index does not cover "s"
 # which is referenced in the remaining filter.
@@ -3243,25 +3237,19 @@ project
       └── filters
            └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
-# TODO: We can generate a lookup anti-join when the index does not cover "s" but
-# the reference to "s" no longer exists in the filters.
+# Generate a lookup anti-join when the index does not cover "s", but the
+# reference to "s" no longer exists in the filters.
 opt expect=GenerateLookupJoinsWithFilter
 SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', 'bar', 'baz') AND n = i)
 ----
 project
  ├── columns: m:1
- └── anti-join (hash)
+ └── anti-join (lookup partial_tab@partial_idx,partial)
       ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
       ├── scan small
       │    └── columns: m:1 n:2
-      ├── index-join partial_tab
-      │    ├── columns: i:6 s:7!null
-      │    └── scan partial_tab@partial_idx,partial
-      │         ├── columns: k:5!null i:6
-      │         ├── key: (5)
-      │         └── fd: (5)-->(6)
-      └── filters
-           └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      └── filters (true)
 
 # We should not generate a lookup anti-join when the index does not cover "s"
 # which is referenced in the remaining filter.
