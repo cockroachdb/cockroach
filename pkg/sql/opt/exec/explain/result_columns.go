@@ -84,14 +84,6 @@ func getResultColumns(
 		a := args.(*lookupJoinArgs)
 		return joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols)), nil
 
-	case interleavedJoinOp:
-		a := args.(*interleavedJoinArgs)
-		return joinColumns(
-			a.JoinType,
-			tableColumns(a.LeftTable, a.LeftParams.NeededCols),
-			tableColumns(a.RightTable, a.RightParams.NeededCols),
-		), nil
-
 	case ordinalityOp:
 		return appendColumns(inputs[0], colinfo.ResultColumn{
 			Name: args.(*ordinalityArgs).ColName,

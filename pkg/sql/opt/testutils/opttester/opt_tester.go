@@ -226,7 +226,6 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData.OptimizerUseMultiColStats = true
 	ot.evalCtx.SessionData.ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData.InsertFastPath = true
-	ot.evalCtx.SessionData.InterleavedJoins = true
 
 	return ot
 }

@@ -386,7 +386,7 @@ INSERT INTO c20067 VALUES (1, 1, 'John Doe')
 # planned incorrectly given a merge join ordering caused by a constant value
 # constraint on a non-interleaved column.
 
-subtest interleaved_join_on_other_columns
+subtest join_on_other_columns
 statement ok
 CREATE TABLE users (id INT PRIMARY KEY)
 

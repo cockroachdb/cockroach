@@ -152,8 +152,6 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.left.plan = v.visit(n.left.plan)
 		n.right.plan = v.visit(n.right.plan)
 
-	case *interleavedJoinNode:
-
 	case *invertedFilterNode:
 		n.input = v.visit(n.input)
 
@@ -387,7 +385,6 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&indexJoinNode{}):               "index join",
 	reflect.TypeOf(&insertNode{}):                  "insert",
 	reflect.TypeOf(&insertFastPathNode{}):          "insert fast path",
-	reflect.TypeOf(&interleavedJoinNode{}):         "interleaved join",
 	reflect.TypeOf(&invertedFilterNode{}):          "inverted filter",
 	reflect.TypeOf(&invertedJoinNode{}):            "inverted join",
 	reflect.TypeOf(&joinNode{}):                    "join",

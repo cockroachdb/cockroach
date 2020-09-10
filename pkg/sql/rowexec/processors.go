@@ -179,14 +179,6 @@ func NewProcessor(
 			flowCtx, processorID, core.MergeJoiner, inputs[0], inputs[1], post, outputs[0],
 		)
 	}
-	if core.InterleavedReaderJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
-			return nil, err
-		}
-		return newInterleavedReaderJoiner(
-			flowCtx, processorID, core.InterleavedReaderJoiner, post, outputs[0],
-		)
-	}
 	if core.ZigzagJoiner != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err

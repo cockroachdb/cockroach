@@ -72,8 +72,6 @@ type Builder struct {
 
 	allowInsertFastPath bool
 
-	allowInterleavedJoins bool
-
 	// forceForUpdateLocking is conditionally passed through to factory methods
 	// for scan operators that serve as the input for mutation operators. When
 	// set to true, it ensures that a FOR UPDATE row-level locking mode is used
@@ -126,7 +124,6 @@ func New(
 			b.nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
 		}
 		b.allowInsertFastPath = evalCtx.SessionData.InsertFastPath
-		b.allowInterleavedJoins = evalCtx.SessionData.InterleavedJoins
 	}
 	return b
 }

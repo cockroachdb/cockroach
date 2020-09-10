@@ -74,9 +74,6 @@ var IndexHintUpdateUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index.u
 // index hint in a DELETE.
 var IndexHintDeleteUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index.delete")
 
-// InterleavedTableJoinCounter is to be incremented whenever an InterleavedTableJoin is planned.
-var InterleavedTableJoinCounter = telemetry.GetCounterOnce("sql.plan.interleaved-table-join")
-
 // ExplainPlanUseCounter is to be incremented whenever vanilla EXPLAIN is run.
 var ExplainPlanUseCounter = telemetry.GetCounterOnce("sql.plan.explain")
 

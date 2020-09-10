@@ -92,7 +92,7 @@ message ProcessorCoreUnion {
   optional CSVWriterSpec CSVWriter = 20;
   optional SamplerSpec Sampler = 15;
   optional SampleAggregatorSpec SampleAggregator = 16;
-  optional InterleavedReaderJoinerSpec interleavedReaderJoiner = 17;
+  reserved 17;
   optional MetadataTestSenderSpec metadataTestSender = 18;
   optional MetadataTestReceiverSpec metadataTestReceiver = 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
