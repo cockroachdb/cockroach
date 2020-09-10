@@ -201,12 +201,15 @@ func TestConnMessageTooBig(t *testing.T) {
 	}
 	shortStr := "b"
 
+	_, err := mainDB.Exec("CREATE TABLE tbl(str TEXT)")
+	require.NoError(t, err)
+
 	testCases := []struct {
-		desc                           string
-		shortStrAction                 func(*pgx.Conn) error
-		longStrAction                  func(*pgx.Conn) error
-		expectedErrRegex               string
-		expectConnectionUsableAfterErr bool
+		desc              string
+		shortStrAction    func(*pgx.Conn) error
+		longStrAction     func(*pgx.Conn) error
+		postLongStrAction func(*pgx.Conn) error
+		expectedErrRegex  string
 	}{
 		{
 			desc: "simple query",
@@ -218,8 +221,45 @@ func TestConnMessageTooBig(t *testing.T) {
 				_, err := c.Exec(fmt.Sprintf(`SELECT '%s'`, longStr))
 				return err
 			},
-			expectedErrRegex:               "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
-			expectConnectionUsableAfterErr: true,
+			postLongStrAction: func(c *pgx.Conn) error {
+				_, err := c.Exec("SELECT 1")
+				return err
+			},
+			expectedErrRegex: "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
+		},
+		{
+			desc: "copy",
+			shortStrAction: func(c *pgx.Conn) error {
+				_, err := c.CopyFrom(
+					pgx.Identifier{"tbl"},
+					[]string{"str"},
+					pgx.CopyFromRows([][]interface{}{
+						{shortStr},
+					}),
+				)
+				return err
+			},
+			longStrAction: func(c *pgx.Conn) error {
+				_, err := c.CopyFrom(
+					pgx.Identifier{"tbl"},
+					[]string{"str"},
+					pgx.CopyFromRows([][]interface{}{
+						{longStr},
+					}),
+				)
+				return err
+			},
+			postLongStrAction: func(c *pgx.Conn) error {
+				_, err := c.CopyFrom(
+					pgx.Identifier{"tbl"},
+					[]string{"str"},
+					pgx.CopyFromRows([][]interface{}{
+						{shortStr},
+					}),
+				)
+				return err
+			},
+			expectedErrRegex: "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
 		},
 		{
 			desc: "prepared statement has string",
@@ -241,8 +281,7 @@ func TestConnMessageTooBig(t *testing.T) {
 				var str string
 				return r.Scan(&str, &str)
 			},
-			expectedErrRegex:               "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
-			expectConnectionUsableAfterErr: false,
+			expectedErrRegex: "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
 		},
 		{
 			desc: "prepared statement with argument",
@@ -264,8 +303,7 @@ func TestConnMessageTooBig(t *testing.T) {
 				var str string
 				return r.Scan(&str)
 			},
-			expectedErrRegex:               "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
-			expectConnectionUsableAfterErr: false,
+			expectedErrRegex: "(EOF)|(broken pipe)|(connection reset by peer)|(write tcp)",
 		},
 	}
 
@@ -301,7 +339,7 @@ func TestConnMessageTooBig(t *testing.T) {
 	})
 
 	// Set the cluster setting to be less than 1MB.
-	_, err := mainDB.Exec(`SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '32 KiB'`)
+	_, err = mainDB.Exec(`SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '32 KiB'`)
 	require.NoError(t, err)
 
 	t.Run("disallow big messages", func(t *testing.T) {
@@ -344,9 +382,8 @@ func TestConnMessageTooBig(t *testing.T) {
 					require.Error(t, gotErr)
 					require.Regexp(t, tc.expectedErrRegex, gotErr.Error())
 
-					if tc.expectConnectionUsableAfterErr {
-						_, err = c.Exec("SELECT 1")
-						require.NoError(t, err)
+					if tc.postLongStrAction != nil {
+						require.NoError(t, tc.postLongStrAction(c))
 					}
 				})
 			})
