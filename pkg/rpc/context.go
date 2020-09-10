@@ -212,23 +212,21 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
 		// We use a SpanInclusionFunc to save a bit of unnecessary work when
 		// tracing is disabled.
+		inclusionOpt := otgrpc.IncludingSpans(func(
+			parentSpanCtx opentracing.SpanContext,
+			method string,
+			req, resp interface{}) bool {
+			// This anonymous func serves to bind the tracer for
+			// spanInclusionFuncForServer.
+			return spanInclusionFuncForServer(
+				tracer.(*tracing.Tracer), parentSpanCtx, method, req, resp)
+		})
 		unaryInterceptor = append(unaryInterceptor, otgrpc.OpenTracingServerInterceptor(
-			tracer,
-			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(
-				func(
-					parentSpanCtx opentracing.SpanContext,
-					method string,
-					req, resp interface{}) bool {
-					// This anonymous func serves to bind the tracer for
-					// spanInclusionFuncForServer.
-					return spanInclusionFuncForServer(
-						tracer.(*tracing.Tracer), parentSpanCtx, method, req, resp)
-				})),
+			tracer, inclusionOpt,
 		))
-		// TODO(tschottdorf): should set up tracing for stream-based RPCs as
-		// well. The otgrpc package has no such facility, but there's also this:
-		//
-		// https://github.com/grpc-ecosystem/go-grpc-middleware/tree/master/tracing/opentracing
+		streamInterceptor = append(streamInterceptor, otgrpc.OpenTracingStreamServerInterceptor(
+			tracer, inclusionOpt,
+		))
 	}
 
 	grpcOpts = append(grpcOpts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
@@ -734,25 +732,29 @@ func (ctx *Context) grpcDialOptions(
 	}
 
 	var unaryInterceptors []grpc.UnaryClientInterceptor
+	var streamInterceptors []grpc.StreamClientInterceptor
 
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
+		var opts []otgrpc.Option
+		// We use a SpanInclusionFunc to circumvent the interceptor's work when
+		// tracing is disabled. Otherwise, the interceptor causes an increase in
+		// the number of packets (even with an empty context!). See #17177.
+		opts = append(opts, otgrpc.IncludingSpans(spanInclusionFuncForClient))
+		// We use a decorator to set the "node" tag. All other spans get the
+		// node tag from context log tags.
+		//
+		// Unfortunately we cannot use the corresponding interceptor on the
+		// server-side of gRPC to set this tag on server spans because that
+		// interceptor runs too late - after a traced RPC's recording had
+		// already been collected. So, on the server-side, the equivalent code
+		// is in setupSpanForIncomingRPC().
+		opts = append(opts, otgrpc.SpanDecorator(func(span opentracing.Span, _ string, _, _ interface{}, _ error) {
+			span.SetTag("node", ctx.NodeID.String())
+		}))
 		unaryInterceptors = append(unaryInterceptors,
-			otgrpc.OpenTracingClientInterceptor(tracer,
-				// We use a SpanInclusionFunc to circumvent the interceptor's work when
-				// tracing is disabled. Otherwise, the interceptor causes an increase in
-				// the number of packets (even with an empty context!). See #17177.
-				otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFuncForClient)),
-				// We use a decorator to set the "node" tag. All other spans get the
-				// node tag from context log tags.
-				//
-				// Unfortunately we cannot use the corresponding interceptor on the
-				// server-side of gRPC to set this tag on server spans because that
-				// interceptor runs too late - after a traced RPC's recording had
-				// already been collected. So, on the server-side, the equivalent code
-				// is in setupSpanForIncomingRPC().
-				otgrpc.SpanDecorator(func(span opentracing.Span, _ string, _, _ interface{}, _ error) {
-					span.SetTag("node", ctx.NodeID.String())
-				})))
+			otgrpc.OpenTracingClientInterceptor(tracer, opts...))
+		streamInterceptors = append(streamInterceptors,
+			otgrpc.OpenTracingStreamClientInterceptor(tracer, opts...))
 	}
 	if ctx.Knobs.UnaryClientInterceptor != nil {
 		testingUnaryInterceptor := ctx.Knobs.UnaryClientInterceptor(target, class)
@@ -760,12 +762,18 @@ func (ctx *Context) grpcDialOptions(
 			unaryInterceptors = append(unaryInterceptors, testingUnaryInterceptor)
 		}
 	}
-	dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
 	if ctx.Knobs.StreamClientInterceptor != nil {
 		testingStreamInterceptor := ctx.Knobs.StreamClientInterceptor(target, class)
 		if testingStreamInterceptor != nil {
-			dialOpts = append(dialOpts, grpc.WithStreamInterceptor(testingStreamInterceptor))
+			streamInterceptors = append(streamInterceptors, testingStreamInterceptor)
 		}
+	}
+
+	if len(unaryInterceptors) > 0 {
+		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
+	}
+	if len(streamInterceptors) > 0 {
+		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(streamInterceptors...))
 	}
 	return dialOpts, nil
 }
