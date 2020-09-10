@@ -994,6 +994,13 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 			descID := descIDs[0]
 			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, descID)
 			if err != nil {
+				if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+					// If the table descriptor doesn't exist, we call Registry.Failed() to
+					// mark the job as failed and return the (hopefully nil) error from
+					// that.
+					log.Warningf(ctx, "job %d: expected descriptor %d not found, marking job as failed", *job.ID(), descID)
+					return registry.Failed(ctx, txn, *job.ID(), err)
+				}
 				return err
 			}
 			return migrateMutationJobForTable(ctx, txn, registry, job, tableDesc)
@@ -1311,7 +1318,7 @@ func migrateMutationJobForTable(
 	// If the job isn't in MutationJobs or GCMutations, it's likely just a
 	// failed or canceled job that was successfully cleaned up. Check for this,
 	// and return an error if this is not the case.
-	status, err := job.CurrentStatus(ctx)
+	status, err := job.WithTxn(txn).CurrentStatus(ctx)
 	if err != nil {
 		return err
 	}
@@ -1361,27 +1368,29 @@ func migrateDropTablesOrDatabaseJob(
 
 	// Otherwise, the job is in the "waiting for GC TTL" phase. In this case, we
 	// mark the present job as Succeeded and create a new GC job.
-
-	// TODO (lucy/paul): In the case of multiple tables, is it a problem if some
-	// of the tables have already been GC'ed at this point? In 19.2, each table
-	// advances separately through the stages of being dropped, so it should be
-	// possible for some tables to still be draining names while others have
-	// already undergone GC.
-
 	if err := registry.Succeeded(ctx, txn, *job.ID()); err != nil {
 		return err
 	}
 	log.VEventf(ctx, 2, "job %d: marked as succeeded", *job.ID())
 
-	tablesToDrop := make([]jobspb.SchemaChangeGCDetails_DroppedID, len(details.DroppedTables))
+	var tablesToDrop []jobspb.SchemaChangeGCDetails_DroppedID
 	for i := range details.DroppedTables {
 		tableID := details.DroppedTables[i].ID
-		tablesToDrop[i].ID = details.DroppedTables[i].ID
 		desc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 		if err != nil {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				// This table was already GC'ed, so exclude it from the job. This is
+				// possible when different tables in the dropped database, or in the set
+				// of tables to be truncated, etc., have different zone configs.
+				log.Infof(ctx, "table %d does not exist, skipping table in GC job", tableID)
+				continue
+			}
 			return err
 		}
-		tablesToDrop[i].DropTime = desc.DropTime
+		tablesToDrop = append(tablesToDrop, jobspb.SchemaChangeGCDetails_DroppedID{
+			ID:       desc.ID,
+			DropTime: desc.DropTime,
+		})
 	}
 	gcJobRecord := sql.CreateGCJobRecord(
 		job.Payload().Description,

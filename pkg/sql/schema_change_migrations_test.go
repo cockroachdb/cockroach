@@ -50,6 +50,7 @@ const (
 	AfterBackfill
 	AfterReversingMutations // Only used if the job was canceled.
 	WaitingForGC            // Only applies to DROP INDEX, DROP TABLE, TRUNCATE TABLE.
+	AfterTableGC            // Only applies to DROP DATABASE (after GCing 1 of 2 tables).
 )
 
 type SchemaChangeType int
@@ -64,13 +65,13 @@ const (
 	CreateTable
 	DropTable
 	TruncateTable
+	DropDatabase
 )
 
 const setup = `
 CREATE DATABASE t;
-USE t;
-CREATE TABLE test (k INT PRIMARY KEY, v INT, INDEX k_idx (k), CONSTRAINT k_cons CHECK (k > 0));
-INSERT INTO test VALUES (1, 2);
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, INDEX k_idx (k), CONSTRAINT k_cons CHECK (k > 0));
+INSERT INTO t.test VALUES (1, 2);
 `
 
 // runsBackfill is a set of schema change types that run a backfill.
@@ -88,7 +89,7 @@ func isDeletingTable(schemaChangeType SchemaChangeType) bool {
 func checkBlockedSchemaChange(
 	t *testing.T, runner *sqlutils.SQLRunner, testCase migrationTestCase,
 ) {
-	if testCase.blockState == WaitingForGC {
+	if testCase.blockState == WaitingForGC || testCase.blockState == AfterTableGC {
 		// Earlier we turned the 20.1 GC job into a 19.2 schema change job. Delete
 		// the original schema change job which is now succeeded, to avoid having
 		// special cases later, since we rely heavily on the index of the job row in
@@ -160,8 +161,10 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 	blockFnErrChan := make(chan error, 1)
 	revMigrationDoneCh, signalRevMigrationDone := makeSignal()
 	migrationDoneCh, signalMigrationDone := makeCondSignal(&shouldSignalMigration)
+	g := ctxgroup.WithContext(context.Background())
 	runner, sqlDB, tc := setupServerAndStartSchemaChange(
 		t,
+		g,
 		blockFnErrChan,
 		testCase,
 		signalRevMigrationDone,
@@ -194,6 +197,20 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 	log.Info(ctx, "waiting for migration to complete")
 	<-migrationDoneCh
 
+	// The original schema change, which has had its job modified, should return a
+	// result at this point now that all relevant jobs are in a terminal state (or
+	// no longer exist?). But the result doesn't matter.
+	_ = g.Wait()
+
+	if testCase.schemaChange.kind == DropDatabase {
+		// TODO(lucy): Another hardcoded table ID to hopefully someday get rid of.
+		// This is for the other table in the database that hasn't been dropped
+		// already by the GC job. We set the GC TTL for it now to get the entire
+		// drop database GC job to finish.
+		if _, err := addImmediateGCZoneConfig(sqlDB, sqlbase.ID(54)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// TODO(pbardea): SHOW JOBS WHEN COMPLETE SELECT does not work on some schema
 	// changes when canceling jobs, but querying until there are no jobs works.
 	//runner.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE (job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC')")
@@ -222,6 +239,7 @@ func makeSignal() (chan struct{}, func()) {
 
 func setupServerAndStartSchemaChange(
 	t *testing.T,
+	g ctxgroup.Group,
 	errCh chan error,
 	testCase migrationTestCase,
 	revMigrationDone, signalMigrationDone func(),
@@ -236,7 +254,7 @@ func setupServerAndStartSchemaChange(
 	blockSchemaChanges := false
 
 	migrateJob := func(jobID int64) {
-		if testCase.blockState == WaitingForGC {
+		if testCase.blockState == WaitingForGC || testCase.blockState == AfterTableGC {
 			if err := migrateGCJobToOldFormat(kvDB, registry, jobID, testCase.schemaChange.kind); err != nil {
 				errCh <- err
 			}
@@ -266,25 +284,32 @@ func setupServerAndStartSchemaChange(
 	runner = sqlutils.MakeSQLRunner(sqlDB)
 	registry = tc.Server(0).JobRegistry().(*jobs.Registry)
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	if _, err := sqlDB.Exec(setup); err != nil {
 		t.Fatal(err)
 	}
+	// TODO (lucy): The rest of this test should also be using this value instead
+	// of the hardcoded ID.
+	var testTableID sqlbase.ID
+	require.NoError(t, sqlDB.QueryRow(`SELECT 't.test'::regclass::int`).Scan(&testTableID))
 
 	runner.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'canceled')", [][]string{{"0"}})
 	blockSchemaChanges = true
 
-	bg := ctxgroup.WithContext(ctx)
-	bg.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
+		// If we're dropping the database, also add another table to it, so that the
+		// migration runs when t.test has been GC'ed already but the other table
+		// hasn't.
+		if testCase.schemaChange.kind == DropDatabase {
+			if _, err := sqlDB.ExecContext(ctx, `CREATE TABLE t.long_gc_ttl()`); err != nil {
+				return err
+			}
+		}
 		if _, err := sqlDB.ExecContext(ctx, testCase.schemaChange.query); err != nil {
-			cancel()
 			return err
 		}
 		return nil
 	})
-	// TODO(pbardea): Remove this magic 53.
-	if _, err := addImmediateGCZoneConfig(sqlDB, sqlbase.ID(53)); err != nil {
+	if _, err := addImmediateGCZoneConfig(sqlDB, testTableID); err != nil {
 		t.Fatal(err)
 	}
 	return runner, sqlDB, tc
@@ -397,6 +422,19 @@ func migrateGCJobToOldFormat(
 						Status: jobspb.Status_WAIT_FOR_GC_INTERVAL,
 					},
 				}
+			} else if schemaChangeType == DropDatabase {
+				details.DroppedTables = []jobspb.DroppedTableDetails{
+					{
+						Name:   "test",
+						ID:     53,
+						Status: jobspb.Status_DONE,
+					},
+					{
+						Name:   "long_ttl_table",
+						ID:     54,
+						Status: jobspb.Status_WAIT_FOR_GC_INTERVAL,
+					},
+				}
 			}
 
 			progress := jobspb.Progress{
@@ -417,7 +455,7 @@ func migrateGCJobToOldFormat(
 	}
 
 	switch schemaChangeType {
-	case DropTable:
+	case DropTable, DropDatabase:
 		// There's no table descriptor to update, so we're done.
 		return nil
 
@@ -579,6 +617,11 @@ func setupTestingKnobs(
 			t.Fatal("cannot block on waiting for GC if the job should also be canceled")
 		}
 		gcKnobs.RunBeforeResume = blockFn
+	case AfterTableGC:
+		if shouldCancel {
+			t.Fatal("cannot block after table GC if the job should also be canceled")
+		}
+		gcKnobs.RunAfterGC = blockFn
 	}
 
 	args.Knobs.SQLSchemaChanger = knobs
@@ -595,6 +638,7 @@ func getTestName(schemaChange SchemaChangeType, blockState BlockState, shouldCan
 		AfterBackfill:           "after-backfill",
 		AfterReversingMutations: "after-reversing-mutations",
 		WaitingForGC:            "waiting-for-gc",
+		AfterTableGC:            "after-table-gc",
 	}
 	schemaChangeName := map[SchemaChangeType]string{
 		AddColumn:      "add-column",
@@ -606,6 +650,7 @@ func getTestName(schemaChange SchemaChangeType, blockState BlockState, shouldCan
 		CreateTable:    "create-table",
 		TruncateTable:  "truncate-table",
 		DropTable:      "drop-table",
+		DropDatabase:   "drop-database",
 	}
 
 	testName := fmt.Sprintf("%s-blocked-at-%s", schemaChangeName[schemaChange], stateNames[blockState])
@@ -636,11 +681,18 @@ func verifySchemaChangeJobRan(
 	}
 
 	// Verify that the GC job exists and is in the correct state, if applicable.
-	if testCase.blockState == WaitingForGC {
+	if testCase.blockState == WaitingForGC || testCase.blockState == AfterTableGC {
+		descriptorIDs := getTableIDsUnderTest(testCase.schemaChange.kind)
+		if testCase.blockState == AfterTableGC {
+			// The database had two tables, but one was GC'ed before the new job was
+			// reconstituted, so the job only knows about one table.
+			descriptorIDs = sqlbase.IDs{54}
+		}
+
 		if err := jobutils.VerifySystemJob(t, runner, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
 			Description:   "GC for " + description,
 			Username:      security.RootUser,
-			DescriptorIDs: getTableIDsUnderTest(testCase.schemaChange.kind),
+			DescriptorIDs: descriptorIDs,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -723,15 +775,21 @@ func verifySchemaChangeJobRan(
 		expected = [][]string{}
 		rows := runner.QueryStr(t, "SHOW TABLES FROM t")
 		require.Equal(t, expected, rows)
+	case DropDatabase:
+		expected = [][]string{}
+		rows := runner.QueryStr(t, "SELECT * FROM system.namespace WHERE name = 't' OR name = 'test' OR name = 'long_ttl_table'")
+		require.Equal(t, expected, rows)
 	}
 }
 
 func getTableIDsUnderTest(schemaChangeType SchemaChangeType) []sqlbase.ID {
-	tableID := sqlbase.ID(53)
 	if schemaChangeType == CreateTable {
-		tableID = sqlbase.ID(54)
+		return []sqlbase.ID{54}
+	} else if schemaChangeType == DropDatabase {
+		return []sqlbase.ID{53, 54}
+	} else {
+		return []sqlbase.ID{53}
 	}
-	return []sqlbase.ID{tableID}
 }
 
 // Helpers used to determine valid test cases.
@@ -740,7 +798,7 @@ func getTableIDsUnderTest(schemaChangeType SchemaChangeType) []sqlbase.ID {
 // schema change) will be reached given if the job was canceled or not.
 func canBlockIfCanceled(blockState BlockState, shouldCancel bool) bool {
 	// States that are only valid when the job is canceled.
-	if blockState == WaitingForGC {
+	if blockState == WaitingForGC || blockState == AfterTableGC {
 		return !shouldCancel
 	}
 	if blockState == AfterReversingMutations {
@@ -752,11 +810,16 @@ func canBlockIfCanceled(blockState BlockState, shouldCancel bool) bool {
 // Ensures that the given schema change actually passes through the state where
 // we're proposing to block.
 func validBlockStateForSchemaChange(blockState BlockState, schemaChangeType SchemaChangeType) bool {
+	if schemaChangeType == DropDatabase {
+		return blockState == AfterTableGC
+	}
 	switch blockState {
 	case AfterBackfill:
 		return runsBackfill[schemaChangeType]
 	case WaitingForGC:
 		return schemaChangeType == DropIndex || schemaChangeType == DropTable
+	case AfterTableGC:
+		return schemaChangeType == DropDatabase
 	}
 	return true
 }
@@ -776,6 +839,7 @@ func TestMigrateSchemaChanges(t *testing.T) {
 		AfterBackfill,
 		AfterReversingMutations,
 		WaitingForGC,
+		AfterTableGC,
 	}
 
 	schemaChanges := []schemaChangeRequest{
@@ -814,6 +878,10 @@ func TestMigrateSchemaChanges(t *testing.T) {
 		{
 			DropTable,
 			"DROP TABLE t.public.test",
+		},
+		{
+			DropDatabase,
+			"DROP DATABASE t CASCADE",
 		},
 	}
 
@@ -923,18 +991,16 @@ func TestMissingMutation(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer s.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(context.Background())
 	registry := s.JobRegistry().(*jobs.Registry)
 
 	_, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test(k INT PRIMARY KEY, v INT);`)
 	require.NoError(t, err)
 
-	bg := ctxgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(context.Background())
 	// Start a schema change on the table in a separate goroutine.
-	bg.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		if _, err := sqlDB.ExecContext(ctx, `ALTER TABLE t.test ADD COLUMN a INT;`); err != nil {
-			cancel()
 			return err
 		}
 		return nil
@@ -945,6 +1011,7 @@ func TestMissingMutation(t *testing.T) {
 	// Rewrite the job to be a 19.2-style job.
 	require.NoError(t, migrateJobToOldFormat(kvDB, registry, schemaChangeJobID, AddColumn))
 
+	ctx := context.Background()
 	// To get the table descriptor into the (invalid) state we're trying to test,
 	// clear the mutations on the table descriptor.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
@@ -966,6 +1033,74 @@ func TestMissingMutation(t *testing.T) {
 
 	close(descriptorUpdated)
 
-	err = bg.Wait()
+	err = g.Wait()
 	require.Regexp(t, fmt.Sprintf("mutation %d not found for MutationJob %d", 1, schemaChangeJobID), err)
+}
+
+// TestMissingTable tests that a missing table descriptor for the referenced
+// table causes a (single-table) schema change job to be marked as failed.
+func TestMissingTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	schemaChangeBlocked, descriptorDeleted := make(chan struct{}), make(chan struct{})
+	migratedJob := false
+	var schemaChangeJobID int64
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLMigrationManager = &sqlmigrations.MigrationManagerTestingKnobs{
+		AlwaysRunJobMigration: true,
+	}
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		RunBeforeResume: func(jobID int64) error {
+			if !migratedJob {
+				migratedJob = true
+				schemaChangeJobID = jobID
+				close(schemaChangeBlocked)
+			}
+
+			<-descriptorDeleted
+			return jobs.NewRetryJobError("stop this job until cluster upgrade")
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	_, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test(k INT PRIMARY KEY, v INT);`)
+	require.NoError(t, err)
+
+	g := ctxgroup.WithContext(context.Background())
+	// Start a schema change on the table in a separate goroutine.
+	g.GoCtx(func(ctx context.Context) error {
+		if _, err := sqlDB.ExecContext(ctx, `ALTER TABLE t.test ADD COLUMN a INT;`); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	<-schemaChangeBlocked
+
+	// Rewrite the job to be a 19.2-style job.
+	require.NoError(t, migrateJobToOldFormat(kvDB, registry, schemaChangeJobID, AddColumn))
+
+	ctx := context.Background()
+	// Delete the table descriptor.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc.Mutations = nil
+	require.NoError(
+		t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
+			return kvDB.Del(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()))
+		}),
+	)
+
+	// Run the migration.
+	migMgr := s.MigrationManager().(*sqlmigrations.Manager)
+	require.NoError(t, migMgr.StartSchemaChangeJobMigration(ctx))
+
+	close(descriptorDeleted)
+
+	err = g.Wait()
+	require.Regexp(t, "descriptor not found", err)
 }
