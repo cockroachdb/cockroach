@@ -455,17 +455,12 @@ func (b *Builder) findMatchingFrameIndex(
 		}
 	}
 
-	var rangeOffsetColumn opt.ColumnID
-	if len(ordering.Columns) == 1 {
-		rangeOffsetColumn = ordering.Columns[0].AnyID()
-	}
 	// If we can't reuse an existing frame, make a new one.
 	if frameIdx == -1 {
 		*frames = append(*frames, memo.WindowExpr{
 			WindowPrivate: memo.WindowPrivate{
-				Partition:         partition,
-				Ordering:          ordering,
-				RangeOffsetColumn: rangeOffsetColumn,
+				Partition: partition,
+				Ordering:  ordering,
 			},
 			Windows: memo.WindowsExpr{},
 		})
