@@ -903,7 +903,7 @@ func ResolveFK(
 				return pgerror.Newf(pgcode.ForeignKeyViolation,
 					"foreign key requires an existing index on columns %s", colNames.String())
 			}
-			_, err := addIndexForFK(tbl, originCols, constraintName, ts)
+			_, err := addIndexForFK(ctx, tbl, originCols, constraintName, ts)
 			if err != nil {
 				return err
 			}
@@ -950,6 +950,7 @@ func ResolveFK(
 // Adds an index to a table descriptor (that is in the process of being created)
 // that will support using `srcCols` as the referencing (src) side of an FK.
 func addIndexForFK(
+	ctx context.Context,
 	tbl *tabledesc.Mutable,
 	srcCols []*descpb.ColumnDescriptor,
 	constraintName string,
@@ -976,7 +977,7 @@ func addIndexForFK(
 		if err := tbl.AddIndex(idx, false); err != nil {
 			return 0, err
 		}
-		if err := tbl.AllocateIDs(); err != nil {
+		if err := tbl.AllocateIDs(ctx); err != nil {
 			return 0, err
 		}
 		added := tbl.Indexes[len(tbl.Indexes)-1]
@@ -990,7 +991,7 @@ func addIndexForFK(
 	if err := tbl.AddIndexMutation(&idx, descpb.DescriptorMutation_ADD); err != nil {
 		return 0, err
 	}
-	if err := tbl.AllocateIDs(); err != nil {
+	if err := tbl.AllocateIDs(ctx); err != nil {
 		return 0, err
 	}
 	id := tbl.Mutations[len(tbl.Mutations)-1].GetIndex().ID
@@ -1687,7 +1688,7 @@ func NewTableDesc(
 		}
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1818,7 +1819,7 @@ func NewTableDesc(
 	// happens to work in gc, but does not work in gccgo.
 	//
 	// See https://github.com/golang/go/issues/23188.
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		return nil, err
 	}
 

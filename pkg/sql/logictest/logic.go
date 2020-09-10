@@ -1258,6 +1258,9 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 					DisableOptimizerRuleProbability: *disableOptRuleProbability,
 					OptimizerCostPerturbation:       *optimizerCostPerturbation,
 				},
+				//SQLExecutor: &sql.ExecutorTestingKnobs{
+				//	TestingDescriptorValidation: true,
+				//},
 			},
 			ClusterName: "testclustername",
 			UseDatabase: "test",
