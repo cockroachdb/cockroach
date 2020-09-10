@@ -27,3 +27,24 @@ For tech writers and docs enthusiasts | Help improve CockroachDB docs: [List of 
 Join our [Community Slack](https://cockroa.ch/slack) (there's a dedicated #contributors channel!) to ask questions, discuss your ideas, or connect with other contributors.
 
 Please follow the guidelines outlined in our [Code of Conduct](https://docs.google.com/document/d/1_BB3IrsAVglDNPy37Z6KQlii_c3fYETFlWMMBUpbY1M/edit#) to help us make the CockroachDB community a welcoming and helpful place for everyone.
+
+## Contribute to CockroachDB 
+
+We welcome contributions outside of Hacktoberfest as well. Our contributor guidelines are available on [the public wiki at **wiki.crdb.io**(https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204033/Contributing+to+CockroachDB).
+
+At this location, we share our team guidelines and knowledge base
+regarding:
+
+- repository layout
+- how to build from source
+- how to organize your code change
+- commenting guidelines
+- commit message guidelines
+- code style guidelines
+- how to write and run tests
+- how to write release notes
+- how to submit a change for review
+- how to use continuous integration (CI)
+- how to troubleshoot certain issues
+
+as well as many other practical topics. 
