@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TestServerInterface defines test server functionality that tests need; it is
@@ -49,6 +50,10 @@ type TestServerInterface interface {
 
 	// NodeID returns the ID of this node within its cluster.
 	NodeID() roachpb.NodeID
+
+	// ClusterID returns the cluster ID as understood by this node in the
+	// cluster.
+	ClusterID() uuid.UUID
 
 	// ServingRPCAddr returns the server's advertised address.
 	ServingRPCAddr() string
