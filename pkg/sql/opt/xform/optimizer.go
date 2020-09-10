@@ -95,7 +95,7 @@ type Optimizer struct {
 	disabledRules RuleSet
 
 	// JoinOrderBuilder adds new join orderings to the memo.
-	jb *JoinOrderBuilder
+	jb JoinOrderBuilder
 }
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
@@ -112,7 +112,7 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	o.matchedRule = nil
 	o.appliedRule = nil
 	o.disabledRules = util.FastIntSet{}
-	o.jb = &JoinOrderBuilder{}
+	o.jb = JoinOrderBuilder{}
 	if evalCtx.TestingKnobs.DisableOptimizerRuleProbability > 0 {
 		o.disableRules(evalCtx.TestingKnobs.DisableOptimizerRuleProbability)
 	}
@@ -151,7 +151,7 @@ func (o *Optimizer) SetCoster(coster Coster) {
 // JoinOrderBuilder returns the JoinOrderBuilder instance that the optimizer is
 // currently using to reorder join trees.
 func (o *Optimizer) JoinOrderBuilder() *JoinOrderBuilder {
-	return o.jb
+	return &o.jb
 }
 
 // DisableOptimizations disables all transformation rules, including normalize
