@@ -16,19 +16,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	opentracing "github.com/opentracing/opentracing-go"
 )
-
-// txnHeartbeatDuring1PC defines whether the txnHeartbeater should launch a
-// heartbeat loop for 1PC transactions. The value defaults to false even though
-// 1PC transactions leave intents around on retriable errors if the batch has
-// been split between ranges and may be pushed when in lock wait-queues because
-// we consider that unlikely enough so we prefer to not pay for a goroutine.
-var txnHeartbeatFor1PC = envutil.EnvOrDefaultBool("COCKROACH_TXN_HEARTBEAT_DURING_1PC", false)
 
 // txnHeartbeater is a txnInterceptor in charge of a transaction's heartbeat
 // loop. Transaction coordinators heartbeat their transaction record
@@ -160,7 +152,7 @@ func (h *txnHeartbeater) SendLocked(
 		// Start the heartbeat loop if it has not already started.
 		if !h.mu.loopStarted {
 			_, haveEndTxn := ba.GetArg(roachpb.EndTxn)
-			if !haveEndTxn || txnHeartbeatFor1PC {
+			if !haveEndTxn {
 				if err := h.startHeartbeatLoopLocked(ctx); err != nil {
 					return nil, roachpb.NewError(err)
 				}
