@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/redact"
 )
 
 // Server implements PerReplicaServer.
@@ -63,7 +64,7 @@ func (is Server) CollectChecksum(
 				// snapshot (if present) intact.
 				if len(req.Checksum) > 0 {
 					log.Errorf(ctx, "consistency check failed on range r%d: expected checksum %x, got %x",
-						req.RangeID, req.Checksum, ccr.Checksum)
+						req.RangeID, redact.Safe(req.Checksum), redact.Safe(ccr.Checksum))
 					// Leave resp.Snapshot alone so that the caller will receive what's
 					// in it (if anything).
 				}
