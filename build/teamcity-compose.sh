@@ -22,8 +22,9 @@ run build/builder.sh mkrelease "$type" -Otarget testbuild PKG=./pkg/compose TAGS
 tc_end_block "Compile compose tests"
 
 tc_start_block "Run compose tests"
-# NB: we're cheating go test into invoking our `compose.test` over the one it
-# builds itself. Note that ./pkg/compose without tags builds an empty test
-# binary.
-run_json_test go test -json -v -timeout 30m -exec ../../build/teamcity-go-test-precompiled.sh ./compose.test ./pkg/compose
+# NB: apply the same trick as teamcity-acceptance.sh
+run_json_test stdbuf -eL -oL go test \
+  -mod=vendor -json -v -timeout 30m \
+  -exec "../../build/teamcity-go-test-precompiled.sh ./pkg/compose/compose.test" ./pkg/compose \
+	-l "$TMPDIR"
 tc_end_block "Run compose tests"
