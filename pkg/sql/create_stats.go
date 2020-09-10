@@ -587,13 +587,34 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 	if job != nil {
 		jobID = *job.ID()
 	}
-	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2, $3) ORDER BY created`
+	const stmt = `
+  WITH current_job_created AS (
+                            SELECT created FROM system.jobs WHERE id = $1
+                           )
+SELECT true
+ WHERE EXISTS(
+        SELECT id
+          FROM (
+                SELECT id,
+                       crdb_internal.pb_to_json(
+                        'cockroach.sql.jobs.jobspb.Payload',
+                        payload
+                       ) AS p
+                  FROM system.jobs AS j, current_job_created AS c
+                 WHERE j.created < c.created
+                   AND id != $1
+                   AND status IN ($2, $3, $4)
+               )
+         WHERE p @> '{"createStats": {}}'
+       );
+`
 
-	rows, err := p.ExecCfg().InternalExecutor.Query(
+	row, err := p.ExecCfg().InternalExecutor.QueryRow(
 		ctx,
 		"get-jobs",
 		nil, /* txn */
 		stmt,
+		jobID,
 		jobs.StatusPending,
 		jobs.StatusRunning,
 		jobs.StatusPaused,
@@ -601,23 +622,8 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 	if err != nil {
 		return err
 	}
-
-	for _, row := range rows {
-		payload, err := jobs.UnmarshalPayload(row[1])
-		if err != nil {
-			return err
-		}
-
-		if payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats {
-			id := (*int64)(row[0].(*tree.DInt))
-			if *id == jobID {
-				break
-			}
-
-			// This is not the first CreateStats job running. This job should fail
-			// so that the earlier job can succeed.
-			return stats.ConcurrentCreateStatsError
-		}
+	if len(row) == 0 {
+		return stats.ConcurrentCreateStatsError
 	}
 	return nil
 }
