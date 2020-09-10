@@ -863,6 +863,10 @@ func NewStore(
 		)
 		s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
 	}
+	s.engine.SetEventMetrics(storage.EventMetrics{
+		DiskSlow:    s.metrics.DiskSlow,
+		DiskStalled: s.metrics.DiskStalled,
+	})
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 

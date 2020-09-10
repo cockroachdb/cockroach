@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -358,6 +359,9 @@ type Engine interface {
 	// GetEnvStats retrieves stats about the engine's environment
 	// For RocksDB, this includes details of at-rest encryption.
 	GetEnvStats() (*EnvStats, error)
+	// SetEventMetrics passes in metrics instances that are directly tied to
+	// event invocations from the storage engine.
+	SetEventMetrics(EventMetrics)
 	// GetAuxiliaryDir returns a path under which files can be stored
 	// persistently, and from which data can be ingested by the engine.
 	//
@@ -535,6 +539,18 @@ type EncryptionRegistries struct {
 	// KeyRegistry is the list of keys, scrubbed of actual key data.
 	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
 	KeyRegistry []byte
+}
+
+// EventMetrics is a struct to hold all metrics that are connected to event
+// handlers in the storage engine. This struct is passed in using
+// SetEventMetrics.
+type EventMetrics struct {
+	// DiskSlow denotes a disk slowness event, where a disk operation took more
+	// than 10s.
+	DiskSlow    *metric.Counter
+	// DiskStalled denotes a disk stall event, where a disk operation took more
+	// than 30s.
+	DiskStalled *metric.Counter
 }
 
 // NewEngine creates a new storage engine.

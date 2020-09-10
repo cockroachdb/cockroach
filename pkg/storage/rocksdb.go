@@ -991,6 +991,11 @@ func (r *RocksDB) GetCompactionStats() string {
 	return s + humanizeutil.IBytes(stats.PendingCompactionBytesEstimate)
 }
 
+// SetEventMetrics implements the Engine interface.
+func (r *RocksDB) SetEventMetrics(_ EventMetrics) {
+	// No-op. Only implemented in Pebble.
+}
+
 // GetEnvStats returns stats for the RocksDB env. This may include encryption stats.
 func (r *RocksDB) GetEnvStats() (*EnvStats, error) {
 	var s C.DBEnvStatsResult

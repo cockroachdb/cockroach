@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -36,6 +37,19 @@ import (
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/vfs"
 )
+
+// MaxSyncDuration is the threshold above which an observed engine sync duration
+// triggers either a warning or a fatal error.
+var MaxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION", 30*time.Second)
+
+// MaxSyncDurationFatalOnExceeded defaults to false due to issues such as
+// https://github.com/cockroachdb/cockroach/issues/34860#issuecomment-469262019.
+// Similar problems have been known to occur during index backfill and, possibly,
+// IMPORT/RESTORE.
+//
+// TODO(bilal): Switch this back to true, as Pebble now has more holistic disk
+// stall detection checks.
+var MaxSyncDurationFatalOnExceeded = envutil.EnvOrDefaultBool("COCKROACH_ENGINE_MAX_SYNC_DURATION_FATAL", false)
 
 // MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
 func MVCCKeyCompare(a, b []byte) int {
@@ -404,6 +418,7 @@ type Pebble struct {
 	settings     *cluster.Settings
 	statsHandler EncryptionStatsHandler
 	fileRegistry *PebbleFileRegistry
+	eventMetrics EventMetrics
 
 	// Relevant options copied over from pebble.Options.
 	fs     vfs.FS
@@ -496,7 +511,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		return nil, err
 	}
 
-	return &Pebble{
+	p := &Pebble{
 		db:           db,
 		path:         cfg.Dir,
 		auxDir:       auxDir,
@@ -507,7 +522,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		fileRegistry: fileRegistry,
 		fs:           cfg.Opts.FS,
 		logger:       cfg.Opts.Logger,
-	}, nil
+	}
+	p.connectEventMetrics(ctx, &cfg.Opts.EventListener)
+
+	return p, nil
 }
 
 func newTeeInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) *TeeEngine {
@@ -772,6 +790,33 @@ func (p *Pebble) GetStats() (*Stats, error) {
 		L0FileCount:                    m.Levels[0].NumFiles,
 		L0SublevelCount:                int64(m.Levels[0].Sublevels),
 	}, nil
+}
+
+// SetEventMetrics implements the Engine interface.
+func (p *Pebble) SetEventMetrics(eventMetrics EventMetrics) {
+	p.eventMetrics = eventMetrics
+}
+
+func (p *Pebble) connectEventMetrics(ctx context.Context, eventListener *pebble.EventListener) {
+	oldDiskSlow := eventListener.DiskSlow
+
+	eventListener.DiskSlow = func(info pebble.DiskSlowInfo) {
+		oldDiskSlow(info)
+		if info.Duration.Seconds() >= MaxSyncDuration.Seconds() {
+			if p.eventMetrics.DiskStalled != nil {
+				p.eventMetrics.DiskStalled.Count()
+			}
+			if MaxSyncDurationFatalOnExceeded {
+				log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
+					info.Path, info.Duration.Seconds())
+			} else {
+				log.Errorf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
+					info.Path, info.Duration.Seconds())
+			}
+		} else if p.eventMetrics.DiskSlow != nil {
+			p.eventMetrics.DiskSlow.Count()
+		}
+	}
 }
 
 // GetEncryptionRegistries implements the Engine interface.

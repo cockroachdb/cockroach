@@ -597,6 +597,11 @@ func (t *TeeEngine) Stat(name string) (os.FileInfo, error) {
 	return info1, err
 }
 
+// SetEventMetrics implements the Engine interface.
+func (t *TeeEngine) SetEventMetrics(_ EventMetrics) {
+	// No-op. Only implemented in Pebble.
+}
+
 // CreateCheckpoint implements the Engine interface.
 func (t *TeeEngine) CreateCheckpoint(dir string) error {
 	path1 := filepath.Join(dir, "eng1")

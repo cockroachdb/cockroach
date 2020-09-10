@@ -398,6 +398,20 @@ var (
 		Unit:        metric.Unit_BYTES,
 	}
 
+	// Disk health metrics.
+	metaDiskSlow = metric.Metadata{
+		Name:        "rocksdb.disk-slow",
+		Help:        "Number of instances of disk operations taking longer than 10s",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDiskStalled = metric.Metadata{
+		Name:        "rocksdb.disk-stalled",
+		Help:        "Number of instances of disk operations taking longer than 30s",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Range event metrics.
 	metaRangeSplits = metric.Metadata{
 		Name:        "range.splits",
@@ -1071,6 +1085,10 @@ type StoreMetrics struct {
 	RdbNumSSTables              *metric.Gauge
 	RdbPendingCompaction        *metric.Gauge
 
+	// Disk health metrics.
+	DiskSlow                    *metric.Counter
+	DiskStalled                 *metric.Counter
+
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
 	// maintained to keep the current structure of NodeStatus; it would be
 	// better to convert the Gauges above into counters which are adjusted
@@ -1434,6 +1452,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
 		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
 		RdbPendingCompaction:        metric.NewGauge(metaRdbPendingCompaction),
+
+		// Disk health metrics.
+		DiskSlow:    metric.NewCounter(metaDiskSlow),
+		DiskStalled: metric.NewCounter(metaDiskStalled),
 
 		// Range event metrics.
 		RangeSplits:                  metric.NewCounter(metaRangeSplits),
