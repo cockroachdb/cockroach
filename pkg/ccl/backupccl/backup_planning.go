@@ -567,7 +567,9 @@ func backupPlanHook(
 
 		var tables []catalog.TableDescriptor
 		statsFiles := make(map[descpb.ID]string)
-		// TODO(pbardea): Let's check the privs for UDTs and UDSs here.
+		// N.B.: These privilege checks currently do nothing since we require the
+		// user running the backup to be an admin. If the user is an Admin, they
+		// should have ALL privileges on these descriptors anyway.
 		for _, desc := range targetDescs {
 			switch desc := desc.(type) {
 			case catalog.DatabaseDescriptor:
@@ -583,6 +585,10 @@ func backupPlanHook(
 				// TODO (anzo): look into the tradeoffs of having all objects in the array to be in the same file,
 				// vs having each object in a separate file, or somewhere in between.
 				statsFiles[desc.GetID()] = backupStatisticsFileName
+			case catalog.TypeDescriptor, catalog.SchemaDescriptor:
+				if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
+					return err
+				}
 			}
 		}
 
