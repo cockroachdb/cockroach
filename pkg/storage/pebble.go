@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -35,7 +37,21 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 )
+
+// MaxSyncDuration is the threshold above which an observed engine sync duration
+// triggers either a warning or a fatal error.
+var MaxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION", 30*time.Second)
+
+// MaxSyncDurationFatalOnExceeded defaults to false due to issues such as
+// https://github.com/cockroachdb/cockroach/issues/34860#issuecomment-469262019.
+// Similar problems have been known to occur during index backfill and, possibly,
+// IMPORT/RESTORE.
+//
+// TODO(bilal): Switch this back to true, as Pebble now has more holistic disk
+// stall detection checks.
+var MaxSyncDurationFatalOnExceeded = envutil.EnvOrDefaultBool("COCKROACH_ENGINE_MAX_SYNC_DURATION_FATAL", false)
 
 // MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
 func MVCCKeyCompare(a, b []byte) int {
@@ -396,14 +412,19 @@ type EncryptionStatsHandler interface {
 type Pebble struct {
 	db *pebble.DB
 
-	closed       bool
-	path         string
-	auxDir       string
-	maxSize      int64
-	attrs        roachpb.Attributes
-	settings     *cluster.Settings
-	statsHandler EncryptionStatsHandler
-	fileRegistry *PebbleFileRegistry
+	closed        bool
+	path          string
+	auxDir        string
+	maxSize       int64
+	attrs         roachpb.Attributes
+	settings      *cluster.Settings
+	statsHandler  EncryptionStatsHandler
+	fileRegistry  *PebbleFileRegistry
+	eventListener *pebble.EventListener
+
+	// Stats updated by pebble.EventListener invocations, and returned in
+	// GetStats. Updated and retrieved atomically.
+	diskSlowCount, diskStallCount uint64
 
 	// Relevant options copied over from pebble.Options.
 	fs     vfs.FS
@@ -490,14 +511,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		ctx:   logCtx,
 		depth: 2, // skip over the EventListener stack frame
 	})
-
-	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Pebble{
-		db:           db,
+	p := &Pebble{
 		path:         cfg.Dir,
 		auxDir:       auxDir,
 		maxSize:      cfg.MaxSize,
@@ -507,7 +521,17 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		fileRegistry: fileRegistry,
 		fs:           cfg.Opts.FS,
 		logger:       cfg.Opts.Logger,
-	}, nil
+	}
+	p.connectEventMetrics(ctx, &cfg.Opts.EventListener)
+	p.eventListener = &cfg.Opts.EventListener
+
+	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
+	if err != nil {
+		return nil, err
+	}
+	p.db = db
+
+	return p, nil
 }
 
 func newTeeInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) *TeeEngine {
@@ -541,6 +565,28 @@ func newPebbleInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int
 		panic(err)
 	}
 	return db
+}
+
+func (p *Pebble) connectEventMetrics(ctx context.Context, eventListener *pebble.EventListener) {
+	oldDiskSlow := eventListener.DiskSlow
+
+	eventListener.DiskSlow = func(info pebble.DiskSlowInfo) {
+		oldDiskSlow(info)
+		if info.Duration.Seconds() >= MaxSyncDuration.Seconds() {
+			atomic.AddUint64(&p.diskStallCount, 1)
+			// Note that the below log messages go to the main cockroach log, not
+			// the pebble-specific log.
+			if MaxSyncDurationFatalOnExceeded {
+				log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
+					info.Path, redact.Safe(info.Duration.Seconds()))
+			} else {
+				log.Errorf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
+					info.Path, redact.Safe(info.Duration.Seconds()))
+			}
+			return
+		}
+		atomic.AddUint64(&p.diskSlowCount, 1)
+	}
 }
 
 func (p *Pebble) String() string {
@@ -760,6 +806,8 @@ func (p *Pebble) GetStats() (*Stats, error) {
 		BlockCachePinnedUsage:          0,
 		BloomFilterPrefixChecked:       m.Filter.Hits + m.Filter.Misses,
 		BloomFilterPrefixUseful:        m.Filter.Hits,
+		DiskSlowCount:                  int64(atomic.LoadUint64(&p.diskSlowCount)),
+		DiskStallCount:                 int64(atomic.LoadUint64(&p.diskStallCount)),
 		MemtableTotalSize:              int64(m.MemTable.Size),
 		Flushes:                        m.Flush.Count,
 		FlushedBytes:                   int64(m.Levels[0].BytesFlushed),
