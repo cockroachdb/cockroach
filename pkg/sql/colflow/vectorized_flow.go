@@ -242,8 +242,15 @@ func (f *vectorizedFlow) Setup(
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(creator)
 	}
-	_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
-	if err == nil {
+	// Although SupportsVectorized must have succeeded by now (because we're
+	// trying to actually set up a vectorized flow), it is possible that we
+	// will hit a memory limit (or another error) now, so we need to wrap
+	// setupFlow call with a panic catcher (expected errors are propagated as
+	// panics).
+	var vecErr error
+	if vecErr = colexecerror.CatchVectorizedRuntimeError(func() {
+		_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
+	}); vecErr == nil && err == nil {
 		f.testingInfo.numClosers = creator.numClosers
 		f.testingInfo.numClosed = &creator.numClosed
 		f.operatorConcurrency = creator.operatorConcurrency
