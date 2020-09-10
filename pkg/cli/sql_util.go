@@ -58,6 +58,9 @@ type sqlConn struct {
 	conn         sqlConnI
 	reconnecting bool
 
+	// passwordMissing is true iff the url is missing a password.
+	passwordMissing bool
+
 	pendingNotices []*pq.Error
 
 	// delayNotices, if set, makes notices accumulate for printing
@@ -152,6 +155,26 @@ func (c *sqlConn) ensureConn() error {
 		// connections only once instead. The context is only used for dialing.
 		conn, err := connector.Connect(context.TODO())
 		if err != nil {
+			// Connection failed: if the failure is due to a mispresented
+			// password, we're going to fill the password here.
+			//
+			// TODO(knz): CockroachDB servers do not properly fill SQLSTATE
+			// (28P01) for password auth errors, so we have to "make do"
+			// with a string match. This should be cleaned up by adding
+			// the missing code server-side.
+			errStr := strings.TrimPrefix(err.Error(), "pq: ")
+			if strings.HasPrefix(errStr, "password authentication failed") && c.passwordMissing {
+				if pErr := c.fillPassword(); pErr != nil {
+					return errors.CombineErrors(err, pErr)
+				}
+				// Recurse, once. We recurse to ensure that pq.NewConnector
+				// and ConnectorWithNoticeHandler get called with the new URL.
+				// The recursion only occurs once because fillPassword()
+				// resets c.passwordMissing, so we cannot get into this
+				// conditional a second time.
+				return c.ensureConn()
+			}
+			// Not a password auth error, or password already set. Simply fail.
 			return wrapConnError(err)
 		}
 		if c.reconnecting && c.dbName != "" {
@@ -665,23 +688,33 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 		return nil, err
 	}
 
-	// Insecure connections are insecure and should never see a password. Reject
-	// one that may be present in the URL already.
-	if options.Get("sslmode") == "disable" {
-		if _, pwdSet := baseURL.User.Password(); pwdSet {
-			return nil, errors.Errorf("cannot specify a password in URL with an insecure connection")
+	// tcpConn is true iff the connection is going over the network.
+	tcpConn := baseURL.Host != ""
+
+	// If there is no TLS mode yet, conjure one based on defaults.
+	if options.Get("sslmode") == "" {
+		if cliCtx.Insecure {
+			options.Set("sslmode", "disable")
+		} else if tcpConn {
+			options.Set("sslmode", "verify-full")
 		}
-	} else {
-		if options.Get("sslcert") == "" || options.Get("sslkey") == "" {
-			// If there's no password in the URL yet and we don't have a client
-			// certificate, ask for it and populate it in the URL.
-			if _, pwdSet := baseURL.User.Password(); !pwdSet {
-				pwd, err := security.PromptForPassword()
-				if err != nil {
-					return nil, err
-				}
-				baseURL.User = url.UserPassword(baseURL.User.Username(), pwd)
-			}
+		// (We don't use TLS over unix socket conns.)
+	}
+
+	// Prevent explicit TLS request in insecure mode.
+	if cliCtx.Insecure && options.Get("sslmode") != "disable" {
+		return nil, errors.Errorf("cannot use TLS connections in insecure mode")
+	}
+
+	// How we're going to authenticate.
+	_, pwdSet := baseURL.User.Password()
+	if pwdSet {
+		// There's a password already configured.
+
+		// In insecure mode, we don't want the user to get the mistaken
+		// idea that a password is worth anything.
+		if cliCtx.Insecure {
+			return nil, errors.Errorf("password authentication not enabled in insecure mode")
 		}
 	}
 
@@ -707,7 +740,33 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
 	}
 
-	return makeSQLConn(sqlURL), nil
+	conn := makeSQLConn(sqlURL)
+
+	conn.passwordMissing = !pwdSet
+
+	return conn, nil
+}
+
+// fillPassword is called the first time the server complains that the
+// password authentication has failed, if no password was supplied to
+// start with. It asks the user for a password interactively.
+func (c *sqlConn) fillPassword() error {
+	connURL, err := url.Parse(c.url)
+	if err != nil {
+		return err
+	}
+
+	// Password can be safely encrypted, or the user opted in
+	// manually to non-encryption. All good.
+
+	pwd, err := security.PromptForPassword()
+	if err != nil {
+		return err
+	}
+	connURL.User = url.UserPassword(connURL.User.Username(), pwd)
+	c.url = connURL.String()
+	c.passwordMissing = false
+	return nil
 }
 
 type queryFunc func(conn *sqlConn) (rows *sqlRows, isMultiStatementQuery bool, err error)

@@ -342,6 +342,15 @@ func (ts *TestServer) MigrationManager() interface{} {
 	return nil
 }
 
+// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
+// interface{}.
+func (ts *TestServer) NodeLiveness() interface{} {
+	if ts != nil {
+		return ts.nodeLiveness
+	}
+	return nil
+}
+
 // RPCContext returns the rpc context used by the TestServer.
 func (ts *TestServer) RPCContext() *rpc.Context {
 	if ts != nil {
