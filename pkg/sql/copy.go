@@ -192,6 +192,13 @@ Loop:
 	for {
 		typ, _, err := readBuf.ReadTypedMsg(c.conn.Rd())
 		if err != nil {
+			if pgwirebase.IsMessageTooBigError(err) && typ == pgwirebase.ClientMsgCopyData {
+				// Slurp the remaining bytes.
+				_, slurpErr := readBuf.SlurpBytes(c.conn.Rd(), pgwirebase.GetMessageTooBigSize(err))
+				if slurpErr != nil {
+					return errors.CombineErrors(err, errors.Wrapf(slurpErr, "error slurping remaining bytes in COPY"))
+				}
+			}
 			return err
 		}
 
