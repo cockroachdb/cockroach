@@ -126,13 +126,23 @@ message ReplicaIdent {
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 //
-// NOTE: Care must be taken when changing the encoding of this proto
-// because it is used as part of conditional put operations.
+// NOTE: Care must be taken when adding or removing fields from this proto
+// because we have code relies on the descriptor comparing Equal() after
+// round-tripping through a previous/next version node (i.e. in mixed-version
+// clusters). Note that we don't need to proto encoding to be stable since, when
+// doing CPuts we use the raw bytes we've read from the DB as the expected value
+// (instead of re-marshaling the proto), but unfortunately we also need the
+// Equal() method to work. Also note that we configure our protos to not
+// maintain unrecognized fields.
+//
 // TODO(jeffreyxiao): All nullable fields in RangeDescriptor can be made
 // non-nullable if #38302 is guaranteed to be on all nodes (I.E. 20.1).
 message RangeDescriptor {
   option (gogoproto.goproto_stringer) = false;
-  option (gogoproto.equal) = true;
+  // We implement the Equal method by hand so that it can ignore deprecated
+  // fields. This can be reverted in 21.1 once the "previous version" no longer
+  // populates deprecated_generation_comparable.
+  option (gogoproto.equal) = false;
   option (gogoproto.populate) = true;
 
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
@@ -217,6 +227,13 @@ message RangeDescriptor {
   // replica is gc'able or not. If it is not gc'able, then by definition the
   // replica applying the merge is.
   optional int64 generation = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "RangeGeneration"];
+
+  // This field is not used any more, but we need to maintain it in 20.2 because
+  // 20.1 nodes need descriptors to round-trip through 20.2 nodes and compare
+  // Equal() when they come back. 20.2 nodes know to ignore this field when
+  // comparing, so the field can be removed in 21.1.
+  optional bool deprecated_generation_comparable = 8;
+
   // The presence of the sticky_bit indicates that the range should not be
   // automatically merged by the merge queue with the range to its left. It is
   // set during a split operation and unset during an unsplit operation. Note
@@ -233,8 +250,6 @@ message RangeDescriptor {
   // queue is enabled. With sticky_bit, users can manually split ranges without
   // diabling the merge queue.
   optional util.hlc.Timestamp sticky_bit = 7;
-
-  reserved 8;
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize
