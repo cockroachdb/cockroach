@@ -12,8 +12,8 @@ package roachpb
 
 import (
 	"fmt"
-	"strings"
 
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -75,15 +75,18 @@ func MakeReplicaDescriptors(replicas []ReplicaDescriptor) ReplicaDescriptors {
 	return ReplicaDescriptors{wrapped: replicas}
 }
 
-func (d ReplicaDescriptors) String() string {
-	var buf strings.Builder
+// SafeFormat implements redact.SafeFormatter.
+func (d ReplicaDescriptors) SafeFormat(w redact.SafePrinter, _ rune) {
 	for i, desc := range d.wrapped {
 		if i > 0 {
-			buf.WriteByte(',')
+			w.SafeRune(',')
 		}
-		fmt.Fprint(&buf, desc)
+		w.Print(desc)
 	}
-	return buf.String()
+}
+
+func (d ReplicaDescriptors) String() string {
+	return redact.StringWithoutMarkers(d)
 }
 
 // All returns every replica in the set, including both voter replicas and
