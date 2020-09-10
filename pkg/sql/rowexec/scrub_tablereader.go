@@ -224,7 +224,7 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 
 	if err := tr.fetcher.StartScan(
 		ctx, tr.FlowCtx.Txn, tr.spans,
-		true /* limit batches */, tr.limitHint, tr.FlowCtx.TraceKV,
+		true /* limit batches */, tr.limitHint, tr.FlowCtx.TraceKV, true,
 	); err != nil {
 		tr.MoveToDraining(err)
 	}

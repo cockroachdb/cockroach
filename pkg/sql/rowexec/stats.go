@@ -156,9 +156,10 @@ func (c *rowFetcherStatCollector) StartScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	needRightCols bool,
 ) error {
 	start := timeutil.Now()
-	err := c.Fetcher.StartScan(ctx, txn, spans, limitBatches, limitHint, traceKV)
+	err := c.Fetcher.StartScan(ctx, txn, spans, limitBatches, limitHint, traceKV, needRightCols)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
