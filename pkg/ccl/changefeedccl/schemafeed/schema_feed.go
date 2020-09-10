@@ -340,7 +340,8 @@ func (tf *SchemaFeed) peekOrPop(
 	if i == -1 {
 		i = 0
 	}
-	events = tf.mu.events[:i]
+	events = make([]TableEvent, i)
+	copy(events, tf.mu.events[:i])
 	if pop {
 		tf.mu.events = tf.mu.events[i:]
 	}
