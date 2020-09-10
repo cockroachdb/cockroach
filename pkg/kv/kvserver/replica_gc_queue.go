@@ -335,7 +335,7 @@ func (rgcq *replicaGCQueue) process(
 			if len(rs) != 1 {
 				return false, errors.Errorf("expected 1 range descriptor, got %d", len(rs))
 			}
-			if leftReplyDesc := &rs[0]; !leftDesc.Equal(*leftReplyDesc) {
+			if leftReplyDesc := &rs[0]; !leftDesc.Equal(leftReplyDesc) {
 				log.VEventf(ctx, 1, "left neighbor %s not up-to-date with meta descriptor %s; cannot safely GC range yet",
 					leftDesc, leftReplyDesc)
 				// Chances are that the left replica needs to be GC'd. Since we don't
