@@ -52,6 +52,7 @@ func makeIndexDescriptor(name string, columnNames []string) descpb.IndexDescript
 
 func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	desc := NewCreatedMutable(descpb.TableDescriptor{
 		ParentID: keys.MinUserDescID,
@@ -75,7 +76,7 @@ func TestAllocateIDs(t *testing.T) {
 		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRole),
 		FormatVersion: descpb.FamilyFormatVersion,
 	})
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +127,7 @@ func TestAllocateIDs(t *testing.T) {
 		t.Fatalf("expected %s, but found %s", a, b)
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expected, desc) {
@@ -138,6 +139,8 @@ func TestAllocateIDs(t *testing.T) {
 
 func TestValidateTableDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
 
 	testData := []struct {
 		err  string
@@ -646,7 +649,7 @@ func TestValidateTableDesc(t *testing.T) {
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
 			desc := NewImmutable(d.desc)
-			if err := desc.ValidateTable(); err == nil {
+			if err := desc.ValidateTable(ctx); err == nil {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 			} else if d.err != err.Error() && "internal error: "+d.err != err.Error() {
 				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)
@@ -1359,6 +1362,8 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 }
 
 func TestUnvalidateConstraints(t *testing.T) {
+	ctx := context.Background()
+
 	desc := NewCreatedMutable(descpb.TableDescriptor{
 		Name:     "test",
 		ParentID: descpb.ID(1),
@@ -1377,7 +1382,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			},
 		},
 	})
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		t.Fatal(err)
 	}
 	lookup := func(_ descpb.ID) (catalog.TableDescriptor, error) {

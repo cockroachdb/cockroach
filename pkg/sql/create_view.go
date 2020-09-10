@@ -176,7 +176,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			desc.IsMaterializedView = true
 			desc.State = descpb.DescriptorState_ADD
 			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
-			if err := desc.AllocateIDs(); err != nil {
+			if err := desc.AllocateIDs(params.ctx); err != nil {
 				return err
 			}
 		}
@@ -394,7 +394,7 @@ func addResultColumns(
 		}
 		desc.AddColumn(col)
 	}
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		return err
 	}
 	return nil

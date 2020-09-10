@@ -170,7 +170,7 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 		}
 	}
 
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.AllocateIDs(params.ctx); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion.NextMutationID

@@ -69,7 +69,7 @@ func (mt mutationTest) checkTableSize(e int) {
 
 // Convert all the mutations into live descriptors for the table
 // and write the updated table descriptor to the DB.
-func (mt mutationTest) makeMutationsActive() {
+func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 	// Remove mutation to check real values in DB using SQL
 	if mt.tableDesc.Mutations == nil || len(mt.tableDesc.Mutations) == 0 {
 		mt.Fatal("No mutations to make active")
@@ -85,7 +85,7 @@ func (mt mutationTest) makeMutationsActive() {
 	}
 	mt.tableDesc.Mutations = nil
 	mt.tableDesc.Version++
-	if err := mt.tableDesc.ValidateTable(); err != nil {
+	if err := mt.tableDesc.ValidateTable(ctx); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -99,7 +99,9 @@ func (mt mutationTest) makeMutationsActive() {
 
 // writeColumnMutation adds column as a mutation and writes the
 // descriptor to the DB.
-func (mt mutationTest) writeColumnMutation(column string, m descpb.DescriptorMutation) {
+func (mt mutationTest) writeColumnMutation(
+	ctx context.Context, column string, m descpb.DescriptorMutation,
+) {
 	col, _, err := mt.tableDesc.FindColumnByName(tree.Name(column))
 	if err != nil {
 		mt.Fatal(err)
@@ -113,13 +115,13 @@ func (mt mutationTest) writeColumnMutation(column string, m descpb.DescriptorMut
 		}
 	}
 	m.Descriptor_ = &descpb.DescriptorMutation_Column{Column: col}
-	mt.writeMutation(m)
+	mt.writeMutation(ctx, m)
 }
 
 // writeMutation writes the mutation to the table descriptor. If the
 // State or the Direction is undefined, these values are populated via
 // picking random values before the mutation is written.
-func (mt mutationTest) writeMutation(m descpb.DescriptorMutation) {
+func (mt mutationTest) writeMutation(ctx context.Context, m descpb.DescriptorMutation) {
 	if m.Direction == descpb.DescriptorMutation_NONE {
 		// randomly pick ADD/DROP mutation if this is the first mutation, or
 		// pick the direction already chosen for the first mutation.
@@ -143,7 +145,7 @@ func (mt mutationTest) writeMutation(m descpb.DescriptorMutation) {
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
 	mt.tableDesc.Version++
-	if err := mt.tableDesc.ValidateTable(); err != nil {
+	if err := mt.tableDesc.ValidateTable(ctx); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -173,7 +175,8 @@ func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer server.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -190,7 +193,7 @@ ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 	// Add column "i" as a mutation in delete/write.
-	mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY})
+	mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY})
 
 	// This row will conflict with the original row, and should insert an `i`
 	// into the new column.
@@ -207,7 +210,7 @@ ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
 		{"c", "qux"},
 	})
 
-	mTest.makeMutationsActive()
+	mTest.makeMutationsActive(ctx)
 
 	mTest.CheckQueryResults(t, `SELECT * FROM t.test`, [][]string{
 		{"a", "bar", "i"},
@@ -230,9 +233,10 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// so disable leases on tables.
 	defer lease.TestingDisableTableLeases()()
 	// Disable external processing of mutations.
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.Background())
+	defer server.Stopper().Stop(ctx)
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -284,7 +288,7 @@ CREATE INDEX allidx ON t.test (k, v);
 					mTest.CheckQueryResults(t, starQuery, initRows)
 
 					// Add column "i" as a mutation.
-					mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+					mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 					// A direct read of column "i" fails.
 					if _, err := sqlDB.Query(`SELECT i FROM t.test`); err == nil {
 						t.Fatalf("Read succeeded despite column being in %v state", descpb.DescriptorMutation{State: state})
@@ -328,7 +332,7 @@ CREATE INDEX allidx ON t.test (k, v);
 					}
 
 					// Make column "i" live so that it is read.
-					mTest.makeMutationsActive()
+					mTest.makeMutationsActive(ctx)
 					// Check that we can read all the rows and columns.
 					mTest.CheckQueryResults(t, starQuery, initRows)
 
@@ -359,7 +363,7 @@ CREATE INDEX allidx ON t.test (k, v);
 						afterDeleteKeys = 4
 					}
 					// Make column "i" a mutation.
-					mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+					mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 					// Insert an all-defaults row into the table.
 					if useUpsert {
 						mTest.Exec(t, `UPSERT INTO t.test DEFAULT VALUES`)
@@ -367,7 +371,7 @@ CREATE INDEX allidx ON t.test (k, v);
 						mTest.Exec(t, `INSERT INTO t.test DEFAULT VALUES`)
 					}
 					// Make column "i" live so that it is read.
-					mTest.makeMutationsActive()
+					mTest.makeMutationsActive(ctx)
 					// Notice that the default value of "i" is only written when the
 					// descriptor is in the DELETE_AND_WRITE_ONLY state.
 					mTest.CheckQueryResults(t, starQuery, afterDefaultInsert)
@@ -375,7 +379,7 @@ CREATE INDEX allidx ON t.test (k, v);
 					mTest.Exec(t, `DELETE FROM t.test WHERE k = 'default'`)
 
 					// Make column "i" a mutation.
-					mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+					mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 					// Insert a row into the table.
 					if useUpsert {
 						mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'x')`)
@@ -383,7 +387,7 @@ CREATE INDEX allidx ON t.test (k, v);
 						mTest.Exec(t, `INSERT INTO t.test VALUES ('c', 'x')`)
 					}
 					// Make column "i" live so that it is read.
-					mTest.makeMutationsActive()
+					mTest.makeMutationsActive(ctx)
 					// Notice that the default value of "i" is only written when the
 					// descriptor is in the DELETE_AND_WRITE_ONLY state.
 					mTest.CheckQueryResults(t, starQuery, afterInsert)
@@ -393,7 +397,7 @@ CREATE INDEX allidx ON t.test (k, v);
 					// guarantees that.
 
 					// Make column "i" a mutation.
-					mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+					mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 					// Updating column "i" for a row fails.
 					if useUpsert {
 						_, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'u', 'u')`)
@@ -408,12 +412,12 @@ CREATE INDEX allidx ON t.test (k, v);
 						}
 					}
 					// Make column "i" live so that it is read.
-					mTest.makeMutationsActive()
+					mTest.makeMutationsActive(ctx)
 					// The above failed update was a noop.
 					mTest.CheckQueryResults(t, starQuery, afterInsert)
 
 					// Make column "i" a mutation.
-					mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+					mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 					// Update a row without specifying  mutation column "i".
 					if useUpsert {
 						mTest.Exec(t, `UPSERT INTO t.test VALUES ('a', 'u')`)
@@ -421,24 +425,24 @@ CREATE INDEX allidx ON t.test (k, v);
 						mTest.Exec(t, `UPDATE t.test SET v = 'u' WHERE k = 'a'`)
 					}
 					// Make column "i" live so that it is read.
-					mTest.makeMutationsActive()
+					mTest.makeMutationsActive(ctx)
 					// The update to column "v" is seen; there is no effect on column "i".
 					mTest.CheckQueryResults(t, starQuery, afterUpdate)
 
 					// Make column "i" a mutation.
-					mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+					mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 					// Update primary key of row "c" to be "d"
 					mTest.Exec(t, `UPDATE t.test SET k = 'd' WHERE v = 'x'`)
 					// Make column "i" live so that it is read.
-					mTest.makeMutationsActive()
+					mTest.makeMutationsActive(ctx)
 					mTest.CheckQueryResults(t, starQuery, afterPKUpdate)
 
 					// Make column "i" a mutation.
-					mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+					mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 					// Delete row "a".
 					mTest.Exec(t, `DELETE FROM t.test WHERE k = 'a'`)
 					// Make column "i" live so that it is read.
-					mTest.makeMutationsActive()
+					mTest.makeMutationsActive(ctx)
 					// Row "a" is deleted.
 					mTest.CheckQueryResults(t, starQuery, afterDelete)
 					// Check that there are no hidden KV values for row "a",
@@ -451,28 +455,30 @@ CREATE INDEX allidx ON t.test (k, v);
 	// Check that a mutation can only be inserted with an explicit mutation state, and direction.
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []descpb.DescriptorMutation{{}}
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
+	if err := tableDesc.ValidateTable(ctx); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Column{Column: &tableDesc.Columns[len(tableDesc.Columns)-1]}}}
 	tableDesc.Columns = tableDesc.Columns[:len(tableDesc.Columns)-1]
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
+	if err := tableDesc.ValidateTable(ctx); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_DELETE_ONLY
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
+	if err := tableDesc.ValidateTable(ctx); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_UNKNOWN
 	tableDesc.Mutations[0].Direction = descpb.DescriptorMutation_DROP
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
+	if err := tableDesc.ValidateTable(ctx); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
 		t.Fatal(err)
 	}
 }
 
 // writeIndexMutation adds index as a mutation and writes the
 // descriptor to the DB.
-func (mt mutationTest) writeIndexMutation(index string, m descpb.DescriptorMutation) {
+func (mt mutationTest) writeIndexMutation(
+	ctx context.Context, index string, m descpb.DescriptorMutation,
+) {
 	tableDesc := mt.tableDesc
 	idx, _, err := tableDesc.FindIndexByName(index)
 	if err != nil {
@@ -489,7 +495,7 @@ func (mt mutationTest) writeIndexMutation(index string, m descpb.DescriptorMutat
 	}
 
 	m.Descriptor_ = &descpb.DescriptorMutation_Index{Index: &idxCopy}
-	mt.writeMutation(m)
+	mt.writeMutation(ctx, m)
 }
 
 // Test INSERT, UPDATE, UPSERT, and DELETE operations with an index schema
@@ -497,6 +503,8 @@ func (mt mutationTest) writeIndexMutation(index string, m descpb.DescriptorMutat
 func TestOperationsWithIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
 	// NB: This test manually adds mutations to a table descriptor to test that
 	// other schema changes work in the presence of those mutations. Since there's
 	// no job associated with the added mutations, those mutations stay on the
@@ -555,7 +563,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
 
 			// Index foo is invisible once it's a mutation.
-			mTest.writeIndexMutation("foo", descpb.DescriptorMutation{State: state})
+			mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
 			if _, err := sqlDB.Query(indexQuery); !testutils.IsError(err, `index "foo" not found`) {
 				t.Fatal(err)
 			}
@@ -569,7 +577,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "x"}})
 
 			// Make index "foo" live so that we can read it.
-			mTest.makeMutationsActive()
+			mTest.makeMutationsActive(ctx)
 			if state == descpb.DescriptorMutation_DELETE_ONLY {
 				// "x" didn't get added to the index.
 				mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
@@ -579,7 +587,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			}
 
 			// Make "foo" a mutation.
-			mTest.writeIndexMutation("foo", descpb.DescriptorMutation{State: state})
+			mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
 			// Update.
 			if useUpsert {
 				mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'w')`)
@@ -593,7 +601,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "w"}})
 
 			// Make index "foo" live so that we can read it.
-			mTest.makeMutationsActive()
+			mTest.makeMutationsActive(ctx)
 			if state == descpb.DescriptorMutation_DELETE_ONLY {
 				// updating "x" -> "w" will result in "x" being deleted from the index.
 				// updating "z" -> "z" results in "z" being deleted from the index.
@@ -605,13 +613,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			}
 
 			// Make "foo" a mutation.
-			mTest.writeIndexMutation("foo", descpb.DescriptorMutation{State: state})
+			mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
 			// Update the primary key of row "a".
 			mTest.Exec(t, `UPDATE t.test SET k = 'd' WHERE v = 'z'`)
 			mTest.CheckQueryResults(t, starQuery, [][]string{{"b", "y"}, {"c", "w"}, {"d", "z"}})
 
 			// Make index "foo" live so that we can read it.
-			mTest.makeMutationsActive()
+			mTest.makeMutationsActive(ctx)
 			// Updating the primary key for a row when we're in delete-only won't
 			// create a new index entry, and will delete the old one. Otherwise it'll
 			// create a new entry and delete the old one.
@@ -622,13 +630,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			}
 
 			// Make "foo" a mutation.
-			mTest.writeIndexMutation("foo", descpb.DescriptorMutation{State: state})
+			mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
 			// Delete row "b".
 			mTest.Exec(t, `DELETE FROM t.test WHERE k = 'b'`)
 			mTest.CheckQueryResults(t, starQuery, [][]string{{"c", "w"}, {"d", "z"}})
 
 			// Make index "foo" live so that we can read it.
-			mTest.makeMutationsActive()
+			mTest.makeMutationsActive(ctx)
 			// Deleting row "b" deletes "y" from the index.
 			if state == descpb.DescriptorMutation_DELETE_ONLY {
 				mTest.CheckQueryResults(t, indexQuery, [][]string{})
@@ -642,7 +650,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Index{Index: &tableDesc.Indexes[len(tableDesc.Indexes)-1]}}}
 	tableDesc.Indexes = tableDesc.Indexes[:len(tableDesc.Indexes)-1]
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
+	if err := tableDesc.ValidateTable(ctx); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
 	}
 }
@@ -662,7 +670,8 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer server.Stopper().Stop(ctx)
 
 	// Create a table with column i and an index on v and i. Fix the column
 	// families so the key counts below don't change if the family heuristics
@@ -728,9 +737,9 @@ CREATE INDEX allidx ON t.test (k, v);
 				mTest.CheckQueryResults(t, starQuery, initRows)
 
 				// Add index "foo" as a mutation.
-				mTest.writeIndexMutation("foo", descpb.DescriptorMutation{State: idxState})
+				mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: idxState})
 				// Make column "i" a mutation.
-				mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+				mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 
 				// Insert a row into the table.
 				if useUpsert {
@@ -740,7 +749,7 @@ CREATE INDEX allidx ON t.test (k, v);
 				}
 
 				// Make column "i" and index "foo" live.
-				mTest.makeMutationsActive()
+				mTest.makeMutationsActive(ctx)
 				// column "i" has no entry.
 				mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z", "q"}, {"b", "y", "r"}, {"c", "x", "NULL"}})
 				if idxState == descpb.DescriptorMutation_DELETE_ONLY {
@@ -752,9 +761,9 @@ CREATE INDEX allidx ON t.test (k, v);
 				}
 
 				// Add index "foo" as a mutation.
-				mTest.writeIndexMutation("foo", descpb.DescriptorMutation{State: idxState})
+				mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: idxState})
 				// Make column "i" a mutation.
-				mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+				mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 
 				// Updating column "i" for a row fails.
 				if useUpsert {
@@ -794,7 +803,7 @@ CREATE INDEX allidx ON t.test (k, v);
 					mTest.Exec(t, `UPDATE t.test SET v = 'u' WHERE k = 'a'`)
 				}
 				// Make column "i" and index "foo" live.
-				mTest.makeMutationsActive()
+				mTest.makeMutationsActive(ctx)
 
 				if state == descpb.DescriptorMutation_DELETE_ONLY {
 					// Mutation column "i" is not updated.
@@ -813,14 +822,14 @@ CREATE INDEX allidx ON t.test (k, v);
 				}
 
 				// Add index "foo" as a mutation.
-				mTest.writeIndexMutation("foo", descpb.DescriptorMutation{State: idxState})
+				mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: idxState})
 				// Make column "i" a mutation.
-				mTest.writeColumnMutation("i", descpb.DescriptorMutation{State: state})
+				mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: state})
 
 				// Delete row "b".
 				mTest.Exec(t, `DELETE FROM t.test WHERE k = 'b'`)
 				// Make column "i" and index "foo" live.
-				mTest.makeMutationsActive()
+				mTest.makeMutationsActive(ctx)
 				// Row "b" is deleted.
 				if state == descpb.DescriptorMutation_DELETE_ONLY {
 					mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}})
@@ -878,7 +887,8 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer server.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -896,64 +906,64 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	// Test CREATE INDEX in the presence of mutations.
 
 	// Add index DROP mutation "foo""
-	mt.writeIndexMutation("foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
+	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
 	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.test (c)`); !testutils.IsError(err, `index "foo" being dropped, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 
 	// "foo" is being added.
-	mt.writeIndexMutation("foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
+	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.test (c)`); !testutils.IsError(err,
 		`relation "foo" already exists`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// Add column DROP mutation "b"
-	mt.writeColumnMutation("b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
+	mt.writeColumnMutation(ctx, "b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
 	if _, err := sqlDB.Exec(`CREATE INDEX bar ON t.test (b)`); !testutils.IsError(err, `column "b" does not exist`) {
 		t.Fatal(err)
 	}
 	// Make "b" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// "b" is being added.
-	mt.writeColumnMutation("b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
+	mt.writeColumnMutation(ctx, "b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	// An index referencing a column mutation that is being added
 	// is allowed to be added.
 	mt.Exec(t, `CREATE INDEX bar ON t.test (b)`)
 	// Make "b" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 
 	// Test DROP INDEX in the presence of mutations.
 
 	// Add index DROP mutation "foo""
-	mt.writeIndexMutation("foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
+	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
 	// Noop.
 	mt.Exec(t, `DROP INDEX t.test@foo`)
 	// Make "foo" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// "foo" is being added.
-	mt.writeIndexMutation("foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
+	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); !testutils.IsError(err, `index "foo" in the middle of being added, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// Test ALTER TABLE ADD/DROP column in the presence of mutations.
 
 	// Add column DROP mutation "b"
-	mt.writeColumnMutation("b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
+	mt.writeColumnMutation(ctx, "b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b CHAR`); !testutils.IsError(err, `column "b" being dropped, try again later`) {
 		t.Fatal(err)
 	}
 	// Noop.
 	mt.Exec(t, `ALTER TABLE t.test DROP b`)
 	// Make "b" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// "b" is being added.
-	mt.writeColumnMutation("b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
+	mt.writeColumnMutation(ctx, "b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b CHAR`); !testutils.IsError(err,
 		`pq: duplicate: column "b" in the middle of being added, not yet public`) {
 		t.Fatal(err)
@@ -962,59 +972,59 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 		t.Fatal(err)
 	}
 	// Make "b" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 
 	// Test ALTER TABLE ADD CONSTRAINT in the presence of mutations.
 
 	// Add index DROP mutation "foo""
-	mt.writeIndexMutation("foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
+	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err, `index "foo" being dropped, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// "foo" is being added.
-	mt.writeIndexMutation("foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
+	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err,
 		`duplicate: index "foo" in the middle of being added, not yet public`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// Add column mutation "b"
-	mt.writeColumnMutation("b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
+	mt.writeColumnMutation(ctx, "b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT bar UNIQUE (b)`); !testutils.IsError(err, `index "bar" contains unknown column "b"`) {
 		t.Fatal(err)
 	}
 	// Make "b" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// "b" is being added.
-	mt.writeColumnMutation("b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
+	mt.writeColumnMutation(ctx, "b", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	// Noop.
 	mt.Exec(t, `ALTER TABLE t.test ADD CONSTRAINT bar UNIQUE (b)`)
 	// Make "b" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 
 	// Test DROP CONSTRAINT in the presence of mutations.
 
 	// Add index mutation "foo""
-	mt.writeIndexMutation("foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
+	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
 	// Noop.
 	mt.Exec(t, `DROP INDEX t.test@foo`)
 	// Make "foo" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// "foo" is being added.
-	mt.writeIndexMutation("foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
+	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); !testutils.IsError(err, `index "foo" in the middle of being added, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 
 	// Rename column/index, while index is under mutation.
 
 	// Add index mutation "foo""
-	mt.writeIndexMutation("foo", descpb.DescriptorMutation{})
+	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{})
 	mt.Exec(t, `ALTER INDEX t.test@foo RENAME to ufo`)
 	mt.Exec(t, `ALTER TABLE t.test RENAME COLUMN c TO d`)
 	// The mutation in the table descriptor has changed and we would like
@@ -1022,7 +1032,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	mt.tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Make "ufo" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// The index has been renamed to ufo, and the column to d.
 	mt.CheckQueryResults(t,
 		"SHOW INDEXES FROM t.test",
@@ -1036,7 +1046,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	// Rename column under mutation works properly.
 
 	// Add column mutation "b".
-	mt.writeColumnMutation("b", descpb.DescriptorMutation{})
+	mt.writeColumnMutation(ctx, "b", descpb.DescriptorMutation{})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test RENAME COLUMN b TO e`); err != nil {
 		mt.Fatal(err)
 	}
@@ -1047,7 +1057,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Make column "e" live.
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 	// Column b changed to d.
 	mt.CheckQueryResults(t,
 		"SHOW COLUMNS FROM t.test",
@@ -1059,17 +1069,17 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	)
 
 	// Try to change column defaults while column is under mutation.
-	mt.writeColumnMutation("e", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
+	mt.writeColumnMutation(ctx, "e", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); err != nil {
 		t.Fatal(err)
 	}
-	mt.makeMutationsActive()
-	mt.writeColumnMutation("e", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
+	mt.makeMutationsActive(ctx)
+	mt.writeColumnMutation(ctx, "e", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_DROP})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); !testutils.IsError(
 		err, `column "e" in the middle of being dropped`) {
 		t.Fatal(err)
 	}
-	mt.makeMutationsActive()
+	mt.makeMutationsActive(ctx)
 }
 
 // TestTableMutationQueue tests that schema elements when added are

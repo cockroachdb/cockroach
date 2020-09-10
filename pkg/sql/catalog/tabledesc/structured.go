@@ -1071,7 +1071,7 @@ func (desc *Mutable) MaybeFillColumnID(
 
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
-func (desc *Mutable) AllocateIDs() error {
+func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 	// Only tables with physical data can have / need a primary key.
 	if desc.IsPhysicalTable() {
 		if err := desc.ensurePrimaryKey(); err != nil {
@@ -1108,7 +1108,7 @@ func (desc *Mutable) AllocateIDs() error {
 	if desc.ID == 0 {
 		desc.ID = keys.MinUserDescID
 	}
-	err := desc.ValidateTable()
+	err := desc.ValidateTable(ctx)
 	desc.ID = savedID
 	return err
 }
@@ -1427,10 +1427,16 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	return desc.ClusterVersion.Version
 }
 
+type testingDescriptorValidation bool
+
+// PerformTestingDescriptorValidation can be set as a value on a context to
+// ensure testing specific descriptor validation happens.
+var PerformTestingDescriptorValidation testingDescriptorValidation = true
+
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
 func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) error {
-	err := desc.ValidateTable()
+	err := desc.ValidateTable(ctx)
 	if err != nil {
 		return err
 	}
@@ -1438,6 +1444,35 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 		return nil
 	}
 	return desc.validateCrossReferences(ctx, dg)
+}
+
+// validateTableIfTesting is similar to validateTable, except it is only invoked
+// when the context has the `PerformTestingDescriptorValidation` value set on it
+// (dictated by ExecutorTestingKnobs). Any cross descriptor validations that may
+// fail in the wild due to known bugs that have now been fixed should be added
+// here instead of validateCrossReferences.
+func (desc *Immutable) validateTableIfTesting(ctx context.Context) error {
+	if isTesting := ctx.Value(PerformTestingDescriptorValidation); isTesting == nil {
+		return nil
+	}
+	// TODO(arul): Fill this with testing only table validation
+	return nil
+}
+
+// validateCrossReferencesIfTesting is similar to validateCrossReferences,
+// except it is only invoked when the context has the
+// `PerformTestingDescriptorValidation` value set on it
+// (dictated by ExecutorTestingKnobs). Any cross reference descriptor validation
+// that may fail in the wild due to known bugs that have now been fixed should
+// be added here instead of validateCrossReferences.
+func (desc *Immutable) validateCrossReferencesIfTesting(
+	ctx context.Context, _ catalog.DescGetter,
+) error {
+	if isTesting := ctx.Value(PerformTestingDescriptorValidation); isTesting == nil {
+		return nil
+	}
+	// TODO(arul): Fill this with testing only cross reference validation
+	return nil
 }
 
 // validateCrossReferences validates that each reference to another table is
@@ -1604,7 +1639,7 @@ func (desc *Immutable) validateCrossReferences(ctx context.Context, dg catalog.D
 		}
 	}
 
-	return nil
+	return desc.validateCrossReferencesIfTesting(ctx, dg)
 }
 
 // ValidateIndexNameIsUnique validates that the index name does not exist.
@@ -1623,7 +1658,7 @@ func (desc *Immutable) ValidateIndexNameIsUnique(indexName string) error {
 // are consistent. Use Validate to validate that cross-table references are
 // correct.
 // If version is supplied, the descriptor is checked for version incompatibilities.
-func (desc *Immutable) ValidateTable() error {
+func (desc *Immutable) ValidateTable(ctx context.Context) error {
 	if err := catalog.ValidateName(desc.Name, "table"); err != nil {
 		return err
 	}
@@ -1820,6 +1855,10 @@ func (desc *Immutable) ValidateTable() error {
 			foundAlterColumnType = true
 			alterColumnTypeMutation = m.MutationID
 		}
+	}
+
+	if err := desc.validateTableIfTesting(ctx); err != nil {
+		return err
 	}
 
 	// Validate the privilege descriptor.

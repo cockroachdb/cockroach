@@ -248,6 +248,7 @@ func readPostgresCreateTable(
 			for name, seq := range createSeq {
 				id := descpb.ID(int(defaultCSVTableID) + len(ret))
 				desc, err := sql.NewSequenceTableDesc(
+					ctx,
 					name,
 					seq.Options,
 					parentID,

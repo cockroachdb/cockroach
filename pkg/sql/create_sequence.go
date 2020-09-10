@@ -103,6 +103,7 @@ func doCreateSequence(
 	// currently relied on in import and restore code and tests.
 	var creationTime hlc.Timestamp
 	desc, err := NewSequenceTableDesc(
+		params.ctx,
 		name.Object(),
 		opts,
 		dbDesc.GetID(),
@@ -168,6 +169,7 @@ func (*createSequenceNode) Close(context.Context)        {}
 
 // NewSequenceTableDesc creates a sequence descriptor.
 func NewSequenceTableDesc(
+	ctx context.Context,
 	sequenceName string,
 	sequenceOptions tree.SequenceOptions,
 	parentID descpb.ID,
@@ -227,7 +229,7 @@ func NewSequenceTableDesc(
 	// immediately.
 	desc.State = descpb.DescriptorState_PUBLIC
 
-	if err := desc.ValidateTable(); err != nil {
+	if err := desc.ValidateTable(ctx); err != nil {
 		return nil, err
 	}
 	return &desc, nil
