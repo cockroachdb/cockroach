@@ -7,6 +7,11 @@
 # when possible. This is true even with interleaved scans, which complicate the
 # logic of mapping a WriteIntentError back to the corresponding table.
 
+# Note that for some reason setting a session variable is not sufficient to
+# trigger the expected errors for the interleaved scans.
+statement ok
+SET CLUSTER SETTING sql.distsql.interleaved_joins.enabled = true
+
 statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
 
