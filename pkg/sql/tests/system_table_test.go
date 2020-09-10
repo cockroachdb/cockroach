@@ -159,6 +159,7 @@ func TestInitialKeysAndSplits(t *testing.T) {
 func TestSystemTableLiterals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	type testcase struct {
 		id     descpb.ID
 		schema string
@@ -203,7 +204,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		if err != nil {
 			t.Fatalf("test: %+v, err: %v", test, err)
 		}
-		require.NoError(t, gen.ValidateTable())
+		require.NoError(t, gen.ValidateTable(ctx))
 
 		if !proto.Equal(test.pkg.TableDesc(), gen.TableDesc()) {
 			diff := strings.Join(pretty.Diff(test.pkg.TableDesc(), gen.TableDesc()), "\n")

@@ -352,7 +352,7 @@ func alterColumnTypeGeneral(
 
 	tableDesc.AddColumnMutation(&newCol, descpb.DescriptorMutation_ADD)
 
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err
 	}
 

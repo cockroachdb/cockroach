@@ -60,6 +60,7 @@ func CreateTestTableDescriptor(
 		return desc, err
 	case *tree.CreateSequence:
 		desc, err := NewSequenceTableDesc(
+			ctx,
 			n.Name.Table(),
 			n.Options,
 			parentID, keys.PublicSchemaID, id,

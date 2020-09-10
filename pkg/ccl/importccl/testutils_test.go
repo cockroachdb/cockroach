@@ -35,7 +35,7 @@ import (
 )
 
 func descForTable(
-	t *testing.T, create string, parent, id descpb.ID, fks fkHandler,
+	ctx context.Context, t *testing.T, create string, parent, id descpb.ID, fks fkHandler,
 ) *tabledesc.Mutable {
 	t.Helper()
 	parsed, err := parser.Parse(create)
@@ -55,6 +55,7 @@ func descForTable(
 		ts := hlc.Timestamp{WallTime: nanos}
 		priv := descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
 		desc, err := sql.NewSequenceTableDesc(
+			ctx,
 			name,
 			tree.SequenceOptions{},
 			parent,

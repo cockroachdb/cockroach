@@ -818,6 +818,11 @@ type ExecutorTestingKnobs struct {
 	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
 	// a given table id.
 	RunAfterSCJobsCacheLookup func(*jobs.Job)
+
+	// TestingDescriptorValidation dictates if stronger descriptor validation
+	// should be performed (typically turned on during tests only to guard against
+	// wild descriptors which are corrupted due to bugs).
+	TestingDescriptorValidation bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
