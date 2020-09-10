@@ -385,6 +385,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nlRenewal,
 		st,
 		cfg.HistogramWindowInterval(),
+		nodeDialer,
 	)
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
@@ -1927,7 +1928,10 @@ func (s *sqlServer) startServeSQL(
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
 func (s *Server) Decommission(
-	ctx context.Context, targetStatus kvserverpb.MembershipStatus, nodeIDs []roachpb.NodeID,
+	ctx context.Context,
+	targetStatus kvserverpb.MembershipStatus,
+	nodeIDs []roachpb.NodeID,
+	inAbsentia bool,
 ) error {
 	if !s.st.Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
 		if targetStatus.Decommissioned() {
@@ -1953,17 +1957,54 @@ func (s *Server) Decommission(
 	}
 
 	for _, nodeID := range nodeIDs {
-		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
+		// XXX: What's a better way to do all of this? We're not plumbing this
+		// into NodeLiveness directly because we want the finalize rpc to live
+		// on the server (we are of course decommissioning a whole node, not a
+		// store or the view of the system kv knows about). Also can't really
+		// tease out node liveness into it's own thing (which btw we should do
+		// separately anyway), cause this calls into node liveness here. It's
+		// very much a server level concern. We also want this callback to know
+		// about ifAbsentia, so it's not something we can fix into NodeLiveness
+		// itself.
+		callback := func(ctx context.Context, nodeID roachpb.NodeID) error {
+			// XXX: We can alternatively forward the decomm request to each
+			// node, and have each node write to local disk if needed (instead
+			// of a new RPC). Seems unnecessary though. Actually, no-bueno, we
+			// need to support the ability to decommission a downed node.
+
+			// If we're attempting to mark a node as fully decommissioned, we
+			// want to inform the node that the process, which would persist a
+			// kill file.
+			if !inAbsentia && targetStatus.Decommissioned() {
+				conn, err := s.nodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
+				if err != nil {
+					return err
+				}
+
+				adminClient := serverpb.NewAdminClient(conn)
+				req := &serverpb.FinalizeDecommissionRequest{}
+				_, err = adminClient.FinalizeDecommission(ctx, req)
+				_ = conn.Close()
+				if err != nil {
+					// XXX: Wrap connection errors better, to make it clear when
+					// --force should be used.
+					return err
+				}
+			}
+			return nil
+		}
+		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus, callback)
 		if err != nil {
 			return err
 		}
 		if statusChanged {
 			// If we die right now or if this transaction fails to commit, the
 			// membership event will not be recorded to the event log. While we
-			// could insert the event record in the same transaction as the liveness
-			// update, this would force a 2PC and potentially leave write intents in
-			// the node liveness range. Better to make the event logging best effort
-			// than to slow down future node liveness transactions.
+			// could insert the event record in the same transaction as the
+			// liveness update, this would force a 2PC and potentially leave
+			// write intents in the node liveness range. Better to make the
+			// event logging best effort than to slow down future node liveness
+			// transactions.
 			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return eventLogger.InsertEventRecord(
 					ctx, txn, eventType, int32(nodeID), int32(s.NodeID()), struct{}{},

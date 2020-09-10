@@ -992,14 +992,14 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	decommissioningNodeID := tc.Server(2).NodeID()
 	log.Infof(ctx, "marking node %d as decommissioning", decommissioningNodeID)
-	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decommissioningNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decommissioningNodeID}, false); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "marked node %d as decommissioning", decommissioningNodeID)
 
 	removedNodeID := tc.Server(3).NodeID()
 	log.Infof(ctx, "marking node %d as decommissioning and shutting it down", removedNodeID)
-	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{removedNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{removedNodeID}, false); err != nil {
 		t.Fatal(err)
 	}
 	tc.StopServer(3)
@@ -1074,18 +1074,19 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 	ctx := context.Background()
 	callerNodeLiveness := mtc.nodeLivenesses[0]
 	nodeID := mtc.gossips[decommissionNodeIdx].NodeID.Get()
+	var noop kvserver.FinalizeDecommissionCallback
 
 	// Verify success on failed update of a liveness record that already has the
 	// given decommissioning setting.
 	if _, err := callerNodeLiveness.SetDecommissioningInternal(
-		ctx, nodeID, kvserver.LivenessRecord{}, kvserverpb.MembershipStatus_ACTIVE,
+		ctx, nodeID, kvserver.LivenessRecord{}, kvserverpb.MembershipStatus_ACTIVE, noop,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set a node to decommissioning state.
 	if _, err := callerNodeLiveness.SetMembershipStatus(
-		ctx, nodeID, kvserverpb.MembershipStatus_DECOMMISSIONING); err != nil {
+		ctx, nodeID, kvserverpb.MembershipStatus_DECOMMISSIONING, noop); err != nil {
 		t.Fatal(err)
 	}
 	verifyNodeIsDecommissioning(t, mtc, nodeID)
@@ -1129,12 +1130,13 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 
 	verifyLiveness(t, mtc)
 
+	var noop kvserver.FinalizeDecommissionCallback
 	ctx := context.Background()
 	const goneNodeID = roachpb.NodeID(10000)
 
 	// When the node simply never existed, expect an error.
 	if _, err := mtc.nodeLivenesses[0].SetMembershipStatus(
-		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING,
+		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING, noop, // XXX: Buggy, change to true.
 	); !errors.Is(err, kvserver.ErrNoLivenessRecord) {
 		t.Fatal(err)
 	}
@@ -1149,37 +1151,43 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// XXX: Change the inAbsentia calls here to correct things as needed.
 	// Decommission from second node.
 	if committed, err := mtc.nodeLivenesses[1].SetMembershipStatus(
-		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING); err != nil {
+		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING, noop,
+	); err != nil { //
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
 	// Re-decommission from first node.
 	if committed, err := mtc.nodeLivenesses[0].SetMembershipStatus(
-		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING); err != nil {
+		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING, noop,
+	); err != nil {
 		t.Fatal(err)
 	} else if committed {
 		t.Fatal("spurious change committed")
 	}
 	// Recommission from first node.
 	if committed, err := mtc.nodeLivenesses[0].SetMembershipStatus(
-		ctx, goneNodeID, kvserverpb.MembershipStatus_ACTIVE); err != nil {
+		ctx, goneNodeID, kvserverpb.MembershipStatus_ACTIVE, noop,
+	); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
 	// Decommission from second node (a second time).
 	if committed, err := mtc.nodeLivenesses[1].SetMembershipStatus(
-		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING); err != nil {
+		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING, noop,
+	); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
 	// Recommission from third node.
 	if committed, err := mtc.nodeLivenesses[2].SetMembershipStatus(
-		ctx, goneNodeID, kvserverpb.MembershipStatus_ACTIVE); err != nil {
+		ctx, goneNodeID, kvserverpb.MembershipStatus_ACTIVE, noop,
+	); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")

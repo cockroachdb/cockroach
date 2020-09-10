@@ -447,6 +447,11 @@ message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   cockroach.kv.kvserver.storagepb.MembershipStatus target_membership = 2;
+  // InAbsentia controls whether any of the target nodes are being
+  // decommissioned while not live. This is driven by `cockroach node
+  // decommission --force`. The flag comes with the guarantee from the user that
+  // the target nodes are never coming back.
+  bool in_absentia = 3;
 }
 
 // DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
@@ -463,6 +468,12 @@ message DecommissionStatusResponse {
   }
   // Status of all affected nodes.
   repeated Status status = 2 [(gogoproto.nullable) = false];
+}
+
+message FinalizeDecommissionRequest {
+}
+
+message FinalizeDecommissionResponse {
 }
 
 // SettingsRequest inquires what are the current settings in the cluster.
@@ -872,6 +883,14 @@ service Admin {
   // If this ever becomes exposed via HTTP, ensure that it performs
   // authorization. See #42567.
   rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
+  }
+
+  // FinalizeDecommission informs the target node that it has been fully
+  // decommissioned. The target node is to then persist a local file to prevent
+  // itself from starting back up again when terminated.
+  //
+  // XXX: Find a better name for this?
+  rpc FinalizeDecommission(FinalizeDecommissionRequest) returns (FinalizeDecommissionResponse) {
   }
 
   // DecommissionStatus retrieves the decommissioning status of the specified nodes.

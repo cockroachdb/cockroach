@@ -411,6 +411,7 @@ func setQuitContextDefaults() {
 var nodeCtx struct {
 	nodeDecommissionWait   nodeDecommissionWaitType
 	nodeDecommissionSelf   bool
+	nodeDecommissionForce  bool
 	statusShowRanges       bool
 	statusShowStats        bool
 	statusShowDecommission bool

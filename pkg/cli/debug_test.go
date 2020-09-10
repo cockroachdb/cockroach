@@ -348,9 +348,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					deadNodes = append(deadNodes, roachpb.NodeID(i+1))
 				}
 
-				if err := runDecommissionNodeImpl(
-					ctx, adminClient, nodeDecommissionWaitNone, deadNodes,
-				); err != nil {
+				if err := runDecommissionNodeImpl(ctx, adminClient, nodeDecommissionWaitNone, false, deadNodes); err != nil {
 					t.Fatal(err)
 				}
 

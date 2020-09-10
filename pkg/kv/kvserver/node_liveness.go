@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -131,6 +132,10 @@ type IsLiveCallback func(kvserverpb.Liveness)
 // indicating that it is alive.
 type HeartbeatCallback func(context.Context)
 
+type FinalizeDecommissionCallback func(context.Context, roachpb.NodeID) error
+
+var noopFinalizeDecommissionCallback FinalizeDecommissionCallback
+
 // NodeLiveness is a centralized failure detector that coordinates
 // with the epoch-based range system to provide for leases of
 // indefinite length (replacing frequent per-range lease renewals with
@@ -174,6 +179,7 @@ type NodeLiveness struct {
 	heartbeatPaused uint32
 	heartbeatToken  chan struct{}
 	metrics         LivenessMetrics
+	nodeDialer      *nodedialer.Dialer
 
 	mu struct {
 		syncutil.RWMutex
@@ -208,6 +214,7 @@ func NewNodeLiveness(
 	renewalDuration time.Duration,
 	st *cluster.Settings,
 	histogramWindow time.Duration,
+	nodeDialer *nodedialer.Dialer,
 ) *NodeLiveness {
 	nl := &NodeLiveness{
 		ambientCtx:        ambient,
@@ -220,6 +227,7 @@ func NewNodeLiveness(
 		st:                st,
 		otherSem:          make(chan struct{}, 1),
 		heartbeatToken:    make(chan struct{}, 1),
+		nodeDialer:        nodeDialer,
 	}
 	nl.metrics = LivenessMetrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -280,7 +288,10 @@ func (nl *NodeLiveness) SetDraining(
 // to change the membership status (as opposed to it returning early when
 // finding the target status possibly set by another node).
 func (nl *NodeLiveness) SetMembershipStatus(
-	ctx context.Context, nodeID roachpb.NodeID, targetStatus kvserverpb.MembershipStatus,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	targetStatus kvserverpb.MembershipStatus,
+	callback FinalizeDecommissionCallback,
 ) (statusChanged bool, err error) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 
@@ -348,7 +359,7 @@ func (nl *NodeLiveness) SetMembershipStatus(
 		// liveness, the previous view is correct. This, too, is required to
 		// de-flake TestNodeLivenessDecommissionAbsent.
 		nl.maybeUpdate(oldLivenessRec)
-		return nl.setMembershipStatusInternal(ctx, nodeID, oldLivenessRec, targetStatus)
+		return nl.setMembershipStatusInternal(ctx, nodeID, oldLivenessRec, targetStatus, callback)
 	}
 
 	for {
@@ -410,7 +421,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 			return errNodeDrainingSet
 		}
 		return errors.New("failed to update liveness record because record has changed")
-	})
+	}, noopFinalizeDecommissionCallback)
 	if err != nil {
 		if log.V(1) {
 			log.Infof(ctx, "updating liveness record: %v", err)
@@ -505,6 +516,7 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 	nodeID roachpb.NodeID,
 	oldLivenessRec LivenessRecord,
 	targetStatus kvserverpb.MembershipStatus,
+	callback FinalizeDecommissionCallback,
 ) (statusChanged bool, err error) {
 	// Let's compute what our new liveness record should be.
 	var newLiveness kvserverpb.Liveness
@@ -560,7 +572,7 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 		// was a no-op.
 		statusChanged = false
 		return nil
-	}); err != nil {
+	}, callback); err != nil {
 		return false, err
 	}
 
@@ -907,7 +919,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		}
 		// Otherwise, return error.
 		return ErrEpochIncremented
-	})
+	}, noopFinalizeDecommissionCallback)
 	if err != nil {
 		if errors.Is(err, errNodeAlreadyLive) {
 			nl.metrics.HeartbeatSuccesses.Inc(1)
@@ -1061,7 +1073,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness kvserverpb.
 			return errors.Errorf("unexpected liveness epoch %d; expected >= %d", actual.Epoch, liveness.Epoch)
 		}
 		return errors.Errorf("mismatch incrementing epoch for %+v; actual is %+v", liveness, actual)
-	})
+	}, noopFinalizeDecommissionCallback)
 	if err != nil {
 		return err
 	}
@@ -1105,7 +1117,10 @@ func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 // This includes the encoded bytes, and it can be used to update the local
 // cache.
 func (nl *NodeLiveness) updateLiveness(
-	ctx context.Context, update livenessUpdate, handleCondFailed func(actual LivenessRecord) error,
+	ctx context.Context,
+	update livenessUpdate,
+	handleCondFailed func(actual LivenessRecord) error,
+	callback FinalizeDecommissionCallback,
 ) (LivenessRecord, error) {
 	for {
 		// Before each attempt, ensure that the context has not expired.
@@ -1125,7 +1140,7 @@ func (nl *NodeLiveness) updateLiveness(
 				return LivenessRecord{}, errors.Wrapf(err, "couldn't update node liveness because disk write failed")
 			}
 		}
-		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
+		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed, callback)
 		if err != nil {
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {
 				log.Infof(ctx, "retrying liveness update after %s", err)
@@ -1138,7 +1153,7 @@ func (nl *NodeLiveness) updateLiveness(
 }
 
 func (nl *NodeLiveness) updateLivenessAttempt(
-	ctx context.Context, update livenessUpdate, handleCondFailed func(actual LivenessRecord) error,
+	ctx context.Context, update livenessUpdate, handleCondFailed func(actual LivenessRecord) error, callback FinalizeDecommissionCallback,
 ) (LivenessRecord, error) {
 	var oldRaw []byte
 	if update.ignoreCache {
@@ -1160,6 +1175,12 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			return LivenessRecord{}, handleCondFailed(l)
 		}
 		oldRaw = l.raw
+	}
+
+	if callback != nil && update.newLiveness.Membership.Decommissioned() {
+		if err := callback(ctx, update.newLiveness.NodeID); err != nil {
+			return LivenessRecord{}, err
+		}
 	}
 
 	v := new(roachpb.Value)

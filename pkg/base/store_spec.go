@@ -417,6 +417,12 @@ func PreventedStartupFile(dir string) string {
 	return filepath.Join(dir, "_CRITICAL_ALERT.txt")
 }
 
+// DecommMarkerFile is the filename (relative to 'dir') used for a file that
+// will block server startup because the node has been fully decommissioned.
+func DecommMarkerFile(dir string) string {
+	return filepath.Join(dir, "DECOMMISSIONED.txt")
+}
+
 // PriorCriticalAlertError attempts to read the
 // PreventedStartupFile for each store directory and returns their
 // contents as a structured error.
@@ -451,6 +457,30 @@ func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
 	return err
 }
 
+// PriorDecommMarkers attempts to read the DecommMarkerFile for each store
+// directory and returns the contents, if any, as a structured error.
+//
+// These files indicate that the node was wholly decommissioned, and is
+// disallowed from starting back up again.
+func (ssl StoreSpecList) PriorDecommMarkers() error {
+	for _, ss := range ssl.Specs {
+		path := ss.DecommMarkerFile()
+		if path == "" {
+			continue
+		}
+		b, err := ioutil.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return errors.Wrapf(err, "%s", path)
+		}
+		return errors.Newf("startup forbidden; node previously decommissioned\n---\n%s",
+			string(b))
+	}
+	return nil
+}
+
 // PreventedStartupFile returns the path to a file which, if it exists, should
 // prevent the server from starting up. Returns an empty string for in-memory
 // engines.
@@ -459,6 +489,17 @@ func (ss StoreSpec) PreventedStartupFile() string {
 		return ""
 	}
 	return PreventedStartupFile(filepath.Join(ss.Path, AuxiliaryDir))
+}
+
+// DecommMarkerFile returns the path to a file which, if it exists, should
+// prevent the server from starting up. It's used to indicate that this server
+// has been wholly decommissioned, is barred from rejoining the cluster.
+// Returns an empty string for in-memory engines.
+func (ss StoreSpec) DecommMarkerFile() string {
+	if ss.InMemory {
+		return ""
+	}
+	return DecommMarkerFile(filepath.Join(ss.Path, AuxiliaryDir))
 }
 
 // Type returns the underlying type in string form. This is part of pflag's

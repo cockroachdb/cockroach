@@ -518,8 +518,9 @@ func (nl *NodeLiveness) SetDecommissioningInternal(
 	nodeID roachpb.NodeID,
 	liveness LivenessRecord,
 	targetStatus kvserverpb.MembershipStatus,
+	callback FinalizeDecommissionCallback,
 ) (changeCommitted bool, err error) {
-	return nl.setMembershipStatusInternal(ctx, nodeID, liveness, targetStatus)
+	return nl.setMembershipStatusInternal(ctx, nodeID, liveness, targetStatus, callback)
 }
 
 // GetCircuitBreaker returns the circuit breaker controlling

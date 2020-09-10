@@ -171,6 +171,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		renewal,
 		cfg.Settings,
 		cfg.HistogramWindowInterval,
+		cfg.NodeDialer,
 	)
 	kvserver.TimeUntilStoreDead.Override(&cfg.Settings.SV, kvserver.TestTimeUntilStoreDead)
 	cfg.StorePool = kvserver.NewStorePool(

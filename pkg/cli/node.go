@@ -288,8 +288,12 @@ var decommissionNodeCmd = &cobra.Command{
 	Use:   "decommission { --self | <node id 1> [<node id 2> ...] }",
 	Short: "decommissions the node(s)",
 	Long: `
-Marks the nodes with the supplied IDs as decommissioning.
-This will cause leases and replicas to be removed from these nodes.`,
+Decommission nodes with the specified node IDs. This will cause leases and
+replicas to be removed from these nodes.
+
+The decommissioning process prefers live targets. If the target nodes are
+permanently downed, use --force instead.
+`,
 	Args: cobra.MinimumNArgs(0),
 	RunE: MaybeDecorateGRPCError(runDecommissionNode),
 }
@@ -306,7 +310,7 @@ func parseNodeIDs(strNodeIDs []string) ([]roachpb.NodeID, error) {
 	return nodeIDs, nil
 }
 
-func runDecommissionNode(cmd *cobra.Command, args []string) error {
+func runDecommissionNode(_ *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -337,7 +341,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 
 	c := serverpb.NewAdminClient(conn)
-	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs)
+	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeCtx.nodeDecommissionForce, nodeIDs)
 }
 
 func handleNodeDecommissionSelf(
@@ -406,6 +410,7 @@ func runDecommissionNodeImpl(
 	ctx context.Context,
 	c serverpb.AdminClient,
 	wait nodeDecommissionWaitType,
+	force bool,
 	nodeIDs []roachpb.NodeID,
 ) error {
 	minReplicaCount := int64(math.MaxInt64)
@@ -451,10 +456,12 @@ func runDecommissionNodeImpl(
 		}
 
 		if !anyActive && replicaCount == 0 {
-			// We now mark the nodes as fully decommissioned.
+			// We now mark the nodes as fully decommissioned. If we're told to
+			// ignore downed nodes (--force), let's pass it on.
 			req := &serverpb.DecommissionRequest{
 				NodeIDs:          nodeIDs,
 				TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONED,
+				InAbsentia:       force,
 			}
 			resp, err := c.Decommission(ctx, req)
 			if err != nil {

@@ -342,9 +342,15 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 		return err
 	}
 
-	// If any store has something to say against a server start-up
-	// (e.g. previously detected corruption), listen to them now.
+	// If any store has something to say against a server start-up due to a
+	// critical alert (e.g. previously detected corruption), listen to them now.
 	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
+		return err
+	}
+
+	// If any store has something to say against a server start-up due to it
+	// being previously decommissioned, listen to them now.
+	if err := serverCfg.Stores.PriorDecommMarkers(); err != nil {
 		return err
 	}
 
