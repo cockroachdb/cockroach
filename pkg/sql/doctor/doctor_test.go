@@ -331,9 +331,40 @@ func TestExamineJobs(t *testing.T) {
 							},
 						})},
 				},
+				{
+					ID:      200,
+					Payload: &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeGCDetails{})},
+					Progress: &jobspb.Progress{Details: jobspb.WrapProgressDetails(
+						jobspb.SchemaChangeGCProgress{
+							Tables: []jobspb.SchemaChangeGCProgress_TableProgress{
+								{ID: 1, Status: jobspb.SchemaChangeGCProgress_DELETED},
+								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
+							},
+						})},
+				},
+				{
+					ID:      300,
+					Payload: &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeGCDetails{})},
+					Progress: &jobspb.Progress{Details: jobspb.WrapProgressDetails(
+						jobspb.SchemaChangeGCProgress{
+							Tables: []jobspb.SchemaChangeGCProgress_TableProgress{
+								{ID: 1, Status: jobspb.SchemaChangeGCProgress_DELETED},
+								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
+							},
+							Indexes: []jobspb.SchemaChangeGCProgress_IndexProgress{
+								{IndexID: 10, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
+							},
+						})},
+				},
 			},
-			expected: `Examining 1 running jobs...
+			expected: `Examining 3 running jobs...
 job 100: schema change GC refers to missing table descriptor(s) [3]
+	existing descriptors that still need to be dropped [2]
+job 200: schema change GC refers to missing table descriptor(s) [3]
+	existing descriptors that still need to be dropped []
+	job 200 can be safely deleted
+job 300: schema change GC refers to missing table descriptor(s) [3]
+	existing descriptors that still need to be dropped []
 `,
 		},
 	}

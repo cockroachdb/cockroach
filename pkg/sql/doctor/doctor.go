@@ -269,21 +269,29 @@ func ExamineJobs(
 		if j.Payload.Type() != jobspb.TypeSchemaChangeGC {
 			continue
 		}
+		existingTables := make([]int64, 0)
 		missingTables := make([]int64, 0)
 		for _, table := range j.Progress.GetSchemaChangeGC().Tables {
 			if table.Status == jobspb.SchemaChangeGCProgress_DELETED {
 				continue
 			}
 			_, tableExists := descGetter[table.ID]
-			if !tableExists {
+			if tableExists {
+				existingTables = append(existingTables, int64(table.ID))
+			} else {
 				missingTables = append(missingTables, int64(table.ID))
 			}
 		}
+
 		if len(missingTables) > 0 {
 			problemsFound = true
 			sortkeys.Int64s(missingTables)
-			fmt.Fprintf(stdout, "job %d: schema change GC refers to missing table descriptor(s) %+v\n",
-				j.ID, missingTables)
+			fmt.Fprintf(stdout, "job %d: schema change GC refers to missing table descriptor(s) %+v\n"+
+				"\texisting descriptors that still need to be dropped %+v\n",
+				j.ID, missingTables, existingTables)
+			if len(existingTables) == 0 && len(j.Progress.GetSchemaChangeGC().Indexes) == 0 {
+				fmt.Fprintf(stdout, "\tjob %d can be safely deleted\n", j.ID)
+			}
 		}
 	}
 	return !problemsFound, nil
