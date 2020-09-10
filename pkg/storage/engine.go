@@ -496,6 +496,8 @@ type Stats struct {
 	BlockCachePinnedUsage          int64
 	BloomFilterPrefixChecked       int64
 	BloomFilterPrefixUseful        int64
+	DiskSlowCount                  int64
+	DiskStallCount                 int64
 	MemtableTotalSize              int64
 	Flushes                        int64
 	FlushedBytes                   int64
