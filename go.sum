@@ -148,8 +148,8 @@ github.com/cockroachdb/datadriven v1.0.1-0.20200826112548-92602d883b11/go.mod h1
 github.com/cockroachdb/errors v1.2.4 h1:Lap807SXTH5tri2TivECb/4abUkMZC9zRoLarvcKDqs=
 github.com/cockroachdb/errors v1.2.4/go.mod h1:rQD95gz6FARkaKkQXUksEje/d9a6wBJoCr5oaCLELYA=
 github.com/cockroachdb/errors v1.6.1/go.mod h1:tm6FTP5G81vwJ5lC0SizQo374JNCOPrHyXGitRJoDqM=
-github.com/cockroachdb/errors v1.7.4 h1:ZlMG24ZIxz6Yp00gR3KkJKsMEWWNyeOWiGyaUav5y8o=
-github.com/cockroachdb/errors v1.7.4/go.mod h1:ngNOpuFdFU8EOjSsuVmCU9AODd7yp3XXEr0JUjbCN5U=
+github.com/cockroachdb/errors v1.7.5 h1:ptyO1BLW+sBxwBTSKJfS6kGzYCVKhI7MyBhoXAnPIKM=
+github.com/cockroachdb/errors v1.7.5/go.mod h1:m/IWRCPXYZ6TvLLDuC0kfLR1pp/+BiZ0h16WHaBMRMM=
 github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955 h1:1ELogBFqZl2Cj/Rn0wWAU4z2/ghBlHzhXDlbT8RlrKU=
 github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955/go.mod h1:Vshs83p1UXI6fjU8eWVgqXeewFxRDP1fNVF5PHiSBm0=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
@@ -166,8 +166,8 @@ github.com/cockroachdb/pebble v0.0.0-20200908153531-a9c6d3b6685c h1:BNozL+Ezkyba
 github.com/cockroachdb/pebble v0.0.0-20200908153531-a9c6d3b6685c/go.mod h1:hU7vhtrqonEphNF+xt8/lHdaBprxmV1h8BOGrd9XwmQ=
 github.com/cockroachdb/redact v0.0.0-20200622112456-cd282804bbd3 h1:2+dpIJzYMSbLi0587YXpi8tOJT52qCOI/1I0UNThc/I=
 github.com/cockroachdb/redact v0.0.0-20200622112456-cd282804bbd3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
-github.com/cockroachdb/redact v1.0.5 h1:yxqIMS6G2Bvi6GiSHFmsrFGO3aP1rwt8cOm4pixw9eY=
-github.com/cockroachdb/redact v1.0.5/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
+github.com/cockroachdb/redact v1.0.6 h1:W34uRRyNR4dlZFd0MibhNELsZSgMkl52uRV/tA1xToY=
+github.com/cockroachdb/redact v1.0.6/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9nEKZgCnOSmy8r4Oykh8BYQO8bFOTgHDS8YZA=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd/go.mod h1:AN708GD2FFeLgUHMbD58YPe4Nw8GG//3rwgyG4L9gR0=
 github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2 h1:IKgmqgMQlVJIZj19CdocBeSfSaiCbEBZGKODaixqtHM=
