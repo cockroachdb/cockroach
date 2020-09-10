@@ -1976,6 +1976,16 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 }
 
 func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescriptor) bool {
+	// Make sure the DeprecatedGenerationComparable field is ignored. 21.1 nodes
+	// will not recognize this field any more (and so they'll drop it), and we
+	// don't want 20.2 nodes to be tripped by that - we want to be able to
+	// round-trip a desc from 20.1 through a 20.2 node and still have it compare
+	// equal back on 20.1.
+	if desc.DeprecatedGenerationComparable != nil {
+		desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
+		desc.DeprecatedGenerationComparable = nil
+	}
+
 	// TODO(jeffreyxiao): This hacky fix ensures that we don't fail the
 	// conditional get because of the ordering of InternalReplicas. Calling
 	// Replicas() will sort the list of InternalReplicas as a side-effect. The
@@ -1992,6 +2002,12 @@ func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescripto
 	return func(desc2 *roachpb.RangeDescriptor) bool {
 		if desc2 != nil {
 			desc2.Replicas() // for sorting side-effect
+		}
+
+		// Ignore a field; see above.
+		if desc2.DeprecatedGenerationComparable != nil {
+			desc2 = protoutil.Clone(desc2).(*roachpb.RangeDescriptor)
+			desc2.DeprecatedGenerationComparable = nil
 		}
 
 		return desc.Equal(desc2)
