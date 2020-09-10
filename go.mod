@@ -161,7 +161,7 @@ require (
 	golang.org/x/tools v0.1.0
 	google.golang.org/api v0.30.0
 	google.golang.org/genproto v0.0.0-20200825200019-8632dd797987
-	google.golang.org/grpc v1.31.0
+	google.golang.org/grpc v1.33.1
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	google.golang.org/protobuf v1.26.0
 	gopkg.in/DataDog/dd-trace-go.v1 v1.28.0
@@ -169,8 +169,6 @@ require (
 	honnef.co/go/tools v0.0.1-2020.1.6
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
-
-replace github.com/grpc-ecosystem/grpc-gateway => github.com/cockroachdb/grpc-gateway v1.14.6-0.20200519165156-52697fc4a249
 
 replace github.com/olekukonko/tablewriter => github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847
 
