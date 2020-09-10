@@ -80,6 +80,7 @@ const (
 	VersionLeasedDatabaseDescriptors
 	VersionUpdateScheduledJobsSchema
 	VersionCreateLoginPrivilege
+	VersionHBAForNonTLS
 
 	// Add new versions here (step one of two).
 )
@@ -598,6 +599,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// role option.
 		Key:     VersionCreateLoginPrivilege,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 20},
+	},
+	{
+		// VersionHBAForNonTLS is when the 'hostssl' and 'hostnossl' HBA
+		// configs are introduced.
+		Key:     VersionHBAForNonTLS,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 21},
 	},
 
 	// Add new versions here (step two of two).
