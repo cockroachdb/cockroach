@@ -2124,10 +2124,18 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
+	// Enable Jemalloc profiles for all roachtests. This has only
+	// minimal performance impact and significantly improves the
+	// troubleshootability of memory-related issues.
+	args = append(args, enableJemallocArgs()...)
 	if !argExists(args, "--encrypt") && c.encryptDefault {
 		args = append(args, "--encrypt")
 	}
 	return execCmd(ctx, c.l, args...)
+}
+
+func enableJemallocArgs() []string {
+	return []string{"-e", "MALLOC_CONF=prof:true"}
 }
 
 // Start is like StartE() except it takes a test and, on error, calls t.Fatal().
