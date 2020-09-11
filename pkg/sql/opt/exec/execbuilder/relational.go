@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -621,9 +622,25 @@ func (b *Builder) buildInvertedFilter(invFilter *memo.InvertedFilterExpr) (execP
 	// A filtering node does not modify the schema.
 	res := execPlan{outputCols: input.outputCols}
 	invertedCol := input.getNodeColumnOrdinal(invFilter.InvertedColumn)
+	var typedPreFilterExpr tree.TypedExpr
+	var typ *types.T
+	if invFilter.PreFiltererState.Expr != nil {
+		// The expression has a single variable, corresponding to the indexed
+		// column. We assign it an ordinal of 0.
+		var colMap opt.ColMap
+		colMap.Set(int(invFilter.PreFiltererState.Col), 0)
+		ctx := buildScalarCtx{
+			ivh:     tree.MakeIndexedVarHelper(nil /* container */, colMap.Len()),
+			ivarMap: colMap,
+		}
+		typedPreFilterExpr, err = b.buildScalar(&ctx, invFilter.PreFiltererState.Expr)
+		if err != nil {
+			return execPlan{}, err
+		}
+		typ = invFilter.PreFiltererState.Typ
+	}
 	res.root, err = b.factory.ConstructInvertedFilter(
-		input.root, invFilter.InvertedExpression, invertedCol,
-	)
+		input.root, invFilter.InvertedExpression, typedPreFilterExpr, typ, invertedCol)
 	if err != nil {
 		return execPlan{}, err
 	}
