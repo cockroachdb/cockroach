@@ -3748,6 +3748,24 @@ func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 	desc.DrainingNames = append(desc.DrainingNames, name)
 }
 
+// SetPublic implements the MutableDescriptor interface.
+func (desc *Mutable) SetPublic() {
+	desc.State = descpb.DescriptorState_PUBLIC
+	desc.OfflineReason = ""
+}
+
+// SetDropped implements the MutableDescriptor interface.
+func (desc *Mutable) SetDropped() {
+	desc.State = descpb.DescriptorState_DROP
+	desc.OfflineReason = ""
+}
+
+// SetOffline implements the MutableDescriptor interface.
+func (desc *Mutable) SetOffline(reason string) {
+	desc.State = descpb.DescriptorState_OFFLINE
+	desc.OfflineReason = reason
+}
+
 // GetPostDeserializationChanges returns the set of changes which occurred to
 // this descriptor post deserialization.
 func (desc *Immutable) GetPostDeserializationChanges() PostDeserializationTableDescriptorChanges {

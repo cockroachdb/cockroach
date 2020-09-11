@@ -215,6 +215,7 @@ var validationMap = []struct {
 			"State":                    {status: thisFieldReferencesNoObjects},
 			"ReferencingDescriptorIDs": {status: iSolemnlySwearThisFieldIsValidated},
 			"Privileges":               {status: iSolemnlySwearThisFieldIsValidated},
+			"OfflineReason":            {status: thisFieldReferencesNoObjects},
 		},
 	},
 }
