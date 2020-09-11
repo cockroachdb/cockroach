@@ -1060,6 +1060,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.TableExpr> joined_table
 %type <*tree.UnresolvedObjectName> relation_expr
 %type <tree.TableExpr> table_expr_opt_alias_idx table_name_opt_idx
+%type <bool> opt_only opt_descendant
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
@@ -8611,13 +8612,33 @@ table_expr_opt_alias_idx:
   }
 
 table_name_opt_idx:
-  table_name opt_index_flags
+  opt_only table_name opt_index_flags opt_descendant
   {
-    name := $1.unresolvedObjectName().ToTableName()
+    name := $2.unresolvedObjectName().ToTableName()
     $$.val = &tree.AliasedTableExpr{
       Expr: &name,
-      IndexFlags: $2.indexFlags(),
+      IndexFlags: $3.indexFlags(),
     }
+  }
+
+opt_only:
+	ONLY
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+opt_descendant:
+	'*'
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
   }
 
 where_clause:
