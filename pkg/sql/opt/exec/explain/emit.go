@@ -210,10 +210,6 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 		}
 		return e.joinNodeName("lookup", a.JoinType), nil
 
-	case interleavedJoinOp:
-		a := n.args.(*interleavedJoinArgs)
-		return e.joinNodeName("interleaved", a.JoinType), nil
-
 	case applyJoinOp:
 		a := n.args.(*applyJoinArgs)
 		return e.joinNodeName("apply", a.JoinType), nil
@@ -265,7 +261,6 @@ var nodeNames = [...]string{
 	indexJoinOp:            "index join",
 	insertFastPathOp:       "insert fast path",
 	insertOp:               "insert",
-	interleavedJoinOp:      "", // This node does not have a fixed name.
 	invertedFilterOp:       "inverted filter",
 	invertedJoinOp:         "inverted join",
 	limitOp:                "limit",
@@ -500,26 +495,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		}
 		ob.Expr("pred", a.OnCond, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		e.emitLockingPolicy(a.Locking)
-
-	case interleavedJoinOp:
-		a := n.args.(*interleavedJoinArgs)
-		leftCols := tableColumns(a.LeftTable, a.LeftParams.NeededCols)
-		rightCols := tableColumns(a.RightTable, a.RightParams.NeededCols)
-		e.emitTableAndIndex("left table", a.LeftTable, a.LeftIndex)
-		e.emitSpans("left spans", a.LeftTable, a.LeftIndex, a.LeftParams)
-		ob.Expr("left filter", a.LeftFilter, leftCols)
-		e.emitTableAndIndex("right table", a.RightTable, a.RightIndex)
-		e.emitSpans("right spans", a.RightTable, a.RightIndex, a.RightParams)
-		ob.Expr("right filter", a.RightFilter, rightCols)
-		ob.Expr("pred", a.OnCond, appendColumns(leftCols, rightCols...))
-
-		if a.LeftIsAncestor {
-			ob.Attr("ancestor", "left")
-			e.emitLockingPolicy(a.LeftParams.Locking)
-		} else {
-			ob.Attr("ancestor", "right")
-			e.emitLockingPolicy(a.RightParams.Locking)
-		}
 
 	case zigzagJoinOp:
 		a := n.args.(*zigzagJoinArgs)

@@ -370,7 +370,6 @@ rows affected: 10
 statement ok
 DROP TABLE c; DROP TABLE b; DROP TABLE a
 
-# Regression test for interleaved join with filters.
 statement ok
 CREATE TABLE table0 (c0 INT, PRIMARY KEY (c0));
 CREATE TABLE table1 (c0 INT, c1 INT, PRIMARY KEY (c0, c1)) INTERLEAVE IN PARENT table0 (c0);
@@ -382,14 +381,21 @@ INSERT INTO table2 SELECT (i-1)//100+1, (i-1)//10+1, i FROM generate_series(1, 1
 query TTT
 EXPLAIN SELECT count(*) FROM table1 INNER MERGE JOIN table2 USING(c0, c1) WHERE c1 >= 25 AND c1 < 75
 ----
-·                      distribution  local
-·                      vectorized    true
-group (scalar)         ·             ·
- └── interleaved join  ·             ·
-·                      left table    table1@primary
-·                      left spans    FULL SCAN
-·                      left filter   (c1 >= 25) AND (c1 < 75)
-·                      right table   table2@primary
-·                      right spans   FULL SCAN
-·                      right filter  (c1 >= 25) AND (c1 < 75)
-·                      ancestor      left
+·                    distribution       local
+·                    vectorized         true
+group (scalar)       ·                  ·
+ └── merge join      ·                  ·
+      │              equality           (c0, c1) = (c0, c1)
+      │              left cols are key  ·
+      ├── filter     ·                  ·
+      │    │         filter             (c1 >= 25) AND (c1 < 75)
+      │    └── scan  ·                  ·
+      │              missing stats      ·
+      │              table              table1@primary
+      │              spans              FULL SCAN
+      └── filter     ·                  ·
+           │         filter             (c1 >= 25) AND (c1 < 75)
+           └── scan  ·                  ·
+·                    missing stats      ·
+·                    table              table2@primary
+·                    spans              FULL SCAN
