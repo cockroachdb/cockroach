@@ -170,6 +170,18 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if t.Cols.SubsetOf(t.Input.Relational().OutputCols) {
 			panic(errors.AssertionFailedf("lookup join with no lookup columns"))
 		}
+		var requiredCols opt.ColSet
+		requiredCols.UnionWith(t.Relational().OutputCols)
+		requiredCols.UnionWith(t.ConstFilters.OuterCols(m))
+		requiredCols.UnionWith(t.On.OuterCols(m))
+		requiredCols.UnionWith(t.KeyCols.ToSet())
+		idx := m.Metadata().Table(t.Table).Index(t.Index)
+		for i := range t.KeyCols {
+			requiredCols.Add(t.Table.ColumnID(idx.Column(i).Ordinal()))
+		}
+		if !t.Cols.SubsetOf(requiredCols) {
+			panic(errors.AssertionFailedf("lookup join with columns that are not required"))
+		}
 
 	case *InsertExpr:
 		tab := m.Metadata().Table(t.Table)

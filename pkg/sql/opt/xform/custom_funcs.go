@@ -1826,8 +1826,14 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		lookupJoin.On.RemoveCommonFilters(constFilters)
 		lookupJoin.ConstFilters = constFilters
 
-		isCovering := iter.IsCovering()
-		if !isCovering && isPartialIndex && (joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp) {
+		if iter.IsCovering() {
+			// Case 1 (see function comment).
+			lookupJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
+			c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
+			continue
+		}
+
+		if isPartialIndex && (joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp) {
 			// Typically, the index must cover all columns in the scanPrivate in
 			// order to generate a lookup join without an additional index join
 			// (case 1, see function comment). However, if the index is a
@@ -1856,15 +1862,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// 2, see function comment).
 			filterColsFromRight := scanPrivate.Cols.Intersection(onFilters.OuterCols(c.e.mem))
 			if filterColsFromRight.SubsetOf(iter.IndexColumns()) {
-				isCovering = true
+				lookupJoin.Cols = filterColsFromRight.Union(inputProps.OutputCols)
+				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
+				continue
 			}
-		}
-
-		if isCovering {
-			// Case 1 (see function comment).
-			lookupJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
-			c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
-			continue
 		}
 
 		// All code that follows is for case 2 (see function comment).
