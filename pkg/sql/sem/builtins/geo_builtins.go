@@ -439,6 +439,47 @@ var geoBuiltins = map[string]builtinDefinition{
 	"postgis_wagyu_version":      returnCompatibilityFixedStringBuiltin("0.4.3 (Internal)"),
 
 	//
+	// Indexing
+	//
+
+	"st_s2covering": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(evalCtx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				cfg, err := geoindex.GeometryIndexConfigForSRID(g.SRID())
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geoindex.NewS2GeometryIndex(*cfg.S2Geometry).CoveringGeometry(evalCtx.Context, g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a geometry which represents the S2 covering used by the index using the default index configuration.",
+			},
+			tree.VolatilityImmutable,
+		),
+		geographyOverload1(
+			func(evalCtx *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+				cfg := geoindex.DefaultGeographyIndexConfig().S2Geography
+				ret, err := geoindex.NewS2GeographyIndex(*cfg).CoveringGeography(evalCtx.Context, g.Geography)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeography(ret), nil
+			},
+			types.Geography,
+			infoBuilder{
+				info: "Returns a geography which represents the S2 covering used by the index using the default index configuration.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+
+	//
 	// Input (Geometry)
 	//
 

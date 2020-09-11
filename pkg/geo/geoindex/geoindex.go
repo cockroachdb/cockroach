@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/golang/geo/s2"
+	"github.com/twpayne/go-geom"
 )
 
 // RelationshipMap contains all the geospatial functions that can be index-
@@ -150,6 +151,9 @@ type GeographyIndex interface {
 
 	// TestingInnerCovering returns an inner covering of g.
 	TestingInnerCovering(g geo.Geography) s2.CellUnion
+	// CoveringGeography returns a Geography which represents the covering of g
+	// using the index configuration.
+	CoveringGeography(c context.Context, g geo.Geography) (geo.Geography, error)
 }
 
 // GeometryIndex is an index over 2D cartesian coordinates.
@@ -192,6 +196,9 @@ type GeometryIndex interface {
 
 	// TestingInnerCovering returns an inner covering of g.
 	TestingInnerCovering(g geo.Geometry) s2.CellUnion
+	// CoveringGeometry returns a Geometry which represents the covering of g
+	// using the index configuration.
+	CoveringGeometry(c context.Context, g geo.Geometry) (geo.Geometry, error)
 }
 
 // RelationshipType stores a type of geospatial relationship query that can
@@ -279,6 +286,11 @@ func (k Key) String() string {
 		b.WriteByte("0123"[c.ChildPosition(level)])
 	}
 	return b.String()
+}
+
+// S2CellID transforms the given key into the S2 CellID.
+func (k Key) S2CellID() s2.CellID {
+	return s2.CellID(k)
 }
 
 // KeySpan represents a range of Keys.
@@ -704,4 +716,25 @@ func DefaultS2Config() *S2Config {
 		LevelMod: 1,
 		MaxCells: 4,
 	}
+}
+
+func makeGeomTFromKeys(
+	keys []Key, srid geopb.SRID, xyFromS2Point func(s2.Point) (float64, float64),
+) (geom.T, error) {
+	t := geom.NewMultiPolygon(geom.XY).SetSRID(int(srid))
+	for _, key := range keys {
+		cell := s2.CellFromCellID(key.S2CellID())
+		flatCoords := make([]float64, 0, 10)
+		for i := 0; i < 4; i++ {
+			x, y := xyFromS2Point(cell.Vertex(i))
+			flatCoords = append(flatCoords, x, y)
+		}
+		// The last point is the same as the first point.
+		flatCoords = append(flatCoords, flatCoords[0:2]...)
+		err := t.Push(geom.NewPolygonFlat(geom.XY, flatCoords, []int{10}))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
 }
