@@ -793,7 +793,12 @@ func (nl *NodeLiveness) heartbeatInternal(
 		}
 	}
 
-	if oldLiveness == (kvserverpb.Liveness{}) {
+	// Let's compute what our new liveness record should be.
+	var newLiveness kvserverpb.Liveness
+	if oldLiveness != (kvserverpb.Liveness{}) {
+		// Start off with our existing view of liveness.
+		newLiveness = oldLiveness
+	} else {
 		// We don't yet know about our own liveness record (which does exist, we
 		// maintain the invariant that there's always a liveness record for
 		// every given node). Let's retrieve it from KV before proceeding.
@@ -804,25 +809,50 @@ func (nl *NodeLiveness) heartbeatInternal(
 		if err != nil {
 			return errors.Wrap(err, "unable to get liveness")
 		}
-		if kv.Value == nil {
-			return ErrNoLivenessRecord
-		}
-		if err := kv.Value.GetProto(&oldLiveness); err != nil {
-			return errors.Wrap(err, "invalid liveness record")
-		}
 
-		oldLivenessRec := LivenessRecord{
-			Liveness: oldLiveness,
-			raw:      kv.Value.TagAndDataBytes(),
-		}
+		if kv.Value != nil {
+			// This is the happy path. Let's unpack the liveness record we found
+			// within KV, and use that to inform what our new liveness should
+			// be.
+			if err := kv.Value.GetProto(&oldLiveness); err != nil {
+				return errors.Wrap(err, "invalid liveness record")
+			}
 
-		// Offer it to make sure that when we actually try to update the
-		// liveness, the previous view is correct.
-		nl.maybeUpdate(oldLivenessRec)
+			oldLivenessRec := LivenessRecord{
+				Liveness: oldLiveness,
+				raw:      kv.Value.TagAndDataBytes(),
+			}
+
+			// Update our cache with the liveness record we just found.
+			nl.maybeUpdate(oldLivenessRec)
+
+			newLiveness = oldLiveness
+		} else {
+			// This is a "should basically never happen" scenario given our
+			// invariant around always persisting liveness records on node
+			// startup. But that was a change we added in 20.2. Though unlikely,
+			// it's possible to get into the following scenario:
+			//
+			// - v20.1 node gets added to v20.1 cluster, and is quickly removed
+			//   before being able to persist its liveness record.
+			// - The cluster is upgraded to v20.2.
+			// - The node from earlier is rolled into v20.2, and re-added to the
+			//   cluster.
+			// - It's never able to successfully heartbeat (it didn't join
+			//   through the join rpc, bootstrap, or gossip). Welp.
+			//
+			// Given this possibility, we'll just fall back to creating the
+			// liveness record here as we did in v20.1 code.
+			//
+			// TODO(irfansharif): Remove this once v20.2 is cut.
+			log.Warningf(ctx, "missing liveness record for n%d; falling back to creating it in-place", nodeID)
+			newLiveness = kvserverpb.Liveness{
+				NodeID: nodeID,
+				Epoch:  0, // incremented to epoch=1 below as needed
+			}
+		}
 	}
 
-	// Let's compute what our new liveness record should be.
-	newLiveness := oldLiveness
 	if incrementEpoch {
 		newLiveness.Epoch++
 		newLiveness.Draining = false // clear draining field
