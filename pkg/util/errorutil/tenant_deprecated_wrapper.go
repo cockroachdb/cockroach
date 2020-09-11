@@ -80,8 +80,3 @@ func (w TenantSQLDeprecatedWrapper) OptionalErr(issue int) (interface{}, error) 
 	}
 	return v, nil
 }
-
-// FeatureNotAvailableToNonSystemTenantsIssue is to be used with the Optinal
-// and related error interfaces when a feature is simply not available
-// to non-system tenants (i.e. we're not planning to change this).
-const FeatureNotAvailableToNonSystemTenantsIssue = 54252
