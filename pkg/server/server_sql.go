@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -328,6 +329,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	hydratedTablesCache := hydratedtables.NewCache(cfg.Settings)
 	cfg.registry.AddMetricStruct(hydratedTablesCache.Metrics())
 
+	gcJobNotifier := gcjobnotifier.New(cfg.Settings, cfg.systemConfigProvider, codec, cfg.stopper)
+
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
 		AmbientContext: cfg.AmbientCtx,
@@ -511,6 +514,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
 		ExternalIODirConfig:        cfg.ExternalIODirConfig,
 		HydratedTables:             hydratedTablesCache,
+		GCJobNotifier:              gcJobNotifier,
 	}
 
 	cfg.stopper.AddCloser(execCfg.ExecLogger)
@@ -658,6 +662,7 @@ func (s *sqlServer) start(
 		}
 	}
 	s.sqlLivenessProvider.Start(ctx)
+	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
