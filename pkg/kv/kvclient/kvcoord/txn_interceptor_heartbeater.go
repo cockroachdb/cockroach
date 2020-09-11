@@ -133,6 +133,7 @@ func (h *txnHeartbeater) init(
 func (h *txnHeartbeater) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	etArg, hasET := ba.GetArg(roachpb.EndTxn)
 	firstLockingIndex, pErr := firstLockingIndex(&ba)
 	if pErr != nil {
 		return nil, pErr
@@ -149,15 +150,21 @@ func (h *txnHeartbeater) SendLocked(
 			ba.Txn.Key = anchor
 		}
 
-		// Start the heartbeat loop if it has not already started.
+		// Start the heartbeat loop if it has not already started and this batch
+		// is not intending to commit/abort the transaction.
 		if !h.mu.loopStarted {
-			_, haveEndTxn := ba.GetArg(roachpb.EndTxn)
-			if !haveEndTxn {
+			if !hasET {
 				if err := h.startHeartbeatLoopLocked(ctx); err != nil {
 					return nil, roachpb.NewError(err)
 				}
 			}
 		}
+	}
+
+	// Set the EndTxn request's TxnHeartbeating flag, if necessary.
+	if hasET {
+		et := etArg.(*roachpb.EndTxnRequest)
+		et.TxnHeartbeating = h.mu.loopStarted
 	}
 
 	// Forward the batch through the wrapped lockedSender.
@@ -375,7 +382,8 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
 		// concurrent requests from failing to notice the transaction was aborted.
-		Poison: true,
+		Poison:          true,
+		TxnHeartbeating: true,
 	})
 
 	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
