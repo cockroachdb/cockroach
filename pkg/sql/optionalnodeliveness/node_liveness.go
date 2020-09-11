@@ -47,8 +47,8 @@ func MakeContainer(nl Interface) Container {
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *Container) OptionalErr(issueNos ...int) (Interface, error) {
-	v, err := nl.w.OptionalErr(issueNos...)
+func (nl *Container) OptionalErr(issue int) (Interface, error) {
+	v, err := nl.w.OptionalErr(issue)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ var _ = (*Container)(nil).OptionalErr // silence unused lint
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *Container) Optional(issueNos ...int) (Interface, bool) {
+func (nl *Container) Optional(issue int) (Interface, bool) {
 	v, ok := nl.w.Optional()
 	if !ok {
 		return nil, false
