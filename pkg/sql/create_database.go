@@ -68,6 +68,15 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		}
 	}
 
+	if n.ConnectionLimit != -1 {
+		return nil, unimplemented.NewWithIssueDetailf(
+			54241,
+			"create.db.connection_limit",
+			"only connection limit -1 is supported, got: %d",
+			n.ConnectionLimit,
+		)
+	}
+
 	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
 	if err != nil {
 		return nil, err
