@@ -1364,3 +1364,23 @@ statement ok
 CREATE TABLE t52816 (x INT, y INT);
 ALTER TABLE t52816 RENAME COLUMN x TO x2, RENAME COLUMN y TO y;
 SELECT x2, y FROM t52816
+
+# Regression test for #54196.
+statement ok
+CREATE TABLE IF NOT EXISTS regression_54196 (
+	col1 int,
+	col2 int,
+	col3 int,
+	INDEX (col1, col2),
+	INDEX (col1, col3),
+	INDEX (col2, col3)
+); ALTER TABLE regression_54196 DROP COLUMN col1
+
+query TT
+SELECT index_name, column_name FROM [SHOW INDEXES FROM regression_54196]
+ORDER BY index_name, column_name ASC
+----
+primary                         rowid
+regression_54196_col2_col3_idx  col2
+regression_54196_col2_col3_idx  col3
+regression_54196_col2_col3_idx  rowid
