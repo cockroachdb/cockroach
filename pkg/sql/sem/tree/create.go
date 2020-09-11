@@ -35,12 +35,13 @@ import (
 
 // CreateDatabase represents a CREATE DATABASE statement.
 type CreateDatabase struct {
-	IfNotExists bool
-	Name        Name
-	Template    string
-	Encoding    string
-	Collate     string
-	CType       string
+	IfNotExists     bool
+	Name            Name
+	Template        string
+	Encoding        string
+	Collate         string
+	CType           string
+	ConnectionLimit int32
 }
 
 // Format implements the NodeFormatter interface.
@@ -65,6 +66,10 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.CType != "" {
 		ctx.WriteString(" LC_CTYPE = ")
 		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.CType, ctx.flags.EncodeFlags())
+	}
+	if node.ConnectionLimit != -1 {
+		ctx.WriteString(" CONNECTION LIMIT = ")
+		ctx.WriteString(strconv.Itoa(int(node.ConnectionLimit)))
 	}
 }
 
