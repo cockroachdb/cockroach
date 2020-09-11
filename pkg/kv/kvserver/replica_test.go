@@ -10903,6 +10903,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
 				et.InFlightWrites = inFlightWrites
+				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			expTxn: txnWithStagingStatusAndInFlightWrites,
@@ -10915,6 +10916,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
+				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			// The transaction record will be eagerly GC-ed.
@@ -10928,6 +10930,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
+				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			// The transaction record will be eagerly GC-ed.
@@ -10941,6 +10944,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
+				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			expTxn:           txnWithStatus(roachpb.ABORTED),
@@ -10954,6 +10958,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
+				et.TxnHeartbeating = true
 				return sendWrappedWithErr(etH, &et)
 			},
 			expTxn:           txnWithStatus(roachpb.COMMITTED),
@@ -11695,21 +11700,15 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: noTxnRecord,
 		},
 		{
-			name: "1PC end transaction after push transaction (timestamp)",
+			name: "end transaction (one-phase commit) after push transaction (timestamp)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et := roachpb.EndTxnRequest{
-					RequestHeader: roachpb.RequestHeader{
-						Key:      txn.Key,
-						Sequence: 1, // This will qualify for 1PC.
-					},
-					Commit: true,
-				}
-				etH := roachpb.Header{Txn: txn}
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.Sequence = 1 // qualify for 1PC
 				return sendWrappedWithErr(etH, &et)
 			},
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
@@ -11718,25 +11717,56 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: noTxnRecord,
 		},
 		{
-			name: "1PC end transaction after push transaction (abort)",
+			name: "end transaction (one-phase commit) after push transaction (abort)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				pt.PushTo = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et := roachpb.EndTxnRequest{
-					RequestHeader: roachpb.RequestHeader{
-						Key:      txn.Key,
-						Sequence: 1, // This will qualify for 1PC.
-					},
-					Commit: true,
-				}
-				etH := roachpb.Header{Txn: txn}
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.Sequence = 1 // qualify for 1PC
 				return sendWrappedWithErr(etH, &et)
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
 			expTxn:   noTxnRecord,
+		},
+		{
+			// 1PC is disabled if the transaction already has a record to ensure
+			// that the record is properly cleaned up by the EndTxn request. If
+			// we did not disable 1PC then the test would need txnWithoutChanges
+			// as the expTxn.
+			name: "end transaction (one-phase commit) after heartbeat transaction",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
+				return sendWrappedWithErr(hbH, &hb)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.Sequence = 1 // qualify for 1PC
+				et.TxnHeartbeating = true
+				return sendWrappedWithErr(etH, &et)
+			},
+			expTxn: noTxnRecord,
+		},
+		{
+			// 1PC is disabled if the transaction already has a record to ensure
+			// that the record is properly cleaned up by the EndTxn request. If
+			// we did not disable 1PC then the test would not throw an error.
+			name: "end transaction (one-phase commit required) after heartbeat transaction",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				hb, hbH := heartbeatArgs(txn, txn.MinTimestamp)
+				return sendWrappedWithErr(hbH, &hb)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.Sequence = 1 // qualify for 1PC
+				et.TxnHeartbeating = true
+				et.Require1PC = true
+				return sendWrappedWithErr(etH, &et)
+			},
+			expError: "TransactionStatusError: could not commit in one phase as requested",
+			expTxn:   txnWithoutChanges,
 		},
 		{
 			name: "heartbeat transaction after push transaction (abort)",

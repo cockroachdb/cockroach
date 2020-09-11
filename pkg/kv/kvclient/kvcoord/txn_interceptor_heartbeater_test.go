@@ -149,7 +149,7 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
 		ctx := context.Background()
 		txn := makeTxnProto()
-		th, _, _ := makeMockTxnHeartbeater(&txn)
+		th, mockSender, _ := makeMockTxnHeartbeater(&txn)
 		defer th.stopper.Stop(ctx)
 
 		// Read-only requests don't start the heartbeat loop.
@@ -185,6 +185,27 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 		require.True(t, th.heartbeatLoopRunningLocked())
 		th.mu.Unlock()
 
+		// The interceptor indicates whether the heartbeat loop is
+		// running on EndTxn requests.
+		ba.Requests = nil
+		ba.Add(&roachpb.EndTxnRequest{Commit: true})
+
+		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+			require.True(t, etReq.TxnHeartbeating)
+
+			br = ba.CreateReply()
+			br.Txn = ba.Txn
+			br.Txn.Status = roachpb.COMMITTED
+			return br, nil
+		})
+		br, pErr = th.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
 		// Closing the interceptor stops the heartbeat loop.
 		th.mu.Lock()
 		th.closeLocked()
@@ -201,7 +222,7 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	txn := makeTxnProto()
-	th, _, _ := makeMockTxnHeartbeater(&txn)
+	th, mockSender, _ := makeMockTxnHeartbeater(&txn)
 	defer th.stopper.Stop(ctx)
 
 	keyA := roachpb.Key("a")
@@ -210,6 +231,19 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	ba.Add(&roachpb.EndTxnRequest{Commit: true})
 
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+
+		etReq := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
+		require.False(t, etReq.TxnHeartbeating)
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.COMMITTED
+		return br, nil
+	})
 	br, pErr := th.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
@@ -360,6 +394,7 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 			require.Nil(t, etReq.Key) // set in txnCommitter
 			require.False(t, etReq.Commit)
 			require.True(t, etReq.Poison)
+			require.True(t, etReq.TxnHeartbeating)
 
 			br = ba.CreateReply()
 			br.Txn = ba.Txn
