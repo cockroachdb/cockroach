@@ -133,6 +133,11 @@ func (desc *Immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
 	return descpb.TableDescriptor_DISABLED
 }
 
+// Public implements the Descriptor interface.
+func (desc *Immutable) Public() bool {
+	return desc.State == descpb.DescriptorState_PUBLIC
+}
+
 // Adding implements the Descriptor interface.
 func (desc *Immutable) Adding() bool {
 	return false
@@ -140,12 +145,12 @@ func (desc *Immutable) Adding() bool {
 
 // Offline implements the Descriptor interface.
 func (desc *Immutable) Offline() bool {
-	return false
+	return desc.State == descpb.DescriptorState_OFFLINE
 }
 
-// GetOfflineReason implements the Descriptor interface.
-func (desc *Immutable) GetOfflineReason() string {
-	return ""
+// Dropped implements the Descriptor interface.
+func (desc *Immutable) Dropped() bool {
+	return desc.State == descpb.DescriptorState_DROP
 }
 
 // DescriptorProto wraps a DatabaseDescriptor in a Descriptor.
@@ -250,6 +255,24 @@ func (desc *Mutable) IsNew() bool {
 // IsUncommittedVersion implements the Descriptor interface.
 func (desc *Mutable) IsUncommittedVersion() bool {
 	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
+}
+
+// SetPublic implements the MutableDescriptor interface.
+func (desc *Mutable) SetPublic() {
+	desc.State = descpb.DescriptorState_PUBLIC
+	desc.OfflineReason = ""
+}
+
+// SetDropped implements the MutableDescriptor interface.
+func (desc *Mutable) SetDropped() {
+	desc.State = descpb.DescriptorState_DROP
+	desc.OfflineReason = ""
+}
+
+// SetOffline implements the MutableDescriptor interface.
+func (desc *Mutable) SetOffline(reason string) {
+	desc.State = descpb.DescriptorState_OFFLINE
+	desc.OfflineReason = reason
 }
 
 // AddDrainingName adds a draining name to the DatabaseDescriptor's slice of

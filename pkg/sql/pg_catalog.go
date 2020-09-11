@@ -1112,7 +1112,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					// they're virtual, dropped tables, or ones that the user can't see.
 					if (!table.IsVirtualTable() && table.GetParentID() != db.GetID()) ||
 						table.Dropped() ||
-						!userCanSeeTable(ctx, p, table, true /*allowAdding*/) {
+						!userCanSeeDescriptor(ctx, p, table, true /*allowAdding*/) {
 						return false, nil
 					}
 					h := makeOidHasher()

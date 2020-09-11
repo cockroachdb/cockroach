@@ -308,26 +308,116 @@ root                                                           ·               
                 └── scan buffer                                ·                      ·                                        (lk, geom1, geom2)                        ·
 ·                                                              label                  buffer 1 (q)                             ·                                         ·
 
-# This query performs an anti-join, and does not currently use an inverted join.
+# Anti joins are also converted to an inner join by the optimizer.
 query TTTTT
 EXPLAIN (VERBOSE)
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
-·                       distribution         local                       ·            ·
-·                       vectorized           true                        ·            ·
-project                 ·                    ·                           (lk)         ·
- │                      estimated row count  990 (missing stats)         ·            ·
- └── cross join (anti)  ·                    ·                           (lk, geom2)  ·
-      │                 estimated row count  990 (missing stats)         ·            ·
-      │                 pred                 st_intersects(geom2, geom)  ·            ·
-      ├── scan          ·                    ·                           (lk, geom2)  ·
-      │                 estimated row count  1000 (missing stats)        ·            ·
-      │                 table                ltable@primary              ·            ·
-      │                 spans                FULL SCAN                   ·            ·
-      └── scan          ·                    ·                           (geom)       ·
-·                       estimated row count  1000 (missing stats)        ·            ·
-·                       table                rtable@primary              ·            ·
-·                       spans                FULL SCAN                   ·            ·
+·                                                         distribution           local                                        ·                                         ·
+·                                                         vectorized             false                                        ·                                         ·
+root                                                      ·                      ·                                            (lk)                                      ·
+ ├── project                                              ·                      ·                                            (lk)                                      ·
+ │    │                                                   estimated row count    990 (missing stats)                          ·                                         ·
+ │    └── project                                         ·                      ·                                            (lk, geom2)                               ·
+ │         │                                              estimated row count    990 (missing stats)                          ·                                         ·
+ │         └── filter                                     ·                      ·                                            (lk, geom2, rk1, geom, rk2)               ·
+ │              │                                         estimated row count    100 (missing stats)                          ·                                         ·
+ │              │                                         filter                 rk1 IS NOT DISTINCT FROM CAST(NULL AS INT8)  ·                                         ·
+ │              └── project                               ·                      ·                                            (lk, geom2, rk1, geom, rk2)               ·
+ │                   │                                    estimated row count    10000 (missing stats)                        ·                                         ·
+ │                   └── hash join (right outer)          ·                      ·                                            (rk1, rk2, lk, geom2, geom, lk, geom2)    ·
+ │                        │                               estimated row count    10000 (missing stats)                        ·                                         ·
+ │                        │                               equality               (lk) = (lk)                                  ·                                         ·
+ │                        │                               right cols are key     ·                                            ·                                         ·
+ │                        ├── lookup join (inner)         ·                      ·                                            (rk1, rk2, lk, geom2, geom)               ·
+ │                        │    │                          estimated row count    10000 (missing stats)                        ·                                         ·
+ │                        │    │                          table                  rtable@primary                               ·                                         ·
+ │                        │    │                          equality               (rk1, rk2) = (rk1,rk2)                       ·                                         ·
+ │                        │    │                          equality cols are key  ·                                            ·                                         ·
+ │                        │    │                          pred                   st_intersects(geom2, geom)                   ·                                         ·
+ │                        │    └── project                ·                      ·                                            (rk1, rk2, lk, geom2)                     ·
+ │                        │         │                     estimated row count    10000 (missing stats)                        ·                                         ·
+ │                        │         └── inverted join     ·                      ·                                            (lk, geom2, rk1, rk2, geom_inverted_key)  ·
+ │                        │              │                table                  rtable@geom_index                            ·                                         ·
+ │                        │              │                inverted expr          st_intersects(geom2, geom_inverted_key)      ·                                         ·
+ │                        │              └── scan buffer  ·                      ·                                            (lk, geom2)                               ·
+ │                        │                               estimated row count    1000 (missing stats)                         ·                                         ·
+ │                        │                               label                  buffer 1                                     ·                                         ·
+ │                        └── scan buffer                 ·                      ·                                            (lk, geom2)                               ·
+ │                                                        estimated row count    1000 (missing stats)                         ·                                         ·
+ │                                                        label                  buffer 1                                     ·                                         ·
+ └── subquery                                             ·                      ·                                            ·                                         ·
+      │                                                   id                     @S1                                          ·                                         ·
+      │                                                   exec mode              all rows                                     ·                                         ·
+      └── buffer                                          ·                      ·                                            (lk, geom2)                               ·
+           │                                              label                  buffer 1                                     ·                                         ·
+           └── render                                     ·                      ·                                            (lk, geom2)                               ·
+                │                                         estimated row count    1000 (missing stats)                         ·                                         ·
+                │                                         render 0               lk                                           ·                                         ·
+                │                                         render 1               geom2                                        ·                                         ·
+                └── scan                                  ·                      ·                                            (lk, geom2)                               ·
+·                                                         estimated row count    1000 (missing stats)                         ·                                         ·
+·                                                         table                  ltable@primary                               ·                                         ·
+·                                                         spans                  FULL SCAN                                    ·                                         ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+SELECT lk FROM ltable
+WHERE NOT EXISTS (
+  SELECT * FROM rtable WHERE ST_Covers(ltable.geom1, rtable.geom) AND lk > 5 AND rk1 > 12
+)
+----
+·                                                                   distribution           local                                        ·                                         ·
+·                                                                   vectorized             false                                        ·                                         ·
+root                                                                ·                      ·                                            (lk)                                      ·
+ ├── project                                                        ·                      ·                                            (lk)                                      ·
+ │    │                                                             estimated row count    997 (missing stats)                          ·                                         ·
+ │    └── project                                                   ·                      ·                                            (lk, geom1)                               ·
+ │         │                                                        estimated row count    997 (missing stats)                          ·                                         ·
+ │         └── filter                                               ·                      ·                                            (lk, geom1, rk1, geom)                    ·
+ │              │                                                   estimated row count    33 (missing stats)                           ·                                         ·
+ │              │                                                   filter                 rk1 IS NOT DISTINCT FROM CAST(NULL AS INT8)  ·                                         ·
+ │              └── project                                         ·                      ·                                            (lk, geom1, rk1, geom)                    ·
+ │                   │                                              estimated row count    1111 (missing stats)                         ·                                         ·
+ │                   └── hash join (right outer)                    ·                      ·                                            (rk1, geom, lk, geom1, lk, geom1)         ·
+ │                        │                                         estimated row count    1111 (missing stats)                         ·                                         ·
+ │                        │                                         equality               (lk) = (lk)                                  ·                                         ·
+ │                        │                                         right cols are key     ·                                            ·                                         ·
+ │                        ├── project                               ·                      ·                                            (rk1, geom, lk, geom1)                    ·
+ │                        │    │                                    estimated row count    1111 (missing stats)                         ·                                         ·
+ │                        │    └── lookup join (inner)              ·                      ·                                            (rk1, rk2, lk, geom1, geom)               ·
+ │                        │         │                               table                  rtable@primary                               ·                                         ·
+ │                        │         │                               equality               (rk1, rk2) = (rk1,rk2)                       ·                                         ·
+ │                        │         │                               equality cols are key  ·                                            ·                                         ·
+ │                        │         │                               pred                   st_covers(geom1, geom)                       ·                                         ·
+ │                        │         └── project                     ·                      ·                                            (rk1, rk2, lk, geom1)                     ·
+ │                        │              │                          estimated row count    1111 (missing stats)                         ·                                         ·
+ │                        │              └── inverted join          ·                      ·                                            (lk, geom1, rk1, rk2, geom_inverted_key)  ·
+ │                        │                   │                     table                  rtable@geom_index                            ·                                         ·
+ │                        │                   │                     inverted expr          st_covers(geom1, geom_inverted_key)          ·                                         ·
+ │                        │                   │                     on                     rk1 > 12                                     ·                                         ·
+ │                        │                   └── filter            ·                      ·                                            (lk, geom1)                               ·
+ │                        │                        │                estimated row count    333 (missing stats)                          ·                                         ·
+ │                        │                        │                filter                 lk > 5                                       ·                                         ·
+ │                        │                        └── scan buffer  ·                      ·                                            (lk, geom1)                               ·
+ │                        │                                         estimated row count    1000 (missing stats)                         ·                                         ·
+ │                        │                                         label                  buffer 1                                     ·                                         ·
+ │                        └── scan buffer                           ·                      ·                                            (lk, geom1)                               ·
+ │                                                                  estimated row count    1000 (missing stats)                         ·                                         ·
+ │                                                                  label                  buffer 1                                     ·                                         ·
+ └── subquery                                                       ·                      ·                                            ·                                         ·
+      │                                                             id                     @S1                                          ·                                         ·
+      │                                                             exec mode              all rows                                     ·                                         ·
+      └── buffer                                                    ·                      ·                                            (lk, geom1)                               ·
+           │                                                        label                  buffer 1                                     ·                                         ·
+           └── render                                               ·                      ·                                            (lk, geom1)                               ·
+                │                                                   estimated row count    1000 (missing stats)                         ·                                         ·
+                │                                                   render 0               lk                                           ·                                         ·
+                │                                                   render 1               geom1                                        ·                                         ·
+                └── scan                                            ·                      ·                                            (lk, geom1)                               ·
+·                                                                   estimated row count    1000 (missing stats)                         ·                                         ·
+·                                                                   table                  ltable@primary                               ·                                         ·
+·                                                                   spans                  FULL SCAN                                    ·                                         ·
 
 # Bounding box operations.
 statement ok

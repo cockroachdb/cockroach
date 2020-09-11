@@ -2915,6 +2915,44 @@ func (c *CustomFuncs) exprContainsGeoIndexRelationship(expr opt.ScalarExpr) bool
 	}
 }
 
+// EnsureNotNullColFromFilteredScan ensures that there is at least one not-null
+// column in the given expression. If there is already at least one not-null
+// column, EnsureNotNullColFromFilteredScan returns the expression unchanged.
+// Otherwise, it calls TryAddKeyToScan, which will try to augment the
+// expression with the primary key of the underlying table scan (guaranteed to
+// be not-null). In order for this call to succeed, the input expression must
+// be a non-virtual Scan, optionally wrapped in a Select. Otherwise,
+// EnsureNotNullColFromFilteredScan will panic.
+//
+// Note that we cannot just project a not-null constant value because we want
+// the output expression to be like the input: a non-virtual Scan, optionally
+// wrapped in a Select. This is needed to ensure that GenerateInvertedJoins
+// or GenerateInvertedJoinsFromSelect can match on this expression.
+func (c *CustomFuncs) EnsureNotNullColFromFilteredScan(expr memo.RelExpr) memo.RelExpr {
+	if !expr.Relational().NotNullCols.Empty() {
+		return expr
+	}
+	if res, ok := c.TryAddKeyToScan(expr); ok {
+		return res
+	}
+	panic(errors.AssertionFailedf(
+		"TryAddKeyToScan failed. Input must have type Scan or Select(Scan). Actual type: %T", expr,
+	))
+}
+
+// NotNullCol returns the first not-null column from the input expression.
+// EnsureNotNullColFromFilteredScan must have been called previously to
+// ensure that such a column exists.
+func (c *CustomFuncs) NotNullCol(expr memo.RelExpr) opt.ColumnID {
+	col, ok := expr.Relational().NotNullCols.Next(0)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"NotNullCol was called on an expression with no not-null columns",
+		))
+	}
+	return col
+}
+
 // ----------------------------------------------------------------------
 //
 // GroupBy Rules

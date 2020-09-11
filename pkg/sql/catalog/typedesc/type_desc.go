@@ -163,6 +163,11 @@ func (desc *Immutable) TypeDesc() *descpb.TypeDescriptor {
 	return &desc.TypeDescriptor
 }
 
+// Public implements the Descriptor interface.
+func (desc *Immutable) Public() bool {
+	return desc.State == descpb.DescriptorState_PUBLIC
+}
+
 // Adding implements the Descriptor interface.
 func (desc *Immutable) Adding() bool {
 	return false
@@ -170,12 +175,12 @@ func (desc *Immutable) Adding() bool {
 
 // Offline implements the Descriptor interface.
 func (desc *Immutable) Offline() bool {
-	return false
+	return desc.State == descpb.DescriptorState_OFFLINE
 }
 
-// GetOfflineReason implements the Descriptor interface.
-func (desc *Immutable) GetOfflineReason() string {
-	return ""
+// Dropped implements the Descriptor interface.
+func (desc *Immutable) Dropped() bool {
+	return desc.State == descpb.DescriptorState_DROP
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
@@ -253,6 +258,24 @@ func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 // IsNew implements the MutableDescriptor interface.
 func (desc *Mutable) IsNew() bool {
 	return desc.ClusterVersion == nil
+}
+
+// SetPublic implements the MutableDescriptor interface.
+func (desc *Mutable) SetPublic() {
+	desc.State = descpb.DescriptorState_PUBLIC
+	desc.OfflineReason = ""
+}
+
+// SetDropped implements the MutableDescriptor interface.
+func (desc *Mutable) SetDropped() {
+	desc.State = descpb.DescriptorState_DROP
+	desc.OfflineReason = ""
+}
+
+// SetOffline implements the MutableDescriptor interface.
+func (desc *Mutable) SetOffline(reason string) {
+	desc.State = descpb.DescriptorState_OFFLINE
+	desc.OfflineReason = reason
 }
 
 // AddEnumValue adds an enum member to the type.

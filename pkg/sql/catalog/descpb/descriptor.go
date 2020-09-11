@@ -19,12 +19,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetDescriptorMetadata extracts metadata out of a raw descpb.Descriptor.
+// GetDescriptorMetadata extracts metadata out of a raw descpb.Descriptor. Used
+// in cases where basic type-agnostic metadata is needed and unwrapping the
+// descriptor is unnecessary.
 func GetDescriptorMetadata(
 	desc *Descriptor,
-) (id ID, version DescriptorVersion, name string, offline, dropped bool) {
+) (id ID, version DescriptorVersion, name string, state DescriptorState) {
 	return GetDescriptorID(desc), GetDescriptorVersion(desc), GetDescriptorName(desc),
-		GetDescriptorDropped(desc), GetDescriptorOffline(desc)
+		GetDescriptorState(desc)
 }
 
 // GetDescriptorID returns the ID of the descriptor.
@@ -92,39 +94,20 @@ func GetDescriptorModificationTime(desc *Descriptor) hlc.Timestamp {
 	}
 }
 
-// GetDescriptorDropped returns whether the descriptor is dropped.
-// TODO (lucy): Does this method belong on Descriptor? This state does matter
-// for descriptor leasing, but arguably we should be upwrapping the descriptor
-// to get it.
-func GetDescriptorDropped(desc *Descriptor) bool {
+// GetDescriptorState returns the DescriptorState of the Descriptor.
+func GetDescriptorState(desc *Descriptor) DescriptorState {
 	switch t := desc.Union.(type) {
 	case *Descriptor_Table:
-		return t.Table.Dropped()
-	case *Descriptor_Type:
-		return t.Type.Dropped()
-	case *Descriptor_Schema:
-		return t.Schema.Dropped()
+		return t.Table.State
 	case *Descriptor_Database:
-		return t.Database.Dropped()
+		return t.Database.State
+	case *Descriptor_Type:
+		return t.Type.State
+	case *Descriptor_Schema:
+		return t.Schema.State
 	default:
 		debug.PrintStack()
-		panic(errors.AssertionFailedf("Dropped: unknown Descriptor type %T", t))
-	}
-}
-
-// GetDescriptorOffline returns whether the descriptor is offline.
-// TODO (lucy): Does this method belong on Descriptor? This state does matter
-// for descriptor leasing, but arguably we should be upwrapping the descriptor
-// to get it.
-func GetDescriptorOffline(desc *Descriptor) bool {
-	switch t := desc.Union.(type) {
-	case *Descriptor_Table:
-		return t.Table.Offline()
-	case *Descriptor_Database, *Descriptor_Type, *Descriptor_Schema:
-		return false
-	default:
-		debug.PrintStack()
-		panic(errors.AssertionFailedf("Offline: unknown Descriptor type %T", t))
+		panic(errors.AssertionFailedf("GetDescriptorState: unknown Descriptor type %T", t))
 	}
 }
 

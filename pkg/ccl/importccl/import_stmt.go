@@ -1058,18 +1058,13 @@ func prepareExistingTableDescForIngestion(
 		return nil, err
 	}
 
-	// Note that this CPut is safe with respect to mixed-version descriptor
-	// upgrade and downgrade, because IMPORT does not operate in mixed-version
-	// states.
-	// TODO(jordan,lucy): remove this comment once 19.2 is released.
-	existingDesc, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, existing)
-	if err != nil {
+	if err := backupccl.VerifyDescriptorVersion(ctx, txn, execCfg.Codec, existing); err != nil {
 		return nil, errors.Wrap(err, "another operation is currently operating on the table")
 	}
-	err = txn.CPut(ctx,
+	err := txn.Put(ctx,
 		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.ID),
 		importing.DescriptorProto(),
-		existingDesc)
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "another operation is currently operating on the table")
 	}
@@ -1360,18 +1355,13 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 			}
 
 			// TODO(dt): re-validate any FKs?
-			// Note that this CPut is safe with respect to mixed-version descriptor
-			// upgrade and downgrade, because IMPORT does not operate in mixed-version
-			// states.
-			// TODO(jordan,lucy): remove this comment once 19.2 is released.
-			existingDesc, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, prevTableDesc)
-			if err != nil {
+			if err := backupccl.VerifyDescriptorVersion(ctx, txn, execCfg.Codec, prevTableDesc); err != nil {
 				return errors.Wrap(err, "publishing tables")
 			}
-			b.CPut(
+			b.Put(
 				catalogkeys.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
 				newTableDesc.DescriptorProto(),
-				existingDesc)
+			)
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			return errors.Wrap(err, "publishing tables")
@@ -1516,18 +1506,13 @@ func (r *importResumer) dropTables(
 			// IMPORT did not create this table, so we should not drop it.
 			newTableDesc.State = descpb.DescriptorState_PUBLIC
 		}
-		// Note that this CPut is safe with respect to mixed-version descriptor
-		// upgrade and downgrade, because IMPORT does not operate in mixed-version
-		// states.
-		// TODO(jordan,lucy): remove this comment once 19.2 is released.
-		existingDesc, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, prevTableDesc)
-		if err != nil {
+		if err := backupccl.VerifyDescriptorVersion(ctx, txn, execCfg.Codec, prevTableDesc); err != nil {
 			return errors.Wrap(err, "rolling back tables")
 		}
-		b.CPut(
+		b.Put(
 			catalogkeys.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
 			newTableDesc.DescriptorProto(),
-			existingDesc)
+		)
 	}
 
 	// Queue a GC job.

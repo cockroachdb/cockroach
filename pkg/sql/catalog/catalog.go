@@ -37,6 +37,13 @@ type MutableDescriptor interface {
 	ImmutableCopy() Descriptor
 	// IsNew returns whether the descriptor was created in this transaction.
 	IsNew() bool
+
+	// SetPublic sets the descriptor's state to public.
+	SetPublic()
+	// SetDropped sets the descriptor's state to dropped.
+	SetDropped()
+	// SetOffline sets the descriptor's state to offline, with the provided reason.
+	SetOffline(reason string)
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.

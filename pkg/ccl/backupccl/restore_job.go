@@ -15,6 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -689,6 +690,9 @@ type restoreResumer struct {
 	execCfg  *sql.ExecutorConfig
 
 	testingKnobs struct {
+		// beforePublishingDescriptors is called right before publishing
+		// descriptors, after any data has been restored.
+		beforePublishingDescriptors func() error
 		// duringSystemTableRestoration is called once for every system table we
 		// restore. It is used to simulate any errors that we may face at this point
 		// of the restore.
@@ -900,16 +904,35 @@ func createImportingDescriptors(
 		return nil, nil, nil, err
 	}
 
-	for _, desc := range tableDescs {
-		desc.Version++
-		desc.State = descpb.DescriptorState_OFFLINE
-		desc.OfflineReason = "restoring"
+	// Set the new descriptors' states to offline.
+	for _, desc := range mutableTables {
+		desc.SetOffline("restoring")
+	}
+	for _, desc := range typesToWrite {
+		desc.SetOffline("restoring")
+	}
+	for _, desc := range schemasToWrite {
+		desc.SetOffline("restoring")
+	}
+	// 20.1 nodes won't make OFFLINE database descriptors public, so write them
+	// in the PUBLIC state.
+	if r.settings.Version.IsActive(ctx, clusterversion.VersionLeasedDatabaseDescriptors) {
+		for _, desc := range mutableDatabases {
+			desc.SetOffline("restoring")
+		}
 	}
 
 	// Collect all types after they have had their ID's rewritten.
 	typesByID := make(map[descpb.ID]catalog.TypeDescriptor)
 	for i := range types {
 		typesByID[types[i].GetID()] = types[i]
+	}
+
+	// Collect all databases, for doing lookups of whether a database is new when
+	// updating schema references later on.
+	dbsByID := make(map[descpb.ID]catalog.DatabaseDescriptor)
+	for i := range databases {
+		dbsByID[databases[i].GetID()] = databases[i]
 	}
 
 	if !details.PrepareCompleted {
@@ -922,7 +945,7 @@ func createImportingDescriptors(
 					return err
 				}
 			}
-			// Write the new TableDescriptors which are set in the OFFLINE state.
+			// Write the new descriptors which are set in the OFFLINE state.
 			if err := WriteDescriptors(ctx, txn, databases, writtenSchemas, tables, writtenTypes, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 			}
@@ -934,7 +957,7 @@ func createImportingDescriptors(
 			existingDBsWithNewSchemas := make(map[descpb.ID][]catalog.SchemaDescriptor)
 			for _, sc := range writtenSchemas {
 				parentID := sc.GetParentID()
-				if _, ok := details.DescriptorRewrites[parentID]; !ok {
+				if _, ok := dbsByID[parentID]; !ok {
 					existingDBsWithNewSchemas[parentID] = append(existingDBsWithNewSchemas[parentID], sc)
 				}
 			}
@@ -1111,6 +1134,13 @@ func (r *restoreResumer) Resume(
 		// Since we have already created any new databases that we needed,
 		// we can return without importing any data.
 		log.Warning(ctx, "nothing to restore")
+		// The database was created in the offline state and needs to be made
+		// public.
+		// TODO (lucy): Ideally we'd just create the database in the public state in
+		// the first place, as a special case.
+		if err := r.publishDescriptors(ctx); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -1218,11 +1248,16 @@ func insertStats(
 	return nil
 }
 
-// publishDescriptors updates the RESTORED tables status from OFFLINE to PUBLIC.
+// publishDescriptors updates the RESTORED descriptors' status from OFFLINE to PUBLIC.
 func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
-	if details.TablesPublished {
+	if details.DescriptorsPublished {
 		return nil
+	}
+	if fn := r.testingKnobs.beforePublishingDescriptors; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
 	}
 	log.Event(ctx, "making tables live")
 
@@ -1236,44 +1271,36 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 				return err
 			}
 		}
-		// Write the new TableDescriptors and flip state over to public so they can be
+
+		// Write the new descriptors and flip state over to public so they can be
 		// accessed.
-		b := txn.NewBatch()
+		allMutDescs := make([]catalog.MutableDescriptor, 0,
+			len(details.TableDescs)+len(details.TypeDescs)+len(details.SchemaDescs)+len(details.DatabaseDescs))
+		// Create slices of raw descriptors for the restore job details.
 		newTables := make([]*descpb.TableDescriptor, 0, len(details.TableDescs))
+		newTypes := make([]*descpb.TypeDescriptor, 0, len(details.TypeDescs))
+		newSchemas := make([]*descpb.SchemaDescriptor, 0, len(details.SchemaDescs))
+		newDBs := make([]*descpb.DatabaseDescriptor, 0, len(details.DatabaseDescs))
+
 		for _, tbl := range details.TableDescs {
-			existingTable := tabledesc.NewImmutable(*tbl)
-			newTableDesc := tabledesc.NewExistingMutable(*tbl)
-			newTableDesc.Version++
-			newTableDesc.State = descpb.DescriptorState_PUBLIC
-			newTableDesc.OfflineReason = ""
+			mutTable := tabledesc.NewExistingMutable(*tbl)
+			allMutDescs = append(allMutDescs, mutTable)
+			newTables = append(newTables, mutTable.TableDesc())
 			// Convert any mutations that were in progress on the table descriptor
 			// when the backup was taken, and convert them to schema change jobs.
 			newJobs, err := createSchemaChangeJobsFromMutations(ctx,
-				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, newTableDesc)
+				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, mutTable)
 			if err != nil {
 				return err
 			}
 			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
-			existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, r.execCfg.Codec, existingTable)
-			if err != nil {
-				return errors.Wrap(err, "validating table descriptor has not changed")
-			}
-			b.CPut(
-				catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, newTableDesc.ID),
-				newTableDesc.DescriptorProto(),
-				existingDescVal,
-			)
-			newTables = append(newTables, newTableDesc.TableDesc())
 		}
-
-		if err := txn.Run(ctx, b); err != nil {
-			return errors.Wrap(err, "publishing tables")
-		}
-
 		// For all of the newly created types, make type schema change jobs for any
 		// type descriptors that were backed up in the middle of a type schema change.
 		for _, typDesc := range details.TypeDescs {
 			typ := typedesc.NewExistingMutable(*typDesc)
+			allMutDescs = append(allMutDescs, typ)
+			newTypes = append(newTypes, typ.TypeDesc())
 			if typ.HasPendingSchemaChanges() {
 				typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, typ)
 				if err != nil {
@@ -1281,6 +1308,52 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 				}
 				newDescriptorChangeJobs = append(newDescriptorChangeJobs, typJob)
 			}
+		}
+		for _, sc := range details.SchemaDescs {
+			mutSchema := schemadesc.NewMutableExisting(*sc)
+			allMutDescs = append(allMutDescs, mutSchema)
+			newSchemas = append(newSchemas, mutSchema.SchemaDesc())
+		}
+		for _, db := range details.DatabaseDescs {
+			// Jobs started before 20.2 upgrade finalization don't put databases in
+			// an offline state.
+			// TODO (lucy): Should we make this more explicit with a format version
+			// field in the details?
+			if db.GetState() != descpb.DescriptorState_OFFLINE {
+				newDBs = append(newDBs, db)
+			} else {
+				mutDB := dbdesc.NewExistingMutable(*db)
+				allMutDescs = append(allMutDescs, dbdesc.NewExistingMutable(*db))
+				newDBs = append(newDBs, mutDB.DatabaseDesc())
+			}
+		}
+
+		b := txn.NewBatch()
+		for _, desc := range allMutDescs {
+			// Verify that the version of the descriptor stored in the job details is
+			// the same as what's actually on disk. If not, then the descriptor was
+			// somehow changed from under us and it's unsafe to proceed.
+			if err := VerifyDescriptorVersion(ctx, txn, keys.SystemSQLCodec, desc); err != nil {
+				return errors.Wrap(err, "publishing descriptors")
+			}
+
+			desc.SetPublic()
+			desc.MaybeIncrementVersion()
+			if err := catalogkv.WriteDescToBatch(
+				ctx,
+				false, /* kvTrace */
+				r.settings,
+				b,
+				keys.SystemSQLCodec,
+				desc.GetID(),
+				desc,
+			); err != nil {
+				return err
+			}
+		}
+
+		if err := txn.Run(ctx, b); err != nil {
+			return errors.Wrap(err, "publishing descriptors")
 		}
 
 		for _, tenant := range details.Tenants {
@@ -1290,8 +1363,11 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 		}
 
 		// Update and persist the state of the job.
-		details.TablesPublished = true
+		details.DescriptorsPublished = true
 		details.TableDescs = newTables
+		details.TypeDescs = newTypes
+		details.SchemaDescs = newSchemas
+		details.DatabaseDescs = newDBs
 		if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
 			for _, newJob := range newDescriptorChangeJobs {
 				if cleanupErr := newJob.CleanupOnRollback(ctx); cleanupErr != nil {
@@ -1349,6 +1425,8 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 }
 
 // dropDescriptors implements the OnFailOrCancel logic.
+// TODO (lucy): If the descriptors have already been published, we need to queue
+// drop jobs for all the descriptors.
 func (r *restoreResumer) dropDescriptors(
 	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn,
 ) error {
@@ -1383,23 +1461,28 @@ func (r *restoreResumer) dropDescriptors(
 	tablesToGC := make([]descpb.ID, 0, len(details.TableDescs))
 	for i := range mutableTables {
 		tableToDrop := mutableTables[i]
+		if err := VerifyDescriptorVersion(ctx, txn, keys.SystemSQLCodec, tableToDrop); err != nil {
+			return errors.Wrap(err, "deleting descriptors")
+		}
+
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
-		prev := tableToDrop.ImmutableCopy().(catalog.TableDescriptor)
-		tableToDrop.Version++
+		tableToDrop.MaybeIncrementVersion()
 		tableToDrop.State = descpb.DescriptorState_DROP
 		err := catalogkv.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tableToDrop.ParentID, tableToDrop.Name)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")
 		}
-		existingDescVal, err := catalogkv.ConditionalGetTableDescFromTxn(ctx, txn, execCfg.Codec, prev)
-		if err != nil {
-			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
+		if err := catalogkv.WriteDescToBatch(
+			ctx,
+			false, /* kvTrace */
+			r.settings,
+			b,
+			keys.SystemSQLCodec,
+			tableToDrop.GetID(),
+			tableToDrop,
+		); err != nil {
+			return err
 		}
-		b.CPut(
-			catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableToDrop.ID),
-			tableToDrop.DescriptorProto(),
-			existingDescVal,
-		)
 	}
 
 	// Drop the type descriptors that this restore created.
@@ -1423,6 +1506,9 @@ func (r *restoreResumer) dropDescriptors(
 
 	// Drop any schema descriptors that this restore created. Also collect the
 	// descriptors so we can update their parent databases later.
+	// TODO (lucy): It's possible for tables and types to be added under the
+	// schema after it becomes public. To account for this, we need to refrain
+	// from dropping the schema if it has children, like we do for databases.
 	dbsWithDeletedSchemas := make(map[descpb.ID][]*descpb.SchemaDescriptor)
 	for i := range details.SchemaDescs {
 		sc := details.SchemaDescs[i]
@@ -1667,6 +1753,24 @@ func (r *restoreResumer) restoreSystemTables(ctx context.Context, db *kv.DB) err
 		return errors.Wrap(err, "dropping temporary system db")
 	}
 
+	return nil
+}
+
+// VerifyDescriptorVersion validates that the supplied descriptor's version
+// matches that of the descriptor currently stored in kv. An error is returned
+// if this is not the case.
+func VerifyDescriptorVersion(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation catalog.Descriptor,
+) error {
+	existing, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, expectation.GetID(), catalogkv.Mutable)
+	if err != nil {
+		return err
+	}
+	if existing.GetVersion() != expectation.GetVersion() {
+		return errors.AssertionFailedf(
+			"unexpected version read from disk for restored descriptor: expected %d, got %d",
+			expectation.GetVersion(), existing.GetVersion())
+	}
 	return nil
 }
 

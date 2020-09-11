@@ -348,34 +348,63 @@ func (c *CustomFuncs) ConstructApplyJoin(
 }
 
 // EnsureKey finds the shortest strong key for the input expression. If no
-// strong key exists and the input expression is a scan, EnsureKey returns a new
-// Scan with the preexisting primary key for the table. If the input is not a
-// Scan, EnsureKey wraps the input in an Ordinality operator, which provides a
-// key column by uniquely numbering the rows. EnsureKey returns the input
-// expression (perhaps augmented with a key column(s) or wrapped by Ordinality).
+// strong key exists and the input expression is a Scan or a Scan wrapped in a
+// Select, EnsureKey returns a new Scan (possibly wrapped in a Select) with the
+// preexisting primary key for the table. If the input is not a Scan or
+// Select(Scan), EnsureKey wraps the input in an Ordinality operator, which
+// provides a key column by uniquely numbering the rows. EnsureKey returns the
+// input expression (perhaps augmented with a key column(s) or wrapped by
+// Ordinality).
 func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 	_, ok := c.CandidateKey(in)
 	if ok {
 		return in
 	}
 
-	// If the the input is a non-virtual table scan, construct a new scan that
-	// outputs the primary key.
-	if t, ok := in.(*memo.ScanExpr); ok {
-		private := t.ScanPrivate
-		tableID := private.Table
-		table := c.f.Metadata().Table(tableID)
-		if !table.IsVirtualTable() {
-			keyCols := c.PrimaryKeyCols(tableID)
-			private.Cols = private.Cols.Union(keyCols)
-			return c.f.ConstructScan(&private)
-		}
+	// Try to add the preexisting primary key if the input is a Scan or Scan
+	// wrapped in a Select.
+	if res, ok := c.TryAddKeyToScan(in); ok {
+		return res
 	}
 
 	// Otherwise, wrap the input in an Ordinality operator.
 	colID := c.f.Metadata().AddColumn("rownum", types.Int)
 	private := memo.OrdinalityPrivate{ColID: colID}
 	return c.f.ConstructOrdinality(in, &private)
+}
+
+// TryAddKeyToScan checks whether the input expression is a non-virtual table
+// Scan, either alone or wrapped in a Select. If so, it returns a new Scan
+// (possibly wrapped in a Select) augmented with the preexisting primary key
+// for the table.
+func (c *CustomFuncs) TryAddKeyToScan(in memo.RelExpr) (_ memo.RelExpr, ok bool) {
+	augmentScan := func(scan *memo.ScanExpr) (_ memo.RelExpr, ok bool) {
+		private := scan.ScanPrivate
+		tableID := private.Table
+		table := c.f.Metadata().Table(tableID)
+		if !table.IsVirtualTable() {
+			keyCols := c.PrimaryKeyCols(tableID)
+			private.Cols = private.Cols.Union(keyCols)
+			return c.f.ConstructScan(&private), true
+		}
+		return nil, false
+	}
+
+	switch t := in.(type) {
+	case *memo.ScanExpr:
+		if res, ok := augmentScan(t); ok {
+			return res, true
+		}
+
+	case *memo.SelectExpr:
+		if scan, ok := t.Input.(*memo.ScanExpr); ok {
+			if res, ok := augmentScan(scan); ok {
+				return c.f.ConstructSelect(res, t.Filters), true
+			}
+		}
+	}
+
+	return nil, false
 }
 
 // KeyCols returns a column set consisting of the columns that make up the
