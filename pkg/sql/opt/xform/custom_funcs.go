@@ -996,6 +996,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes)
 	for iter.Next() {
 		var spanExpr *invertedexpr.SpanExpression
+		var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 		var spansToRead invertedexpr.InvertedSpans
 		var constraint *constraint.Constraint
 		var remaining memo.FiltersExpr
@@ -1003,7 +1004,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
-		spanExpr, geoOk = invertedidx.TryConstrainGeoIndex(
+		spanExpr, pfState, geoOk = invertedidx.TryConstrainGeoIndex(
 			c.e.evalCtx.Context, c.e.f, filters, scanPrivate.Table, iter.Index(),
 		)
 		if geoOk {
@@ -1049,7 +1050,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		sb.setScan(&newScanPrivate)
 
 		// Add an inverted filter if it exists.
-		sb.addInvertedFilter(spanExpr, invertedCol)
+		sb.addInvertedFilter(spanExpr, pfState, invertedCol)
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
