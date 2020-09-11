@@ -88,8 +88,8 @@ func alterZoneConfigAndClusterSettings(
 		return err
 	}
 
-	// Enable temp tables for v20.1
-	if strings.HasPrefix(version, "v20.") {
+	// Enable temp tables for v20.1+
+	if strings.HasPrefix(version, "v20.") || strings.HasPrefix(version, "v21.") {
 		if _, err := db.ExecContext(
 			ctx, `SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
 		); err != nil {
