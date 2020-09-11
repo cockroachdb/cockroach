@@ -33,10 +33,11 @@ func setLogging(on bool) func() {
 }
 
 type cmd struct {
-	index        uint64
-	nonTrivial   bool
-	nonLocal     bool
-	shouldReject bool
+	index                 uint64
+	nonTrivial            bool
+	nonLocal              bool
+	shouldReject          bool
+	shouldThrowErrRemoved bool
 
 	acked    bool
 	finished bool
@@ -51,19 +52,27 @@ type appliedCmd struct {
 	*checkedCmd
 }
 
-func (c *cmd) Index() uint64                        { return c.index }
-func (c *cmd) IsTrivial() bool                      { return !c.nonTrivial }
-func (c *cmd) IsLocal() bool                        { return !c.nonLocal }
+func (c *cmd) Index() uint64   { return c.index }
+func (c *cmd) IsTrivial() bool { return !c.nonTrivial }
+func (c *cmd) IsLocal() bool   { return !c.nonLocal }
+func (c *cmd) AckErrAndFinish(_ context.Context, err error) error {
+	c.acked = true
+	c.finished = true
+	if logging {
+		fmt.Printf(" acknowledging rejected command %d with err=%s\n", c.Index(), err)
+	}
+	return nil
+}
 func (c *checkedCmd) Rejected() bool                { return c.rejected }
 func (c *checkedCmd) CanAckBeforeApplication() bool { return true }
-func (c *checkedCmd) AckSuccess() error {
+func (c *checkedCmd) AckSuccess(context.Context) error {
 	c.acked = true
 	if logging {
 		fmt.Printf(" acknowledging command %d before application\n", c.Index())
 	}
 	return nil
 }
-func (c *appliedCmd) FinishAndAckOutcome(context.Context) error {
+func (c *appliedCmd) AckOutcomeAndFinish(context.Context) error {
 	c.finished = true
 	if c.acked {
 		if logging {
@@ -71,7 +80,7 @@ func (c *appliedCmd) FinishAndAckOutcome(context.Context) error {
 		}
 	} else {
 		if logging {
-			fmt.Printf(" finishing and acknowledging command %d; rejected=%t\n", c.Index(), c.Rejected())
+			fmt.Printf(" acknowledging and finishing command %d; rejected=%t\n", c.Index(), c.Rejected())
 		}
 		c.acked = true
 	}
@@ -136,6 +145,11 @@ func (sm *testStateMachine) ApplySideEffects(
 	if logging {
 		fmt.Printf(" applying side-effects of command %d\n", cmd.Index())
 	}
+	if cmd.shouldThrowErrRemoved {
+		err := apply.ErrRemoved
+		_ = cmd.AckErrAndFinish(context.Background(), err)
+		return nil, err
+	}
 	acmd := appliedCmd{checkedCmd: cmd}
 	return &acmd, nil
 }
@@ -168,18 +182,20 @@ func (b *testBatch) Close() {
 }
 
 type testDecoder struct {
-	nonTrivial   map[uint64]bool
-	nonLocal     map[uint64]bool
-	shouldReject map[uint64]bool
+	nonTrivial            map[uint64]bool
+	nonLocal              map[uint64]bool
+	shouldReject          map[uint64]bool
+	shouldThrowErrRemoved map[uint64]bool
 
 	cmds []*cmd
 }
 
 func newTestDecoder() *testDecoder {
 	return &testDecoder{
-		nonTrivial:   make(map[uint64]bool),
-		nonLocal:     make(map[uint64]bool),
-		shouldReject: make(map[uint64]bool),
+		nonTrivial:            make(map[uint64]bool),
+		nonLocal:              make(map[uint64]bool),
+		shouldReject:          make(map[uint64]bool),
+		shouldThrowErrRemoved: make(map[uint64]bool),
 	}
 }
 
@@ -188,10 +204,11 @@ func (d *testDecoder) DecodeAndBind(_ context.Context, ents []raftpb.Entry) (boo
 	for i, ent := range ents {
 		idx := ent.Index
 		cmd := &cmd{
-			index:        idx,
-			nonTrivial:   d.nonTrivial[idx],
-			nonLocal:     d.nonLocal[idx],
-			shouldReject: d.shouldReject[idx],
+			index:                 idx,
+			nonTrivial:            d.nonTrivial[idx],
+			nonLocal:              d.nonLocal[idx],
+			shouldReject:          d.shouldReject[idx],
+			shouldThrowErrRemoved: d.shouldThrowErrRemoved[idx],
 		}
 		d.cmds[i] = cmd
 		if logging {
@@ -345,5 +362,37 @@ func TestAckCommittedEntriesBeforeApplication(t *testing.T) {
 		}
 		require.Equal(t, exp, cmd.acked)
 		require.False(t, cmd.finished)
+	}
+}
+
+func TestApplyCommittedEntriesWithErr(t *testing.T) {
+	ctx := context.Background()
+	ents := makeEntries(6)
+
+	sm := getTestStateMachine()
+	dec := newTestDecoder()
+	dec.nonTrivial[3] = true
+	dec.shouldThrowErrRemoved[3] = true
+	dec.nonTrivial[6] = true
+
+	// Use an apply.Task to apply all commands.
+	appT := apply.MakeTask(sm, dec)
+	defer appT.Close()
+	require.NoError(t, appT.Decode(ctx, ents))
+	require.Equal(t, apply.ErrRemoved, appT.ApplyCommittedEntries(ctx))
+
+	// Assert that only commands up to the replica removal were applied.
+	exp := testStateMachine{
+		batches:            [][]uint64{{1, 2}, {3}},
+		applied:            []uint64{1, 2, 3},
+		appliedSideEffects: []uint64{1, 2, 3},
+	}
+	require.Equal(t, exp, *sm)
+
+	// Assert that all commands were acknowledged and finished, even though not
+	// all were applied.
+	for _, cmd := range dec.cmds {
+		require.True(t, cmd.acked)
+		require.True(t, cmd.finished)
 	}
 }
