@@ -1364,3 +1364,24 @@ statement ok
 CREATE TABLE t52816 (x INT, y INT);
 ALTER TABLE t52816 RENAME COLUMN x TO x2, RENAME COLUMN y TO y;
 SELECT x2, y FROM t52816
+
+statement ok
+CREATE TABLE test_if_not_exists (id uuid primary key, hash string)
+
+statement ok
+ALTER TABLE test_if_not_exists ADD CONSTRAINT test_if_not_exists_hash UNIQUE (hash)
+
+statement error duplicate constraint name: "test_if_not_exists_hash"
+ALTER TABLE test_if_not_exists ADD CONSTRAINT test_if_not_exists_hash UNIQUE (hash);
+
+statement ok
+ALTER TABLE test_if_not_exists ADD CONSTRAINT IF NOT EXISTS test_if_not_exists_hash UNIQUE (hash);
+
+statement ok
+ALTER TABLE test_if_not_exists ADD CONSTRAINT test_if_not_exists_check CHECK (hash in ('1', '2', '3'));
+
+statement error duplicate constraint name: "test_if_not_exists_check"
+ALTER TABLE test_if_not_exists ADD CONSTRAINT test_if_not_exists_check CHECK (hash in ('1', '2', '3'));
+
+statement ok
+ALTER TABLE test_if_not_exists ADD CONSTRAINT IF NOT EXISTS test_if_not_exists_check CHECK (hash in ('1', '2', '3'));
