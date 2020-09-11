@@ -82,6 +82,15 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		}
 		return nil, nil
 	}
+	// Immediately after a RENAME an old name still points to the descriptor
+	// during the drain phase for the name. Do not return a descriptor during
+	// draining.
+	if db.GetName() != name {
+		if flags.Required {
+			return nil, sqlerrors.NewUndefinedDatabaseError(name)
+		}
+		return nil, nil
+	}
 	return db, nil
 }
 
@@ -133,6 +142,15 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	if !descriptorInAcceptableState(sc, flags) {
 		if flags.Required {
 			return false, catalog.ResolvedSchema{}, catalog.FilterDescriptorState(sc)
+		}
+		return false, catalog.ResolvedSchema{}, nil
+	}
+	// Immediately after a RENAME an old name still points to the descriptor
+	// during the drain phase for the name. Do not return a descriptor during
+	// draining.
+	if sc.GetName() != scName {
+		if flags.Required {
+			return false, catalog.ResolvedSchema{}, sqlerrors.NewUndefinedSchemaError(scName)
 		}
 		return false, catalog.ResolvedSchema{}, nil
 	}
@@ -305,27 +323,27 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		}
 		return nil, nil
 	}
-	switch desc := desc.(type) {
-	case catalog.TableDescriptor:
-		// Immediately after a RENAME an old name still points to the
-		// descriptor during the drain phase for the name. Do not
-		// return a descriptor during draining.
-		// TODO (lucy): Is this check actually a good idea? If so, we should extend
-		// it to all the other descriptors.
-		//
-		// The second or condition ensures that clusters < 20.1 access the
+	// Immediately after a RENAME an old name still points to the descriptor
+	// during the drain phase for the name. Do not return a descriptor during
+	// draining.
+	if _, ok := desc.(catalog.TableDescriptor); ok {
+		// This condition ensures that clusters < 20.1 access the
 		// system.namespace_deprecated table when selecting from system.namespace.
-		// As this table can not be renamed by users, it is okay that the first
+		// As this table can not be renamed by users, it is okay that the subsequent
 		// check fails.
-		if desc.GetName() == object ||
-			object == systemschema.NamespaceTableName && db == systemschema.SystemDatabaseName {
+		if object == systemschema.NamespaceTableName &&
+			db == systemschema.SystemDatabaseName {
 			return desc, nil
 		}
-		return nil, nil
-	case catalog.TypeDescriptor:
-		return desc, nil
 	}
-	return nil, nil
+	if desc.GetName() != object {
+		if flags.Required {
+			a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
+			return nil, sqlerrors.NewUndefinedObjectError(&a.tn, flags.DesiredObjectKind)
+		}
+		return nil, nil
+	}
+	return desc, nil
 }
 
 func descriptorInAcceptableState(desc catalog.Descriptor, flags tree.CommonLookupFlags) bool {
