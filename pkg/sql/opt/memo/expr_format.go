@@ -446,12 +446,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !t.Flags.Empty() {
 			tp.Childf("flags: %s", t.Flags.String())
 		}
-		idxCols := make(opt.ColList, len(t.KeyCols))
-		idx := md.Table(t.Table).Index(t.Index)
-		for i := range idxCols {
-			idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal())
-		}
 		if !f.HasFlags(ExprFmtHideColumns) {
+			idxCols := make(opt.ColList, len(t.KeyCols))
+			idx := md.Table(t.Table).Index(t.Index)
+			for i := range idxCols {
+				idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal())
+			}
 			tp.Childf("key columns: %v = %v", t.KeyCols, idxCols)
 		}
 		if t.LookupColsAreTableKey {
