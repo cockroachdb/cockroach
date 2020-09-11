@@ -15,9 +15,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -190,4 +192,18 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 		synth.Status = roachpb.ABORTED
 	}
 	return synth.AsTransaction()
+}
+
+// HasTxnRecord returns whether the provided transaction has a transaction
+// record. The provided reader must come from the leaseholder of the transaction
+// record's Range.
+func HasTxnRecord(
+	ctx context.Context, reader storage.Reader, txn *roachpb.Transaction,
+) (bool, error) {
+	key := keys.TransactionKey(txn.Key, txn.ID)
+	val, _, err := storage.MVCCGet(ctx, reader, key, hlc.Timestamp{}, storage.MVCCGetOptions{})
+	if err != nil {
+		return false, err
+	}
+	return val != nil, nil
 }
