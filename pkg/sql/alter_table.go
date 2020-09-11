@@ -403,6 +403,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.Name)
 			}
+			var idxNamesToDelete []string
 			for _, idx := range n.tableDesc.AllNonDropIndexes() {
 				// We automatically drop indexes that reference the column
 				// being dropped.
@@ -466,15 +467,19 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// Perform the DROP.
 				if containsThisColumn {
-					jobDesc := fmt.Sprintf("removing index %q dependent on column %q which is being"+
-						" dropped; full details: %s", idx.Name, colToDrop.ColName(),
-						tree.AsStringWithFQNames(n.n, params.Ann()))
-					if err := params.p.dropIndexByName(
-						params.ctx, tn, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
-						t.DropBehavior, ignoreIdxConstraint, jobDesc,
-					); err != nil {
-						return err
-					}
+					idxNamesToDelete = append(idxNamesToDelete, idx.Name)
+				}
+			}
+
+			for _, idxName := range idxNamesToDelete {
+				jobDesc := fmt.Sprintf("removing index %q dependent on column %q which is being"+
+					" dropped; full details: %s", idxName, colToDrop.ColName(),
+					tree.AsStringWithFQNames(n.n, params.Ann()))
+				if err := params.p.dropIndexByName(
+					params.ctx, tn, tree.UnrestrictedName(idxName), n.tableDesc, false,
+					t.DropBehavior, ignoreIdxConstraint, jobDesc,
+				); err != nil {
+					return err
 				}
 			}
 
