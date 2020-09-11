@@ -11,6 +11,7 @@
 export * from "./badge";
 export * from "./button";
 export * from "./icon";
+export * from "./inlineAlert/inlineAlert";
 export * from "./globalNavigation";
 export * from "./anchor";
 export * from "./sideNavigation";
