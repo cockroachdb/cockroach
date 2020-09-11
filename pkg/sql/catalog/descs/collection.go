@@ -393,7 +393,12 @@ func (tc *Collection) getMutableObjectDescriptor(
 
 	// Resolve the database.
 	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
-		tree.DatabaseLookupFlags{Required: flags.Required, AvoidCached: flags.AvoidCached})
+		tree.DatabaseLookupFlags{
+			Required:       flags.Required,
+			AvoidCached:    flags.AvoidCached,
+			IncludeDropped: flags.IncludeDropped,
+			IncludeOffline: flags.IncludeOffline,
+		})
 	if err != nil || db == nil {
 		return nil, err
 	}
@@ -401,7 +406,12 @@ func (tc *Collection) getMutableObjectDescriptor(
 
 	// Resolve the schema to the ID of the schema.
 	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
-		tree.SchemaLookupFlags{Required: flags.Required, AvoidCached: flags.AvoidCached})
+		tree.SchemaLookupFlags{
+			Required:       flags.Required,
+			AvoidCached:    flags.AvoidCached,
+			IncludeDropped: flags.IncludeDropped,
+			IncludeOffline: flags.IncludeOffline,
+		})
 	if err != nil || !foundSchema {
 		return nil, err
 	}
@@ -785,7 +795,12 @@ func (tc *Collection) getObjectVersion(
 
 	// Resolve the database.
 	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
-		tree.DatabaseLookupFlags{Required: flags.Required, AvoidCached: flags.Required})
+		tree.DatabaseLookupFlags{
+			Required:       flags.Required,
+			AvoidCached:    flags.AvoidCached,
+			IncludeDropped: flags.IncludeDropped,
+			IncludeOffline: flags.IncludeOffline,
+		})
 	if err != nil || db == nil {
 		return nil, err
 	}
@@ -793,7 +808,12 @@ func (tc *Collection) getObjectVersion(
 
 	// Resolve the schema to the ID of the schema.
 	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
-		tree.SchemaLookupFlags{Required: flags.Required, AvoidCached: flags.Required})
+		tree.SchemaLookupFlags{
+			Required:       flags.Required,
+			AvoidCached:    flags.AvoidCached,
+			IncludeDropped: flags.IncludeDropped,
+			IncludeOffline: flags.IncludeOffline,
+		})
 	if err != nil || !foundSchema {
 		return nil, err
 	}
