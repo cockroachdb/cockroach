@@ -83,7 +83,9 @@ func (b *indexScanBuilder) setScan(scanPrivate *memo.ScanPrivate) {
 // addInvertedFilter wraps the input expression with an InvertedFilter
 // expression having the given span expression.
 func (b *indexScanBuilder) addInvertedFilter(
-	spanExpr *invertedexpr.SpanExpression, invertedCol opt.ColumnID,
+	spanExpr *invertedexpr.SpanExpression,
+	pfState *invertedexpr.PreFiltererStateForInvertedFilterer,
+	invertedCol opt.ColumnID,
 ) {
 	if spanExpr != nil {
 		if b.invertedFilterPrivate.InvertedColumn != 0 {
@@ -94,6 +96,7 @@ func (b *indexScanBuilder) addInvertedFilter(
 		}
 		b.invertedFilterPrivate = memo.InvertedFilterPrivate{
 			InvertedExpression: spanExpr,
+			PreFiltererState:   pfState,
 			InvertedColumn:     invertedCol,
 		}
 	}
