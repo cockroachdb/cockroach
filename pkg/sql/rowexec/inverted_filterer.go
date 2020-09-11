@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -88,13 +89,6 @@ func newInvertedFilterer(
 		},
 	}
 
-	// TODO(sumeer): for expressions that only involve unions, and the output
-	// does not need to be in key-order, we should incrementally output after
-	// de-duping. It will reduce the container memory/disk by 2x.
-
-	// Prepare inverted evaluator for later evaluation.
-	ifr.invertedEval.init()
-
 	// The RowContainer columns are the PK columns, that are the columns
 	// other than the inverted column. The output has the same types as
 	// the input.
@@ -137,6 +131,28 @@ func newInvertedFilterer(
 		ifr.input = newInputStatCollector(ifr.input)
 		ifr.FinishTrace = ifr.outputStatsToTrace
 	}
+
+	if spec.PreFiltererSpec != nil {
+		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+		var exprHelper execinfrapb.ExprHelper
+		colTypes := []*types.T{spec.PreFiltererSpec.Type}
+		if err := exprHelper.Init(spec.PreFiltererSpec.Expression, colTypes, semaCtx, ifr.EvalCtx); err != nil {
+			return nil, err
+		}
+		preFilterer, preFiltererState, err := invertedidx.NewBoundPreFilterer(
+			spec.PreFiltererSpec.Type, exprHelper.Expr)
+		if err != nil {
+			return nil, err
+		}
+		ifr.invertedEval.filterer = preFilterer
+		ifr.invertedEval.preFilterState = append(ifr.invertedEval.preFilterState, preFiltererState)
+	}
+	// TODO(sumeer): for expressions that only involve unions, and the output
+	// does not need to be in key-order, we should incrementally output after
+	// de-duping. It will reduce the container memory/disk by 2x.
+
+	// Prepare inverted evaluator for later evaluation.
+	ifr.invertedEval.init()
 
 	return ifr, nil
 }

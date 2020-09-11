@@ -125,39 +125,55 @@ func TryConstrainGeoIndex(
 	filters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
-) (invertedConstraint *invertedexpr.SpanExpression, ok bool) {
+) (
+	invertedConstraint *invertedexpr.SpanExpression,
+	preFiltererState *invertedexpr.PreFiltererStateForInvertedFilterer,
+	ok bool,
+) {
 	config := index.GeoConfig()
 	var getSpanExpr getSpanExprForGeoIndexFn
+	var typ *types.T
 	if geoindex.IsGeographyConfig(config) {
 		getSpanExpr = getSpanExprForGeographyIndex
+		typ = types.Geography
 	} else if geoindex.IsGeometryConfig(config) {
 		getSpanExpr = getSpanExprForGeometryIndex
+		typ = types.Geometry
 	} else {
-		return nil, false
+		return nil, nil, false
 	}
 
 	var invertedExpr invertedexpr.InvertedExpression
+	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 	for i := range filters {
-		invertedExprLocal := constrainGeoIndex(
+		invertedExprLocal, pfStateLocal := constrainGeoIndex(
 			ctx, factory, filters[i].Condition, tabID, index, getSpanExpr,
 		)
 		if invertedExpr == nil {
 			invertedExpr = invertedExprLocal
+			pfState = pfStateLocal
 		} else {
 			invertedExpr = invertedexpr.And(invertedExpr, invertedExprLocal)
+			// Do pre-filtering using the first of the conjuncts that provided
+			// non-nil pre-filtering state.
+			if pfState == nil {
+				pfState = pfStateLocal
+			}
 		}
 	}
 
 	if invertedExpr == nil {
-		return nil, false
+		return nil, nil, false
 	}
 
 	spanExpr, ok := invertedExpr.(*invertedexpr.SpanExpression)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
-
-	return spanExpr, true
+	if pfState != nil {
+		pfState.Typ = typ
+	}
+	return spanExpr, pfState, true
 }
 
 // getSpanExprForGeographyIndex gets a SpanExpression that constrains the given
@@ -512,20 +528,18 @@ func constrainGeoIndex(
 	tabID opt.TableID,
 	index cat.Index,
 	getSpanExpr getSpanExprForGeoIndexFn,
-) invertedexpr.InvertedExpression {
+) (invertedexpr.InvertedExpression, *invertedexpr.PreFiltererStateForInvertedFilterer) {
 	var args memo.ScalarListExpr
 	switch t := expr.(type) {
 	case *memo.AndExpr:
-		return invertedexpr.And(
-			constrainGeoIndex(ctx, factory, t.Left, tabID, index, getSpanExpr),
-			constrainGeoIndex(ctx, factory, t.Right, tabID, index, getSpanExpr),
-		)
+		l, _ := constrainGeoIndex(ctx, factory, t.Left, tabID, index, getSpanExpr)
+		r, _ := constrainGeoIndex(ctx, factory, t.Right, tabID, index, getSpanExpr)
+		return invertedexpr.And(l, r), nil
 
 	case *memo.OrExpr:
-		return invertedexpr.Or(
-			constrainGeoIndex(ctx, factory, t.Left, tabID, index, getSpanExpr),
-			constrainGeoIndex(ctx, factory, t.Right, tabID, index, getSpanExpr),
-		)
+		l, _ := constrainGeoIndex(ctx, factory, t.Left, tabID, index, getSpanExpr)
+		r, _ := constrainGeoIndex(ctx, factory, t.Right, tabID, index, getSpanExpr)
+		return invertedexpr.Or(l, r), nil
 
 	case *memo.FunctionExpr:
 		args = t.Args
@@ -542,7 +556,7 @@ func constrainGeoIndex(
 		}
 
 	default:
-		return invertedexpr.NonInvertedColExpression{}
+		return invertedexpr.NonInvertedColExpression{}, nil
 	}
 
 	// Try to constrain the index with the given expression. If the resulting
@@ -556,15 +570,15 @@ func constrainGeoIndex(
 	//   g1 ~ g2 -> ST_CoveredBy(g2, g1)
 	//
 	// See geoindex.CommuteRelationshipMap for the full list of mappings.
-	invertedExpr := constrainGeoIndexFromExpr(
-		ctx, expr, args, false /* commuteArgs */, tabID, index, getSpanExpr,
+	invertedExpr, pfState := constrainGeoIndexFromExpr(
+		ctx, factory, expr, args, false /* commuteArgs */, tabID, index, getSpanExpr,
 	)
 	if _, ok := invertedExpr.(invertedexpr.NonInvertedColExpression); ok {
-		invertedExpr = constrainGeoIndexFromExpr(
-			ctx, expr, args, true /* commuteArgs */, tabID, index, getSpanExpr,
+		invertedExpr, pfState = constrainGeoIndexFromExpr(
+			ctx, factory, expr, args, true /* commuteArgs */, tabID, index, getSpanExpr,
 		)
 	}
-	return invertedExpr
+	return invertedExpr, pfState
 }
 
 // constrainGeoIndexFromExpr returns an InvertedExpression representing a
@@ -574,16 +588,17 @@ func constrainGeoIndex(
 // two arguments are swapped.
 func constrainGeoIndexFromExpr(
 	ctx context.Context,
+	factory *norm.Factory,
 	expr opt.ScalarExpr,
 	args memo.ScalarListExpr,
 	commuteArgs bool,
 	tabID opt.TableID,
 	index cat.Index,
 	getSpanExpr getSpanExprForGeoIndexFn,
-) invertedexpr.InvertedExpression {
+) (invertedexpr.InvertedExpression, *invertedexpr.PreFiltererStateForInvertedFilterer) {
 	relationship, ok := GetGeoIndexRelationship(expr)
 	if !ok {
-		return invertedexpr.NonInvertedColExpression{}
+		return invertedexpr.NonInvertedColExpression{}, nil
 	}
 
 	if args.ChildCount() < 2 {
@@ -599,7 +614,7 @@ func constrainGeoIndexFromExpr(
 
 	// The first argument should be a constant.
 	if !memo.CanExtractConstDatum(arg1) {
-		return invertedexpr.NonInvertedColExpression{}
+		return invertedexpr.NonInvertedColExpression{}, nil
 	}
 	d := memo.ExtractConstDatum(arg1)
 
@@ -607,31 +622,41 @@ func constrainGeoIndexFromExpr(
 	// column.
 	variable, ok := arg2.(*memo.VariableExpr)
 	if !ok {
-		return invertedexpr.NonInvertedColExpression{}
+		return invertedexpr.NonInvertedColExpression{}, nil
 	}
 	if variable.Col != tabID.ColumnID(index.Column(0).InvertedSourceColumnOrdinal()) {
 		// The column in the function does not match the index column.
-		return invertedexpr.NonInvertedColExpression{}
+		return invertedexpr.NonInvertedColExpression{}, nil
 	}
 
 	// Any additional params must be constant.
 	var additionalParams []tree.Datum
 	for i := 2; i < args.ChildCount(); i++ {
 		if !memo.CanExtractConstDatum(args.Child(i)) {
-			return invertedexpr.NonInvertedColExpression{}
+			return invertedexpr.NonInvertedColExpression{}, nil
 		}
 		additionalParams = append(additionalParams, memo.ExtractConstDatum(args.Child(i)))
 	}
 
+	funcArgs := args
 	if commuteArgs {
 		relationship, ok = geoindex.CommuteRelationshipMap[relationship]
 		if !ok {
 			// It's not possible to commute this relationship.
-			return invertedexpr.NonInvertedColExpression{}
+			return invertedexpr.NonInvertedColExpression{}, nil
 		}
+		funcArgs = make(memo.ScalarListExpr, len(args))
+		copy(funcArgs, args)
+		funcArgs[0], funcArgs[1] = funcArgs[1], funcArgs[0]
 	}
+	name := geoindex.RelationshipReverseMap[relationship]
+	preFilterExpr := constructFunction(factory, name, funcArgs)
 
-	return getSpanExpr(ctx, d, additionalParams, relationship, index.GeoConfig())
+	return getSpanExpr(ctx, d, additionalParams, relationship, index.GeoConfig()),
+		&invertedexpr.PreFiltererStateForInvertedFilterer{
+			Expr:        preFilterExpr,
+			VariableCol: variable.Col,
+		}
 }
 
 type geoInvertedExpr struct {
@@ -682,6 +707,12 @@ type PreFilterer struct {
 func NewPreFilterer(
 	typ *types.T, preFilterRelationship geoindex.RelationshipType, additionalParams []tree.Datum,
 ) *PreFilterer {
+	// Normalize the typ for later pointer comparison.
+	if typ.Equivalent(types.Geometry) {
+		typ = types.Geometry
+	} else if typ.Equivalent(types.Geography) {
+		typ = types.Geography
+	}
 	return &PreFilterer{
 		typ:                       typ,
 		preFilterRelationship:     preFilterRelationship,
@@ -1068,4 +1099,42 @@ func (g *geoDatumsToInvertedExpr) PreFilter(
 
 func (g *geoDatumsToInvertedExpr) String() string {
 	return fmt.Sprintf("inverted-expr: %s", g.invertedExpr)
+}
+
+func newGeoBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, interface{}, error) {
+	f, ok := expr.(*tree.FuncExpr)
+	if !ok {
+		return nil, nil,
+			errors.Errorf("pre-filtering only supported for single function expression")
+	}
+	name := f.Func.FunctionReference.String()
+	relationship, ok := geoindex.RelationshipMap[name]
+	if !ok {
+		return nil, nil, fmt.Errorf("%s cannot be index-accelerated", name)
+	}
+	if len(f.Exprs) < 2 {
+		return nil, nil,
+			fmt.Errorf("index-accelerated functions must have at least two arguments")
+	}
+	// We know that the constant geo parameter is the first parameter, because
+	// the optimizer has already commuted the arguments of any function where
+	// that was not the case.
+	bindParam, ok := f.Exprs[0].(tree.Datum)
+	if !ok {
+		return nil, nil, fmt.Errorf("first param must be datum")
+	}
+	if !bindParam.ResolvedType().Equivalent(typ) {
+		return nil, nil, fmt.Errorf("bind param type %s should be %s", bindParam, typ)
+	}
+	var additionalParams []tree.Datum
+	for i := 2; i < len(f.Exprs); i++ {
+		datum, ok := f.Exprs[i].(tree.Datum)
+		if !ok {
+			return nil, nil, fmt.Errorf("non constant additional parameter for %s", name)
+		}
+		additionalParams = append(additionalParams, datum)
+	}
+	preFilterer := NewPreFilterer(typ, relationship, additionalParams)
+	preFilterState := preFilterer.Bind(bindParam)
+	return preFilterer, preFilterState, nil
 }
