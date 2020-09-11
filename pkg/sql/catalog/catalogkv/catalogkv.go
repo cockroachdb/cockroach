@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -630,34 +629,6 @@ func GetSchemaDescriptorsFromIDs(
 		res[i] = schema
 	}
 	return res, nil
-}
-
-// ConditionalGetTableDescFromTxn validates that the supplied TableDescriptor
-// matches the one currently stored in kv. This simulates a CPut and returns a
-// ConditionFailedError on mismatch. We don't directly use CPut with protos
-// because the marshaling is not guaranteed to be stable and also because it's
-// sensitive to things like missing vs default values of fields.
-func ConditionalGetTableDescFromTxn(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation catalog.TableDescriptor,
-) ([]byte, error) {
-	key := catalogkeys.MakeDescMetadataKey(codec, expectation.GetID())
-	existingKV, err := txn.Get(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-	var existing *descpb.Descriptor
-	if existingKV.Value != nil {
-		existing = &descpb.Descriptor{}
-		if err := existingKV.Value.GetProto(existing); err != nil {
-			return nil, errors.Wrapf(err,
-				"decoding current table descriptor value for id: %d", expectation.GetID())
-		}
-	}
-	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, existing, existingKV.Value.Timestamp)
-	if !expectation.DescriptorProto().Equal(existing) {
-		return nil, &roachpb.ConditionFailedError{ActualValue: existingKV.Value}
-	}
-	return existingKV.Value.TagAndDataBytes(), nil
 }
 
 // UnwrapDescriptorRaw takes a descriptor retrieved from a backup manifest or
