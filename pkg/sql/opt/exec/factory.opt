@@ -118,34 +118,6 @@ define MergeJoin {
     RightEqColsAreKey bool
 }
 
-# InterleavedJoin runs a join between two interleaved tables. One table is the
-# ancestor of the other in the interleaving hierarchy (as per leftIsAncestor).
-#
-# Semantically, the join is identical to a merge-join between these two
-# tables, where the equality columns are all the index column of the ancestor
-# index.
-#
-# The two scans are guaranteed to have the same direction, and to not have
-# any hard limits.
-#
-# Since the interleaved joiner does a single scan for both tables, only the
-# Locking clause for the ancestor is used.
-#
-define InterleavedJoin {
-    JoinType descpb.JoinType
-    LeftTable cat.Table
-    LeftIndex cat.Index
-    LeftParams exec.ScanParams
-    LeftFilter tree.TypedExpr
-    RightTable cat.Table
-    RightIndex cat.Index
-    RightParams exec.ScanParams
-    RightFilter tree.TypedExpr
-    LeftIsAncestor bool
-    OnCond tree.TypedExpr
-    ReqOrdering exec.OutputOrdering
-}
-
 # GroupBy runs an aggregation. A set of aggregations is performed for each group
 # of values on the groupCols.
 # A row is produced for each set of distinct values on the group columns. The

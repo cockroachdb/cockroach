@@ -39,17 +39,22 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 36
+const Version execinfrapb.DistSQLVersion = 37
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 35
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 37
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 37 (MinAcceptedVersion: 37)
+  - An InterleavedReaderJoiner processor was removed, and the old processor
+    spec would be unrecognized by a server running older versions, hence the
+    bump to the version and to the minimal accepted version.
 
 - Version: 36 (MinAcceptedVersion: 35)
     - Added an aggregator for ST_Collect. The change is backwards compatible

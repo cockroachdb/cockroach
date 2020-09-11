@@ -343,3 +343,112 @@ user root
 
 statement ok
 ROLLBACK
+
+# The NOWAIT wait policy returns error indicating location of conflicting lock,
+# when possible. This is true even with interleaved scans, which complicate the
+# logic of mapping a WriteIntentError back to the corresponding table.
+
+statement ok
+CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
+
+statement ok
+CREATE TABLE p1_0 (
+  i INT PRIMARY KEY,
+  s1 STRING
+) INTERLEAVE IN PARENT p2 (i)
+
+statement ok
+CREATE TABLE p1_1 (
+  i INT PRIMARY KEY,
+  s2 STRING
+) INTERLEAVE IN PARENT p2 (i)
+
+statement ok
+GRANT UPDATE ON p2   TO testuser;
+GRANT UPDATE ON p1_0 TO testuser;
+GRANT UPDATE ON p1_1 TO testuser;
+
+statement ok
+INSERT INTO p2 VALUES (2, '2a'), (3, '3a'), (5, '5a'), (7, '7a')
+
+statement ok
+INSERT INTO p1_0 VALUES (2, '2b'), (3, '3b'), (5, '5b')
+
+statement ok
+INSERT INTO p1_1 VALUES (2, '2c'), (3, '3c')
+
+query TT
+SELECT s, s1 FROM p2 JOIN p1_0 USING (i) ORDER BY s
+----
+2a  2b
+3a  3b
+5a  5b
+
+# Conflict on parent table.
+statement ok
+BEGIN; UPDATE p2 SET s = '7a_update' WHERE i = 7
+
+user testuser
+
+query error pgcode 55P03 could not obtain lock on row \(i\)=\(7\) in p2@primary
+SELECT * FROM p2 FOR SHARE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row in interleaved table
+SELECT * FROM p1_0 FOR SHARE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row in interleaved table
+SELECT * FROM p1_1 FOR SHARE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row \(i\)=\(7\) in p2@primary
+SELECT s, s1 FROM p2 JOIN p1_0 USING (i) ORDER BY s FOR SHARE NOWAIT
+
+user root
+
+statement ok
+ROLLBACK
+
+# Conflict on child table.
+statement ok
+BEGIN; UPDATE p1_0 SET s1 = '5b_update' WHERE i = 5
+
+user testuser
+
+query error pgcode 55P03 could not obtain lock on row in interleaved table
+SELECT * FROM p2 FOR SHARE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row \(i\)=\(5\) in p1_0@primary
+SELECT * FROM p1_0 FOR SHARE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row in interleaved table
+SELECT * FROM p1_1 FOR SHARE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row in interleaved table
+SELECT s, s1 FROM p2 JOIN p1_0 USING (i) ORDER BY s FOR SHARE NOWAIT
+
+user root
+
+statement ok
+ROLLBACK
+
+# Conflict on ignored child table.
+statement ok
+BEGIN; UPDATE p1_1 SET s2 = '3c_update' WHERE i = 3
+
+user testuser
+
+query error pgcode 55P03 could not obtain lock on row in interleaved table
+SELECT * FROM p2 FOR SHARE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row in interleaved table
+SELECT * FROM p1_0 FOR SHARE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row \(i\)=\(3\) in p1_1@primary
+SELECT * FROM p1_1 FOR SHARE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row in interleaved table
+SELECT s, s1 FROM p2 JOIN p1_0 USING (i) ORDER BY s FOR SHARE NOWAIT
+
+user root
+
+statement ok
+ROLLBACK
