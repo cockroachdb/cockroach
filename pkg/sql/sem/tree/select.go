@@ -384,6 +384,8 @@ type AliasedTableExpr struct {
 	IndexFlags *IndexFlags
 	Ordinality bool
 	Lateral    bool
+	Only       bool
+	Descendant bool
 	As         AliasClause
 }
 

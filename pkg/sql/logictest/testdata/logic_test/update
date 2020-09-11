@@ -120,6 +120,40 @@ c   d
 e   f
 f   g
 
+# Confirm ONLY and * are no-ops
+statement count 1
+UPDATE ONLY kv2 SET v = 'h' WHERE k IN ('a')
+
+query TT rowsort
+SELECT * FROM kv2
+----
+a   h
+c   d
+e   f
+f   g
+
+statement count 1
+UPDATE kv2 * SET v = 'b' WHERE k IN ('a')
+
+query TT rowsort
+SELECT * FROM kv2
+----
+a   b
+c   d
+e   f
+f   g
+
+statement count 1
+UPDATE ONLY kv2 * SET v = 'b' WHERE k IN ('a')
+
+query TT rowsort
+SELECT * FROM kv2
+----
+a   b
+c   d
+e   f
+f   g
+
 statement ok
 CREATE TABLE kv3 (
   k CHAR PRIMARY KEY,

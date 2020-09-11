@@ -2077,6 +2077,10 @@ $function$`,
 		// FOR READ ONLY is ignored, like in Postgres.
 		{`SELECT 1 FOR READ ONLY`, `SELECT 1`},
 
+		{`UPDATE ONLY a SET b = 3`, `UPDATE a SET b = 3`},
+		{`UPDATE ONLY a * SET b = 3`, `UPDATE a SET b = 3`},
+		{`UPDATE a * SET b = 3`, `UPDATE a SET b = 3`},
+
 		{`SHOW CREATE TABLE t`,
 			`SHOW CREATE t`},
 		{`SHOW CREATE VIEW t`,
