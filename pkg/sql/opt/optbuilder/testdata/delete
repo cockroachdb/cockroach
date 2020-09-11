@@ -461,9 +461,9 @@ DELETE FROM partial_indexes
 delete partial_indexes
  ├── columns: <none>
  ├── fetch columns: a:5 b:6 c:7
- ├── partial index del columns: column9:9 column10:10 column11:11 column12:12
+ ├── partial index del columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12
  └── project
-      ├── columns: column9:9 column10:10 column11:11 column12:12 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
+      ├── columns: partial_index_del1:9 partial_index_del2:10 partial_index_del3:11 partial_index_del4:12 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
       ├── scan partial_indexes
       │    ├── columns: a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
       │    └── partial index predicates
@@ -473,7 +473,37 @@ delete partial_indexes
       │              ├── a:5 > b:6
       │              └── c:7 = 'bar'
       └── projections
-           ├── c:7 = 'foo' [as=column9:9]
-           ├── (a:5 > b:6) AND (c:7 = 'bar') [as=column10:10]
-           ├── c:7 = 'delete-only' [as=column11:11]
-           └── c:7 = 'write-only' [as=column12:12]
+           ├── c:7 = 'foo' [as=partial_index_del1:9]
+           ├── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10]
+           ├── c:7 = 'delete-only' [as=partial_index_del3:11]
+           └── c:7 = 'write-only' [as=partial_index_del4:12]
+
+# Do not error with "column reference is ambiguous" when table column names
+# match synthesized column names.
+exec-ddl
+CREATE TABLE t (
+    partial_index_del1 INT,
+    UNIQUE INDEX (partial_index_del1) WHERE partial_index_del1 > 0
+)
+----
+
+build
+DELETE FROM t WHERE partial_index_del1 = 5
+----
+delete t
+ ├── columns: <none>
+ ├── fetch columns: t.partial_index_del1:4 rowid:5
+ ├── partial index del columns: partial_index_del1:7
+ └── project
+      ├── columns: partial_index_del1:7!null t.partial_index_del1:4!null rowid:5!null crdb_internal_mvcc_timestamp:6
+      ├── select
+      │    ├── columns: t.partial_index_del1:4!null rowid:5!null crdb_internal_mvcc_timestamp:6
+      │    ├── scan t
+      │    │    ├── columns: t.partial_index_del1:4 rowid:5!null crdb_internal_mvcc_timestamp:6
+      │    │    └── partial index predicates
+      │    │         └── secondary: filters
+      │    │              └── t.partial_index_del1:4 > 0
+      │    └── filters
+      │         └── t.partial_index_del1:4 = 5
+      └── projections
+           └── t.partial_index_del1:4 > 0 [as=partial_index_del1:7]

@@ -773,7 +773,7 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 // predScope is the scope of columns available to the partial index predicate
 // expression.
 func (mb *mutationBuilder) projectPartialIndexPutCols(predScope *scope) {
-	mb.projectPartialIndexCols(mb.partialIndexPutColIDs, predScope)
+	mb.projectPartialIndexCols(mb.partialIndexPutColIDs, predScope, "partial_index_put")
 }
 
 // projectPartialIndexPutCols builds a Project that synthesizes boolean output
@@ -784,17 +784,20 @@ func (mb *mutationBuilder) projectPartialIndexPutCols(predScope *scope) {
 // predScope is the scope of columns available to the partial index predicate
 // expression.
 func (mb *mutationBuilder) projectPartialIndexDelCols(predScope *scope) {
-	mb.projectPartialIndexCols(mb.partialIndexDelColIDs, predScope)
+	mb.projectPartialIndexCols(mb.partialIndexDelColIDs, predScope, "partial_index_del")
 }
 
 // projectPartialIndexCols builds a Project that synthesizes boolean output
 // columns for each partial index defined on the target table.
-func (mb *mutationBuilder) projectPartialIndexCols(colIDs opt.ColList, predScope *scope) {
+func (mb *mutationBuilder) projectPartialIndexCols(
+	colIDs opt.ColList, predScope *scope, aliasPrefix string,
+) {
 	if partialIndexCount(mb.tab) > 0 {
 		projectionScope := mb.outScope.replace()
 		projectionScope.appendColumnsFromScope(mb.outScope)
 
 		ord := 0
+		aliasSuffix := 1
 		for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
 			index := mb.tab.Index(i)
 			if _, isPartial := index.Predicate(); !isPartial {
@@ -803,12 +806,14 @@ func (mb *mutationBuilder) projectPartialIndexCols(colIDs opt.ColList, predScope
 
 			expr := mb.parsePartialIndexPredicateExpr(i)
 			texpr := predScope.resolveAndRequireType(expr, types.Bool)
-			scopeCol := mb.b.addColumn(projectionScope, "", texpr)
+			alias := fmt.Sprintf("%s%d", aliasPrefix, aliasSuffix)
+			scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
 
 			mb.b.buildScalar(texpr, predScope, projectionScope, scopeCol, nil)
 			colIDs[ord] = scopeCol.id
 
 			ord++
+			aliasSuffix++
 		}
 
 		mb.b.constructProjectForScope(mb.outScope, projectionScope)
