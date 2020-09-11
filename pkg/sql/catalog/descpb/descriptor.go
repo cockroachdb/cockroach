@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetDescriptorMetadata extracts metadata out of a raw descpb.Descriptor.
+// GetDescriptorMetadata extracts metadata out of a raw descpb.Descriptor. Used
+// in cases where basic type-agnostic metadata is needed and unwrapping the
+// descriptor is unnecessary.
 func GetDescriptorMetadata(
 	desc *Descriptor,
 ) (id ID, version DescriptorVersion, name string, state DescriptorState) {
@@ -93,9 +95,6 @@ func GetDescriptorModificationTime(desc *Descriptor) hlc.Timestamp {
 }
 
 // GetDescriptorState returns the DescriptorState of the Descriptor.
-// TODO (lucy): Does this method belong on Descriptor? This state does matter
-// for descriptor leasing, but arguably we should be upwrapping the descriptor
-// to get it.
 func GetDescriptorState(desc *Descriptor) DescriptorState {
 	switch t := desc.Union.(type) {
 	case *Descriptor_Table:
