@@ -16,12 +16,17 @@ definitely_ccache
 rm -fr vendor/github.com/cockroachdb/pebble
 git clone https://github.com/cockroachdb/pebble vendor/github.com/cockroachdb/pebble
 
+PEBBLE_SHA=$(git -C vendor/github.com/cockroachdb/pebble rev-parse HEAD)
+echo "Pebble SHA: $PEBBLE_SHA"
+
 env=(
-  "BUILD_VCS_NUMBER=$BUILD_VCS_NUMBER"
+  "GITHUB_REPO=$GITHUB_REPO"
+  "GITHUB_API_TOKEN=$GITHUB_API_TOKEN"
+  "BUILD_VCS_NUMBER=$PEBBLE_SHA"
   "TC_BUILD_ID=$TC_BUILD_ID"
   "TC_SERVER_URL=$TC_SERVER_URL"
   "TC_BUILD_BRANCH=$TC_BUILD_BRANCH"
-  "PKG=./vendor/github.com/cockroachdb/pebble/internal/metamorphic"
+  "PKG=internal/metamorphic"
   "STRESSFLAGS=-maxtime 1h -maxfails 1 -stderr -p 1"
   "TZ=America/New_York"
 )
@@ -29,13 +34,18 @@ env=(
 build/builder.sh env "${env[@]}" bash <<'EOF'
 set -euxo pipefail
 go install github.com/cockroachdb/stress
+go install ./pkg/cmd/github-post
+mkdir -p artifacts/meta
 
 # We've set pipefail, so the exit status is going to come from stress if there
 # are test failures.
 # Use an `if` so that the `-e` option doesn't stop the script on error.
 if ! stdbuf -oL -eL \
-  go test -mod=vendor -exec "stress ${STRESSFLAGS}" -run 'TestMeta$$' -timeout 0 -tags 'invariants' -test.v $PKG 2>&1 | tee artifacts/stress.log; then
+  go test -mod=vendor -exec "stress ${STRESSFLAGS}" -run 'TestMeta$$' \
+  -timeout 0 -tags 'invariants' -test.v ./vendor/github.com/cockroachdb/pebble/internal/metamorphic \
+  -dir artifacts/meta -ops "uniform:5000-25000" 2>&1 | tee artifacts/meta/metamorphic.log; then
     exit_status=${PIPESTATUS[0]}
+    go tool test2json -t -p "${PKG}" < artifacts/meta/metamorphic.log | github-post --formatter=pebble-metamorphic
     exit $exit_status
   fi
 EOF
