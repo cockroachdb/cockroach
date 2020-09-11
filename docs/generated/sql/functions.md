@@ -2070,6 +2070,9 @@ The paths themselves are given in the direction of the first geometry.</p>
 <li>S: has spatial reference system</li>
 </ul>
 </span></td></tr>
+<tr><td><a name="st_swapordinates"></a><code>st_swapordinates(geometry: geometry, swap_ordinate_string: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a version of the given geometry with given ordinates swapped.
+The swap_ordinate_string parameter is a 2-character string naming the ordinates to swap. Valid names are: x, y, z and m.</p>
+</span></td></tr>
 <tr><td><a name="st_symdifference"></a><code>st_symdifference(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the symmetric difference of both geometries.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
