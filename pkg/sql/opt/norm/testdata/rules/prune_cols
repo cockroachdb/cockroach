@@ -1948,18 +1948,18 @@ update partial_indexes
  ├── fetch columns: a:5 b:6 c:7
  ├── update-mapping:
  │    └── b_new:10 => b:2
- ├── partial index put columns: column11:11
- ├── partial index del columns: column9:9
+ ├── partial index put columns: partial_index_put1:11
+ ├── partial index del columns: partial_index_del1:9
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: column11:11 a:5!null b:6 c:7 column9:9 b_new:10
+      ├── columns: partial_index_put1:11 a:5!null b:6 c:7 partial_index_del1:9 b_new:10
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── key: ()
       ├── fd: ()-->(5-7,9-11)
       ├── project
-      │    ├── columns: b_new:10 column9:9 a:5!null b:6 c:7
+      │    ├── columns: b_new:10 partial_index_del1:9 a:5!null b:6 c:7
       │    ├── cardinality: [0 - 1]
       │    ├── immutable
       │    ├── key: ()
@@ -1980,9 +1980,9 @@ update partial_indexes
       │    │         └── a:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
       │    └── projections
       │         ├── b:6 + 1 [as=b_new:10, outer=(6), immutable]
-      │         └── b:6 > 1 [as=column9:9, outer=(6)]
+      │         └── b:6 > 1 [as=partial_index_del1:9, outer=(6)]
       └── projections
-           └── b_new:10 > 1 [as=column11:11, outer=(10)]
+           └── b_new:10 > 1 [as=partial_index_put1:11, outer=(10)]
 
 # Prune secondary family column not needed for the update.
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
