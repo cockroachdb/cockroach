@@ -157,7 +157,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	// privileges are added.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
-		if !tableIsVisible(table, true /*allowAdding*/) {
+		if !descriptorIsVisible(table, true /*allowAdding*/) {
 			continue
 		}
 		if _, ok := userNames[table.GetPrivileges().Owner]; ok {
