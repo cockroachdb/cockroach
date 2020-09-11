@@ -11,13 +11,178 @@
 package tracing
 
 import (
+	"context"
+	"math/rand"
 	"regexp"
+	"strconv"
+	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestMaxChildSpansPerSpan verifies that the maxChildSpansPerSpan limit is
+// enforced for both local and remote spans.
+func TestMaxChildSpansPerSpan(t *testing.T) {
+	// Randomize the maximum number of children. Whatever its value, it should not
+	// be exceeded.
+	const maxMaxChildSpans = 1000
+	initTracer := func() (_ *Tracer, maxChildSpans int64, _ *settings.Values) {
+		maxChildSpans = int64(rand.Intn(maxMaxChildSpans))
+		var values settings.Values
+		values.Init(nil)
+		maxChildSpansPerSpan.Override(&values, maxChildSpans)
+
+		tr := NewTracer()
+		tr.Configure(&values)
+		return tr, maxChildSpans, &values
+	}
+	logToSpanAndFinish := func(sp opentracing.Span, msg string) {
+		sp.LogFields(otlog.String(LogMessageField, msg))
+		sp.Finish()
+	}
+	addLocalChild := func(ctx context.Context, i int) {
+		childStr := strconv.Itoa(i)
+		_, child := ChildSpan(ctx, childStr)
+		logToSpanAndFinish(child, childStr)
+	}
+	mkRemoteSpan := func(tr *Tracer, i int, children int) []RecordedSpan {
+		childStr := strconv.Itoa(i)
+		sp := tr.StartSpan(childStr, Recordable)
+		StartRecording(sp, SnowballRecording)
+		ctx := opentracing.ContextWithSpan(context.Background(), sp)
+		for i := 0; i < children; i++ {
+			addLocalChild(ctx, i)
+		}
+		logToSpanAndFinish(sp, childStr)
+		return GetRecording(sp)
+	}
+
+	// Ensure that no limit is enforced when there is a 0 limit.
+	t.Run("unlimited", func(t *testing.T) {
+		tr, _, settings := initTracer()
+		maxChildSpansPerSpan.Override(settings, 0)
+		root := tr.StartSpan("root", Recordable)
+		StartRecording(root, SnowballRecording)
+		ctx := opentracing.ContextWithSpan(context.Background(), root)
+		const aLargeNumber = 1 << 15
+		for i := 0; i < aLargeNumber; /* a very large number */ i++ {
+			addLocalChild(ctx, i)
+		}
+		root.Finish()
+		recording := GetRecording(root)
+		require.Len(t, recording, int(aLargeNumber+1))
+	})
+
+	// Ensure that the limit is enforced on local children.
+	t.Run("child spans", func(t *testing.T) {
+		tr, maxChildSpans, _ := initTracer()
+		root := tr.StartSpan("root", Recordable)
+		StartRecording(root, SnowballRecording)
+		ctx := opentracing.ContextWithSpan(context.Background(), root)
+		for i := 0; i < int(maxChildSpans*2); i++ {
+			addLocalChild(ctx, i)
+		}
+		root.Finish()
+		recording := GetRecording(root)
+		require.Len(t, recording, int(maxChildSpans+1))
+	})
+
+	// Ensure that the limit is enforced when adding remote spans one at a time.
+	t.Run("remote spans", func(t *testing.T) {
+		tr, maxChildSpans, _ := initTracer()
+		root := tr.StartSpan("root", Recordable)
+		StartRecording(root, SnowballRecording)
+		for i := 0; i < int(maxChildSpans*2); i++ {
+			require.NoError(t, ImportRemoteSpans(root, mkRemoteSpan(tr, i, 0 /* children */)))
+		}
+		root.Finish()
+		recording := GetRecording(root)
+		require.Len(t, recording, int(maxChildSpans+1))
+	})
+
+	// Ensure that when the setting increases, new spans get recorded (we may
+	// eventually want to change this).
+	t.Run("increase setting", func(t *testing.T) {
+		tr, maxChildren, settings := initTracer()
+		root := tr.StartSpan("root", Recordable)
+		StartRecording(root, SnowballRecording)
+		ctx := opentracing.ContextWithSpan(context.Background(), root)
+		// Only the first 3rd of these should get recorded.
+		for i := 0; i < int(maxChildren*3); i++ {
+			addLocalChild(ctx, i)
+		}
+
+		maxChildSpansPerSpan.Override(settings, 2*maxChildren)
+		// The next 3rd of these should get recorded.
+		for i := 0; i < int(maxChildren*3); i++ {
+			addLocalChild(ctx, i)
+		}
+		root.Finish()
+		recording := GetRecording(root)
+		require.Len(t, recording, int(2*maxChildren+1))
+	})
+
+	// Ensure that when the setting increases, new spans get recorded (we may
+	// eventually want to change this).
+	t.Run("decrease setting", func(t *testing.T) {
+		tr, maxChildren, settings := initTracer()
+		root := tr.StartSpan("root", Recordable)
+		StartRecording(root, SnowballRecording)
+		ctx := opentracing.ContextWithSpan(context.Background(), root)
+		// Only the first 3rd of these should get recorded.
+		for i := 0; i < int(maxChildren/2); i++ {
+			addLocalChild(ctx, i)
+		}
+
+		maxChildSpansPerSpan.Override(settings, maxChildren/2)
+		// None of these should get recorded.
+		for i := 0; i < int(maxChildren*3); i++ {
+			addLocalChild(ctx, i)
+		}
+		root.Finish()
+		recording := GetRecording(root)
+		require.Len(t, recording, int(maxChildren/2+1))
+	})
+
+	// Ensure that the limit is enforced when mixing adding local children and
+	// larger remote spans concurrently.
+	t.Run("concurrent random mix", func(t *testing.T) {
+		tr, maxChildSpans, _ := initTracer()
+		root := tr.StartSpan("root", Recordable)
+		StartRecording(root, SnowballRecording)
+		ctx := opentracing.ContextWithSpan(context.Background(), root)
+		var wg sync.WaitGroup
+		for written := 0; written < int(maxChildSpans*2); {
+			r := rand.Float64()
+			switch {
+			case r < .5: // add local child
+				wg.Add(1)
+				go func(i int) {
+					defer wg.Done()
+					addLocalChild(ctx, i)
+				}(written)
+				written++
+			default: // add some remote spans
+				children := rand.Intn(int(maxChildSpans) / 2)
+				wg.Add(1)
+				go func(i, children int) {
+					defer wg.Done()
+					assert.NoError(t, ImportRemoteSpans(root, mkRemoteSpan(tr, i, children)))
+				}(written, children)
+				written += 1 + children
+			}
+		}
+		wg.Wait()
+		root.Finish()
+		recording := GetRecording(root)
+		require.Len(t, recording, int(maxChildSpans+1))
+	})
+}
 
 func TestRecordingString(t *testing.T) {
 	tr := NewTracer()

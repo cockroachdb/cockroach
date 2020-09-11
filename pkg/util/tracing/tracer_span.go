@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -646,8 +647,14 @@ func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
 	remoteSpans[0].ParentSpanID = s.SpanID
 
 	s.mu.Lock()
-	s.mu.recording.remoteSpans = append(s.mu.recording.remoteSpans, remoteSpans...)
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	if remaining := s.remainingChildSpanCapacityLocked(); remaining > 0 {
+		if remaining < int64(len(remoteSpans)) {
+			remoteSpans = remoteSpans[:remaining]
+		}
+		s.mu.recording.remoteSpans = append(s.mu.recording.remoteSpans, remoteSpans...)
+	}
+	// TODO(ajwerner): Add a log record when totalChildSpans reaches maxChildren.
 	return nil
 }
 
@@ -938,8 +945,31 @@ func (s *span) getRecordingLocked() RecordedSpan {
 
 func (s *span) addChild(child *span) {
 	s.mu.Lock()
-	s.mu.recording.children = append(s.mu.recording.children, child)
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	if s.remainingChildSpanCapacityLocked() > 0 {
+		s.mu.recording.children = append(s.mu.recording.children, child)
+	}
+	// TODO(ajwerner): Add a log record when totalChildren reaches maxChildren.
+}
+
+func (s *span) getMaxChildSpans() int64 {
+	return atomic.LoadInt64(&s.tracer.maxChildSpans)
+}
+
+// remainingChildSpanCapacityLocked returns the remaining number of child spans
+// or remote spans which may be added. This method never returns a negative
+// number.
+func (s *span) remainingChildSpanCapacityLocked() int64 {
+	maxChildren := s.getMaxChildSpans()
+	if maxChildren == 0 { // 0 means infinite
+		return math.MaxInt64
+	}
+	total := int64(len(s.mu.recording.children) + len(s.mu.recording.remoteSpans))
+	remaining := maxChildren - total
+	if remaining < 0 {
+		remaining = 0
+	}
+	return remaining
 }
 
 type noopSpanContext struct{}

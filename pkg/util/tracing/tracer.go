@@ -70,6 +70,14 @@ var zipkinCollector = settings.RegisterPublicStringSetting(
 	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
 )
 
+// Bound the number of children in a span by default to avoid unbounded memory
+// allocation. The default value was pulled out of thin air and is totally
+// unprincipled.
+var maxChildSpansPerSpan = settings.RegisterNonNegativeIntSetting(
+	"trace.span.max_child_spans",
+	"if non-zero, controls the maximum number of children spans which will be recorded",
+	10000)
+
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //
 //  - forwarding events to x/net/trace instances
@@ -101,6 +109,9 @@ type Tracer struct {
 
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
+
+	// maxChildSpans is set atomically by a cluster setting.
+	maxChildSpans int64
 
 	// Pointer to shadowTracer, if using one.
 	shadowTracer unsafe.Pointer
@@ -134,12 +145,17 @@ func (t *Tracer) Configure(sv *settings.Values) {
 		}
 		atomic.StoreInt32(&t._useNetTrace, nt)
 	}
-
-	reconfigure()
+	setMaxChildSpansPerSpan := func() {
+		atomic.StoreInt64(&t.maxChildSpans, maxChildSpansPerSpan.Get(sv))
+	}
 
 	enableNetTrace.SetOnChange(sv, reconfigure)
 	lightstepToken.SetOnChange(sv, reconfigure)
 	zipkinCollector.SetOnChange(sv, reconfigure)
+	maxChildSpansPerSpan.SetOnChange(sv, setMaxChildSpansPerSpan)
+
+	reconfigure()
+	setMaxChildSpansPerSpan()
 }
 
 func (t *Tracer) useNetTrace() bool {
