@@ -40,6 +40,7 @@ func setExplainBundleResult(
 	ast tree.Statement,
 	trace tracing.Recording,
 	plan *planTop,
+	placeholders *tree.PlaceholderInfo,
 	ie *InternalExecutor,
 	execCfg *ExecutorConfig,
 ) error {
@@ -48,7 +49,7 @@ func setExplainBundleResult(
 
 	var text []string
 	func() {
-		bundle, err := buildStatementBundle(ctx, execCfg.DB, ie, plan, trace)
+		bundle, err := buildStatementBundle(ctx, execCfg.DB, ie, plan, trace, placeholders)
 		if err != nil {
 			// TODO(radu): we cannot simply set an error on the result here without
 			// changing the executor logic (e.g. an implicit transaction could have
@@ -151,12 +152,17 @@ type diagnosticsBundle struct {
 // the statement. It generates a bundle for storage in
 // system.statement_diagnostics.
 func buildStatementBundle(
-	ctx context.Context, db *kv.DB, ie *InternalExecutor, plan *planTop, trace tracing.Recording,
+	ctx context.Context,
+	db *kv.DB,
+	ie *InternalExecutor,
+	plan *planTop,
+	trace tracing.Recording,
+	placeholders *tree.PlaceholderInfo,
 ) (diagnosticsBundle, error) {
 	if plan == nil {
 		return diagnosticsBundle{}, errors.AssertionFailedf("execution terminated early")
 	}
-	b := makeStmtBundleBuilder(db, ie, plan, trace)
+	b := makeStmtBundleBuilder(db, ie, plan, trace, placeholders)
 
 	b.addStatement()
 	b.addOptPlans()
@@ -177,16 +183,21 @@ type stmtBundleBuilder struct {
 	db *kv.DB
 	ie *InternalExecutor
 
-	plan  *planTop
-	trace tracing.Recording
+	plan         *planTop
+	trace        tracing.Recording
+	placeholders *tree.PlaceholderInfo
 
 	z memZipper
 }
 
 func makeStmtBundleBuilder(
-	db *kv.DB, ie *InternalExecutor, plan *planTop, trace tracing.Recording,
+	db *kv.DB,
+	ie *InternalExecutor,
+	plan *planTop,
+	trace tracing.Recording,
+	placeholders *tree.PlaceholderInfo,
 ) stmtBundleBuilder {
-	b := stmtBundleBuilder{db: db, ie: ie, plan: plan, trace: trace}
+	b := stmtBundleBuilder{db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders}
 	b.z.Init()
 	return b
 }
@@ -200,8 +211,19 @@ func (b *stmtBundleBuilder) addStatement() {
 	cfg.Simplify = true
 	cfg.Align = tree.PrettyNoAlign
 	cfg.JSONFmt = true
+	output := cfg.Pretty(b.plan.stmt.AST)
 
-	b.z.AddFile("statement.txt", cfg.Pretty(b.plan.stmt.AST))
+	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
+		var buf bytes.Buffer
+		buf.WriteString(output)
+		buf.WriteString("\n\nArguments:\n")
+		for i, v := range b.placeholders.Values {
+			fmt.Fprintf(&buf, "  %s: %v\n", tree.PlaceholderIdx(i), v)
+		}
+		output = buf.String()
+	}
+
+	b.z.AddFile("statement.txt", output)
 }
 
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
