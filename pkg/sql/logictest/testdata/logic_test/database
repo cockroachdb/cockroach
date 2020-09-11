@@ -90,6 +90,12 @@ statement ok
 CREATE DATABASE b6 TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'
 
 statement ok
+CREATE DATABASE b7 WITH CONNECTION LIMIT -1
+
+statement error only connection limit -1 is supported, got: 1
+CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
+
+statement ok
 CREATE DATABASE c
 
 query T
@@ -102,6 +108,7 @@ b3
 b4
 b5
 b6
+b7
 c
 defaultdb
 postgres
@@ -141,7 +148,8 @@ DROP DATABASE b2 CASCADE;
   DROP DATABASE b3 CASCADE;
   DROP DATABASE b4 CASCADE;
   DROP DATABASE b5 CASCADE;
-  DROP DATABASE b6 CASCADE
+  DROP DATABASE b6 CASCADE;
+  DROP DATABASE b7 CASCADE
 
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
