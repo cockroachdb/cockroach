@@ -255,7 +255,7 @@ func TestSchemaChangeGCJobTableGCdWhileWaitingForExpiration(t *testing.T) {
 
 	sqlDB.Exec(t, "CREATE DATABASE db")
 	sqlDB.Exec(t, "CREATE TABLE db.foo ()")
-	var dbID, tableID descpb.ID
+	var dbID, tableID sqlbase.ID
 	sqlDB.QueryRow(t, `
 SELECT parent_id, table_id
   FROM crdb_internal.tables
@@ -275,11 +275,11 @@ SELECT job_id, status
 
 	// Manually delete the table.
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		nameKey := sqlbase.MakeNameMetadataKey(keys.SystemSQLCodec, dbID, keys.PublicSchemaID, "foo")
+		nameKey := sqlbase.MakeNameMetadataKey(dbID, keys.PublicSchemaID, "foo")
 		if err := txn.Del(ctx, nameKey); err != nil {
 			return err
 		}
-		descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableID)
+		descKey := sqlbase.MakeDescMetadataKey(tableID)
 		return txn.Del(ctx, descKey)
 	}))
 	// Update the GC TTL to tickle the job to refresh the status and discover that

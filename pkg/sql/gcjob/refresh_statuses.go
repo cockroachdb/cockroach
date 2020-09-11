@@ -16,16 +16,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -274,16 +271,4 @@ func isProtected(
 			return true
 		})
 	return protected
-}
-
-// setupConfigWatcher returns a filter to watch zone config changes and a
-// channel that is notified when there are changes.
-func setupConfigWatcher(
-	execCfg *sql.ExecutorConfig,
-) (gossip.SystemConfigDeltaFilter, <-chan struct{}) {
-	k := keys.MakeTablePrefix(uint32(keys.ZonesTableID))
-	k = encoding.EncodeUvarintAscending(k, uint64(keys.ZonesTablePrimaryIndexID))
-	zoneCfgFilter := gossip.MakeSystemConfigDeltaFilter(k)
-	gossipUpdateC := execCfg.Gossip.RegisterSystemConfigChannel()
-	return zoneCfgFilter, gossipUpdateC
 }
