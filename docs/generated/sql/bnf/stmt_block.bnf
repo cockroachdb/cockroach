@@ -1298,7 +1298,7 @@ with_clause ::=
 	| 'WITH' 'RECURSIVE' cte_list
 
 table_name_opt_idx ::=
-	table_name opt_index_flags
+	opt_only table_name opt_index_flags opt_descendant
 
 where_clause ::=
 	'WHERE' a_expr
@@ -1752,10 +1752,18 @@ opt_sequence_option_list ::=
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*
 
+opt_only ::=
+	'ONLY'
+	| 
+
 opt_index_flags ::=
 	'@' index_name
 	| '@' '[' iconst64 ']'
 	| '@' '{' index_flags_param_list '}'
+	| 
+
+opt_descendant ::=
+	'*'
 	| 
 
 sortby_list ::=
