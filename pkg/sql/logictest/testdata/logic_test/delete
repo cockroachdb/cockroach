@@ -148,6 +148,40 @@ SELECT k, v FROM unindexed
 ----
 k v
 
+# Confirm ONLY and * are no-ops
+
+statement count 4
+INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
+
+statement count 1
+DELETE FROM ONLY unindexed WHERE k >= 4 ORDER BY k LIMIT 1
+
+query II colnames,rowsort
+SELECT k, v FROM unindexed
+----
+k v
+1 2
+3 4
+7 8
+
+statement count 1
+DELETE FROM unindexed * WHERE k >= 7
+
+query II colnames,rowsort
+SELECT k, v FROM unindexed
+----
+k v
+1 2
+3 4
+
+statement count 2
+DELETE FROM ONLY unindexed * WHERE k <=3
+
+query II colnames,rowsort
+SELECT k, v FROM unindexed
+----
+k v
+
 statement ok
 CREATE TABLE indexed (id int primary key, value int, other int, index (value))
 
