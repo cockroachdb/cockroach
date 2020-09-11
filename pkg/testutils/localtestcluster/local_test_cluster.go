@@ -221,6 +221,13 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 
+	// The heartbeat loop depends on gossip to retrieve the node ID, so we're
+	// sure to set it first.
+	nc.Set(ctx, nodeDesc.NodeID)
+	if err := ltc.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
+		t.Fatalf("unable to set node descriptor: %s", err)
+	}
+
 	if !ltc.DisableLivenessHeartbeat {
 		cfg.NodeLiveness.StartHeartbeat(ctx, ltc.stopper, []storage.Engine{ltc.Eng}, nil /* alive */)
 	}
@@ -230,10 +237,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	ltc.Stores.AddStore(ltc.Store)
-	nc.Set(ctx, nodeDesc.NodeID)
-	if err := ltc.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
-		t.Fatalf("unable to set node descriptor: %s", err)
-	}
 	ltc.Cfg = cfg
 }
 
