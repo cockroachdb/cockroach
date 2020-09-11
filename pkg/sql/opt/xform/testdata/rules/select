@@ -1551,6 +1551,8 @@ project
       │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
       │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
@@ -1589,6 +1591,8 @@ project
       │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
       │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
@@ -1626,6 +1630,8 @@ project
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -1661,6 +1667,8 @@ project
       │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         ├── pre-filterer expression
+      │         │    └── st_covers('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -1692,6 +1700,8 @@ project
       │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         ├── pre-filterer expression
+      │         │    └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -1723,6 +1733,8 @@ project
       │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         ├── pre-filterer expression
+      │         │    └── st_dfullywithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -1764,6 +1776,8 @@ project
       │         │         ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
       │         │         └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
@@ -1815,6 +1829,8 @@ project
       │         │         ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
       │         │         └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
@@ -1857,6 +1873,8 @@ project
       │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         ├── pre-filterer expression
+      │         │    └── st_dwithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -1889,6 +1907,8 @@ project
       │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         ├── pre-filterer expression
+      │         │    └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -1920,6 +1940,8 @@ project
       │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         ├── pre-filterer expression
+      │         │    └── st_dfullywithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -1959,6 +1981,8 @@ project
       │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfdO\x00\x00\x00\x00\x00\x00\x00", "B\xfdO\x00\x00\x00\x00\x00\x00\x00"]
       │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
       │         └── scan g@geog_idx
       │              ├── columns: k:1!null geog_inverted_key:7!null
@@ -2100,6 +2124,8 @@ project
       │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │         ├── pre-filterer expression
+      │         │    └── st_overlaps('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -2198,6 +2224,8 @@ project
       │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │         │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
       │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4)
       │         ├── key: (1)
       │         └── select
       │              ├── columns: k:1!null geog_inverted_key:7!null
@@ -2242,6 +2270,8 @@ project
       │         │    └── union spans
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │         │         └── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x18\x00\x00\x00\x00\x00\x00\x00")
+      │         ├── pre-filterer expression
+      │         │    └── st_covers('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -2277,6 +2307,8 @@ project
       │         │    └── union spans
       │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_coveredby('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null
@@ -2319,6 +2351,8 @@ project
       │         │         └── span expression
       │         │              ├── tight: false
       │         │              └── union spans: ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── pre-filterer expression
+      │         │    └── st_coveredby('01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840', geom:3)
       │         ├── key: (1)
       │         └── scan g@geom_idx
       │              ├── columns: k:1!null geom_inverted_key:6!null

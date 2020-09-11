@@ -239,6 +239,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"SpanExpression":    {fullName: "invertedexpr.SpanExpression", isPointer: true, usePointerIntern: true},
 		"InvertedSpans":     {fullName: "invertedexpr.InvertedSpans", passByVal: true},
 		"Persistence":       {fullName: "tree.Persistence", passByVal: true},
+		"PreFiltererState":  {fullName: "invertedexpr.PreFiltererStateForInvertedFilterer", isPointer: true, usePointerIntern: true},
 	}
 
 	// Add types of generated op and private structs.

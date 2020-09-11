@@ -38,6 +38,7 @@ func (g *execExplainGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/exec\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
 	g.w.unnest(")\n")
 
 	g.genExplainFactory()

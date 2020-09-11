@@ -17,7 +17,9 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -67,6 +69,19 @@ type DatumsToInvertedExpr interface {
 	// The bounding box pre-filtering complements the span expressions, by
 	// eliminating some false positives caused by cell coverings.
 	PreFilter(enc EncInvertedVal, preFilters []interface{}, result []bool) (bool, error)
+}
+
+// PreFiltererStateForInvertedFilterer captures state that needs to be passed
+// around in the optimizer for later construction of the
+// InvertedFiltererSpec.PreFiltererSpec.
+type PreFiltererStateForInvertedFilterer struct {
+	// Typ is the type of the original column that is indexed in the inverted
+	// index.
+	Typ *types.T
+	// Expr is an expression with a single variable.
+	Expr opt.ScalarExpr
+	// Col is the column id of the single variable in the expression.
+	Col opt.ColumnID
 }
 
 // EncInvertedVal is the encoded form of a value in the inverted column.

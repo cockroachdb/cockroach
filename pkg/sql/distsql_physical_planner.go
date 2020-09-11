@@ -2284,6 +2284,15 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 		InvertedColIdx: uint32(n.invColumn),
 		InvertedExpr:   *n.expression.ToProto(),
 	}
+	if n.preFiltererExpr != nil {
+		invertedFiltererSpec.PreFiltererSpec = &execinfrapb.InvertedFiltererSpec_PreFiltererSpec{
+			Type: n.preFiltererType,
+		}
+		if invertedFiltererSpec.PreFiltererSpec.Expression, err = physicalplan.MakeExpression(
+			n.preFiltererExpr, planCtx, nil); err != nil {
+			return nil, err
+		}
+	}
 
 	// Cases:
 	// - Last stage is a single processor (local or remote): Place the inverted

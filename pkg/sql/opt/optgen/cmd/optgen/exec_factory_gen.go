@@ -37,6 +37,7 @@ func (g *execFactoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
 	g.w.unnest(")\n\n")
 
 	g.genExecFactory()

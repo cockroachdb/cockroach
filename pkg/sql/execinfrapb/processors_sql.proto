@@ -563,6 +563,13 @@ message InvertedJoinerSpec {
 // Internal columns are | a | b | d |. The output sets b to NULL, since it does
 // not have the value of the original column that was indexed in the inverted
 // column.
+//
+// Optionally, there can be a pre-filtering spec that describes an expression
+// (derived from the original expression that was converted to inverted_expr),
+// that must evaluate to true on each inverted row. This is a performance
+// optimization -- for more details see invertedidx.PreFilterer (geometry
+// and geography inverted indexes are the only ones that currently use
+// pre-filtering).
 message InvertedFiltererSpec {
   // The index in the input row of the inverted column.
   optional uint32 inverted_col_idx = 1 [(gogoproto.nullable) = false];
@@ -570,6 +577,16 @@ message InvertedFiltererSpec {
   // The expression to evaluate. The SpansToRead are ignored since they
   // have already been used to setup the input.
   optional opt.invertedexpr.SpanExpressionProto inverted_expr = 2 [(gogoproto.nullable) = false];
+
+  // Optional pre-filtering expression.
+  message PreFiltererSpec {
+    // Expression has only one variable, @1, which refers to the column with
+    // the inverted index.
+    optional Expression expression = 1 [(gogoproto.nullable) = false];
+    // The type of the original column that was indexed in the inverted index.
+    optional sql.sem.types.T type = 2;
+  }
+  optional PreFiltererSpec pre_filterer_spec = 6;
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core

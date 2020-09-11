@@ -3766,6 +3766,8 @@ project
       │    │    │         ├── inverted expression: /18
       │    │    │         │    ├── tight: false
       │    │    │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │    │    │         ├── pre-filterer expression
+      │    │    │         │    └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16)
       │    │    │         ├── key: (13)
       │    │    │         └── scan n@nyc_neighborhoods_geo_idx
       │    │    │              ├── columns: n.gid:13!null n.geom_inverted_key:18!null
