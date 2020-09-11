@@ -225,12 +225,6 @@ type RocksDB struct {
 
 var _ Engine = &RocksDB{}
 
-// SetRocksDBOpenHook sets the DBOpenHook function that will be called during
-// RocksDB initialization. It is intended to be called by CCL code.
-func SetRocksDBOpenHook(fn unsafe.Pointer) {
-	C.DBSetOpenHook(fn)
-}
-
 // NewRocksDB allocates and returns a new RocksDB object.
 // This creates options and opens the database. If the database
 // doesn't yet exist at the specified directory, one is initialized
