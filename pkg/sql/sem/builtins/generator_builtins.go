@@ -1129,7 +1129,8 @@ func makeCheckConsistencyGenerator(
 	ctx *tree.EvalContext, args tree.Datums,
 ) (tree.ValueGenerator, error) {
 	if !ctx.Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(
+			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 	}
 
 	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
