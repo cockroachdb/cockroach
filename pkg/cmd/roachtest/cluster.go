@@ -2121,6 +2121,10 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	args := []string{
 		roachprod,
 		"start",
+		// Enable Jemalloc profiles for all roachtests. This has only
+		// minimal performance imapct and significantly improves the
+		// troubleshootability of memory-related issues.
+		"-e", "MALLOC_CONF=prof:true",
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
