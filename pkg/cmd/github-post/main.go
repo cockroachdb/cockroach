@@ -87,19 +87,19 @@ func scoped(te testEvent) scopedTest {
 }
 
 func mustPkgFromEnv() string {
-	packageName := maybePkgFromEnv()
+	packageName := os.Getenv(pkgEnv)
 	if packageName == "" {
 		panic(errors.Errorf("package name environment variable %s is not set", pkgEnv))
 	}
 	return packageName
 }
 
-func maybePkgFromEnv() string {
-	packageName, ok := os.LookupEnv(pkgEnv)
-	if !ok {
-		return ""
+func maybeEnv(envKey, defaultValue string) string {
+	v := os.Getenv(envKey)
+	if v == "" {
+		return defaultValue
 	}
-	return packageName
+	return v
 }
 
 func trimPkg(pkg string) string {
@@ -310,10 +310,7 @@ func listFailures(
 		// If we couldn't find a failing Go test, assume that a failure occurred
 		// before running Go and post an issue about that.
 		const unknown = "(unknown)"
-		packageName := maybePkgFromEnv()
-		if packageName == "" {
-			packageName = "unknown"
-		}
+		packageName := maybeEnv(pkgEnv, "unknown")
 		trimmedPkgName := trimPkg(packageName)
 		title := fmt.Sprintf("%s: package failed", trimmedPkgName)
 		if err := fileIssue(
@@ -395,10 +392,7 @@ func listFailures(
 				return errors.Wrap(err, "failed to post issue")
 			}
 		} else {
-			packageName := maybePkgFromEnv()
-			if packageName == "" {
-				packageName = "unknown"
-			}
+			packageName := maybeEnv(pkgEnv, "unknown")
 			trimmedPkgName := trimPkg(packageName)
 			title := fmt.Sprintf("%s: package timed out", trimmedPkgName)
 			// TODO(irfansharif): These are assigned to nobody given our lack of
