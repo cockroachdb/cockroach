@@ -164,8 +164,9 @@ message RestoreDetails {
   // stages have completed via these flags.
   bool prepare_completed = 8;
   bool stats_inserted = 9;
-  bool tables_published = 10;
-
+  // DescriptorsPublished indicates whether or not the descriptors written in
+  // the job have been transactionally updated after the data was restored.
+  bool descriptors_published = 10;
   int32 descriptor_coverage = 11 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
   ];
