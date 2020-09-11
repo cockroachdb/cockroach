@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -700,6 +701,8 @@ type ExecutorConfig struct {
 	// HydratedTables is a node-level cache of table descriptors which utilize
 	// user-defined types.
 	HydratedTables *hydratedtables.Cache
+
+	GCJobNotifier *gcjobnotifier.Notifier
 }
 
 // Organization returns the value of cluster.organization.
