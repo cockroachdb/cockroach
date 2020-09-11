@@ -418,12 +418,12 @@ func (tf *SchemaFeed) ingestDescriptors(
 	ctx context.Context,
 	startTS, endTS hlc.Timestamp,
 	descs []catalog.Descriptor,
-	validateFn func(ctx context.Context, desc catalog.Descriptor) error,
+	validateFn func(ctx context.Context, earliestTsBeingIngested hlc.Timestamp, desc catalog.Descriptor) error,
 ) error {
 	sort.Slice(descs, func(i, j int) bool { return descLess(descs[i], descs[j]) })
 	var validateErr error
 	for _, desc := range descs {
-		if err := validateFn(ctx, desc); validateErr == nil {
+		if err := validateFn(ctx, startTS, desc); validateErr == nil {
 			validateErr = err
 		}
 	}
@@ -482,7 +482,9 @@ func formatEvent(e TableEvent) string {
 	return fmt.Sprintf("%v->%v", formatDesc(e.Before), formatDesc(e.After))
 }
 
-func (tf *SchemaFeed) validateDescriptor(ctx context.Context, desc catalog.Descriptor) error {
+func (tf *SchemaFeed) validateDescriptor(
+	ctx context.Context, earliestTsBeingIngested hlc.Timestamp, desc catalog.Descriptor,
+) error {
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
 	switch desc := desc.(type) {
@@ -528,9 +530,16 @@ func (tf *SchemaFeed) validateDescriptor(ctx context.Context, desc catalog.Descr
 				return err
 			}
 			if !shouldFilter {
+				// Only sort the tail of the events from earliestTsBeingIngested.
+				// The head could already have been handed out and sorting is not
+				// stable.
+				idxToSort := sort.Search(len(tf.mu.events), func(i int) bool {
+					return !tf.mu.events[i].After.ModificationTime.Less(earliestTsBeingIngested)
+				})
 				tf.mu.events = append(tf.mu.events, e)
-				sort.Slice(tf.mu.events, func(i, j int) bool {
-					return descLess(tf.mu.events[i].After, tf.mu.events[j].After)
+				toSort := tf.mu.events[idxToSort:]
+				sort.Slice(toSort, func(i, j int) bool {
+					return descLess(toSort[i].After, toSort[j].After)
 				})
 			}
 		}
