@@ -76,6 +76,12 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	if !ok {
 		return nil, nil
 	}
+	if !descriptorInAcceptableState(db, flags) {
+		if flags.Required {
+			return nil, catalog.FilterDescriptorState(db)
+		}
+		return nil, nil
+	}
 	return db, nil
 }
 
@@ -122,6 +128,12 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	}
 	sc, ok := untypedDesc.(catalog.SchemaDescriptor)
 	if !ok {
+		return false, catalog.ResolvedSchema{}, nil
+	}
+	if !descriptorInAcceptableState(sc, flags) {
+		if flags.Required {
+			return false, catalog.ResolvedSchema{}, catalog.FilterDescriptorState(sc)
+		}
 		return false, catalog.ResolvedSchema{}, nil
 	}
 	return true, catalog.ResolvedSchema{
@@ -242,7 +254,12 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 
 	ok, schema, err := a.GetSchema(ctx, txn, codec, dbID, scName,
-		tree.SchemaLookupFlags{Required: flags.Required, AvoidCached: flags.AvoidCached})
+		tree.SchemaLookupFlags{
+			Required:       flags.Required,
+			AvoidCached:    flags.AvoidCached,
+			IncludeDropped: flags.IncludeDropped,
+			IncludeOffline: flags.IncludeOffline,
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -280,36 +297,40 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	if err != nil {
 		return nil, err
 	}
+	// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
+	// OFFLINE if the relevant flag is set.
+	if !descriptorInAcceptableState(desc, flags.CommonLookupFlags) {
+		if flags.Required {
+			return nil, catalog.FilterDescriptorState(desc)
+		}
+		return nil, nil
+	}
 	switch desc := desc.(type) {
 	case catalog.TableDescriptor:
-		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
-		// OFFLINE if the relevant flag is set.
-		acceptableStates := map[descpb.DescriptorState]bool{
-			descpb.DescriptorState_ADD:     true,
-			descpb.DescriptorState_PUBLIC:  true,
-			descpb.DescriptorState_OFFLINE: flags.IncludeOffline,
-			descpb.DescriptorState_DROP:    flags.IncludeDropped,
-		}
-		if acceptableStates[desc.GetState()] {
-			// Immediately after a RENAME an old name still points to the
-			// descriptor during the drain phase for the name. Do not
-			// return a descriptor during draining.
-			//
-			// The second or condition ensures that clusters < 20.1 access the
-			// system.namespace_deprecated table when selecting from system.namespace.
-			// As this table can not be renamed by users, it is okay that the first
-			// check fails.
-			if desc.GetName() == object ||
-				object == systemschema.NamespaceTableName && db == systemschema.SystemDatabaseName {
-				return desc, nil
-			}
+		// Immediately after a RENAME an old name still points to the
+		// descriptor during the drain phase for the name. Do not
+		// return a descriptor during draining.
+		// TODO (lucy): Is this check actually a good idea? If so, we should extend
+		// it to all the other descriptors.
+		//
+		// The second or condition ensures that clusters < 20.1 access the
+		// system.namespace_deprecated table when selecting from system.namespace.
+		// As this table can not be renamed by users, it is okay that the first
+		// check fails.
+		if desc.GetName() == object ||
+			object == systemschema.NamespaceTableName && db == systemschema.SystemDatabaseName {
+			return desc, nil
 		}
 		return nil, nil
 	case catalog.TypeDescriptor:
-		if desc.Dropped() {
-			return nil, nil
-		}
 		return desc, nil
 	}
 	return nil, nil
+}
+
+func descriptorInAcceptableState(desc catalog.Descriptor, flags tree.CommonLookupFlags) bool {
+	return desc.Public() ||
+		desc.Adding() ||
+		(desc.Dropped() && flags.IncludeDropped) ||
+		(desc.Offline() && flags.IncludeOffline)
 }

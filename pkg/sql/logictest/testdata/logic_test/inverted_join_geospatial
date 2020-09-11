@@ -303,7 +303,8 @@ SELECT lk, count(*), (SELECT count(*) FROM q) FROM (
 5  2  4
 6  1  4
 
-# These queries perform anti-joins, which do not currently use an inverted join.
+# Anti-join is supported by having the optimizer convert it to a left join,
+# which is then converted to an inner join.
 query I
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ORDER BY lk
@@ -319,3 +320,13 @@ ORDER BY rk
 12
 14
 15
+
+query I
+SELECT lk FROM ltable
+WHERE NOT EXISTS (
+  SELECT * FROM rtable WHERE ST_Covers(ltable.geom2, rtable.geom) AND lk > 1 AND rk > 12
+)
+----
+1
+5
+6

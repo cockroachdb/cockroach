@@ -1084,6 +1084,7 @@ message DatabaseDescriptor {
   map<string, SchemaInfo> schemas = 7 [(gogoproto.nullable) = false];
 
   optional DescriptorState state = 8 [(gogoproto.nullable) = false];
+  optional string offline_reason = 9 [(gogoproto.nullable) = false];
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
@@ -1128,6 +1129,7 @@ message TypeDescriptor {
     [(gogoproto.nullable) = false, (gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "ID"];
 
   optional DescriptorState state = 13 [(gogoproto.nullable) = false];
+  optional string offline_reason = 15 [(gogoproto.nullable) = false];
 
   // Represents the kind of type that this type descriptor represents.
   enum Kind {
@@ -1189,6 +1191,7 @@ message SchemaDescriptor {
   [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
   optional DescriptorState state = 8 [(gogoproto.nullable) = false];
+  optional string offline_reason = 9 [(gogoproto.nullable) = false];
 
   // Last modification time of the descriptor.
   optional util.hlc.Timestamp modification_time = 5 [(gogoproto.nullable) = false];
