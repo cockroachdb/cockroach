@@ -1377,6 +1377,9 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geometries, or NULL if the two points are coincident.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
 </span></td></tr>
+<tr><td><a name="st_boundary"></a><code>st_boundary(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the closure of the combinatorial boundary of this Geometry.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_box2dfromgeohash"></a><code>st_box2dfromgeohash(geohash: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Return a Box2D from a GeoHash string with max precision.</p>
 </span></td></tr>
 <tr><td><a name="st_box2dfromgeohash"></a><code>st_box2dfromgeohash(geohash: <a href="string.html">string</a>, precision: <a href="int.html">int</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Return a Box2D from a GeoHash string with supplied precision.</p>
@@ -1548,6 +1551,9 @@ from the given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_dfullywithinexclusive"></a><code>st_dfullywithinexclusive(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
+</span></td></tr>
+<tr><td><a name="st_difference"></a><code>st_difference(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the difference of two Geometries.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_dimension"></a><code>st_dimension(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of topological dimensions of a given Geometry.</p>
 </span></td></tr>
@@ -1985,6 +1991,9 @@ East is azimuth π/2 (90 degrees); south is azimuth π (180 degrees); west is az
 Negative azimuth values and values greater than 2π (360 degrees) are supported.</p>
 </span></td></tr>
 <tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the DE-9IM spatial relation between geometry_a and geometry_b.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry, bnr: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the DE-9IM spatial relation between geometry_a and geometry_b using the given boundary node rule (1:OGC/MOD2, 2:Endpoint, 3:MultivalentEndpoint, 4:MonovalentEndpoint).</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry, pattern: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the DE-9IM spatial relation between geometry_a and geometry_b matches the DE-9IM pattern.</p>
