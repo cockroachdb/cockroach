@@ -1241,6 +1241,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 | d  e  y_off |  | y |
 \ 0  0      1 /  \ 0 /</p>
 </span></td></tr>
+<tr><td><a name="st_angle"></a><code>st_angle(line1: geometry, line2: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the clockwise angle between two LINESTRING geometries, treating them as vectors between their start- and endpoints. Returns NULL if any vectors have 0 length.</p>
+</span></td></tr>
+<tr><td><a name="st_angle"></a><code>st_angle(point1: geometry, point2: geometry, point3: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the clockwise angle between the vectors formed by point2,point1 and point2,point3. The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.</p>
+</span></td></tr>
+<tr><td><a name="st_angle"></a><code>st_angle(point1: geometry, point2: geometry, point3: geometry, point4: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the clockwise angle between the vectors formed by point1,point2 and point3,point4. The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.</p>
+</span></td></tr>
 <tr><td><a name="st_area"></a><code>st_area(geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geography in meters^2. Uses a spheroid to perform the operation.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
