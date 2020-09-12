@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geodist"
+	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/xy/lineintersector"
@@ -708,4 +709,69 @@ func (c *geomDistanceCalculator) ClosestPointToEdge(
 		return p, false
 	}
 	return geodist.Point{GeomPoint: coordAdd(e.V0.GeomPoint, coordMul(ab, r))}, true
+}
+
+// FrechetDistance calculates the Frechet distance between two geometries.
+func FrechetDistance(a, b geo.Geometry) (*float64, error) {
+	if a.Empty() || b.Empty() {
+		return nil, nil
+	}
+	if a.SRID() != b.SRID() {
+		return nil, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	distance, err := geos.FrechetDistance(a.EWKB(), b.EWKB())
+	if err != nil {
+		return nil, err
+	}
+	return &distance, nil
+}
+
+// FrechetDistanceDensify calculates the Frechet distance between two geometries.
+func FrechetDistanceDensify(a, b geo.Geometry, densifyFrac float64) (*float64, error) {
+	// For Frechet distance, we take <= 0 to disable the densifyFrac parameter.
+	// This differs from HausdorffDistance, but follows PostGIS behavior.
+	if densifyFrac <= 0 {
+		return FrechetDistance(a, b)
+	}
+	if a.Empty() || b.Empty() {
+		return nil, nil
+	}
+	if a.SRID() != b.SRID() {
+		return nil, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	distance, err := geos.FrechetDistanceDensify(a.EWKB(), b.EWKB(), densifyFrac)
+	if err != nil {
+		return nil, err
+	}
+	return &distance, nil
+}
+
+// HausdorffDistance calculates the Hausdorff distance between two geometries.
+func HausdorffDistance(a, b geo.Geometry) (*float64, error) {
+	if a.Empty() || b.Empty() {
+		return nil, nil
+	}
+	if a.SRID() != b.SRID() {
+		return nil, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	distance, err := geos.HausdorffDistance(a.EWKB(), b.EWKB())
+	if err != nil {
+		return nil, err
+	}
+	return &distance, nil
+}
+
+// HausdorffDistanceDensify calculates the Hausdorff distance between two geometries.
+func HausdorffDistanceDensify(a, b geo.Geometry, densifyFrac float64) (*float64, error) {
+	if a.Empty() || b.Empty() {
+		return nil, nil
+	}
+	if a.SRID() != b.SRID() {
+		return nil, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	distance, err := geos.HausdorffDistanceDensify(a.EWKB(), b.EWKB(), densifyFrac)
+	if err != nil {
+		return nil, err
+	}
+	return &distance, nil
 }
