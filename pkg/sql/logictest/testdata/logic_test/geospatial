@@ -211,6 +211,18 @@ SELECT ST_Azimuth(ST_Point(0, 0), ST_Point(0, 0))
 ----
 NULL
 
+query RRRRRRR
+SELECT
+	degrees(ST_Angle('POINT (0 0)', 'POINT (0 1)', 'POINT (0 0)', 'POINT (1 0)')),
+	degrees(ST_Angle('POINT (0 0)', 'POINT (0 1)', 'POINT (0 0)')),
+	degrees(ST_Angle('POINT (0 0)', 'POINT (0 1)', 'POINT (1 1)')),
+	degrees(ST_Angle('POINT (0 0)', 'POINT (0 0)', 'POINT (0 0)', 'POINT (0 0)')),
+	degrees(ST_Angle('LINESTRING (0 0, 0 1)', 'LINESTRING (0 0, 1 0)')),
+	degrees(ST_Angle('LINESTRING (0 0, 0 1)', 'LINESTRING (0 0, 0 1)')),
+	degrees(ST_Angle('LINESTRING (0 0, 0 0)', 'LINESTRING (0 0, 0 0)'))
+----
+90  0  270  NULL  90  0  NULL
+
 subtest json_test
 
 # All values here should be true.
