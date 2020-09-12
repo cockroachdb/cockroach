@@ -700,3 +700,192 @@ func TestShortestLineString(t *testing.T) {
 		requireMismatchingSRIDError(t, err)
 	})
 }
+
+func TestFrechetDistance(t *testing.T) {
+	pf := func(f float64) *float64 { return &f }
+
+	testCases := []struct {
+		a        string
+		b        string
+		expected *float64
+	}{
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING EMPTY", nil},
+		{"LINESTRING EMPTY", "LINESTRING (0 0, 9 1, 2 2)", nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", pf(7.615773105863909)},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v %v", tc.a, tc.b), func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			ret, err := FrechetDistance(a, b)
+			require.NoError(t, err)
+			if tc.expected != nil && ret != nil {
+				require.Equal(t, *tc.expected, *ret)
+			} else {
+				require.Equal(t, tc.expected, ret)
+			}
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := FrechetDistance(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestFrechetDistanceDensify(t *testing.T) {
+	pf := func(f float64) *float64 { return &f }
+
+	testCases := []struct {
+		a        string
+		b        string
+		densify  float64
+		expected *float64
+	}{
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", 0.5, nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING EMPTY", 0.5, nil},
+		{"LINESTRING EMPTY", "LINESTRING (0 0, 9 1, 2 2)", 0.5, nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", -1, pf(7.615773105863909)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", -0.1, pf(7.615773105863909)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.0, pf(7.615773105863909)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.2, pf(6.627216610312356)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.4, pf(6.666666666666667)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.6, pf(6.670832032063167)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 0.8, pf(7.615773105863909)},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 1.0, pf(7.615773105863909)},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densify), func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			ret, err := FrechetDistanceDensify(a, b, tc.densify)
+			require.NoError(t, err)
+			if tc.expected != nil && ret != nil {
+				require.Equal(t, *tc.expected, *ret)
+			} else {
+				require.Equal(t, tc.expected, ret)
+			}
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := FrechetDistanceDensify(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB, 0.5)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestHausdorffDistance(t *testing.T) {
+	pf := func(f float64) *float64 { return &f }
+
+	testCases := []struct {
+		a        string
+		b        string
+		expected *float64
+	}{
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING EMPTY", nil},
+		{"LINESTRING EMPTY", "LINESTRING (0 0, 9 1, 2 2)", nil},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", pf(5.656854249492381)},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v %v", tc.a, tc.b), func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			ret, err := HausdorffDistance(a, b)
+			require.NoError(t, err)
+			if tc.expected != nil && ret != nil {
+				require.Equal(t, *tc.expected, *ret)
+			} else {
+				require.Equal(t, tc.expected, ret)
+			}
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := HausdorffDistance(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestHausdorffDistanceDensify(t *testing.T) {
+	pf := func(f float64) *float64 { return &f }
+
+	testCases := []struct {
+		a        string
+		b        string
+		densify  float64
+		expected *float64
+	}{
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", 0.5, nil},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING EMPTY", 0.5, nil},
+		{"LINESTRING EMPTY", "LINESTRING (10 10, 10 150, 130 10)", 0.5, nil},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.2, pf(66)},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.4, pf(56.66666666666667)},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.6, pf(70)},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.8, pf(14.142135623730951)},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1.0, pf(14.142135623730951)},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densify), func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			ret, err := HausdorffDistanceDensify(a, b, tc.densify)
+			require.NoError(t, err)
+			if tc.expected != nil && ret != nil {
+				require.Equal(t, *tc.expected, *ret)
+			} else {
+				require.Equal(t, tc.expected, ret)
+			}
+		})
+	}
+
+	errorTestCases := []struct {
+		a       string
+		b       string
+		densify float64
+	}{
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", -1},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", -0.1},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.0},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1.1},
+	}
+
+	t.Run("errors on invalid densify fraction", func(t *testing.T) {
+		for _, tc := range errorTestCases {
+			tc := tc
+			t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densify), func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.a)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.b)
+				require.NoError(t, err)
+
+				_, err = HausdorffDistanceDensify(a, b, tc.densify)
+				require.Error(t, err)
+			})
+		}
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := HausdorffDistanceDensify(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB, 0.5)
+		requireMismatchingSRIDError(t, err)
+	})
+}
