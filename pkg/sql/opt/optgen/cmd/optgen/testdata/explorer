@@ -51,12 +51,12 @@ define InnerJoin {
 
 [PushLimitIntoIndexJoin, Explore]
 (Limit
-    (IndexJoin
+    $join:(IndexJoin
       (Scan $scanDef:*)
       $indexJoinDef:*
     )
     (Const $limit:* & (IsPositiveInt $limit))
-    $ordering:* & (CanLimitConstrainedScan $scanDef $ordering)
+    $ordering:* & (CanLimitConstrainedScan $scanDef $ordering) & (FuncOnTypedIndexJoin $join)
 )
 =>
 (IndexJoin
@@ -106,14 +106,15 @@ func (_e *explorer) exploreLimit(
 	// [PushLimitIntoIndexJoin]
 	{
 		_partlyExplored := _rootOrd < _rootState.start
-		_state := _e.lookupExploreState(_root.Input)
+		join := _root.Input
+		_state := _e.lookupExploreState(join)
 		if !_state.fullyExplored {
 			_fullyExplored = false
 		}
 		var _member memo.RelExpr
 		for _ord := 0; _ord < _state.end; _ord++ {
 			if _member == nil {
-				_member = _root.Input.FirstExpr()
+				_member = join.FirstExpr()
 			} else {
 				_member = _member.NextExpr()
 			}
@@ -142,19 +143,21 @@ func (_e *explorer) exploreLimit(
 								if _e.funcs.IsPositiveInt(limit) {
 									ordering := _root.Ordering
 									if _e.funcs.CanLimitConstrainedScan(scanDef, ordering) {
-										if _e.o.matchedRule == nil || _e.o.matchedRule(opt.PushLimitIntoIndexJoin) {
-											_expr := &memo.IndexJoinExpr{
-												Input: _e.f.ConstructScan(
-													_e.funcs.LimitScanDef(scanDef, limit, ordering),
-												),
-												IndexJoinPrivate: *indexJoinDef,
-											}
-											_interned := _e.mem.AddIndexJoinToGroup(_expr, _root)
-											if _e.o.appliedRule != nil {
-												if _interned != _expr {
-													_e.o.appliedRule(opt.PushLimitIntoIndexJoin, _root, nil)
-												} else {
-													_e.o.appliedRule(opt.PushLimitIntoIndexJoin, _root, _interned)
+										if _e.funcs.FuncOnTypedIndexJoin(_indexJoin) {
+											if _e.o.matchedRule == nil || _e.o.matchedRule(opt.PushLimitIntoIndexJoin) {
+												_expr := &memo.IndexJoinExpr{
+													Input: _e.f.ConstructScan(
+														_e.funcs.LimitScanDef(scanDef, limit, ordering),
+													),
+													IndexJoinPrivate: *indexJoinDef,
+												}
+												_interned := _e.mem.AddIndexJoinToGroup(_expr, _root)
+												if _e.o.appliedRule != nil {
+													if _interned != _expr {
+														_e.o.appliedRule(opt.PushLimitIntoIndexJoin, _root, nil)
+													} else {
+														_e.o.appliedRule(opt.PushLimitIntoIndexJoin, _root, _interned)
+													}
 												}
 											}
 										}

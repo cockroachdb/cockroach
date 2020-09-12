@@ -37,10 +37,10 @@ define KVOptionsItem {
     Key   string
 }
 
-[PushSelectIntoJoinLeft, Normalize]
+[PushSelectIntoJoinLeftSelect, Normalize]
 (Select
     $input:(InnerJoin | InnerJoinApply
-        $left:*
+        $left:(Select)
         $right:*
         $on:*
     )
@@ -82,34 +82,37 @@ func (_f *Factory) ConstructSelect(
 	input memo.RelExpr,
 	filters memo.FiltersExpr,
 ) memo.RelExpr {
-	// [PushSelectIntoJoinLeft]
+	// [PushSelectIntoJoinLeftSelect]
 	{
 		if input.Op() == opt.InnerJoinOp || input.Op() == opt.InnerJoinApplyOp {
 			left := input.Child(0).(memo.RelExpr)
-			right := input.Child(1).(memo.RelExpr)
-			on := *input.Child(2).(*memo.FiltersExpr)
-			for i := range filters {
-				item := &filters[i]
-				leftCols := _f.funcs.OutputCols(left)
-				if _f.funcs.IsBoundBy(item, leftCols) {
-					if _f.matchedRule == nil || _f.matchedRule(opt.PushSelectIntoJoinLeft) {
-						on := on
-						_expr := _f.ConstructSelect(
-							_f.DynamicConstruct(
-								input.Op(),
-								_f.ConstructSelect(
-									left,
-									_f.funcs.ExtractBoundConditions(filters, leftCols),
-								),
-								right,
-								&on,
-							).(memo.RelExpr),
-							_f.funcs.ExtractUnboundConditions(filters, leftCols),
-						)
-						if _f.appliedRule != nil {
-							_f.appliedRule(opt.PushSelectIntoJoinLeft, nil, _expr)
+			_select, _ := left.(*memo.SelectExpr)
+			if _select != nil {
+				right := input.Child(1).(memo.RelExpr)
+				on := *input.Child(2).(*memo.FiltersExpr)
+				for i := range filters {
+					item := &filters[i]
+					leftCols := _f.funcs.OutputCols(_select)
+					if _f.funcs.IsBoundBy(item, leftCols) {
+						if _f.matchedRule == nil || _f.matchedRule(opt.PushSelectIntoJoinLeftSelect) {
+							on := on
+							_expr := _f.ConstructSelect(
+								_f.DynamicConstruct(
+									input.Op(),
+									_f.ConstructSelect(
+										_select,
+										_f.funcs.ExtractBoundConditions(filters, leftCols),
+									),
+									right,
+									&on,
+								).(memo.RelExpr),
+								_f.funcs.ExtractUnboundConditions(filters, leftCols),
+							)
+							if _f.appliedRule != nil {
+								_f.appliedRule(opt.PushSelectIntoJoinLeftSelect, nil, _expr)
+							}
+							return _expr
 						}
-						return _expr
 					}
 				}
 			}
