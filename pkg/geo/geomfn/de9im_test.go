@@ -36,6 +36,40 @@ func TestRelate(t *testing.T) {
 	}
 }
 
+func TestRelateBoundaryNodeRule(t *testing.T) {
+	testCases := []struct {
+		a        geo.Geometry
+		b        geo.Geometry
+		bnr      int
+		expected string
+	}{
+		{leftRect, rightRect, 1, "FF2F11212"},
+		{leftRect, rightRect, 2, "FF2F11212"},
+		{leftRect, rightRect, 3, "1F2F002F2"},
+		{leftRect, rightRect, 4, "FF2F11212"},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
+			ret, err := RelateBoundaryNodeRule(tc.a, tc.b, tc.bnr)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+
+	t.Run("errors on invalid BNR", func(t *testing.T) {
+		_, err := RelateBoundaryNodeRule(leftRect, rightRect, 0)
+		require.Error(t, err)
+		_, err = RelateBoundaryNodeRule(leftRect, rightRect, 5)
+		require.Error(t, err)
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := RelateBoundaryNodeRule(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB, 1)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
 func TestMatchesDE9IM(t *testing.T) {
 	testCases := []struct {
 		str           string

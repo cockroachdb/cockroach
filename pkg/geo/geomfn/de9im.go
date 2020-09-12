@@ -25,6 +25,15 @@ func Relate(a geo.Geometry, b geo.Geometry) (string, error) {
 	return geos.Relate(a.EWKB(), b.EWKB())
 }
 
+// RelateBoundaryNodeRule returns the DE-9IM relation between A and B using
+// the given boundary node rule (as specified by GEOS).
+func RelateBoundaryNodeRule(a, b geo.Geometry, bnr int) (string, error) {
+	if a.SRID() != b.SRID() {
+		return "", geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	return geos.RelateBoundaryNodeRule(a.EWKB(), b.EWKB(), bnr)
+}
+
 // RelatePattern returns whether the DE-9IM relation between A and B matches.
 func RelatePattern(a geo.Geometry, b geo.Geometry, pattern string) (bool, error) {
 	if a.SRID() != b.SRID() {

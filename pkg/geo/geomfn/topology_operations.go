@@ -15,6 +15,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 )
 
+// Boundary returns the boundary of a given Geometry.
+func Boundary(g geo.Geometry) (geo.Geometry, error) {
+	// follow PostGIS behavior
+	if g.Empty() {
+		return g, nil
+	}
+	boundaryEWKB, err := geos.Boundary(g.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.ParseGeometryFromEWKB(boundaryEWKB)
+}
+
 // Centroid returns the Centroid of a given Geometry.
 func Centroid(g geo.Geometry) (geo.Geometry, error) {
 	centroidEWKB, err := geos.Centroid(g.EWKB())
@@ -43,6 +56,22 @@ func ConvexHull(g geo.Geometry) (geo.Geometry, error) {
 		return geo.Geometry{}, err
 	}
 	return geo.ParseGeometryFromEWKB(convexHullEWKB)
+}
+
+// Difference returns the difference between two given Geometries.
+func Difference(a, b geo.Geometry) (geo.Geometry, error) {
+	// follow PostGIS behavior
+	if a.Empty() || b.Empty() {
+		return a, nil
+	}
+	if a.SRID() != b.SRID() {
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	diffEWKB, err := geos.Difference(a.EWKB(), b.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.ParseGeometryFromEWKB(diffEWKB)
 }
 
 // Simplify returns a simplified Geometry.
