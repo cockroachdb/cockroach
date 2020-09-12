@@ -321,9 +321,10 @@ func (s *adminServer) DatabaseDetails(
 	// Marshal table names.
 	rows, cols, err = s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-show-tables", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: userName},
-		fmt.Sprintf("SHOW TABLES FROM %s", escDBName),
-	)
+		sessiondata.InternalExecutorOverride{User: userName, Database: req.Database},
+		`SELECT table_schema, table_name FROM information_schema.tables
+WHERE table_catalog = $1 AND table_type != 'SYSTEM VIEW';`, req.Database)
+
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
 	}
@@ -334,33 +335,28 @@ func (s *adminServer) DatabaseDetails(
 	// Marshal table names.
 	{
 		scanner := makeResultScanner(cols)
-		if a, e := len(cols), 4; a != e {
-			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
-		}
 		for _, row := range rows {
 			var schemaName, tableName string
-			if err := scanner.Scan(row, "schema_name", &schemaName); err != nil {
+			if err := scanner.Scan(row, "table_schema", &schemaName); err != nil {
 				return nil, err
-			}
-			if schemaName != "public" {
-				continue
 			}
 			if err := scanner.Scan(row, "table_name", &tableName); err != nil {
 				return nil, err
 			}
-			resp.TableNames = append(resp.TableNames, tableName)
+			resp.TableNames = append(resp.TableNames, fmt.Sprintf("%s.%s",
+				tree.NameStringP(&schemaName), tree.NameStringP(&tableName)))
 		}
 	}
 
 	// Query the descriptor ID and zone configuration for this database.
 	{
-		path, err := s.queryDescriptorIDPath(ctx, userName, []string{req.Database})
+		databaseID, err := s.queryDatabaseID(ctx, userName, req.Database)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
-		resp.DescriptorID = int64(path[1])
+		resp.DescriptorID = int64(databaseID)
 
-		id, zone, zoneExists, err := s.queryZonePath(ctx, userName, path)
+		id, zone, zoneExists, err := s.queryZonePath(ctx, userName, []descpb.ID{databaseID})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -371,7 +367,7 @@ func (s *adminServer) DatabaseDetails(
 		resp.ZoneConfig = zone
 
 		switch id {
-		case path[1]:
+		case databaseID:
 			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
 		default:
 			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
@@ -379,6 +375,34 @@ func (s *adminServer) DatabaseDetails(
 	}
 
 	return &resp, nil
+}
+
+// getFullyQualifiedTableName, given a database name and a tableName that either
+// is a unqualified name or a schema-qualified name, returns a maximally
+// qualified name: either database.table if the input wasn't schema qualified,
+// or database.schema.table if it was.
+func getFullyQualifiedTableName(dbName string, tableName string) (string, error) {
+	name, err := parser.ParseQualifiedTableName(tableName)
+	if err != nil {
+		// If we got a parse error, it could be that the user passed us an unescaped
+		// table name. Quote the whole thing and try again.
+		name, err = parser.ParseQualifiedTableName(tree.NameStringP(&tableName))
+		if err != nil {
+			return "", err
+		}
+	}
+	if !name.ExplicitSchema {
+		// If the schema wasn't explicitly set, craft the qualified table name to be
+		// database.table.
+		name.SchemaName = tree.Name(dbName)
+		name.ExplicitSchema = true
+	} else {
+		// Otherwise, add the database to the beginning of the name:
+		// database.schema.table.
+		name.CatalogName = tree.Name(dbName)
+		name.ExplicitCatalog = true
+	}
+	return name.String(), nil
 }
 
 // TableDetails is an endpoint that returns columns, indices, and other
@@ -392,11 +416,10 @@ func (s *adminServer) TableDetails(
 		return nil, err
 	}
 
-	escDBName := tree.NameStringP(&req.Database)
-	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
-	// grammar to allow that.
-	escTableName := tree.NameStringP(&req.Table)
-	escQualTable := fmt.Sprintf("%s.%s", escDBName, escTableName)
+	escQualTable, err := getFullyQualifiedTableName(req.Database, req.Table)
+	if err != nil {
+		return nil, err
+	}
 
 	var resp serverpb.TableDetailsResponse
 
@@ -579,14 +602,17 @@ func (s *adminServer) TableDetails(
 	var tableID descpb.ID
 	// Query the descriptor ID and zone configuration for this table.
 	{
-		path, err := s.queryDescriptorIDPath(ctx, userName, []string{req.Database, req.Table})
+		databaseID, err := s.queryDatabaseID(ctx, userName, req.Database)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
-		tableID = path[2]
+		tableID, err = s.queryTableID(ctx, userName, req.Database, escQualTable)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
 		resp.DescriptorID = int64(tableID)
 
-		id, zone, zoneExists, err := s.queryZonePath(ctx, userName, path)
+		id, zone, zoneExists, err := s.queryZonePath(ctx, userName, []descpb.ID{databaseID, tableID})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -597,9 +623,9 @@ func (s *adminServer) TableDetails(
 		resp.ZoneConfig = zone
 
 		switch id {
-		case path[1]:
+		case databaseID:
 			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
-		case path[2]:
+		case tableID:
 			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_TABLE
 		default:
 			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
@@ -640,21 +666,19 @@ func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	// TODO(someone): perform authorization based on the requesting user's
-	// SELECT privilege over the requested table.
 	userName, err := s.requireAdminUser(ctx)
 	if err != nil {
 		return nil, err
 	}
+	escQualTable, err := getFullyQualifiedTableName(req.Database, req.Table)
+	if err != nil {
+		return nil, err
+	}
 
-	// Get table span.
-	path, err := s.queryDescriptorIDPath(
-		ctx, userName, []string{req.Database, req.Table},
-	)
+	tableID, err := s.queryTableID(ctx, userName, req.Database, escQualTable)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	tableID := path[2]
 	tableSpan := generateTableSpan(tableID)
 
 	return s.statsForSpan(ctx, tableSpan)
@@ -2334,23 +2358,22 @@ func (s *adminServer) queryZonePath(
 	return 0, *zonepb.NewZoneConfig(), false, nil
 }
 
-// queryNamespaceID queries for the ID of the namespace with the given name and
-// parent ID.
-func (s *adminServer) queryNamespaceID(
-	ctx context.Context, userName string, parentID descpb.ID, name string,
+// queryDatabaseID queries for the ID of the database with the given name.
+func (s *adminServer) queryDatabaseID(
+	ctx context.Context, userName string, name string,
 ) (descpb.ID, error) {
-	const query = `SELECT crdb_internal.get_namespace_id($1, $2)`
+	const query = `SELECT crdb_internal.get_database_id($1)`
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-query-namespace-ID", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
-		query, parentID, name,
+		query, name,
 	)
 	if err != nil {
 		return 0, err
 	}
 
 	if len(rows) != 1 {
-		return 0, errors.Errorf("invalid number of rows returned: %s (%d, %s)", query, parentID, name)
+		return 0, errors.Errorf("invalid number of rows returned: %s (%s)", query, name)
 	}
 
 	var id int64
@@ -2358,7 +2381,7 @@ func (s *adminServer) queryNamespaceID(
 	if isNull, err := scanner.IsNull(rows[0], cols[0].Name); err != nil {
 		return 0, err
 	} else if isNull {
-		return 0, errors.Errorf("namespace %s with ParentID %d not found", name, parentID)
+		return 0, errors.Errorf("database %s not found", name)
 	}
 
 	err = scanner.ScanIndex(rows[0], 0, &id)
@@ -2369,22 +2392,20 @@ func (s *adminServer) queryNamespaceID(
 	return descpb.ID(id), nil
 }
 
-// queryDescriptorIDPath converts a path of namespaces into a path of namespace
-// IDs. For example, if this function is called with a database/table name pair,
-// it will return a list of IDs consisting of the root namespace ID, the
-// databases ID, and the table ID (in that order).
-func (s *adminServer) queryDescriptorIDPath(
-	ctx context.Context, userName string, names []string,
-) ([]descpb.ID, error) {
-	path := []descpb.ID{keys.RootNamespaceID}
-	for _, name := range names {
-		id, err := s.queryNamespaceID(ctx, userName, path[len(path)-1], name)
-		if err != nil {
-			return nil, err
-		}
-		path = append(path, id)
+// queryTableID queries for the ID of the table with the given name in the
+// database with the given name. The table name may contain a schema qualifier.
+func (s *adminServer) queryTableID(
+	ctx context.Context, username string, database string, tableName string,
+) (descpb.ID, error) {
+	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
+		ctx, "admin-resolve-name", nil,
+		sessiondata.InternalExecutorOverride{User: username, Database: database},
+		"SELECT $1::regclass::oid", tableName,
+	)
+	if err != nil {
+		return descpb.InvalidID, err
 	}
-	return path, nil
+	return descpb.ID(tree.MustBeDOid(row[0]).DInt), nil
 }
 
 func (s *adminServer) dialNode(
