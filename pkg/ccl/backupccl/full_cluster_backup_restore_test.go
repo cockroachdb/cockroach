@@ -457,10 +457,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		}
 	}
 
-	sqlDBRestore.ExpectErr(
-		t, "injected error",
-		`RESTORE FROM $1`, LocalFoo,
-	)
+	sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, LocalFoo)
 	// Verify the failed RESTORE added some DROP tables.
 	// Note that the system tables here correspond to the temporary tables
 	// imported, not the system tables themselves.
@@ -479,6 +476,29 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			{"zones"},
 		},
 	)
+
+	t.Run("after offline tables", func(t *testing.T) {
+		_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(
+			t, singleNode, tempDir, InitNone,
+		)
+		defer cleanupEmptyCluster()
+
+		// Bugger the backup by injecting a failure while restoring the system data.
+		for _, server := range tcRestore.Servers {
+			registry := server.JobRegistry().(*jobs.Registry)
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.afterOfflineTableCreation = func() error {
+						return errors.New("injected error")
+					}
+					return r
+				},
+			}
+		}
+
+		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, LocalFoo)
+	})
 }
 
 // TestClusterRevisionHistory tests that cluster backups can be taken with
