@@ -68,8 +68,10 @@ message DatabaseDetailsResponse {
   // grants are the results of SHOW GRANTS for this database.
   repeated Grant grants = 1 [(gogoproto.nullable) = false];
 
-  // table_names contains the names of all tables (SHOW TABLES) in this
-  // database.
+  // table_names contains the names of all tables in this database. Note that
+  // all responses will be schema-qualified (schema.table) and that every schema
+  // or table that contains a "sql unsafe character" such as uppercase letters
+  // or dots will be surrounded with double quotes, such as "naughty schema".table.
   repeated string table_names = 2;
   // descriptor_id is an identifier used to uniquely identify this database.
   // It can be used to find events pertaining to this database by filtering on
@@ -86,7 +88,10 @@ message TableDetailsRequest {
   // database is the database that contains the table we're interested in.
   string database = 1;
 
-  // table is the name of the table that we're querying.
+  // table is the name of the table that we're querying. Table may be
+  // schema-qualified (schema.table) and each name component that contains
+  // sql unsafe characters such as . or uppercase letters must be surrounded
+  // in double quotes like "naughty schema".table.
   string table = 2;
 }
 
@@ -176,7 +181,10 @@ message TableDetailsResponse {
 message TableStatsRequest {
   // database is the database that contains the table we're interested in.
   string database = 1;
-  // table is the name of the table that we're querying.
+  // table is the name of the table that we're querying. Table may be
+  // schema-qualified (schema.table) and each name component that contains
+  // sql unsafe characters such as . or uppercase letters must be surrounded
+  // in double quotes like "naughty schema".table.
   string table = 2;
 }
 
