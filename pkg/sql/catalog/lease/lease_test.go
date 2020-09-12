@@ -611,7 +611,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 				if waitTableID != descpb.GetDescriptorID(descriptor) {
 					return
 				}
-				if descpb.GetDescriptorDropped(descriptor) {
+				if descpb.GetDescriptorState(descriptor) == descpb.DescriptorState_DROP {
 					close(deleted)
 					waitTableID = 0
 				}

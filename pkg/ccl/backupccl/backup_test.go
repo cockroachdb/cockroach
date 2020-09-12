@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -6035,6 +6036,277 @@ func TestBackupDoesNotHangOnIntent(t *testing.T) {
 
 	// observe that the backup aborted our txn.
 	require.Error(t, tx.Commit())
+}
+
+// TestRestoreResetsDescriptorVersions tests that new descriptors created while
+// restoring have their versions reset. Descriptors end up at version 2 after
+// the job is finished, since they are updated once at the end of the job to
+// make them public.
+func TestRestoreResetsDescriptorVersions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+	defer cleanupFn()
+	kvDB := tc.Server(0).DB()
+
+	// Create some descriptors and do some schema changes to bump their versions.
+	sqlDB.Exec(t, `
+CREATE DATABASE d_old;
+ALTER DATABASE d_old RENAME TO d;
+
+USE d;
+
+CREATE SCHEMA sc_old;
+ALTER SCHEMA sc_old RENAME TO sc;
+
+CREATE TABLE sc.tb (x INT);
+ALTER TABLE sc.tb ADD COLUMN a INT;
+
+CREATE TYPE sc.typ AS ENUM ('hello');
+ALTER TYPE sc.typ ADD VALUE 'hi';
+`)
+	// Back up the database.
+	sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+	// Drop the database and restore into it.
+	sqlDB.Exec(t, `DROP DATABASE d`)
+	sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+
+	dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
+	require.EqualValues(t, 2, dbDesc.Version)
+
+	schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+	require.EqualValues(t, 2, schemaDesc.Version)
+
+	tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
+	require.EqualValues(t, 2, tableDesc.Version)
+
+	typeDesc := catalogkv.TestingGetTypeDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "typ")
+	require.EqualValues(t, 2, typeDesc.Version)
+}
+
+func TestOfflineDescriptorsDuringRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var state = struct {
+		mu syncutil.Mutex
+		// Closed when the restore job has reached the point right before publishing
+		// descriptors.
+		beforePublishingNotification chan struct{}
+		// Closed when we're ready to resume with the restore.
+		continueNotification chan struct{}
+	}{}
+	initBackfillNotification := func() (chan struct{}, chan struct{}) {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		state.beforePublishingNotification = make(chan struct{})
+		state.continueNotification = make(chan struct{})
+		return state.beforePublishingNotification, state.continueNotification
+	}
+	notifyBackfill := func(ctx context.Context) {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		if state.beforePublishingNotification != nil {
+			close(state.beforePublishingNotification)
+			state.beforePublishingNotification = nil
+		}
+		select {
+		case <-state.continueNotification:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+
+	t.Run("restore-database", func(t *testing.T) {
+		ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		kvDB := tc.Server(0).DB()
+
+		for _, server := range tc.Servers {
+			registry := server.JobRegistry().(*jobs.Registry)
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.beforePublishingDescriptors = func() error {
+						notifyBackfill(ctx)
+						return nil
+					}
+					return r
+				},
+			}
+		}
+
+		sqlDB.Exec(t, `
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc;
+CREATE TABLE sc.tb (x INT);
+CREATE TYPE sc.typ AS ENUM ('hello');
+`)
+
+		// Back up the database.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+		// Drop the database and restore into it.
+		sqlDB.Exec(t, `DROP DATABASE d`)
+
+		beforePublishingNotif, continueNotif := initBackfillNotification()
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			if _, err := sqlDB.DB.ExecContext(ctx, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`); err != nil {
+				t.Fatal(err)
+			}
+			return nil
+		})
+
+		<-beforePublishingNotif
+
+		// Verify that the descriptors are offline.
+
+		dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, dbDesc.State)
+
+		schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.State)
+
+		tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.State)
+
+		typeDesc := catalogkv.TestingGetTypeDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "typ")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.State)
+
+		// Verify that the descriptors are not visible.
+		// TODO (lucy): Arguably there should be a SQL test where we manually create
+		// the offline descriptors. This part doesn't have much to do with RESTORE
+		// per se.
+
+		// Sometimes name resolution doesn't result in an "offline" error because
+		// the lookups are performed in planner.LookupObject(), which sets the
+		// Required flag to false so that callers can decide what to do with a
+		// negative result, but also means that we never generate the error in the
+		// first place. Right now we just settle for having some error reported, even
+		// if it's not the ideal error.
+
+		sqlDB.CheckQueryResults(t, `SHOW DATABASES`, [][]string{{"data"}, {"defaultdb"}, {"postgres"}, {"system"}})
+
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `USE d`)
+
+		sqlDB.ExpectErr(t, `target database or schema does not exist`, `SHOW TABLES FROM d`)
+		sqlDB.ExpectErr(t, `target database or schema does not exist`, `SHOW TABLES FROM d.sc`)
+
+		sqlDB.ExpectErr(t, `relation "d.sc.tb" does not exist`, `SELECT * FROM d.sc.tb`)
+		sqlDB.ExpectErr(t, `relation "d.sc.tb" does not exist`, `ALTER TABLE d.sc.tb ADD COLUMN b INT`)
+
+		sqlDB.ExpectErr(t, `type "d.sc.typ" does not exist`, `ALTER TYPE d.sc.typ RENAME TO typ2`)
+
+		sqlDB.ExpectErr(t, `cannot create "d.sc.other" because the target database or schema does not exist`, `CREATE TABLE d.sc.other()`)
+
+		close(continueNotif)
+		require.NoError(t, g.Wait())
+	})
+
+	t.Run("restore-into-existing-database", func(t *testing.T) {
+		ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		kvDB := tc.Server(0).DB()
+
+		for _, server := range tc.Servers {
+			registry := server.JobRegistry().(*jobs.Registry)
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.beforePublishingDescriptors = func() error {
+						notifyBackfill(ctx)
+						return nil
+					}
+					return r
+				},
+			}
+		}
+
+		sqlDB.Exec(t, `
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc;
+CREATE TABLE sc.tb (x INT);
+CREATE TYPE sc.typ AS ENUM ('hello');
+`)
+
+		// Back up the database.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+		// Drop the database.
+		sqlDB.Exec(t, `DROP DATABASE d`)
+
+		// Create a new database and restore into it.
+		sqlDB.Exec(t, `CREATE DATABASE newdb`)
+
+		beforePublishingNotif, continueNotif := initBackfillNotification()
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			if _, err := sqlDB.DB.ExecContext(ctx, `RESTORE d.* FROM 'nodelocal://0/test/' WITH into_db='newdb'`); err != nil {
+				t.Fatal(err)
+			}
+			return nil
+		})
+
+		<-beforePublishingNotif
+
+		// Verify that the descriptors are offline.
+
+		dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
+		schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.State)
+
+		tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "newdb", "sc", "tb")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.State)
+
+		typeDesc := catalogkv.TestingGetTypeDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "newdb", "sc", "typ")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.State)
+
+		// Verify that the descriptors are not visible.
+		// TODO (lucy): Arguably there should be a SQL test where we manually create
+		// the offline descriptors. This part doesn't have much to do with RESTORE
+		// per se.
+
+		// Sometimes name resolution doesn't result in an "offline" error because
+		// the lookups are performed in planner.LookupObject(), which sets the
+		// Required flag to false so that callers can decide what to do with a
+		// negative result, but also means that we never generate the error in the
+		// first place. Right now we just settle for having some error reported, even
+		// if it's not the ideal error.
+
+		sqlDB.Exec(t, `USE newdb`)
+
+		sqlDB.CheckQueryResults(t, `SHOW TABLES`, [][]string{})
+		sqlDB.CheckQueryResults(t, `SHOW TYPES`, [][]string{})
+		sqlDB.CheckQueryResults(t, `SHOW SCHEMAS`, [][]string{
+			{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"},
+		})
+
+		sqlDB.ExpectErr(t, `target database or schema does not exist`, `SHOW TABLES FROM newdb.sc`)
+
+		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `SELECT * FROM newdb.sc.tb`)
+		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `SELECT * FROM sc.tb`)
+		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `ALTER TABLE newdb.sc.tb ADD COLUMN b INT`)
+		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `ALTER TABLE sc.tb ADD COLUMN b INT`)
+
+		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `ALTER TYPE newdb.sc.typ RENAME TO typ2`)
+		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `ALTER TYPE sc.typ RENAME TO typ2`)
+
+		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `ALTER SCHEMA sc RENAME TO sc2`)
+
+		close(continueNotif)
+		require.NoError(t, g.Wait())
+
+	})
 }
 
 // TestManifestBitFlip tests that we can detect a corrupt manifest when a bit

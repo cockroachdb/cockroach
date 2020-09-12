@@ -59,10 +59,8 @@ type Descriptor interface {
 	TypeName() string
 	GetAuditMode() descpb.TableDescriptor_AuditMode
 
+	Public() bool
 	Adding() bool
-	// Note: Implementers of Dropped() should also update the implementation
-	// (*descpb.Descriptor).Dropped(). These implementations are not shared
-	// behind this interface.
 	Dropped() bool
 	Offline() bool
 	GetOfflineReason() string

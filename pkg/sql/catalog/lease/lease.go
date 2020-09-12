@@ -1849,8 +1849,8 @@ func (m *Manager) refreshLeases(
 					}
 				}
 
-				id, version, name, dropped, offline := descpb.GetDescriptorMetadata(desc)
-				goingOffline := offline || dropped
+				id, version, name, state := descpb.GetDescriptorMetadata(desc)
+				goingOffline := state == descpb.DescriptorState_DROP || state == descpb.DescriptorState_OFFLINE
 				// Try to refresh the lease to one >= this version.
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (offline %v)",
 					id, version, goingOffline)
@@ -2020,7 +2020,7 @@ func (m *Manager) watchForRangefeedUpdates(
 			return
 		}
 		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, ev.Value.Timestamp)
-		id, version, name, _, _ := descpb.GetDescriptorMetadata(&descriptor)
+		id, version, name, _ := descpb.GetDescriptorMetadata(&descriptor)
 		if log.V(2) {
 			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
 				ev.Key, id, name, version)
@@ -2079,7 +2079,7 @@ func (m *Manager) handleUpdatedSystemCfg(
 			return
 		}
 		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, kv.Value.Timestamp)
-		id, version, name, _, _ := descpb.GetDescriptorMetadata(&descriptor)
+		id, version, name, _ := descpb.GetDescriptorMetadata(&descriptor)
 		if log.V(2) {
 			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
 				kv.Key, id, name, version)
