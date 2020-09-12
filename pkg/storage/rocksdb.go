@@ -152,6 +152,12 @@ type RocksDBCache struct {
 	cache *C.DBCache
 }
 
+// SetRocksDBOpenHook sets the DBOpenHook function that will be called during
+// RocksDB initialization. It is intended to be called by CCL code.
+func SetRocksDBOpenHook(fn unsafe.Pointer) {
+	C.DBSetOpenHook(fn)
+}
+
 // NewRocksDBCache creates a new cache of the specified size. Note that the
 // cache is refcounted internally and starts out with a refcount of one (i.e.
 // Release() should be called after having used the cache).
