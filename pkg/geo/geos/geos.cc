@@ -94,6 +94,8 @@ typedef CR_GEOS_Geometry (*CR_GEOS_MakeValid_r)(CR_GEOS_Handle, CR_GEOS_Geometry
 
 typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
 typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
+typedef int (*CR_GEOS_MinimumClearance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
+typedef CR_GEOS_Geometry (*CR_GEOS_MinimumClearanceLine_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef int (*CR_GEOS_Normalize_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef CR_GEOS_Geometry (*CR_GEOS_LineMerge_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
@@ -187,6 +189,8 @@ struct CR_GEOS {
 
   CR_GEOS_Area_r GEOSArea_r;
   CR_GEOS_Length_r GEOSLength_r;
+  CR_GEOS_MinimumClearance_r GEOSMinimumClearance_r;
+  CR_GEOS_MinimumClearanceLine_r GEOSMinimumClearanceLine_r;
   CR_GEOS_Normalize_r GEOSNormalize_r;
   CR_GEOS_LineMerge_r GEOSLineMerge_r;
 
@@ -273,6 +277,8 @@ struct CR_GEOS {
     INIT(GEOSMakeValid_r);
     INIT(GEOSArea_r);
     INIT(GEOSLength_r);
+    INIT(GEOSMinimumClearance_r);
+    INIT(GEOSMinimumClearanceLine_r);
     INIT(GEOSNormalize_r);
     INIT(GEOSLineMerge_r);
     INIT(GEOSisSimple_r);
@@ -536,6 +542,42 @@ CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
 
 CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
   return CR_GEOS_UnaryOperator(lib, lib->GEOSLength_r, a, ret);
+}
+
+CR_GEOS_Status CR_GEOS_MinimumClearance(CR_GEOS* lib, CR_GEOS_Slice g, double* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, g);
+  *ret = 0;
+  if (geom != nullptr) {
+    auto r = lib->GEOSMinimumClearance_r(handle, geom, ret);
+    if (r == 2) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_MinimumClearanceLine(CR_GEOS* lib, CR_GEOS_Slice g,
+                                            CR_GEOS_String* clearanceEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  *clearanceEWKB = {.data = NULL, .len = 0};
+
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, g);
+  if (geom != nullptr) {
+    auto clearance = lib->GEOSMinimumClearanceLine_r(handle, geom);
+    auto srid = lib->GEOSGetSRID_r(handle, clearance);
+    CR_GEOS_writeGeomToEWKB(lib, handle, clearance, clearanceEWKB, srid);
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
 }
 
 CR_GEOS_Status CR_GEOS_Normalize(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_String* normalizedEWKB) {
