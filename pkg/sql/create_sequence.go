@@ -90,7 +90,7 @@ func doCreateSequence(
 		return err
 	}
 
-	privs := createInheritedPrivilegesFromDBDesc(dbDesc, params.SessionData().User)
+	privs := CreateInheritedPrivilegesFromDBDesc(dbDesc, params.SessionData().User)
 
 	if persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempSequenceCounter)
