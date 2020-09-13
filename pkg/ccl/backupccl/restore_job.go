@@ -282,6 +282,7 @@ rangeLoop:
 func WriteDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
+	user string,
 	descsCol *descs.Collection,
 	databases []catalog.DatabaseDescriptor,
 	schemas []catalog.SchemaDescriptor,
@@ -298,14 +299,15 @@ func WriteDescriptors(
 		wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
 		for i := range databases {
 			desc := databases[i]
-			// If the restore is not a full cluster restore we cannot know that
-			// the users on the restoring cluster match the ones that were on the
-			// cluster that was backed up. So we wipe the privileges on the database.
-			if descCoverage != tree.AllDescriptors {
+			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, desc, user, wroteDBs, descCoverage)
+			if err != nil {
+				return err
+			}
+			if updatedPrivileges != nil {
 				if mut, ok := desc.(*dbdesc.Mutable); ok {
-					mut.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
+					mut.Privileges = updatedPrivileges
 				} else {
-					log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
+					log.Fatalf(ctx, "wrong type for database %d, %T, expected Mutable",
 						desc.GetID(), desc)
 				}
 			}
@@ -325,6 +327,18 @@ func WriteDescriptors(
 		// Write namespace and descriptor entries for each schema.
 		for i := range schemas {
 			sc := schemas[i]
+			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, sc, user, wroteDBs, descCoverage)
+			if err != nil {
+				return err
+			}
+			if updatedPrivileges != nil {
+				if mut, ok := sc.(*schemadesc.Mutable); ok {
+					mut.Privileges = updatedPrivileges
+				} else {
+					log.Fatalf(ctx, "wrong type for schema %d, %T, expected Mutable",
+						sc.GetID(), sc)
+				}
+			}
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, sc.(catalog.MutableDescriptor), b,
 			); err != nil {
@@ -336,30 +350,9 @@ func WriteDescriptors(
 
 		for i := range tables {
 			table := tables[i]
-			// For full cluster restore, keep privileges as they were.
-			var updatedPrivileges *descpb.PrivilegeDescriptor
-			if wrote, ok := wroteDBs[table.GetParentID()]; ok {
-				// Leave the privileges of the temp system tables as
-				// the default.
-				if descCoverage != tree.AllDescriptors || wrote.GetName() == restoreTempSystemDB {
-					updatedPrivileges = wrote.GetPrivileges()
-				}
-			} else {
-				parentDBDesc, err := descsCol.GetMutableDescriptorByID(ctx,
-					table.GetParentID(), txn)
-				parentDB := parentDBDesc.(*dbdesc.Mutable)
-				if err != nil {
-					return errors.Wrapf(err,
-						"failed to lookup parent DB %d", errors.Safe(table.GetParentID()))
-				}
-				// We don't check priv's here since we checked them during job planning.
-
-				// On full cluster restore, keep the privs as they are in the backup.
-				if descCoverage != tree.AllDescriptors {
-					// Default is to copy privs from restoring parent db, like CREATE TABLE.
-					// TODO(dt): Make this more configurable.
-					updatedPrivileges = protoutil.Clone(parentDB.GetPrivileges()).(*descpb.PrivilegeDescriptor)
-				}
+			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, table, user, wroteDBs, descCoverage)
+			if err != nil {
+				return err
 			}
 			if updatedPrivileges != nil {
 				if mut, ok := table.(*tabledesc.Mutable); ok {
@@ -391,6 +384,18 @@ func WriteDescriptors(
 		// the system.descriptor table.
 		for i := range types {
 			typ := types[i]
+			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, typ, user, wroteDBs, descCoverage)
+			if err != nil {
+				return err
+			}
+			if updatedPrivileges != nil {
+				if mut, ok := typ.(*typedesc.Mutable); ok {
+					mut.Privileges = updatedPrivileges
+				} else {
+					log.Fatalf(ctx, "wrong type for type %d, %T, expected Mutable",
+						typ.GetID(), typ)
+				}
+			}
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, typ.(catalog.MutableDescriptor), b,
 			); err != nil {
@@ -947,7 +952,7 @@ func createImportingDescriptors(
 			) error {
 				// Write the new descriptors which are set in the OFFLINE state.
 				if err := WriteDescriptors(
-					ctx, txn, descsCol, databases, writtenSchemas, tables, writtenTypes,
+					ctx, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
 					details.DescriptorCoverage, r.settings, nil, /* extra */
 				); err != nil {
 					return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
@@ -1698,6 +1703,54 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 	}
 
 	return nil
+}
+
+func getRestoringPrivileges(
+	ctx context.Context,
+	txn *kv.Txn,
+	desc catalog.Descriptor,
+	user string,
+	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
+	descCoverage tree.DescriptorCoverage,
+) (*descpb.PrivilegeDescriptor, error) {
+	// Don't update the privileges of descriptors if we're doing a cluster
+	// restore.
+	if descCoverage == tree.AllDescriptors {
+		return nil, nil
+	}
+
+	var updatedPrivileges *descpb.PrivilegeDescriptor
+
+	switch desc := desc.(type) {
+	case catalog.TableDescriptor, catalog.SchemaDescriptor:
+		if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
+			// If we're creating a new database in this restore, the privileges of the
+			// table and schema should be that of the parent DB.
+			//
+			// Leave the privileges of the temp system tables as the default too.
+			if descCoverage != tree.AllDescriptors || wrote.GetName() == restoreTempSystemDB {
+				updatedPrivileges = wrote.GetPrivileges()
+			}
+		} else {
+			parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, desc.GetParentID())
+			if err != nil {
+				return nil, errors.Wrapf(err,
+					"failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
+			}
+
+			// Default is to copy privs from restoring parent db, like CREATE {TABLE,
+			// SCHEMA}. But also like CREATE {TABLE,SCHEMA}, we set the owner to the
+			// user creating the table (the one running the restore).
+			// TODO(dt): Make this more configurable.
+			updatedPrivileges = sql.CreateInheritedPrivilegesFromDBDesc(parentDB, user)
+		}
+	case catalog.TypeDescriptor, catalog.DatabaseDescriptor:
+		// If the restore is not a cluster restore we cannot know that the users on
+		// the restoring cluster match the ones that were on the cluster that was
+		// backed up. So we wipe the privileges on the type/database.
+		updatedPrivileges = descpb.NewDefaultPrivilegeDescriptor(user)
+	}
+	return updatedPrivileges, nil
 }
 
 // restoreSystemTables atomically replaces the contents of the system tables
