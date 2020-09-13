@@ -263,3 +263,42 @@ func TestMakePolygon(t *testing.T) {
 		})
 	}
 }
+
+func TestMakePolygonWithSRID(t *testing.T) {
+	testCases := []struct {
+		name     string
+		g        string
+		srid     int
+		expected string
+	}{
+		{
+			"Single input variant - 2D",
+			"LINESTRING(75 29,77 29,77 29, 75 29)",
+			int(geopb.DefaultGeometrySRID),
+			"SRID=0;POLYGON((75 29,77 29,77 29,75 29))",
+		},
+		{
+			"Single input variant - 2D with SRID",
+			"LINESTRING(75 29,77 29,77 29, 75 29)",
+			4326,
+			"SRID=4326;POLYGON((75 29,77 29,77 29,75 29))",
+		},
+		{
+			"Single input variant - 2D square with SRID",
+			"LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)",
+			4000,
+			"SRID=4000;POLYGON((40 80, 80 80, 80 40, 40 40, 40 80))",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := geo.MustParseGeometry(tc.g)
+			polygon, err := MakePolygonWithSRID(g, tc.srid)
+			require.NoError(t, err)
+			expected := geo.MustParseGeometry(tc.expected)
+			require.Equal(t, expected, polygon)
+			require.EqualValues(t, tc.srid, polygon.SRID())
+		})
+	}
+}

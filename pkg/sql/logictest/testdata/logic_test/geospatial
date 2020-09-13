@@ -3046,6 +3046,11 @@ SELECT ST_AsEWKT(ST_MakePolygon(
 ----
 SRID=4326;POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70))
 
+query T
+SELECT ST_AsEWKT(ST_Polygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)'), 4326))
+----
+SRID=4326;POLYGON ((75 29, 77 29, 77 29, 75 29))
+
 # Multi-Geometry related operations.
 query ITTT
 SELECT
