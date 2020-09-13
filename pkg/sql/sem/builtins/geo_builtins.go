@@ -1962,6 +1962,43 @@ Flags shown square brackets after the geometry type have the following meaning:
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_minimumclearance": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.MinimumClearance(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: `Returns the minimum distance a vertex can move before producing an invalid geometry. ` +
+					`Returns Infinity if no minimum clearance can be found (e.g. for a single point).`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_minimumclearanceline": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.MinimumClearanceLine(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns a LINESTRING spanning the minimum distance a vertex can move before producing ` +
+					`an invalid geometry. If no minimum clearance can be found (e.g. for a single point), an ` +
+					`empty LINESTRING is returned.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_numinteriorrings": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -4882,8 +4919,6 @@ Bottom Left.`,
 	"st_memsize":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48985}),
 	"st_minimumboundingcircle":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
 	"st_minimumboundingradius":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48988}),
-	"st_minimumclearance":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48989}),
-	"st_minimumclearanceline":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48990}),
 	"st_node":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
 	"st_orderingequals":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49002}),
 	"st_orientedenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
