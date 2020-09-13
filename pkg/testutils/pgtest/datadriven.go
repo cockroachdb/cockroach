@@ -204,13 +204,15 @@ func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 				code = v
 			}
 			if err := enc.Encode(struct {
-				Type    string
-				Code    string
-				Message string `json:",omitempty"`
+				Type           string
+				Code           string
+				Message        string `json:",omitempty"`
+				ConstraintName string `json:",omitempty"`
 			}{
-				Type:    "ErrorResponse",
-				Code:    code,
-				Message: errmsg.Message,
+				Type:           "ErrorResponse",
+				Code:           code,
+				Message:        errmsg.Message,
+				ConstraintName: errmsg.ConstraintName,
 			}); err != nil {
 				panic(err)
 			}
