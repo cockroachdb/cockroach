@@ -215,3 +215,20 @@ func Normalize(g geo.Geometry) (geo.Geometry, error) {
 	}
 	return geo.ParseGeometryFromEWKB(retEWKB)
 }
+
+// MinimumClearance returns the minimum distance a vertex can move to produce
+// an invalid geometry, or infinity if no clearance was found.
+func MinimumClearance(g geo.Geometry) (float64, error) {
+	return geos.MinimumClearance(g.EWKB())
+}
+
+// MinimumClearanceLine returns the line spanning the minimum distance a vertex
+// can move to produce an invalid geometry, or an empty line if no clearance was
+// found.
+func MinimumClearanceLine(g geo.Geometry) (geo.Geometry, error) {
+	retEWKB, err := geos.MinimumClearanceLine(g.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.ParseGeometryFromEWKB(retEWKB)
+}
