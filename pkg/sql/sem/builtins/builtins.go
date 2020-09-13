@@ -2984,6 +2984,39 @@ may increase either contention or retry errors, or both.`,
 			Volatility: tree.VolatilityImmutable,
 		}),
 
+	"crdb_internal.pb_to_json_index": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"pbname", types.String},
+				{"data", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				msg, err := protoreflect.DecodeMessage(
+					string(tree.MustBeDString(args[0])),
+					[]byte(tree.MustBeDBytes(args[1])),
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				j, err := func() (json.JSON, error) {
+					if indexer, ok := msg.(protoreflect.ProtoIndexer); ok {
+						return indexer.ProtoToJSONBForIndex()
+					}
+					return protoreflect.MessageToJSON(msg)
+				}()
+
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDJSON(j), nil
+			},
+			Info:       "Converts protocol message to its JSONB representation for the purpose of index creation.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
 	// Enum functions.
 	"enum_first": makeBuiltin(
 		tree.FunctionProperties{NullableArgs: true, Category: categoryEnum},

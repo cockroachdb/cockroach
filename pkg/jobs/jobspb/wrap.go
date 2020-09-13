@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -217,3 +218,23 @@ const (
 
 // SafeValue implements the redact.SafeValue interface.
 func (Type) SafeValue() {}
+
+func (p *Payload) ProtoToJSONBForIndex() (json.JSON, error) {
+	j := json.NewObjectBuilder(4)
+	j.Add("username", json.FromString(p.Username))
+	j.Add("job_type", json.FromString(p.Type().String()))
+
+	if num, err := json.FromFloat64(float64(p.StartedMicros)); err == nil {
+		j.Add("started_micros", num)
+	} else {
+		return nil, err
+	}
+
+	if num, err := json.FromFloat64(float64(p.FinishedMicros)); err == nil {
+		j.Add("finished_micros", num)
+	} else {
+		return nil, err
+	}
+
+	return j.Build(), nil
+}
