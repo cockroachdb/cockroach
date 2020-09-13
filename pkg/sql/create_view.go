@@ -119,7 +119,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
-	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
+	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
 	var newDesc *tabledesc.Mutable
 
