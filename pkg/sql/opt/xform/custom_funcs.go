@@ -345,9 +345,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// If the index is a partial index, check whether or not the filter
 		// implies the predicate.
 		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
-		var pred memo.FiltersExpr
 		if isPartialIndex {
-			pred = memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
 			remainingFilters, ok := c.im.FiltersImplyPredicate(explicitFilters, pred)
 			if !ok {
 				// The filters do not imply the predicate, so the partial index
@@ -974,7 +973,7 @@ func (c *CustomFuncs) partitionValuesFilters(
 // the Scan operator's table.
 func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 	// Don't bother matching unless there's an inverted index.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes|rejectPartialIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes)
 	return iter.Next()
 }
 
@@ -993,27 +992,40 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	sb.init(c, scanPrivate.Table)
 
 	// Iterate over all inverted indexes.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes|rejectPartialIndexes)
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes)
 	for iter.Next() {
 		var spanExpr *invertedexpr.SpanExpression
 		var spansToRead invertedexpr.InvertedSpans
 		var constraint *constraint.Constraint
-		var remaining memo.FiltersExpr
 		var geoOk, nonGeoOk bool
+		remaining := filters
+
+		// If the index is a partial index, check whether or not the filter
+		// implies the predicate.
+		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
+		if isPartialIndex {
+			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			remainingFilters, ok := c.im.FiltersImplyPredicate(remaining, pred)
+			if !ok {
+				// The filters do not imply the predicate, so the partial index
+				// cannot be used.
+				continue
+			}
+			remaining = remainingFilters
+		}
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
 		spanExpr, geoOk = invertedidx.TryConstrainGeoIndex(
-			c.e.evalCtx.Context, c.e.f, filters, scanPrivate.Table, iter.Index(),
+			c.e.evalCtx.Context, c.e.f, remaining, scanPrivate.Table, iter.Index(),
 		)
 		if geoOk {
-			// Geo index scans can never be tight, so remaining filters is always the
-			// same as filters.
-			remaining = filters
 			spansToRead = spanExpr.SpansToRead
 		} else {
 			constraint, remaining, nonGeoOk = c.tryConstrainIndex(
-				filters,
+				remaining,
 				nil, /* optionalFilters */
 				scanPrivate.Table,
 				iter.IndexOrdinal(),
