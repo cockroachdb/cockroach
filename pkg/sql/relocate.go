@@ -92,7 +92,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 				// Lookup the store in gossip.
 				var storeDesc roachpb.StoreDescriptor
 				gossipStoreKey := gossip.MakeStoreKey(storeID)
-				g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr()
+				g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
 				if err != nil {
 					return false, err
 				}

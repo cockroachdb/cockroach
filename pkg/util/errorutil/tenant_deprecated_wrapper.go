@@ -73,10 +73,10 @@ func (w TenantSQLDeprecatedWrapper) Optional() (interface{}, bool) {
 
 // OptionalErr calls Optional and returns an error (referring to the optionally
 // supplied Github issues) if the wrapped object is not available.
-func (w TenantSQLDeprecatedWrapper) OptionalErr(issueNos ...int) (interface{}, error) {
+func (w TenantSQLDeprecatedWrapper) OptionalErr(issue int) (interface{}, error) {
 	v, ok := w.Optional()
 	if !ok {
-		return nil, UnsupportedWithMultiTenancy(issueNos...)
+		return nil, UnsupportedWithMultiTenancy(issue)
 	}
 	return v, nil
 }

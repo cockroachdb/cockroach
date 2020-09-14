@@ -53,9 +53,9 @@ type NodesStatusServer interface {
 // available. If it is not, an error referring to the optionally supplied issues
 // is returned.
 func (s *OptionalNodesStatusServer) OptionalNodesStatusServer(
-	issueNos ...int,
+	issue int,
 ) (NodesStatusServer, error) {
-	v, err := s.w.OptionalErr(issueNos...)
+	v, err := s.w.OptionalErr(issue)
 	if err != nil {
 		return nil, err
 	}
