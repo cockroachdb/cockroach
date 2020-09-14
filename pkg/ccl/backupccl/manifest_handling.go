@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"path"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -569,11 +570,13 @@ func getLocalityInfo(
 	return info, nil
 }
 
+const incBackupSubdirGlob = "[0-9]*/[0-9]*.[0-9][0-9]/"
+
 // findPriorBackupNames finds "appended" incremental backups, as done by
 // findPriorBackupLocations and appends the backup manifest file name to
 // the URI.
 func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	prev, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/"+backupManifestName)
+	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestName)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
@@ -587,9 +590,24 @@ func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]s
 // layers to be manually moved/removed/etc without needing to update/maintain
 // said list.
 func findPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	prev, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/")
+	backupManifestSuffix := backupManifestName
+	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
+	}
+
+	if len(prev) == 0 {
+		// 20.1 nodes and earlier will have an oldBackupManifestName so we check for
+		// that too.
+		backupManifestSuffix = backupOldManifestName
+		prev, err = store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
+		if err != nil {
+			return nil, errors.Wrap(err, "reading previous backup layers")
+		}
+	}
+
+	for i := range prev {
+		prev[i] = strings.TrimSuffix(prev[i], "/"+backupManifestSuffix)
 	}
 	sort.Strings(prev)
 	return prev, nil
