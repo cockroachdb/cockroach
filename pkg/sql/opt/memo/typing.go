@@ -119,6 +119,9 @@ func FindFunction(
 	props, overloads := builtins.GetBuiltinProperties(name)
 	for o := range overloads {
 		overload = &overloads[o]
+		if overload.Types.Length() != e.ChildCount() {
+			continue
+		}
 		matches := true
 		for i, n := 0, e.ChildCount(); i < n; i++ {
 			typ := e.Child(i).(opt.ScalarExpr).DataType()
