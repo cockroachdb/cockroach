@@ -15,29 +15,30 @@ func _() {
 	_ = x[createTable-4]
 	_ = x[createTableAs-5]
 	_ = x[createView-6]
-	_ = x[dropColumn-7]
-	_ = x[dropColumnDefault-8]
-	_ = x[dropColumnNotNull-9]
-	_ = x[dropColumnStored-10]
-	_ = x[dropConstraint-11]
-	_ = x[dropIndex-12]
-	_ = x[dropSequence-13]
-	_ = x[dropTable-14]
-	_ = x[dropView-15]
-	_ = x[renameColumn-16]
-	_ = x[renameIndex-17]
-	_ = x[renameSequence-18]
-	_ = x[renameTable-19]
-	_ = x[renameView-20]
-	_ = x[setColumnDefault-21]
-	_ = x[setColumnNotNull-22]
-	_ = x[setColumnType-23]
-	_ = x[insertRow-24]
+	_ = x[createEnum-7]
+	_ = x[dropColumn-8]
+	_ = x[dropColumnDefault-9]
+	_ = x[dropColumnNotNull-10]
+	_ = x[dropColumnStored-11]
+	_ = x[dropConstraint-12]
+	_ = x[dropIndex-13]
+	_ = x[dropSequence-14]
+	_ = x[dropTable-15]
+	_ = x[dropView-16]
+	_ = x[renameColumn-17]
+	_ = x[renameIndex-18]
+	_ = x[renameSequence-19]
+	_ = x[renameTable-20]
+	_ = x[renameView-21]
+	_ = x[setColumnDefault-22]
+	_ = x[setColumnNotNull-23]
+	_ = x[setColumnType-24]
+	_ = x[insertRow-25]
 }
 
-const _opType_name = "addColumnaddConstraintcreateIndexcreateSequencecreateTablecreateTableAscreateViewdropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewrenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypeinsertRow"
+const _opType_name = "addColumnaddConstraintcreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumdropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewrenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypeinsertRow"
 
-var _opType_index = [...]uint16{0, 9, 22, 33, 47, 58, 71, 81, 91, 108, 125, 141, 155, 164, 176, 185, 193, 205, 216, 230, 241, 251, 267, 283, 296, 305}
+var _opType_index = [...]uint16{0, 9, 22, 33, 47, 58, 71, 81, 91, 101, 118, 135, 151, 165, 174, 186, 195, 203, 215, 226, 240, 251, 261, 277, 293, 306, 315}
 
 func (i opType) String() string {
 	if i < 0 || i >= opType(len(_opType_index)-1) {
