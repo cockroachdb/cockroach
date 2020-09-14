@@ -332,7 +332,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 		}
 	} else {
 		if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
-			keys.RootNamespaceID, keys.RootNamespaceID, name, flags.Required,
+			keys.RootNamespaceID, keys.RootNamespaceID, name, flags,
 		); refuseFurtherLookup || err != nil {
 			return nil, err
 		} else if mut := desc.mutable; mut != nil {
@@ -420,7 +420,7 @@ func (tc *Collection) getMutableObjectDescriptor(
 		dbID,
 		resolvedSchema.ID,
 		name.Object(),
-		flags.Required,
+		flags.CommonLookupFlags,
 	); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if mut := desc.mutable; mut != nil {
@@ -455,7 +455,7 @@ func (tc *Collection) getMutableUserDefinedSchemaDescriptor(
 	log.VEventf(ctx, 2, "reading mutable descriptor on '%s'", schemaName)
 	// First try the uncommitted descriptors.
 	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
-		dbID, keys.RootNamespaceID, schemaName, flags.Required,
+		dbID, keys.RootNamespaceID, schemaName, flags,
 	); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if mut := desc.mutable; mut != nil {
@@ -491,7 +491,7 @@ func (tc *Collection) getUserDefinedSchemaVersion(
 		dbID,
 		keys.RootNamespaceID,
 		schemaName,
-		flags.Required,
+		flags,
 	); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if immut := desc.immutable; immut != nil {
@@ -656,7 +656,7 @@ func (tc *Collection) GetDatabaseVersion(
 		keys.RootNamespaceID,
 		keys.RootNamespaceID,
 		name,
-		flags.Required,
+		flags,
 	); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if immut := desc.immutable; immut != nil {
@@ -833,7 +833,7 @@ func (tc *Collection) getObjectVersion(
 		dbID,
 		schemaID,
 		name.Object(),
-		flags.Required,
+		flags.CommonLookupFlags,
 	); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if immut := desc.immutable; immut != nil {
@@ -842,7 +842,7 @@ func (tc *Collection) getObjectVersion(
 			if !flags.Required {
 				return nil, nil
 			}
-			return nil, catalog.FilterDescriptorState(immut)
+			return nil, catalog.FilterDescriptorState(immut, flags.CommonLookupFlags)
 		}
 
 		log.VEventf(ctx, 2, "found uncommitted descriptor %d", immut.GetID())
@@ -919,7 +919,7 @@ func (tc *Collection) getDescriptorVersionByID(
 		if err != nil {
 			return nil, err
 		}
-		if err := catalog.FilterDescriptorState(desc); err != nil {
+		if err := catalog.FilterDescriptorState(desc, flags); err != nil {
 			return nil, err
 		}
 		return desc, nil
@@ -1005,8 +1005,19 @@ func (tc *Collection) GetMutableDescriptorByID(
 }
 
 // ResolveSchemaByID looks up a schema by ID.
+//
+// TODO(ajwerner): refactor this to take flags or more generally conform to the
+// other resolution APIs.
 func (tc *Collection) ResolveSchemaByID(
 	ctx context.Context, txn *kv.Txn, schemaID descpb.ID,
+) (catalog.ResolvedSchema, error) {
+	return tc.resolveSchemaByID(ctx, txn, schemaID, tree.SchemaLookupFlags{
+		Required: true,
+	})
+}
+
+func (tc *Collection) resolveSchemaByID(
+	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
 ) (catalog.ResolvedSchema, error) {
 	if schemaID == keys.PublicSchemaID {
 		return catalog.ResolvedSchema{
@@ -1038,22 +1049,34 @@ func (tc *Collection) ResolveSchemaByID(
 	}
 
 	// Otherwise, fall back to looking up the descriptor with the desired ID.
-	desc, err := tc.getDescriptorVersionByID(
-		ctx, txn, schemaID, tree.CommonLookupFlags{Required: true}, true /* setTxnDeadline */)
+	var desc catalog.Descriptor
+	var err error
+	if flags.RequireMutable {
+		// Note that this throws away the flags in general.
+		desc, err = tc.GetMutableDescriptorByID(ctx, schemaID, txn)
+		if err == nil {
+			err = catalog.FilterDescriptorState(desc, flags)
+		}
+	} else {
+		desc, err = tc.getDescriptorVersionByID(
+			ctx, txn, schemaID, flags, true, /* setTxnDeadline */
+		)
+	}
 	if err != nil {
 		return catalog.ResolvedSchema{}, err
 	}
 
-	schemaDesc, ok := desc.(*schemadesc.Immutable)
+	schemaDesc, ok := desc.(catalog.SchemaDescriptor)
 	if !ok {
-		return catalog.ResolvedSchema{}, pgerror.Newf(pgcode.WrongObjectType, "descriptor %d was not a schema", schemaID)
+		return catalog.ResolvedSchema{}, pgerror.Newf(pgcode.WrongObjectType,
+			"descriptor %d was not a schema", schemaID)
 	}
 
 	return catalog.ResolvedSchema{
 		Kind: catalog.SchemaUserDefined,
 		ID:   schemaID,
 		Desc: schemaDesc,
-		Name: schemaDesc.Name,
+		Name: schemaDesc.GetName(),
 	}, nil
 }
 
@@ -1061,6 +1084,9 @@ func (tc *Collection) ResolveSchemaByID(
 // present in the input TableDescriptor. It always returns the same type of
 // TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
 // are not modified during the process of metadata installation.
+//
+// TODO(ajwerner): This should accept flags to indicate whether we can resolve
+// offline descriptors.
 func (tc *Collection) hydrateTypesInTableDesc(
 	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (catalog.TableDescriptor, error) {
@@ -1074,16 +1100,19 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, desc.ParentID,
-				tree.DatabaseLookupFlags{Required: true})
+			dbDesc, err := tc.GetMutableDescriptorByID(ctx, desc.ParentID, txn)
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			sc, err := tc.ResolveSchemaByID(ctx, txn, desc.ParentSchemaID)
+			sc, err := tc.resolveSchemaByID(ctx, txn, desc.ParentSchemaID, tree.SchemaLookupFlags{
+				Required:       true,
+				RequireMutable: true,
+				IncludeOffline: true,
+			})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.Name)
+			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.Name, desc.Name)
 			return name, desc, nil
 		}
 
@@ -1435,7 +1464,7 @@ func (tc *Collection) getUncommittedDatabaseIDDeprecated(
 // cache and go to KV (where the descriptor prior to the DROP may
 // still exist).
 func (tc *Collection) getUncommittedDescriptor(
-	dbID descpb.ID, schemaID descpb.ID, name string, required bool,
+	dbID descpb.ID, schemaID descpb.ID, name string, flags tree.CommonLookupFlags,
 ) (refuseFurtherLookup bool, desc uncommittedDescriptor, err error) {
 	// Walk latest to earliest so that a DROP followed by a CREATE with the same
 	// name will result in the CREATE being seen.
@@ -1452,7 +1481,7 @@ func (tc *Collection) getUncommittedDescriptor(
 				drain.ParentID == dbID &&
 				drain.ParentSchemaID == schemaID {
 				// Name has gone away.
-				if required {
+				if flags.Required {
 					// If it's required here, say it doesn't exist.
 					err = sqlerrors.NewUndefinedRelationError(tree.NewUnqualifiedTableName(tree.Name(name)))
 				}
@@ -1465,8 +1494,9 @@ func (tc *Collection) getUncommittedDescriptor(
 		// Do we know about a descriptor with this name?
 		if lease.NameMatchesDescriptor(mutDesc, dbID, schemaID, name) {
 			// Right state?
-			if err = catalog.FilterDescriptorState(mutDesc); err != nil && !catalog.HasAddingTableError(err) {
-				if !required {
+			if err = catalog.FilterDescriptorState(mutDesc, flags); err != nil &&
+				!catalog.HasAddingTableError(err) {
+				if !flags.Required {
 					// If it's not required here, we simply say we don't have it.
 					err = nil
 				}
