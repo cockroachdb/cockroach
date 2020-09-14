@@ -671,19 +671,37 @@ Put /Table/54/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/12
 Del /Table/54/2/3/2/0
 CPut /Table/54/2/4/2/0 -> /BYTES/ (expecting does not exist)
 
-# ---------------------------------------------------------
-# INSERT partial inverted index
-# ---------------------------------------------------------
+# Tests for partial inverted indexes.
 
-# INVERTED INDEX (b) WHERE c IN ('foo', 'bar')
 statement ok
 CREATE TABLE inv (
     a INT PRIMARY KEY,
     b JSON,
     c STRING,
-    INVERTED INDEX (b) WHERE c IN ('foo', 'bar'),
+    INVERTED INDEX i (b) WHERE c IN ('foo', 'bar'),
     FAMILY (a, b, c)
 )
+
+# ---------------------------------------------------------
+# SELECT
+# ---------------------------------------------------------
+
+query T kvtrace
+SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
+----
+Scan /Table/55/2/"x"/"y"{-/PrefixEnd}
+
+query T kvtrace
+SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'foo'
+----
+Scan /Table/55/2/"x"/"y"{-/PrefixEnd}
+
+statement error index "i" is a partial inverted index and cannot be used for this query
+SELECT * FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'baz'
+
+# ---------------------------------------------------------
+# INSERT partial inverted index
+# ---------------------------------------------------------
 
 query T kvtrace
 INSERT INTO inv VALUES (1, '{"x": "y", "num": 1}', 'foo')
@@ -878,3 +896,39 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          t@b_partial (partial index)
 ·     spans          FULL SCAN
+
+query TTT
+EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
+----
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          inv@i (partial index)
+·     spans          [/'{"x": "y"}' - /'{"x": "y"}']
+
+query TTT
+EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'foo'
+----
+·                distribution   local
+·                vectorized     true
+filter           ·              ·
+ │               filter         c = 'foo'
+ └── index join  ·              ·
+      │          table          inv@primary
+      └── scan   ·              ·
+·                missing stats  ·
+·                table          inv@i (partial index)
+·                spans          [/'{"x": "y"}' - /'{"x": "y"}']
+
+query TTT
+EXPLAIN SELECT * FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
+----
+·           distribution   local
+·           vectorized     true
+index join  ·              ·
+ │          table          inv@primary
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          inv@i (partial index)
+·           spans          [/'{"x": "y"}' - /'{"x": "y"}']
