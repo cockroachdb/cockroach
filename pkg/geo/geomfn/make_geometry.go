@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -51,4 +52,18 @@ func MakePolygon(outer geo.Geometry, interior ...geo.Geometry) (geo.Geometry, er
 		return geo.Geometry{}, err
 	}
 	return geo.MakeGeometryFromGeomT(polygon)
+}
+
+// MakePolygonWithSRID is like MakePolygon but also sets the SRID, like ST_Polygon.
+func MakePolygonWithSRID(g geo.Geometry, srid int) (geo.Geometry, error) {
+	polygon, err := MakePolygon(g)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	t, err := polygon.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	geo.AdjustGeomTSRID(t, geopb.SRID(srid))
+	return geo.MakeGeometryFromGeomT(t)
 }

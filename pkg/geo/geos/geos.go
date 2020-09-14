@@ -326,6 +326,32 @@ func Area(ewkb geopb.EWKB) (float64, error) {
 	return float64(area), nil
 }
 
+// Boundary returns the boundary of an EWKB.
+func Boundary(ewkb geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_Boundary(g, goToCSlice(ewkb), &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
+// Difference returns the difference between two EWKB.
+func Difference(ewkb1 geopb.EWKB, ewkb2 geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var diffEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_Difference(g, goToCSlice(ewkb1), goToCSlice(ewkb2), &diffEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(diffEWKB), nil
+}
+
 // Length returns the length of an EWKB.
 func Length(ewkb geopb.EWKB) (float64, error) {
 	g, err := ensureInitInternal()
@@ -519,6 +545,34 @@ func MinDistance(a geopb.EWKB, b geopb.EWKB) (float64, error) {
 	return float64(distance), nil
 }
 
+// MinimumClearance returns the minimum distance a vertex can move to result in an
+// invalid geometry.
+func MinimumClearance(ewkb geopb.EWKB) (float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return 0, err
+	}
+	var distance C.double
+	if err := statusToError(C.CR_GEOS_MinimumClearance(g, goToCSlice(ewkb), &distance)); err != nil {
+		return 0, err
+	}
+	return float64(distance), nil
+}
+
+// MinimumClearanceLine returns the line spanning the minimum clearance a vertex can
+// move before producing an invalid geometry.
+func MinimumClearanceLine(ewkb geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var clearanceEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_MinimumClearanceLine(g, goToCSlice(ewkb), &clearanceEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(clearanceEWKB), nil
+}
+
 // ClipByRect clips a EWKB to the specified rectangle.
 func ClipByRect(
 	ewkb geopb.EWKB, xMin float64, yMin float64, xMax float64, yMax float64,
@@ -677,6 +731,22 @@ func Relate(a geopb.EWKB, b geopb.EWKB) (string, error) {
 	}
 	var ret C.CR_GEOS_String
 	if err := statusToError(C.CR_GEOS_Relate(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return "", err
+	}
+	if ret.data == nil {
+		return "", errors.Newf("expected DE-9IM string but found nothing")
+	}
+	return string(cStringToSafeGoBytes(ret)), nil
+}
+
+// RelateBoundaryNodeRule returns the DE-9IM relation between A and B given a boundary node rule.
+func RelateBoundaryNodeRule(a geopb.EWKB, b geopb.EWKB, bnr int) (string, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return "", err
+	}
+	var ret C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_RelateBoundaryNodeRule(g, goToCSlice(a), goToCSlice(b), C.int(bnr), &ret)); err != nil {
 		return "", err
 	}
 	if ret.data == nil {

@@ -596,6 +596,30 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_polygon": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"srid", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				srid := tree.MustBeDInt(args[1])
+				polygon, err := geomfn.MakePolygonWithSRID(g.Geometry, int(srid))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(polygon), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a new Polygon from the given LineString and sets its SRID. It is equivalent ` +
+					`to ST_MakePolygon with a single argument followed by ST_SetSRID.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	"st_geomcollfromtext":        geometryFromTextCheckShapeBuiltin(geopb.ShapeType_GeometryCollection),
 	"st_geomcollfromwkb":         geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_GeometryCollection),
@@ -1962,6 +1986,43 @@ Flags shown square brackets after the geometry type have the following meaning:
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_minimumclearance": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.MinimumClearance(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: `Returns the minimum distance a vertex can move before producing an invalid geometry. ` +
+					`Returns Infinity if no minimum clearance can be found (e.g. for a single point).`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_minimumclearanceline": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.MinimumClearanceLine(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns a LINESTRING spanning the minimum distance a vertex can move before producing ` +
+					`an invalid geometry. If no minimum clearance can be found (e.g. for a single point), an ` +
+					`empty LINESTRING is returned.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_numinteriorrings": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -3001,6 +3062,30 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+				{"geometry_b", types.Geometry},
+				{"bnr", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				bnr := tree.MustBeDInt(args[2])
+				ret, err := geomfn.RelateBoundaryNodeRule(a.Geometry, b.Geometry, int(bnr))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the DE-9IM spatial relation between geometry_a and geometry_b using the given ` +
+					`boundary node rule (1:OGC/MOD2, 2:Endpoint, 3:MultivalentEndpoint, 4:MonovalentEndpoint).`,
+				libraryUsage: usesGEOS,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_relatematch": makeBuiltin(
 		defProps(),
@@ -3143,6 +3228,24 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 	// Topology operations
 	//
 
+	"st_boundary": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				centroid, err := geomfn.Boundary(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(centroid), err
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns the closure of the combinatorial boundary of this Geometry.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_centroid": makeBuiltin(
 		defProps(),
 		append(
@@ -3210,6 +3313,24 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			types.Geometry,
 			infoBuilder{
 				info:         "Returns a geometry that represents the Convex Hull of the given geometry.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_difference": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				diff, err := geomfn.Difference(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(diff), err
+			},
+			types.Geometry,
+			infoBuilder{
+				info:         "Returns the difference of two Geometries.",
 				libraryUsage: usesGEOS,
 			},
 			tree.VolatilityImmutable,
@@ -4826,7 +4947,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_aslatlontext":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
 	"st_assvg":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
 	"st_astwkb":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48886}),
-	"st_boundary":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48888}),
 	"st_boundingdiagonal":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
 	"st_buildarea":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
 	"st_chaikinsmoothing":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),
@@ -4838,7 +4958,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_clusterwithin":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48901}),
 	"st_concavehull":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48906}),
 	"st_delaunaytriangles":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48915}),
-	"st_difference":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48917}),
 	"st_dump":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
 	"st_dumppoints":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
 	"st_dumprings":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
@@ -4856,13 +4975,10 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_memsize":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48985}),
 	"st_minimumboundingcircle":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
 	"st_minimumboundingradius":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48988}),
-	"st_minimumclearance":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48989}),
-	"st_minimumclearanceline":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48990}),
 	"st_node":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
 	"st_orderingequals":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49002}),
 	"st_orientedenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
 	"st_pointinsidecircle":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49007}),
-	"st_polygon":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49010}),
 	"st_polygonize":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
 	"st_quantizecoordinates":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
 	"st_seteffectivearea":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
