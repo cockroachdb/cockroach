@@ -146,9 +146,9 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 // ----------------------------------------------------------------------
 
 // GeneratePartialIndexScans generates unconstrained index scans over all
-// partial indexes with predicates that are implied by the filters. Partial
-// indexes with predicates which cannot be proven to be implied by the filters
-// are disregarded.
+// non-inverted, partial indexes with predicates that are implied by the
+// filters. Partial indexes with predicates which cannot be proven to be implied
+// by the filters are disregarded.
 //
 // When a filter completely matches the predicate, the remaining filters are
 // simplified so that they do not include the filter. A redundant filter is
@@ -213,7 +213,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	tabMeta := md.TableMeta(scanPrivate.Table)
 
 	// Iterate over all partial indexes.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes|rejectInvertedIndexes)
 	for iter.Next() {
 		pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
 		remainingFilters, ok := c.im.FiltersImplyPredicate(filters, pred)
@@ -974,7 +974,7 @@ func (c *CustomFuncs) partitionValuesFilters(
 // the Scan operator's table.
 func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 	// Don't bother matching unless there's an inverted index.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes|rejectPartialIndexes)
 	return iter.Next()
 }
 
@@ -993,7 +993,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	sb.init(c, scanPrivate.Table)
 
 	// Iterate over all inverted indexes.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes|rejectPartialIndexes)
 	for iter.Next() {
 		var spanExpr *invertedexpr.SpanExpression
 		var spansToRead invertedexpr.InvertedSpans
