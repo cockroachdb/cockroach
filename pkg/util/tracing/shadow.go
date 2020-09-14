@@ -115,7 +115,7 @@ func createLightStepTracer(token string) (shadowTracerManager, opentracing.Trace
 var zipkinLogEveryN = util.Every(5 * time.Second)
 
 func createZipkinTracer(
-	collectorAddr string, collectorBatchSize int64,
+	collectorAddr string, collectorBatchSize int64, samplingRate float64,
 ) (shadowTracerManager, opentracing.Tracer) {
 	// Create our HTTP collector.
 	collector, err := zipkin.NewHTTPCollector(
@@ -138,8 +138,11 @@ func createZipkinTracer(
 	// Create our recorder.
 	recorder := zipkin.NewRecorder(collector, false /* debug */, "0.0.0.0:0", "cockroach")
 
+	// Create our sampler which is used to limit the sampling rate
+	sampler := zipkin.NewBoundarySampler(samplingRate, 5)
+
 	// Create our tracer.
-	zipkinTr, err := zipkin.NewTracer(recorder)
+	zipkinTr, err := zipkin.NewTracer(recorder, zipkin.WithSampler(sampler))
 	if err != nil {
 		panic(err)
 	}
