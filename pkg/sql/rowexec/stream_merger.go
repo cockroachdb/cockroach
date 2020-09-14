@@ -96,7 +96,7 @@ func (sm *streamMerger) NextBatch(
 	return leftGroup, rightGroup, nil
 }
 
-// CompareEncDatumRowForMerge EncDatumRow compares two EncDatumRows for merging.
+// CompareEncDatumRowForMerge compares two EncDatumRows for merging.
 // When merging two streams and preserving the order (as in a MergeSort or
 // a MergeJoin) compare the head of the streams, emitting the one that sorts
 // first. It allows for the EncDatumRow to be nil if one of the streams is
