@@ -101,10 +101,6 @@ type kvBatchSnapshotStrategy struct {
 	limiter *rate.Limiter
 	// Only used on the sender side.
 	newBatch func() storage.Batch
-	// bytesSent is updated in sendBatch and returned from Send(). It does not
-	// reflect the log entries sent (which are never sent in newer versions of
-	// CRDB, as of VersionUnreplicatedTruncatedState).
-	bytesSent int64
 
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk. Only used on the receiver side.
@@ -318,6 +314,11 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 ) (int64, error) {
 	assertStrategy(ctx, header, SnapshotRequest_KV_BATCH)
 
+	// bytesSent is updated as key-value batches are sent with sendBatch. It
+	// does not reflect the log entries sent (which are never sent in newer
+	// versions of CRDB, as of VersionUnreplicatedTruncatedState).
+	bytesSent := int64(0)
+
 	// Iterate over all keys using the provided iterator and stream out batches
 	// of key-values.
 	kvs := 0
@@ -343,10 +344,11 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			return 0, err
 		}
 
-		if int64(b.Len()) >= kvSS.batchSize {
+		if bLen := int64(b.Len()); bLen >= kvSS.batchSize {
 			if err := kvSS.sendBatch(ctx, stream, b); err != nil {
 				return 0, err
 			}
+			bytesSent += bLen
 			b.Close()
 			b = nil
 		}
@@ -355,6 +357,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
 			return 0, err
 		}
+		bytesSent += int64(b.Len())
 	}
 
 	// Iterate over the specified range of Raft entries and send them all out
@@ -467,7 +470,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries}); err != nil {
 		return 0, err
 	}
-	return kvSS.bytesSent, nil
+	return bytesSent, nil
 }
 
 func (kvSS *kvBatchSnapshotStrategy) sendBatch(
@@ -476,9 +479,7 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 	if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
 		return err
 	}
-	repr := batch.Repr()
-	kvSS.bytesSent += int64(len(repr))
-	return stream.Send(&SnapshotRequest{KVBatch: repr})
+	return stream.Send(&SnapshotRequest{KVBatch: batch.Repr()})
 }
 
 // Status implements the snapshotStrategy interface.
