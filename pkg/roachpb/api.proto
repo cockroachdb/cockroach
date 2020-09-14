@@ -851,24 +851,33 @@ message AdminRelocateRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A HeartbeatTxnRequest is arguments to the HeartbeatTxn()
-// method. It's sent by transaction coordinators to let the system
-// know that the transaction is still ongoing. Note that this
-// heartbeat message is different from the heartbeat message in the
-// gossip protocol.
+// HeartbeatTxnRequest is the argument to HeartbeatTxn(). It's sent by
+// transaction coordinators to let the system know that the specified
+// transaction is still ongoing. Note that this heartbeat message is different
+// from the one in the gossip protocol.
 message HeartbeatTxnRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Now records the timestamp the heartbeat occurs at.
   util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
+
+  // HeartbeatTxn records the transaction we're intending to heartbeat.
+  Transaction heartbeat_txn = 3 [(gogoproto.nullable) = true];
 }
 
-// A HeartbeatTxnResponse is the return value from the HeartbeatTxn()
-// method. It returns the transaction info in the response header. The
-// returned transaction lets the coordinator know the disposition of
-// the transaction (i.e. aborted, committed, or pending).
+// A HeartbeatTxnResponse is the return value from HeartbeatTxn(). It returns
+// the transaction info as part of the response.
 message HeartbeatTxnResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // HeartbeatTxn returns the disposition of the transaction (i.e. aborted,
+  // committed, or pending) that we just tried to heartbeat.
+  Transaction heartbeat_txn = 2 [(gogoproto.nullable) = true];
+  // XXX: Do want something like abort reason here? Maybe. Just want it carry
+  // over. Who ultimately consumes this error? Should this be named abort
+  // reason?
+  TransactionAbortedError error = 3 [(gogoproto.nullable) = true];
 }
 
 // A GCRequest is arguments to the GC() method. It's sent by range

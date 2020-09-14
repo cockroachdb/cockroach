@@ -56,14 +56,17 @@ func InitFactoryForLocalTestCluster(
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
 ) kv.TxnSenderFactory {
+	ds := NewDistSenderForLocalTestCluster(st, nodeDesc, tracer, clock, latency, stores, stopper, gossip)
+	rdc := ds.RangeDescriptorCache()
 	return NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
-			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
-			Settings:   st,
-			Clock:      clock,
-			Stopper:    stopper,
+			AmbientCtx:           log.AmbientContext{Tracer: st.Tracer},
+			Settings:             st,
+			Clock:                clock,
+			Stopper:              stopper,
+			RangeDescriptorCache: rdc,
 		},
-		NewDistSenderForLocalTestCluster(st, nodeDesc, tracer, clock, latency, stores, stopper, gossip),
+		ds,
 	)
 }
 

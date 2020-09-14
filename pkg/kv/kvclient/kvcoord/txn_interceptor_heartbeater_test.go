@@ -15,8 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,22 +32,35 @@ import (
 )
 
 func makeMockTxnHeartbeater(
-	txn *roachpb.Transaction,
-) (th txnHeartbeater, mockSender, mockGatekeeper *mockLockedSender) {
-	mockSender, mockGatekeeper = &mockLockedSender{}, &mockLockedSender{}
+	db *testDescriptorDB, txn *roachpb.Transaction, mockDistSender *kv.SenderFunc,
+) (th txnHeartbeater, mockSender *mockLockedSender) {
+	mockSender = &mockLockedSender{}
 	manual := hlc.NewManualClock(123)
+	stopper := stop.NewStopper()
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
 	th.init(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
-		stop.NewStopper(),
-		hlc.NewClock(manual.UnixNano, time.Nanosecond),
+		stopper,
+		clock,
 		new(TxnMetrics),
 		1*time.Millisecond,
-		mockGatekeeper,
+		&TxnHeartbeatBatcher{
+			cache: NewRangeDescriptorCache(cluster.MakeTestingClusterSettings(), db, staticSize(2<<10), stopper),
+			clock: clock,
+			batcher: requestbatcher.New(requestbatcher.Config{
+				Name:            "heartbeat_batcher",
+				MaxMsgsPerBatch: 1,
+				Stopper:         stopper,
+				Sender:          mockDistSender, // XXX: Panics on stress when nil.
+				MaxWait:         0,
+			}),
+		},
 		new(syncutil.Mutex),
 		txn,
 	)
 	th.setWrapped(mockSender)
-	return th, mockSender, mockGatekeeper
+	return th, mockSender
 }
 
 func waitForHeartbeatLoopToStop(t *testing.T, th *txnHeartbeater) {
@@ -67,7 +83,7 @@ func TestTxnHeartbeaterSetsTransactionKey(t *testing.T) {
 	ctx := context.Background()
 	txn := makeTxnProto()
 	txn.Key = nil // reset
-	th, mockSender, _ := makeMockTxnHeartbeater(&txn)
+	th, mockSender := makeMockTxnHeartbeater(initTestDescriptorDB(t), &txn, nil)
 	defer th.stopper.Stop(ctx)
 
 	// No key is set on a read-only batch.
@@ -149,7 +165,7 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
 		ctx := context.Background()
 		txn := makeTxnProto()
-		th, _, _ := makeMockTxnHeartbeater(&txn)
+		th, _ := makeMockTxnHeartbeater(initTestDescriptorDB(t), &txn, nil)
 		defer th.stopper.Stop(ctx)
 
 		// Read-only requests don't start the heartbeat loop.
@@ -201,7 +217,7 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	txn := makeTxnProto()
-	th, _, _ := makeMockTxnHeartbeater(&txn)
+	th, _ := makeMockTxnHeartbeater(initTestDescriptorDB(t), &txn, nil)
 	defer th.stopper.Stop(ctx)
 
 	keyA := roachpb.Key("a")
@@ -232,17 +248,15 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "heartbeatObserved", func(t *testing.T, heartbeatObserved bool) {
 		ctx := context.Background()
 		txn := makeTxnProto()
-		th, _, mockGatekeeper := makeMockTxnHeartbeater(&txn)
-		defer th.stopper.Stop(ctx)
 
 		var count int
 		var lastTime hlc.Timestamp
-		mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockDistSender := kv.SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			require.Len(t, ba.Requests, 1)
 			require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
 			hbReq := ba.Requests[0].GetInner().(*roachpb.HeartbeatTxnRequest)
-			require.Equal(t, &txn, ba.Txn)
+			require.Equal(t, &txn, hbReq.HeartbeatTxn)
 			require.Equal(t, roachpb.Key(txn.Key), hbReq.Key)
 			require.True(t, lastTime.Less(hbReq.Now))
 
@@ -250,9 +264,12 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 			lastTime = hbReq.Now
 
 			br := ba.CreateReply()
-			br.Txn = ba.Txn
+			br.Txn = hbReq.HeartbeatTxn
 			return br, nil
 		})
+
+		th, _ := makeMockTxnHeartbeater(initTestDescriptorDB(t), &txn, &mockDistSender)
+		defer th.stopper.Stop(ctx)
 
 		// Kick off the heartbeat loop.
 		keyA := roachpb.Key("a")
@@ -279,21 +296,25 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 		// Mark the coordinator's transaction record as COMMITTED while a heartbeat
 		// is in-flight. This should cause the heartbeat loop to shut down.
 		th.mu.Lock()
-		mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockDistSender = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			require.Len(t, ba.Requests, 1)
 			require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
 			br := ba.CreateReply()
-			br.Txn = ba.Txn
+			br.Txn = ba.Requests[0].GetHeartbeatTxn().HeartbeatTxn
 			if heartbeatObserved {
 				// Mimic a Heartbeat request that observed a committed record.
 				br.Txn.Status = roachpb.COMMITTED
+				resp := br.Responses[0].GetInner()
+				reply := resp.(*roachpb.HeartbeatTxnResponse)
+				reply.Txn = br.Txn
 			} else {
 				// Mimic an EndTxn that raced with the heartbeat loop.
 				txn.Status = roachpb.COMMITTED
 			}
 			return br, nil
-		})
+		}
+
 		th.mu.Unlock()
 		waitForHeartbeatLoopToStop(t, &th)
 
@@ -317,11 +338,8 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "abortedErr", func(t *testing.T, abortedErr bool) {
 		ctx := context.Background()
 		txn := makeTxnProto()
-		th, mockSender, mockGatekeeper := makeMockTxnHeartbeater(&txn)
-		defer th.stopper.Stop(ctx)
-
 		putDone, asyncAbortDone := make(chan struct{}), make(chan struct{})
-		mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockDistSender := kv.SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			// Wait for the Put to finish to avoid a data race.
 			<-putDone
 
@@ -338,6 +356,8 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 			br.Txn.Status = roachpb.ABORTED
 			return br, nil
 		})
+		th, mockSender := makeMockTxnHeartbeater(initTestDescriptorDB(t), &txn, &mockDistSender)
+		defer th.stopper.Stop(ctx)
 
 		// Kick off the heartbeat loop.
 		keyA := roachpb.Key("a")

@@ -172,10 +172,11 @@ func createTestStoreWithOpts(
 
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
-			AmbientCtx: ac,
-			Settings:   storeCfg.Settings,
-			Clock:      storeCfg.Clock,
-			Stopper:    stopper,
+			AmbientCtx:           ac,
+			Settings:             storeCfg.Settings,
+			Clock:                storeCfg.Clock,
+			Stopper:              stopper,
+			RangeDescriptorCache: distSender.RangeDescriptorCache(),
 		},
 		distSender,
 	)
@@ -819,10 +820,11 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 	})
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Settings:   m.storeConfig.Settings,
-			Clock:      m.clocks[idx],
-			Stopper:    stopper,
+			AmbientCtx:           ambient,
+			Settings:             m.storeConfig.Settings,
+			Clock:                m.clocks[idx],
+			Stopper:              stopper,
+			RangeDescriptorCache: m.distSenders[idx].RangeDescriptorCache(),
 		},
 		m.distSenders[idx],
 	)
@@ -1543,6 +1545,7 @@ func truncateLogArgs(index uint64, rangeID roachpb.RangeID) *roachpb.TruncateLog
 	}
 }
 
+// XXX: Can we make do without the header here?
 func heartbeatArgs(
 	txn *roachpb.Transaction, now hlc.Timestamp,
 ) (*roachpb.HeartbeatTxnRequest, roachpb.Header) {
@@ -1550,7 +1553,8 @@ func heartbeatArgs(
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
-		Now: now,
+		Now:          now,
+		HeartbeatTxn: txn,
 	}, roachpb.Header{Txn: txn}
 }
 

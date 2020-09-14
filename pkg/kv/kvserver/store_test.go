@@ -2627,6 +2627,7 @@ func TestStoreBadRequests(t *testing.T) {
 	args6 := scanArgs(keys.RangeDescriptorKey(roachpb.RKey(keys.MinKey)), roachpb.Key("a"))
 
 	tArgs0, _ := heartbeatArgs(txn, hlc.Timestamp{})
+	tArgs0.HeartbeatTxn = nil // XXX
 
 	tArgs2, tHeader2 := endTxnArgs(txn, false /* commit */)
 	tHeader2.Txn.Key = roachpb.Key(tHeader2.Txn.Key).Next()

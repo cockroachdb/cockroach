@@ -87,16 +87,18 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 
 	// Make a db with a short heartbeat interval.
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ds := s.DistSenderI().(*kvcoord.DistSender)
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			// Short heartbeat interval.
-			HeartbeatInterval: time.Millisecond,
-			Settings:          s.ClusterSettings(),
-			Clock:             s.Clock(),
-			Stopper:           s.Stopper(),
+			HeartbeatInterval:    time.Millisecond,
+			Settings:             s.ClusterSettings(),
+			Clock:                s.Clock(),
+			Stopper:              s.Stopper(),
+			RangeDescriptorCache: ds.RangeDescriptorCache(),
 		},
-		s.DistSenderI().(*kvcoord.DistSender),
+		ds,
 	)
 	db := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)

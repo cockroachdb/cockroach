@@ -96,9 +96,10 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	})
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      s.Clock(),
-			Stopper:    s.Stopper(),
+			AmbientCtx:           ambient,
+			Clock:                s.Clock(),
+			Stopper:              s.Stopper(),
+			RangeDescriptorCache: ds.RangeDescriptorCache(),
 		},
 		ds,
 	)

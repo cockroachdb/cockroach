@@ -1252,8 +1252,20 @@ func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
 func (*AdminTransferLeaseRequest) flags() int  { return isAdmin | isAlone }
 func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }
 func (*AdminRelocateRangeRequest) flags() int  { return isAdmin | isAlone }
-func (*HeartbeatTxnRequest) flags() int        { return isWrite | isTxn }
 func (*GCRequest) flags() int                  { return isWrite | isRange }
+
+// HeartBeatTxnRequests include the transaction we're looking to heartbeat.
+// We're careful to not mark this request as one that can be included as part of
+// a transaction (we elide the `isTxn` tag below). This is to avoid confusion:
+// we want to heartbeat the transaction included as part of the request, not the
+// transaction we might get wrapped within.
+//
+// XXX: Is that right? I'm a bit confused. I understand why we want to treat
+// these as non-transactional requests, but what happens if we don't? Is it for
+// when we're operating in a mixed cluster setting with v20.2 (where we didn't
+// batch heartbeats), and to maintain backwards compatibility, have to fallback
+// to using Header.Txn? I'm not really sure.
+func (*HeartbeatTxnRequest) flags() int { return isWrite }
 
 // PushTxnRequest updates different marker keys in the timestamp cache when
 // pushing a transaction's timestamp and when aborting a transaction.

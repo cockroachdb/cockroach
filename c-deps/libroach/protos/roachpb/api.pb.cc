@@ -53,7 +53,6 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_GCRequest_GCKey;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_GCResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_GetRequest;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_HeartbeatTxnResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ImportRequest_File;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_IncrementRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_IncrementResponse;
@@ -92,7 +91,6 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_EndTxnResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ExportResponse_File;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_GetResponse;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_HeartbeatTxnRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ImportResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_InitPutRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_LeaseInfoResponse;
@@ -117,6 +115,8 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_AdminScatterResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ExportResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_GCRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_HeartbeatTxnRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_HeartbeatTxnResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_RangeStatsResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_RequestLeaseRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_ResolveIntentRequest;
@@ -145,6 +145,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2ferrors_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_TransactionAbortedError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<30> scc_info_AmbiguousResultError;
 }  // namespace protobuf_roachpb_2ferrors_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
@@ -1582,10 +1583,11 @@ static void InitDefaultsHeartbeatTxnRequest() {
   ::cockroach::roachpb::HeartbeatTxnRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<2> scc_info_HeartbeatTxnRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsHeartbeatTxnRequest}, {
+::google::protobuf::internal::SCCInfo<3> scc_info_HeartbeatTxnRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsHeartbeatTxnRequest}, {
       &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
-      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Transaction.base,}};
 
 static void InitDefaultsHeartbeatTxnResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1598,9 +1600,11 @@ static void InitDefaultsHeartbeatTxnResponse() {
   ::cockroach::roachpb::HeartbeatTxnResponse::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_HeartbeatTxnResponse =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsHeartbeatTxnResponse}, {
-      &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,}};
+::google::protobuf::internal::SCCInfo<3> scc_info_HeartbeatTxnResponse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsHeartbeatTxnResponse}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_ResponseHeader.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Transaction.base,
+      &protobuf_roachpb_2ferrors_2eproto::scc_info_TransactionAbortedError.base,}};
 
 static void InitDefaultsGCRequest_GCKey() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -13933,6 +13937,8 @@ void HeartbeatTxnRequest::InitAsDefaultInstance() {
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
   ::cockroach::roachpb::_HeartbeatTxnRequest_default_instance_._instance.get_mutable()->now_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  ::cockroach::roachpb::_HeartbeatTxnRequest_default_instance_._instance.get_mutable()->heartbeat_txn_ = const_cast< ::cockroach::roachpb::Transaction*>(
+      ::cockroach::roachpb::Transaction::internal_default_instance());
 }
 void HeartbeatTxnRequest::clear_now() {
   if (GetArenaNoVirtual() == NULL && now_ != NULL) {
@@ -13940,9 +13946,16 @@ void HeartbeatTxnRequest::clear_now() {
   }
   now_ = NULL;
 }
+void HeartbeatTxnRequest::clear_heartbeat_txn() {
+  if (GetArenaNoVirtual() == NULL && heartbeat_txn_ != NULL) {
+    delete heartbeat_txn_;
+  }
+  heartbeat_txn_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int HeartbeatTxnRequest::kHeaderFieldNumber;
 const int HeartbeatTxnRequest::kNowFieldNumber;
+const int HeartbeatTxnRequest::kHeartbeatTxnFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 HeartbeatTxnRequest::HeartbeatTxnRequest()
@@ -13966,13 +13979,18 @@ HeartbeatTxnRequest::HeartbeatTxnRequest(const HeartbeatTxnRequest& from)
   } else {
     now_ = NULL;
   }
+  if (from.has_heartbeat_txn()) {
+    heartbeat_txn_ = new ::cockroach::roachpb::Transaction(*from.heartbeat_txn_);
+  } else {
+    heartbeat_txn_ = NULL;
+  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.HeartbeatTxnRequest)
 }
 
 void HeartbeatTxnRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&now_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(now_));
+      reinterpret_cast<char*>(&heartbeat_txn_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(heartbeat_txn_));
 }
 
 HeartbeatTxnRequest::~HeartbeatTxnRequest() {
@@ -13983,6 +14001,7 @@ HeartbeatTxnRequest::~HeartbeatTxnRequest() {
 void HeartbeatTxnRequest::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
   if (this != internal_default_instance()) delete now_;
+  if (this != internal_default_instance()) delete heartbeat_txn_;
 }
 
 void HeartbeatTxnRequest::SetCachedSize(int size) const {
@@ -14008,6 +14027,10 @@ void HeartbeatTxnRequest::Clear() {
     delete now_;
   }
   now_ = NULL;
+  if (GetArenaNoVirtual() == NULL && heartbeat_txn_ != NULL) {
+    delete heartbeat_txn_;
+  }
+  heartbeat_txn_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -14043,6 +14066,17 @@ bool HeartbeatTxnRequest::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_now()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_heartbeat_txn()));
         } else {
           goto handle_unusual;
         }
@@ -14085,6 +14119,11 @@ void HeartbeatTxnRequest::SerializeWithCachedSizes(
       2, this->_internal_now(), output);
   }
 
+  if (this->has_heartbeat_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      3, this->_internal_heartbeat_txn(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.HeartbeatTxnRequest)
@@ -14106,6 +14145,12 @@ size_t HeartbeatTxnRequest::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *now_);
+  }
+
+  if (this->has_heartbeat_txn()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *heartbeat_txn_);
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -14131,6 +14176,9 @@ void HeartbeatTxnRequest::MergeFrom(const HeartbeatTxnRequest& from) {
   if (from.has_now()) {
     mutable_now()->::cockroach::util::hlc::Timestamp::MergeFrom(from.now());
   }
+  if (from.has_heartbeat_txn()) {
+    mutable_heartbeat_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.heartbeat_txn());
+  }
 }
 
 void HeartbeatTxnRequest::CopyFrom(const HeartbeatTxnRequest& from) {
@@ -14152,6 +14200,7 @@ void HeartbeatTxnRequest::InternalSwap(HeartbeatTxnRequest* other) {
   using std::swap;
   swap(header_, other->header_);
   swap(now_, other->now_);
+  swap(heartbeat_txn_, other->heartbeat_txn_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -14165,9 +14214,27 @@ void HeartbeatTxnRequest::InternalSwap(HeartbeatTxnRequest* other) {
 void HeartbeatTxnResponse::InitAsDefaultInstance() {
   ::cockroach::roachpb::_HeartbeatTxnResponse_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::ResponseHeader*>(
       ::cockroach::roachpb::ResponseHeader::internal_default_instance());
+  ::cockroach::roachpb::_HeartbeatTxnResponse_default_instance_._instance.get_mutable()->heartbeat_txn_ = const_cast< ::cockroach::roachpb::Transaction*>(
+      ::cockroach::roachpb::Transaction::internal_default_instance());
+  ::cockroach::roachpb::_HeartbeatTxnResponse_default_instance_._instance.get_mutable()->error_ = const_cast< ::cockroach::roachpb::TransactionAbortedError*>(
+      ::cockroach::roachpb::TransactionAbortedError::internal_default_instance());
+}
+void HeartbeatTxnResponse::clear_heartbeat_txn() {
+  if (GetArenaNoVirtual() == NULL && heartbeat_txn_ != NULL) {
+    delete heartbeat_txn_;
+  }
+  heartbeat_txn_ = NULL;
+}
+void HeartbeatTxnResponse::clear_error() {
+  if (GetArenaNoVirtual() == NULL && error_ != NULL) {
+    delete error_;
+  }
+  error_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int HeartbeatTxnResponse::kHeaderFieldNumber;
+const int HeartbeatTxnResponse::kHeartbeatTxnFieldNumber;
+const int HeartbeatTxnResponse::kErrorFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 HeartbeatTxnResponse::HeartbeatTxnResponse()
@@ -14186,11 +14253,23 @@ HeartbeatTxnResponse::HeartbeatTxnResponse(const HeartbeatTxnResponse& from)
   } else {
     header_ = NULL;
   }
+  if (from.has_heartbeat_txn()) {
+    heartbeat_txn_ = new ::cockroach::roachpb::Transaction(*from.heartbeat_txn_);
+  } else {
+    heartbeat_txn_ = NULL;
+  }
+  if (from.has_error()) {
+    error_ = new ::cockroach::roachpb::TransactionAbortedError(*from.error_);
+  } else {
+    error_ = NULL;
+  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.HeartbeatTxnResponse)
 }
 
 void HeartbeatTxnResponse::SharedCtor() {
-  header_ = NULL;
+  ::memset(&header_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&error_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(error_));
 }
 
 HeartbeatTxnResponse::~HeartbeatTxnResponse() {
@@ -14200,6 +14279,8 @@ HeartbeatTxnResponse::~HeartbeatTxnResponse() {
 
 void HeartbeatTxnResponse::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
+  if (this != internal_default_instance()) delete heartbeat_txn_;
+  if (this != internal_default_instance()) delete error_;
 }
 
 void HeartbeatTxnResponse::SetCachedSize(int size) const {
@@ -14221,6 +14302,14 @@ void HeartbeatTxnResponse::Clear() {
     delete header_;
   }
   header_ = NULL;
+  if (GetArenaNoVirtual() == NULL && heartbeat_txn_ != NULL) {
+    delete heartbeat_txn_;
+  }
+  heartbeat_txn_ = NULL;
+  if (GetArenaNoVirtual() == NULL && error_ != NULL) {
+    delete error_;
+  }
+  error_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -14245,6 +14334,28 @@ bool HeartbeatTxnResponse::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_heartbeat_txn()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_error()));
         } else {
           goto handle_unusual;
         }
@@ -14282,6 +14393,16 @@ void HeartbeatTxnResponse::SerializeWithCachedSizes(
       1, this->_internal_header(), output);
   }
 
+  if (this->has_heartbeat_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      2, this->_internal_heartbeat_txn(), output);
+  }
+
+  if (this->has_error()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      3, this->_internal_error(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.HeartbeatTxnResponse)
@@ -14297,6 +14418,18 @@ size_t HeartbeatTxnResponse::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *header_);
+  }
+
+  if (this->has_heartbeat_txn()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *heartbeat_txn_);
+  }
+
+  if (this->has_error()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *error_);
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -14319,6 +14452,12 @@ void HeartbeatTxnResponse::MergeFrom(const HeartbeatTxnResponse& from) {
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
   }
+  if (from.has_heartbeat_txn()) {
+    mutable_heartbeat_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.heartbeat_txn());
+  }
+  if (from.has_error()) {
+    mutable_error()->::cockroach::roachpb::TransactionAbortedError::MergeFrom(from.error());
+  }
 }
 
 void HeartbeatTxnResponse::CopyFrom(const HeartbeatTxnResponse& from) {
@@ -14339,6 +14478,8 @@ void HeartbeatTxnResponse::Swap(HeartbeatTxnResponse* other) {
 void HeartbeatTxnResponse::InternalSwap(HeartbeatTxnResponse* other) {
   using std::swap;
   swap(header_, other->header_);
+  swap(heartbeat_txn_, other->heartbeat_txn_);
+  swap(error_, other->error_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

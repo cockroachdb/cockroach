@@ -62,20 +62,14 @@ var txnHeartbeatFor1PC = envutil.EnvOrDefaultBool("COCKROACH_TXN_HEARTBEAT_DURIN
 // the future.
 type txnHeartbeater struct {
 	log.AmbientContext
-	stopper      *stop.Stopper
-	clock        *hlc.Clock
-	metrics      *TxnMetrics
-	loopInterval time.Duration
+	stopper          *stop.Stopper
+	clock            *hlc.Clock
+	metrics          *TxnMetrics
+	loopInterval     time.Duration
+	heartbeatBatcher *TxnHeartbeatBatcher
 
 	// wrapped is the next sender in the interceptor stack.
 	wrapped lockedSender
-	// gatekeeper is the sender to which heartbeat requests need to be sent. It is
-	// set to the gatekeeper interceptor, so sending directly to it will bypass
-	// all the other interceptors; heartbeats don't need them and they can only
-	// hurt - we don't want heartbeats to get sequence numbers or to check any
-	// intents. Note that the async rollbacks that this interceptor sometimes
-	// sends got through `wrapped`, not directly through `gatekeeper`.
-	gatekeeper lockedSender
 
 	// mu contains state protected by the TxnCoordSender's mutex.
 	mu struct {
@@ -123,7 +117,7 @@ func (h *txnHeartbeater) init(
 	clock *hlc.Clock,
 	metrics *TxnMetrics,
 	loopInterval time.Duration,
-	gatekeeper lockedSender,
+	heartbeatBatcher *TxnHeartbeatBatcher,
 	mu sync.Locker,
 	txn *roachpb.Transaction,
 ) {
@@ -132,7 +126,7 @@ func (h *txnHeartbeater) init(
 	h.clock = clock
 	h.metrics = metrics
 	h.loopInterval = loopInterval
-	h.gatekeeper = gatekeeper
+	h.heartbeatBatcher = heartbeatBatcher
 	h.mu.Locker = mu
 	h.mu.txn = txn
 }
@@ -273,6 +267,7 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 // heartbeat sends a HeartbeatTxnRequest to the txn record.
 // Returns true if heartbeating should continue, false if the transaction is no
 // longer Pending and so there's no point in heartbeating further.
+// XXX: Fix up error handling code.
 func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	// Like with the TxnCoordSender, the locking here is peculiar. The lock is not
 	// held continuously throughout this method: we acquire the lock here and
@@ -300,52 +295,42 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	if txn.Key == nil {
 		log.Fatalf(ctx, "attempting to heartbeat txn without anchor key: %v", txn)
 	}
-	ba := roachpb.BatchRequest{}
-	ba.Txn = txn
-	ba.Add(&roachpb.HeartbeatTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: txn.Key,
-		},
-		Now: h.clock.Now(),
-	})
 
-	// Send the heartbeat request directly through the gatekeeper interceptor.
-	// See comment on h.gatekeeper for a discussion of why.
-	log.VEvent(ctx, 2, "heartbeat")
-	br, pErr := h.gatekeeper.SendLocked(ctx, ba)
-
+	// XXX: Backwards compatibility concerns here as well.
+	respTxn, respErr, err := h.heartbeatBatcher.Send(ctx, txn)
+	if err != nil {
+		return false // XXX: What does this mean?
+	}
 	// If the txn is no longer pending, ignore the result of the heartbeat
 	// and tear down the heartbeat loop.
 	if h.mu.txn.Status != roachpb.PENDING {
 		return false
 	}
 
-	var respTxn *roachpb.Transaction
-	if pErr != nil {
-		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
+	if respErr != nil {
+		log.VEventf(ctx, 2, "heartbeat failed: %s", respErr)
+
+		// XXX: I don't know what this structure lends to. Is this where the
+		// other kind of errors come into play?
 
 		// We need to be prepared here to handle the case of a
 		// TransactionAbortedError with no transaction proto in it.
 		//
 		// TODO(nvanbenschoten): Make this the only case where we get back an
 		// Aborted txn.
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
-			// Note that it's possible that the txn actually committed but its
-			// record got GC'ed. In that case, aborting won't hurt anyone though,
-			// since all intents have already been resolved.
-			// The only thing we must ascertain is that we don't tell the client
-			// about this error - it will get either a definitive result of
-			// its commit or an ambiguous one and we have nothing to offer that
-			// provides more clarity. We do however prevent it from running more
-			// requests in case it isn't aware that the transaction is over.
-			h.abortTxnAsyncLocked(ctx)
-			h.mu.finalObservedStatus = roachpb.ABORTED
-			return false
-		}
-
-		respTxn = pErr.GetTxn()
-	} else {
-		respTxn = br.Txn
+		//if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
+		// Note that it's possible that the txn actually committed but its
+		// record got GC'ed. In that case, aborting won't hurt anyone though,
+		// since all intents have already been resolved.
+		// The only thing we must ascertain is that we don't tell the client
+		// about this error it will get either a definitive result of
+		// its commit or an ambiguous one and we have nothing to offer that
+		// provides more clarity. We do however prevent it from running more
+		// requests in case it isn't aware that the transaction is over.
+		h.abortTxnAsyncLocked(ctx)
+		h.mu.finalObservedStatus = roachpb.ABORTED
+		return false
+		//}
 	}
 
 	// Tear down the heartbeat loop if the response transaction is finalized.
