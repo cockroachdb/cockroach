@@ -487,6 +487,15 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	// Add the geoConfig if applicable.
 	notNullIndex := true
 	for i, colDef := range def.Columns {
+		ordinal := tt.FindOrdinal(string(colDef.Column))
+		colType := tt.Columns[ordinal].DatumType()
+		if !def.Inverted && !colinfo.ColumnTypeIsIndexable(colType) {
+			panic(fmt.Errorf("column %s of type %s is not indexable", colDef.Column, colType))
+		}
+		if def.Inverted && i == 0 && !colinfo.ColumnTypeIsInvertedIndexable(colType) {
+			panic(fmt.Errorf("column %s of type %s is not inverted indexable", colDef.Column, colType))
+		}
+
 		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, keyCol)
 
 		if typ == primaryIndex && col.IsNullable() {
