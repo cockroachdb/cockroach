@@ -306,32 +306,60 @@ ORDER BY object_type, object_name`, full)
 	// Show privileges of descriptors that are backed up.
 	{
 		showPrivs := LocalFoo + "/show_privs"
-		sqlDB.Exec(t, `CREATE TABLE data.top_secret (id INT PRIMARY KEY, name STRING)`)
-		sqlDB.Exec(t, `CREATE USER agent_bond`)
-		sqlDB.Exec(t, `CREATE USER agent_thomas`)
-		sqlDB.Exec(t, `CREATE USER m`)
-		sqlDB.Exec(t, `CREATE ROLE agents`)
-		sqlDB.Exec(t, `GRANT agents TO agent_bond`)
-		sqlDB.Exec(t, `GRANT agents TO agent_thomas`)
-		sqlDB.Exec(t, `GRANT ALL ON data.top_secret TO m`)
-		sqlDB.Exec(t, `GRANT INSERT on data.top_secret TO agents`)
-		sqlDB.Exec(t, `GRANT SELECT on data.top_secret TO agent_bond`)
-		sqlDB.Exec(t, `GRANT UPDATE on data.top_secret TO agent_bond`)
-		sqlDB.Exec(t, `BACKUP data.top_secret TO $1;`, showPrivs)
+		sqlDB.Exec(t, `
+CREATE DATABASE mi5; USE mi5;
+CREATE SCHEMA locator;
+CREATE TYPE locator.continent AS ENUM ('amer', 'eu', 'afr', 'asia', 'au', 'ant');
+CREATE TABLE locator.agent_locations (id INT PRIMARY KEY, location locator.continent);
+CREATE TABLE top_secret (id INT PRIMARY KEY, name STRING);
 
-		want := []string{
-			`GRANT ALL ON data TO admin; GRANT ALL ON data TO root; `,
-			`GRANT ALL ON top_secret TO admin; GRANT SELECT, UPDATE ON top_secret TO agent_bond; ` +
-				`GRANT INSERT ON top_secret TO agents; GRANT ALL ON top_secret TO m; GRANT ALL ON top_secret TO root; `,
+CREATE USER agent_bond;
+CREATE USER agent_thomas;
+CREATE USER m;
+CREATE ROLE agents;
+
+GRANT agents TO agent_bond;
+GRANT agents TO agent_thomas;
+
+GRANT ALL ON DATABASE mi5 TO agents;
+REVOKE UPDATE ON DATABASE mi5 FROM agents;
+
+GRANT ALL ON SCHEMA locator TO m;
+GRANT ALL ON SCHEMA locator TO agent_bond;
+REVOKE USAGE ON SCHEMA locator FROM agent_bond;
+
+GRANT ALL ON TYPE locator.continent TO m;
+GRANT ALL ON TYPE locator.continent TO agent_bond;
+REVOKE USAGE ON TYPE locator.continent FROM agent_bond;
+
+GRANT ALL ON TABLE locator.agent_locations TO m;
+GRANT UPDATE ON locator.agent_locations TO agents;
+GRANT SELECT ON locator.agent_locations TO agent_bond;
+
+GRANT ALL ON top_secret TO m;
+GRANT INSERT ON top_secret TO agents;
+GRANT SELECT ON top_secret TO agent_bond;
+GRANT UPDATE ON top_secret TO agent_bond;
+`)
+		sqlDB.Exec(t, `BACKUP DATABASE mi5 TO $1;`, showPrivs)
+
+		want := [][]string{
+			{`mi5`, `database`, `GRANT ALL ON mi5 TO admin; GRANT CREATE, DELETE, DROP, GRANT, INSERT, ` +
+				`SELECT, ZONECONFIG ON mi5 TO agents; GRANT ALL ON mi5 TO root; `},
+			{`locator`, `schema`, `GRANT ALL ON locator TO admin; GRANT CREATE, GRANT ON locator TO agent_bond; GRANT ALL ON locator TO m; ` +
+				`GRANT ALL ON locator TO root; `},
+			{`continent`, `type`, `GRANT ALL ON continent TO admin; GRANT GRANT ON continent TO agent_bond; GRANT ALL ON continent TO m; GRANT ALL ON continent TO root; `},
+			{`_continent`, `type`, `GRANT ALL ON _continent TO admin; GRANT ALL ON _continent TO root; `},
+			{`agent_locations`, `table`, `GRANT ALL ON agent_locations TO admin; ` +
+				`GRANT SELECT ON agent_locations TO agent_bond; GRANT UPDATE ON agent_locations TO agents; ` +
+				`GRANT ALL ON agent_locations TO m; GRANT ALL ON agent_locations TO root; `},
+			{`top_secret`, `table`, `GRANT ALL ON top_secret TO admin; ` +
+				`GRANT SELECT, UPDATE ON top_secret TO agent_bond; GRANT INSERT ON top_secret TO agents; ` +
+				`GRANT ALL ON top_secret TO m; GRANT ALL ON top_secret TO root; `},
 		}
 
-		showBackupRows := sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT privileges FROM [SHOW BACKUP '%s' WITH privileges]`, showPrivs))
-		for i, row := range showBackupRows {
-			privs := row[0]
-			if !eqWhitespace(privs, want[i]) {
-				t.Fatalf("mismatched privileges: '%s', want '%s'", privs, want[i])
-			}
-		}
+		showQuery := fmt.Sprintf(`SELECT object_name, object_type, privileges FROM [SHOW BACKUP '%s' WITH privileges]`, showPrivs)
+		sqlDBRestore.CheckQueryResults(t, showQuery, want)
 	}
 }
 
