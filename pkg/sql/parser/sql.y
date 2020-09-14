@@ -6997,7 +6997,7 @@ resume_schedules_stmt:
 // DROP SCHEDULES <selectclause>
 //  selectclause: select statement returning schedule IDs to resume.
 //
-// DROP SCHEDULES <jobid>
+// DROP SCHEDULE <jobid>
 //
 // %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, CANCEL JOBS
 drop_schedule_stmt:
