@@ -2411,11 +2411,11 @@ INSERT INTO d.t3 VALUES ('hi');
 		// Create a backup of all the tables in d.
 		{
 			// Backup all of the tables.
-			sqlDB.Exec(t, `BACKUP d.* TO 'nodelocal://0/test3/'`)
+			sqlDB.Exec(t, `BACKUP d.* TO 'nodelocal://0/test_all_tables/'`)
 			// Create a new database to restore all of the tables into.
 			sqlDB.Exec(t, `CREATE DATABASE d4`)
 			// Restore all of the tables.
-			sqlDB.Exec(t, `RESTORE TABLE d.* FROM 'nodelocal://0/test3/' WITH into_db = 'd4'`)
+			sqlDB.Exec(t, `RESTORE TABLE d.* FROM 'nodelocal://0/test_all_tables/' WITH into_db = 'd4'`)
 			// Check that all of the tables have expected data.
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d4.t ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
 			sqlDB.CheckQueryResults(t, `SELECT * FROM d4.t2 ORDER BY x`, [][]string{{"{hello}"}})
@@ -2509,14 +2509,14 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 			// Create a table using these ___typ1.
 			sqlDB.Exec(t, `CREATE TABLE d5.tb1 (x d5.typ1[])`)
 			// Backup tb1.
-			sqlDB.Exec(t, `BACKUP TABLE d5.tb1 TO 'nodelocal://0/test3/'`)
+			sqlDB.Exec(t, `BACKUP TABLE d5.tb1 TO 'nodelocal://0/testd5/'`)
 
 			// Create another database with a compatible type.
 			sqlDB.Exec(t, `CREATE DATABASE d6`)
 			sqlDB.Exec(t, `CREATE TYPE d6.typ1 AS ENUM ('v1', 'v2')`)
 			// Restoring tb1 into d6 will remap d5.typ1 to d6.typ1 and d5.___typ1
 			// to d6._typ1.
-			sqlDB.Exec(t, `RESTORE TABLE d5.tb1 FROM 'nodelocal://0/test3/' WITH into_db = 'd6'`)
+			sqlDB.Exec(t, `RESTORE TABLE d5.tb1 FROM 'nodelocal://0/testd5/' WITH into_db = 'd6'`)
 			sqlDB.Exec(t, `INSERT INTO d6.tb1 VALUES (ARRAY['v1']::d6._typ1)`)
 		}
 
@@ -2564,13 +2564,13 @@ INSERT INTO d.t VALUES ('hello'), ('howdy');
 		{
 			// Create a database with a type, and take a backup.
 			sqlDB.Exec(t, `CREATE DATABASE d3`)
-			sqlDB.Exec(t, `BACKUP DATABASE d3 TO 'nodelocal://0/test2/'`)
+			sqlDB.Exec(t, `BACKUP DATABASE d3 TO 'nodelocal://0/testd3/'`)
 
 			// Now create a new type in that database.
 			sqlDB.Exec(t, `CREATE TYPE d3.farewell AS ENUM ('bye', 'cya')`)
 
 			// Perform an incremental backup, which should pick up the new type.
-			sqlDB.Exec(t, `BACKUP DATABASE d3 TO 'nodelocal://0/test2/'`)
+			sqlDB.Exec(t, `BACKUP DATABASE d3 TO 'nodelocal://0/testd3/'`)
 
 			// Until #51362 lands we have to manually clean up this type before the
 			// DROP DATABASE statement otherwise we'll leave behind an orphaned desc.
@@ -2578,7 +2578,8 @@ INSERT INTO d.t VALUES ('hello'), ('howdy');
 
 			// Now restore it.
 			sqlDB.Exec(t, `DROP DATABASE d3`)
-			sqlDB.Exec(t, `RESTORE DATABASE d3 FROM 'nodelocal://0/test2/'`)
+			sqlDB.Exec(t, `RESTORE DATABASE d3 FROM 'nodelocal://0/testd3/'`)
+
 			// Check that we are able to use the type.
 			sqlDB.Exec(t, `CREATE TABLE d3.t (x d3.farewell)`)
 			sqlDB.Exec(t, `DROP TABLE d3.t`)
@@ -2586,9 +2587,9 @@ INSERT INTO d.t VALUES ('hello'), ('howdy');
 			// If we drop the type and back up again, it should be gone.
 			sqlDB.Exec(t, `DROP TYPE d3.farewell`)
 
-			sqlDB.Exec(t, `BACKUP DATABASE d3 TO 'nodelocal://0/test2/'`)
+			sqlDB.Exec(t, `BACKUP DATABASE d3 TO 'nodelocal://0/testd3_2/'`)
 			sqlDB.Exec(t, `DROP DATABASE d3`)
-			sqlDB.Exec(t, `RESTORE DATABASE d3 FROM 'nodelocal://0/test2/'`)
+			sqlDB.Exec(t, `RESTORE DATABASE d3 FROM 'nodelocal://0/testd3_2/'`)
 			sqlDB.ExpectErr(t, `pq: type "d3.farewell" does not exist`, `CREATE TABLE d3.t (x d3.farewell)`)
 		}
 	})
