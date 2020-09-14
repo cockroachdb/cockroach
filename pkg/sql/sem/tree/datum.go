@@ -4610,6 +4610,21 @@ func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
 		return NewDTuple(t, datums...), nil
 	case types.BitFamily:
 		return bitArrayZero, nil
+	case types.EnumFamily:
+		// The scenario in which this arises is when the column is being dropped and
+		// is NOT NULL. If there are no values for this enum, there's nothing that
+		// can be put here so we'll return
+		if len(t.TypeMeta.EnumData.PhysicalRepresentations) == 0 {
+			return nil, pgerror.Newf(
+				pgcode.NotNullViolation,
+				"%s has no values which can be used to satisfy the NOT NULL "+
+					"constraint while adding or dropping",
+				t.Name(),
+			)
+		}
+		// We fall back to using the smallest enum value during the dropping period.
+		return MakeDEnumFromPhysicalRepresentation(t,
+			t.TypeMeta.EnumData.PhysicalRepresentations[0])
 	default:
 		return nil, errors.AssertionFailedf("unhandled type %v", t.SQLString())
 	}

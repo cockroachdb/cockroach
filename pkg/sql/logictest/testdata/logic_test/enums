@@ -1161,3 +1161,44 @@ uds    typ        schema
 
 statement error pq: cannot create "fakedb.typ" because the target database or schema does not exist
 CREATE TYPE fakedb.typ AS ENUM ('schema')
+
+# Test the behavior of dropping a not-null enum colums
+
+subtest drop_not_null
+
+statement ok
+CREATE TYPE enum_with_vals AS ENUM ('val', 'other_val');
+
+statement ok
+CREATE TABLE table_with_not_null_enum (i INT PRIMARY KEY, v enum_with_vals NOT NULL);
+
+statement ok
+BEGIN;
+
+statement ok
+ALTER TABLE table_with_not_null_enum DROP COLUMN v;
+
+statement ok
+INSERT INTO table_with_not_null_enum VALUES (1);
+
+statement ok
+COMMIT; DROP TABLE table_with_not_null_enum; DROP TYPE enum_with_vals;
+
+statement ok
+CREATE TYPE enum_with_no_vals AS ENUM ();
+
+statement ok
+CREATE TABLE table_with_not_null_enum_no_vals (i INT PRIMARY KEY, v enum_with_no_vals NOT NULL);
+
+statement ok
+BEGIN;
+
+statement ok
+ALTER TABLE table_with_not_null_enum_no_vals DROP COLUMN v;
+
+statement error enum_with_no_vals has no values which can be used to satisfy the NOT NULL constraint while adding or dropping
+INSERT INTO table_with_not_null_enum_no_vals VALUES (1);
+
+statement ok
+ROLLBACK; DROP TABLE table_with_not_null_enum_no_vals; DROP TYPE enum_with_no_vals;
+
