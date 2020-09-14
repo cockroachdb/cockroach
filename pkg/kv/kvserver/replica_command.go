@@ -1932,7 +1932,7 @@ func (r *Replica) sendSnapshot(
 		r.store.allocator.storePool,
 		req,
 		snap,
-		r.store.Engine().NewBatch,
+		r.store.Engine().NewWriteOnlyBatch,
 		sent,
 	); err != nil {
 		if errors.Is(err, errMalformedSnapshot) {
