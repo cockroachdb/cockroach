@@ -320,22 +320,26 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	// Iterate over all keys using the provided iterator and stream out batches
 	// of key-values.
-	n := 0
+	kvs := 0
 	var b storage.Batch
+	defer func() {
+		if b != nil {
+			b.Close()
+		}
+	}()
 	for iter := snap.Iter; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return 0, err
 		} else if !ok {
 			break
 		}
-		key := iter.Key()
-		value := iter.Value()
-		n++
+		kvs++
+		unsafeKey := iter.UnsafeKey()
+		unsafeValue := iter.UnsafeValue()
 		if b == nil {
 			b = kvSS.newBatch()
 		}
-		if err := b.Put(key, value); err != nil {
-			b.Close()
+		if err := b.Put(unsafeKey, unsafeValue); err != nil {
 			return 0, err
 		}
 
@@ -343,11 +347,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			if err := kvSS.sendBatch(ctx, stream, b); err != nil {
 				return 0, err
 			}
+			b.Close()
 			b = nil
-			// We no longer need the keys and values in the batch we just sent,
-			// so reset ReplicaDataIterator's allocator and allow its data to
-			// be garbage collected.
-			iter.ResetAllocator()
 		}
 	}
 	if b != nil {
@@ -462,7 +463,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 		}
 	}
-	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", n, len(logEntries))
+	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", kvs, len(logEntries))
 	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries}); err != nil {
 		return 0, err
 	}
@@ -477,7 +478,6 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 	}
 	repr := batch.Repr()
 	kvSS.bytesSent += int64(len(repr))
-	batch.Close()
 	return stream.Send(&SnapshotRequest{KVBatch: repr})
 }
 
