@@ -859,7 +859,10 @@ func createImportingDescriptors(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := RewriteTableDescs(mutableTables, details.DescriptorRewrites, details.OverrideDB); err != nil {
+	canResetModTime := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionLeasedDatabaseDescriptors)
+	if err := RewriteTableDescs(
+		mutableTables, details.DescriptorRewrites, details.OverrideDB, canResetModTime,
+	); err != nil {
 		return nil, nil, nil, err
 	}
 	tableDescs := make([]*descpb.TableDescriptor, len(mutableTables))
