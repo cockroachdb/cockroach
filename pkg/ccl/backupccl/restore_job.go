@@ -685,6 +685,15 @@ type restoreResumer struct {
 	settings *cluster.Settings
 	execCfg  *sql.ExecutorConfig
 
+	// canResetTableModificationTime is true if the cluster version is new enough.
+	// In release-20.1, any decoded table descriptor needed a populated
+	// modification time regardless of its version number. In 20.2 and later we've
+	// relaxed this requirement to allow version 1 descriptors to be serialized
+	// with a zero modification time.
+	//
+	// TODO(ajwerner): Remove in 21.1.
+	canResetTableModificationTime bool
+
 	testingKnobs struct {
 		// beforePublishingDescriptors is called right before publishing
 		// descriptors, after any data has been restored.
@@ -850,7 +859,10 @@ func createImportingDescriptors(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := RewriteTableDescs(mutableTables, details.DescriptorRewrites, details.OverrideDB); err != nil {
+	if err := RewriteTableDescs(
+		mutableTables, details.DescriptorRewrites, details.OverrideDB,
+		r.canResetTableModificationTime,
+	); err != nil {
 		return nil, nil, nil, err
 	}
 	tableDescs := make([]*descpb.TableDescriptor, len(mutableTables))
@@ -1052,6 +1064,8 @@ func (r *restoreResumer) Resume(
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
+	r.canResetTableModificationTime = p.ExecCfg().Settings.Version.IsActive(
+		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
 
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,
