@@ -205,8 +205,7 @@ func (s *span) enableRecording(parent *span, recType RecordingType, separateReco
 // are recorded; also, all direct and indirect child spans started from now on
 // will be part of the same recording.
 //
-// Recording is not supported by noop spans; to ensure a real span is always
-// created, use the Recordable option to StartSpan.
+// Recording is a noop for noop spans
 //
 // If recording was already started on this span (either directly or because a
 // parent span is recording), the old recording is lost.
@@ -215,7 +214,7 @@ func StartRecording(os opentracing.Span, recType RecordingType) {
 		panic("StartRecording called with NoRecording")
 	}
 	if _, noop := os.(*noopSpan); noop {
-		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
+		return
 	}
 
 	// If we're already recording (perhaps because the parent was recording when
@@ -248,16 +247,6 @@ func (s *span) disableRecording() {
 		s.setBaggageItemLocked(Snowball, "")
 	}
 	s.mu.Unlock()
-}
-
-// IsRecordable returns true if {Start,Stop}Recording() can be called on this
-// span.
-//
-// In other words, this tests if the span is our custom type, and not a noopSpan
-// or anything else.
-func IsRecordable(os opentracing.Span) bool {
-	_, isCockroachSpan := os.(*span)
-	return isCockroachSpan
 }
 
 // Recording represents a group of RecordedSpans, as returned by GetRecording.

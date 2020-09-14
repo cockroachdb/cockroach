@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/thrift/gen-go/zipkincore"
 )
 
 const strKey = "testing.str"
@@ -303,11 +306,11 @@ func TestSettingsShowAll(t *testing.T) {
 }
 
 // TestSettingsZipkinBatchSize tests that a batch size of 1
-// can be configured for the zipkin trace collector
+// can be configured for the zipkin trace collector.
 func TestSettingsZipkinBatchSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Set up collector handler function and batch size reporting
+	// Set up collector handler function and batch size reporting.
 	observedBatchSize := int64(-1)
 	collectorHandlerFcn := func(rw http.ResponseWriter, req *http.Request) {
 		bodyBytes, err := ioutil.ReadAll(req.Body)
@@ -330,7 +333,7 @@ func TestSettingsZipkinBatchSize(t *testing.T) {
 	}
 	defer traceCollectorServer.Close()
 
-	// Start test cluster containing a test db and test table
+	// Start test cluster containing a test db and test table.
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
@@ -341,14 +344,134 @@ func TestSettingsZipkinBatchSize(t *testing.T) {
 		}
 	}
 
-	// Configure tracing with a batch size of 1 in the test cluster
+	// Configure tracing with a batch size of 1 in the test cluster.
 	execStatement(`SET CLUSTER SETTING trace.zipkin.collector.batch.size = 1`)
 	execStatement(fmt.Sprintf(`SET CLUSTER SETTING trace.zipkin.collector = '%s'`, traceCollectorServerURL.Host))
 
-	// Test that the collector observed a batch size of 1 with no error
+	// Test that the collector observed a batch size of 1 with no error.
 	testutils.SucceedsSoon(t, func() error {
 		if atomic.LoadInt64(&observedBatchSize) != 1 {
 			return fmt.Errorf(`did not observe spans in batches of size 1`)
+		}
+		return nil
+	})
+}
+
+// TestSettingsTraceSamplingRate tests that setting the sampling rate
+// of traces will correctly limit the percentage of traces sampled.
+func TestSettingsTraceSamplingRate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Start test cluster containing a test db and test table.
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	execStatement := func(statement string) {
+		if _, err := tc.ServerConn(rand.Intn(3)).Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	execStatement(`CREATE DATABASE t`)
+	execStatement(`CREATE TABLE test (k INT PRIMARY KEY, v INT)`)
+
+	// Set up tracing collector and variable to count the number of traces
+	// collected from INSERT INTO statements.
+	nTraces := int64(0)
+	collectorHandlerFcn := func(rw http.ResponseWriter, req *http.Request) {
+		bodyBytes, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			return
+		}
+		t := thrift.NewTMemoryBuffer()
+		if _, err = t.Write(bodyBytes); err != nil {
+			return
+		}
+		p := thrift.NewTBinaryProtocolTransport(t)
+		_, batchSize, err := p.ReadListBegin()
+		if err != nil {
+			return
+		}
+
+		for i := 0; i < batchSize; i += 1 {
+			span := zipkincore.Span{}
+			if err = span.Read(p); err != nil {
+				return
+			}
+
+			if span.Name == `exec stmt` {
+				for _, annotation := range span.Annotations {
+					if strings.Contains(annotation.Value, `INSERT INTO test VALUES`) &&
+						strings.Contains(annotation.Value, `in state: Open`) {
+						atomic.AddInt64(&nTraces, 1)
+					}
+				}
+			}
+		}
+	}
+	traceCollectorServer := httptest.NewServer(http.HandlerFunc(collectorHandlerFcn))
+	defer traceCollectorServer.Close()
+
+	// Configure tracing in the test cluster.
+	traceCollectorServerURL, err := url.Parse(traceCollectorServer.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setClusterTraceSamplingRate := func(rate float64) {
+		execStatement(fmt.Sprintf(`SET CLUSTER SETTING trace.sampling.rate = %f`, rate))
+	}
+	execStatement(fmt.Sprintf(`SET CLUSTER SETTING trace.zipkin.collector = '%s'`, traceCollectorServerURL.Host))
+
+	// Function that writes 500 rows.
+	startKey := 0
+	write1000Rows := func() {
+		waitGroup := sync.WaitGroup{}
+		for key := startKey; key < startKey+500; key += 25 {
+			waitGroup.Add(1)
+			go func(wg *sync.WaitGroup, k int) {
+				defer wg.Done()
+				for v := 0; v < 25; v++ {
+					execStatement(fmt.Sprintf(`INSERT INTO test VALUES (%d, %d)`, k+v, v))
+				}
+			}(&waitGroup, key)
+		}
+		waitGroup.Wait()
+		startKey = startKey + 1000
+	}
+
+	// Test 100% Sampling Rate.
+	setClusterTraceSamplingRate(1.0)
+	atomic.StoreInt64(&nTraces, 0)
+	write1000Rows()
+	testutils.SucceedsSoon(t, func() error {
+		currentTraces := atomic.LoadInt64(&nTraces)
+		if currentTraces < 475 && currentTraces > 525 {
+			return fmt.Errorf(`could not trace all SQL 'INSERT INTO' statements. traced %d out of 500`, currentTraces)
+		}
+		return nil
+	})
+
+	// Test 50% Sampling Rate.
+	setClusterTraceSamplingRate(0.5)
+	atomic.StoreInt64(&nTraces, 0)
+	write1000Rows()
+	testutils.SucceedsSoon(t, func() error {
+		currentTraces := atomic.LoadInt64(&nTraces)
+		if currentTraces < 225 && currentTraces > 275 {
+			return fmt.Errorf(`could not trace 50 percent of SQL 'INSERT INTO' statements. traced %d out of 500`, currentTraces)
+		}
+		return nil
+	})
+
+	// Test 10% Sampling Rate.
+	setClusterTraceSamplingRate(0.1)
+	atomic.StoreInt64(&nTraces, 0)
+	write1000Rows()
+	testutils.SucceedsSoon(t, func() error {
+		currentTraces := atomic.LoadInt64(&nTraces)
+		if currentTraces < 25 && currentTraces > 75 {
+			return fmt.Errorf(`could not trace 10 percent of SQL 'INSERT INTO' statements. traced %d out of 500`, currentTraces)
 		}
 		return nil
 	})
