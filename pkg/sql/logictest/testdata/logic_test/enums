@@ -1161,3 +1161,19 @@ uds    typ        schema
 
 statement error pq: cannot create "fakedb.typ" because the target database or schema does not exist
 CREATE TYPE fakedb.typ AS ENUM ('schema')
+
+# Regression test that hydrating descriptors does not happen on dropped
+# descriptors.
+
+subtest dropped_database_with_enum
+
+statement ok
+CREATE DATABASE to_drop;
+USE to_drop;
+CREATE TYPE greeting AS ENUM ('hi');
+CREATE TABLE t(a greeting);
+USE defaultdb;
+DROP DATABASE to_drop CASCADE;
+CREATE TYPE another AS ENUM ('hi');
+CREATE TABLE s(a another);
+SELECT * FROM crdb_internal.tables;
