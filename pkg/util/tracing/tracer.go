@@ -76,6 +76,17 @@ var zipkinCollectorBatchSize = settings.RegisterNonNegativeIntSetting(
 	100,
 )
 
+var samplingRate = settings.RegisterValidatedFloatSetting(
+	"trace.sampling.rate",
+	"if set, sets the fraction of traces that will be sampled",
+	1.0,
+	func(value float64) error {
+		if value < 0 || value > 1.0 {
+			return errors.Errorf("must set trace.sampling.rate between 0.0 and 1.0")
+		}
+		return nil
+	})
+
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //
 //  - forwarding events to x/net/trace instances
@@ -110,6 +121,11 @@ type Tracer struct {
 
 	// Pointer to shadowTracer, if using one.
 	shadowTracer unsafe.Pointer
+
+	// The fraction (between 0.0 and 1.0) of traces to record and collect stored
+	// as an unsafe pointer for atomics. Set by changing the cluster settings.
+	// Accessed via t.samplingRate().
+	_samplingRate unsafe.Pointer
 }
 
 var _ opentracing.Tracer = &Tracer{}
@@ -142,6 +158,9 @@ func (t *Tracer) Configure(sv *settings.Values) {
 			nt = 1
 		}
 		atomic.StoreInt32(&t._useNetTrace, nt)
+
+		sr := samplingRate.Get(sv)
+		atomic.SwapPointer(&t._samplingRate, unsafe.Pointer(&sr))
 	}
 
 	reconfigure()
@@ -150,6 +169,7 @@ func (t *Tracer) Configure(sv *settings.Values) {
 	lightstepToken.SetOnChange(sv, reconfigure)
 	zipkinCollector.SetOnChange(sv, reconfigure)
 	zipkinCollectorBatchSize.SetOnChange(sv, reconfigure)
+	samplingRate.SetOnChange(sv, reconfigure)
 }
 
 func (t *Tracer) useNetTrace() bool {
@@ -345,18 +365,40 @@ type RecordableOpt bool
 
 const (
 	// RecordableSpan means that the root span will be recordable. This means that
-	// a real span will be created (and so it carries a cost).
+	// a real span may be created (it may not due to sampling) (if created, it will carry a cost).
 	RecordableSpan RecordableOpt = true
 	// NonRecordableSpan means that the root span will not be recordable. This
-	// means that the static noop span might be returned.
+	// means that the static noop span will be returned.
 	NonRecordableSpan RecordableOpt = false
 )
 
-// AlwaysTrace returns true if operations should be traced regardless of the
-// context.
-func (t *Tracer) AlwaysTrace() bool {
-	shadowTracer := t.getShadowTracer()
-	return t.useNetTrace() || shadowTracer != nil || t.forceRealSpans
+// alwaysTrace can be used to set conditions for when 100% tracing is desired
+func (t *Tracer) alwaysTrace() bool {
+	return t.useNetTrace() || t.forceRealSpans
+}
+
+// effectiveSamplingRate returns the sampling rate as set by t._samplingRate.
+// If _samplingRate has not been set by t.Configure(), return 100% sampling
+func (t *Tracer) effectiveSamplingRate() float64 {
+	var samplingRate float64
+	unsafeSamplingRate := unsafe.Pointer(&samplingRate)
+	atomic.SwapPointer(&unsafeSamplingRate, t._samplingRate)
+	if unsafeSamplingRate == nil {
+		return 1.0
+	}
+	return *(*float64)(unsafeSamplingRate)
+}
+
+// shouldSample determines if traces should be recorded starting at the root.
+func (t *Tracer) shouldSample() bool {
+	sr := t.effectiveSamplingRate()
+	if sr == 1.0 {
+		return true
+	}
+	if sr == 0 {
+		return false
+	}
+	return rand.Float64() < sr
 }
 
 // StartRootSpan creates a root span. This is functionally equivalent to:
@@ -368,9 +410,14 @@ func (t *Tracer) AlwaysTrace() bool {
 func (t *Tracer) StartRootSpan(
 	opName string, logTags *logtags.Buffer, recordable RecordableOpt,
 ) opentracing.Span {
-	// In the usual case, we return noopSpan.
-	if !t.AlwaysTrace() && recordable == NonRecordableSpan {
-		return &t.noopSpan
+
+	if !t.alwaysTrace() {
+		if recordable == NonRecordableSpan {
+			return &t.noopSpan
+		}
+		if !t.shouldSample() {
+			return &t.noopSpan
+		}
 	}
 
 	s := &span{

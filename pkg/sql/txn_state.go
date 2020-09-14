@@ -193,10 +193,6 @@ func (ts *txnState) resetForNewSQLTxn(
 	// Put the new span in the context.
 	txnCtx := opentracing.ContextWithSpan(connCtx, sp)
 
-	if !tracing.IsRecordable(sp) {
-		log.Fatalf(connCtx, "non-recordable transaction span of type: %T", sp)
-	}
-
 	ts.sp = sp
 	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
 
