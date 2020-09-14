@@ -40,7 +40,9 @@ func runDebugDecodeProto(_ *cobra.Command, _ []string) error {
 // the result of `fn` on `out`.
 // Errors returned by `fn` are emitted on `out` with a "warning" prefix.
 func streamMap(out io.Writer, in io.Reader, fn func(string) (bool, string, error)) error {
-	for sc := bufio.NewScanner(in); sc.Scan(); {
+	sc := bufio.NewScanner(in)
+	sc.Buffer(nil, 128<<20 /* 128 MiB */)
+	for sc.Scan() {
 		for _, field := range strings.Fields(sc.Text()) {
 			ok, value, err := fn(field)
 			if err != nil {
@@ -56,7 +58,7 @@ func streamMap(out io.Writer, in io.Reader, fn func(string) (bool, string, error
 		}
 		fmt.Fprintln(out, "")
 	}
-	return nil
+	return sc.Err()
 }
 
 // tryDecodeValue tries to decode the given string with the given proto name
