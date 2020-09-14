@@ -1129,14 +1129,13 @@ enum_table_show  CREATE TABLE public.enum_table_show (
 
 # Inverted partial indexes.
 
-statement error pgcode 0A000 unimplemented: partial inverted indexes not supported
-CREATE TABLE inv (j JSON, i INT, INVERTED INDEX (j) WHERE i > 0)
+statement ok
+CREATE TABLE inv (j JSON, i INT, INVERTED INDEX (j) WHERE i > 0);
+DROP TABLE inv;
 
 statement ok
-CREATE TABLE inv (j JSON, i INT)
-
-statement error pgcode 0A000 unimplemented: partial inverted indexes not supported
-CREATE INVERTED INDEX ON inv (j) WHERE i > 0
+CREATE TABLE inv (k INT PRIMARY KEY, j JSON, s STRING);
+CREATE INVERTED INDEX ON inv (j) WHERE s IN ('foo', 'bar');
 
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.

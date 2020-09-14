@@ -1458,11 +1458,6 @@ func NewTableDesc(
 				idx.Partitioning = partitioning
 			}
 			if d.Predicate != nil {
-				if d.Inverted {
-					telemetry.Inc(sqltelemetry.PartialInvertedIndexErrorCounter)
-					return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
-				}
-
 				expr, err := idxValidator.Validate(d.Predicate)
 				if err != nil {
 					return nil, err

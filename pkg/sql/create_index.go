@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -225,11 +224,6 @@ func MakeIndexDescriptor(
 	}
 
 	if n.Predicate != nil {
-		if n.Inverted {
-			telemetry.Inc(sqltelemetry.PartialInvertedIndexErrorCounter)
-			return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
-		}
-
 		idxValidator := schemaexpr.MakeIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
 		expr, err := idxValidator.Validate(n.Predicate)
 		if err != nil {

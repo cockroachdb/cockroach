@@ -70,11 +70,6 @@ var (
 	// PartialIndexCounter is to be incremented every time a partial index is
 	// created.
 	PartialIndexCounter = telemetry.GetCounterOnce("sql.schema.partial_index")
-
-	// PartialInvertedIndexErrorCounter is to be incremented every time a
-	// partial inverted index is attempted to be created, but fails because it
-	// is not yet supported.
-	PartialInvertedIndexErrorCounter = telemetry.GetCounterOnce("sql.schema.partial_inverted_index_error")
 )
 
 var (
