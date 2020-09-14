@@ -1058,10 +1058,17 @@ func (tc *Collection) ResolveSchemaByID(
 // hydrateTypesInTableDesc installs user defined type metadata in all types.T
 // present in the input TableDescriptor. It always returns the same type of
 // TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
-// are not modified during the process of metadata installation.
+// are not modified during the process of metadata installation. Dropped tables
+// do not get hydrated.
+//
+// TODO(ajwerner): This should accept flags to indicate whether we can resolve
+// offline descriptors.
 func (tc *Collection) hydrateTypesInTableDesc(
 	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (catalog.TableDescriptor, error) {
+	if desc.Dropped() {
+		return desc, nil
+	}
 	switch t := desc.(type) {
 	case *tabledesc.Mutable:
 		// It is safe to hydrate directly into Mutable since it is
@@ -1545,6 +1552,10 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 		// Now hydrate all table descriptors.
 		for i := range descs {
 			desc := descs[i]
+			// Never hydrate dropped descriptors.
+			if desc.Dropped() {
+				continue
+			}
 			if tblDesc, ok := desc.(*tabledesc.Immutable); ok {
 				if err := typedesc.HydrateTypesInTableDescriptor(
 					ctx,
