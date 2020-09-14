@@ -22,7 +22,7 @@ echo "Pebble SHA: $PEBBLE_SHA"
 env=(
   "GITHUB_REPO=$GITHUB_REPO"
   "GITHUB_API_TOKEN=$GITHUB_API_TOKEN"
-  "BUILD_VCS_NUMBER=$BUILD_VCS_NUMBER"
+  "BUILD_VCS_NUMBER=$PEBBLE_SHA"
   "TC_BUILD_ID=$TC_BUILD_ID"
   "TC_SERVER_URL=$TC_SERVER_URL"
   "TC_BUILD_BRANCH=$TC_BUILD_BRANCH"
@@ -43,9 +43,9 @@ mkdir -p artifacts/meta
 if ! stdbuf -oL -eL \
   go test -mod=vendor -exec "stress ${STRESSFLAGS}" -run 'TestMeta$$' \
   -timeout 0 -tags 'invariants' -test.v ./vendor/github.com/cockroachdb/pebble/internal/metamorphic \
-  -dir artifacts/meta -ops "uniform:5000-25000" 2>&1 | tee artifacts/metamorphic.log; then
+  -dir artifacts/meta -ops "uniform:5000-25000" 2>&1 | tee artifacts/meta/metamorphic.log; then
     exit_status=${PIPESTATUS[0]}
-    go tool test2json -t -p "${PKG}" < artifacts/metamorphic.log | github-post
+    go tool test2json -t -p "${PKG}" < artifacts/meta/metamorphic.log | github-post --formatter=pebble-metamorphic
     exit $exit_status
   fi
 EOF
