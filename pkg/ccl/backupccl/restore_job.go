@@ -689,6 +689,16 @@ type restoreResumer struct {
 	settings *cluster.Settings
 	execCfg  *sql.ExecutorConfig
 
+	// versionAtLeast20_2 is true if the cluster version is new enough.
+	// In release-20.1, any decoded table descriptor needed a populated
+	// modification time regardless of its version number. In 20.2 and later we've
+	// relaxed this requirement to allow version 1 descriptors to be serialized
+	// with a zero modification time. Furthermore, in 20.1, database descriptors
+	// could not be safely put into the offiline state.
+	//
+	// TODO(ajwerner): Remove in 21.1.
+	versionAtLeast20_2 bool
+
 	testingKnobs struct {
 		// beforePublishingDescriptors is called right before publishing
 		// descriptors, after any data has been restored.
@@ -859,7 +869,10 @@ func createImportingDescriptors(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := RewriteTableDescs(mutableTables, details.DescriptorRewrites, details.OverrideDB); err != nil {
+	if err := RewriteTableDescs(
+		mutableTables, details.DescriptorRewrites, details.OverrideDB,
+		r.versionAtLeast20_2,
+	); err != nil {
 		return nil, nil, nil, err
 	}
 	tableDescs := make([]*descpb.TableDescriptor, len(mutableTables))
@@ -916,7 +929,7 @@ func createImportingDescriptors(
 	}
 	// 20.1 nodes won't make OFFLINE database descriptors public, so write them
 	// in the PUBLIC state.
-	if r.settings.Version.IsActive(ctx, clusterversion.VersionLeasedDatabaseDescriptors) {
+	if r.versionAtLeast20_2 {
 		for _, desc := range mutableDatabases {
 			desc.SetOffline("restoring")
 		}
@@ -1089,6 +1102,8 @@ func (r *restoreResumer) Resume(
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
+	r.versionAtLeast20_2 = p.ExecCfg().Settings.Version.IsActive(
+		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
 
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,
