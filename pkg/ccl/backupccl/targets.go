@@ -284,7 +284,9 @@ func descriptorsMatchingTargets(
 		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			schemaDesc := resolver.descByID[id]
-			if err := catalog.FilterDescriptorState(schemaDesc); err != nil {
+			if err := catalog.FilterDescriptorState(
+				schemaDesc, tree.CommonLookupFlags{},
+			); err != nil {
 				if requirePublic {
 					return errors.Wrapf(err, "schema %d was expected to be PUBLIC", id)
 				}
@@ -363,7 +365,9 @@ func descriptorsMatchingTargets(
 			}
 
 			// Verify that the table is in the correct state.
-			if err := catalog.FilterDescriptorState(tableDesc); err != nil {
+			if err := catalog.FilterDescriptorState(
+				tableDesc, tree.CommonLookupFlags{},
+			); err != nil {
 				// Return a does not exist error if explicitly asking for this table.
 				return ret, doesNotExistErr
 			}
@@ -437,7 +441,9 @@ func descriptorsMatchingTargets(
 				desc := resolver.descByID[id]
 				switch desc := desc.(type) {
 				case catalog.TableDescriptor:
-					if err := catalog.FilterDescriptorState(desc); err != nil {
+					if err := catalog.FilterDescriptorState(
+						desc, tree.CommonLookupFlags{},
+					); err != nil {
 						// Don't include this table in the expansion since it's not in a valid
 						// state. Silently fail since this table was not directly requested,
 						// but was just part of an expansion.

@@ -58,18 +58,17 @@ import (
 // this can cause issues in mixed version clusters. Please use the provided
 // removal/lookup methods for those cases.
 
-// RemoveObjectNamespaceEntry removes entries from both the deprecated and
-// new system.namespace table (if one exists).
-func RemoveObjectNamespaceEntry(
+// WriteObjectNamespaceEntryRemovalToBatch writes Del operations to b for
+// both the deprecated and new system.namespace table (if one exists).
+func WriteObjectNamespaceEntryRemovalToBatch(
 	ctx context.Context,
-	txn *kv.Txn,
+	b *kv.Batch,
 	codec keys.SQLCodec,
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
 	KVTrace bool,
-) error {
-	b := txn.NewBatch()
+) {
 	var toDelete []catalogkeys.DescriptorKey
 	// The (parentID, name) mapping could be in either the new system.namespace
 	// or the deprecated version. Thus we try to remove the mapping from both.
@@ -91,15 +90,22 @@ func RemoveObjectNamespaceEntry(
 		}
 		b.Del(delKey.Key(codec))
 	}
-	return txn.Run(ctx, b)
 }
 
-// RemovePublicTableNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
-// for public tables.
-func RemovePublicTableNamespaceEntry(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, name string,
+// RemoveObjectNamespaceEntry removes entries from both the deprecated and
+// new system.namespace table (if one exists).
+func RemoveObjectNamespaceEntry(
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	parentID descpb.ID,
+	parentSchemaID descpb.ID,
+	name string,
+	KVTrace bool,
 ) error {
-	return RemoveObjectNamespaceEntry(ctx, txn, codec, parentID, keys.PublicSchemaID, name, false /* KVTrace */)
+	b := txn.NewBatch()
+	WriteObjectNamespaceEntryRemovalToBatch(ctx, b, codec, parentID, parentSchemaID, name, KVTrace)
+	return txn.Run(ctx, b)
 }
 
 // RemoveSchemaNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry

@@ -111,20 +111,13 @@ func (p *planner) writeDatabaseChangeToBatch(
 	if p.Descriptors().DatabaseLeasingUnsupported() {
 		log.Fatal(ctx, "invalid attempted write of database descriptor")
 	}
-	desc.MaybeIncrementVersion()
 	if err := desc.Validate(); err != nil {
 		return err
 	}
-	if err := p.Descriptors().AddUncommittedDescriptor(desc); err != nil {
-		return err
-	}
-	return catalogkv.WriteDescToBatch(
+	return p.Descriptors().WriteDescToBatch(
 		ctx,
 		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.ExecCfg().Settings,
-		b,
-		p.ExecCfg().Codec,
-		desc.ID,
 		desc,
+		b,
 	)
 }

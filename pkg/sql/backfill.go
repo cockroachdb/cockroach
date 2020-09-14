@@ -168,6 +168,23 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 
 	var viewToRefresh *descpb.MaterializedViewRefresh
 
+	// Note that this descriptor is intentionally not leased. If the schema change
+	// held the lease, certain non-mutation related schema changes would not be
+	// able to proceed. That might be okay and even desirable. The bigger reason
+	// to not hold a lease throughout the duration of this schema change stage
+	// is more practical. The lease manager (and associated descriptor
+	// infrastructure) does not provide a mechanism to hold a lease over a long
+	// period of time and update the transaction commit deadline. As such, when
+	// the schema change job attempts to mutate the descriptor later in this
+	// method, the descriptor will need to be re-read and the operation should be
+	// revalidated against the new state of the descriptor. Any work to hold
+	// leases during mutations will need to consider the user experience when the
+	// user would like to issue schema changes to be applied asynchronously.
+	// Perhaps such schema changes could avoid waiting for a single version and
+	// thus avoid blocked. This will get ironed out in the context of
+	// transactional schema changes. In all likelihood, not holding a lease here
+	// is the right thing to do as we would never want this operation to fail
+	// because a new mutation was enqueued.
 	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
 	if err != nil {
 		return err
@@ -332,19 +349,22 @@ func (sc *SchemaChanger) dropConstraints(
 			fksByBackrefTable[c.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[c.ForeignKey.ReferencedTableID], c)
 		}
 	}
-	tableIDsToUpdate := make([]descpb.ID, 0, len(fksByBackrefTable)+1)
-	tableIDsToUpdate = append(tableIDsToUpdate, sc.descID)
-	for id := range fksByBackrefTable {
-		tableIDsToUpdate = append(tableIDsToUpdate, id)
-	}
 
 	// Create update closure for the table and all other tables with backreferences.
-	update := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
-		scDesc, ok := descs[sc.descID]
-		if !ok {
-			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
+	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		if err != nil {
+			return err
 		}
-		scTable := scDesc.(*tabledesc.Mutable)
+		// TODO(ajwerner): The need to do this implies that we should cache all
+		// mutable descriptors inside of the collection when they are resolved
+		// such that all attempts to resolve a mutable descriptor from a
+		// collection will always give you the same exact pointer.
+		scTable.MaybeIncrementVersion()
+		if err := descsCol.AddUncommittedDescriptor(scTable); err != nil {
+			return err
+		}
+		b := txn.NewBatch()
 		for i := range constraints {
 			constraint := &constraints[i]
 			switch constraint.ConstraintType {
@@ -369,19 +389,27 @@ func (sc *SchemaChanger) dropConstraints(
 				var foundExisting bool
 				for j := range scTable.OutboundFKs {
 					def := &scTable.OutboundFKs[j]
-					if def.Name == constraint.Name {
-						backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
-						if !ok {
-							return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
-						}
-						backrefTable := backrefDesc.(*tabledesc.Mutable)
-						if err := removeFKBackReferenceFromTable(backrefTable, def.Name, scTable); err != nil {
-							return err
-						}
-						scTable.OutboundFKs = append(scTable.OutboundFKs[:j], scTable.OutboundFKs[j+1:]...)
-						foundExisting = true
-						break
+					if def.Name != constraint.Name {
+						continue
 					}
+					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx,
+						constraint.ForeignKey.ReferencedTableID, txn)
+					if err != nil {
+						return err
+					}
+					if err := removeFKBackReferenceFromTable(
+						backrefTable, def.Name, scTable,
+					); err != nil {
+						return err
+					}
+					if err := descsCol.WriteDescToBatch(
+						ctx, true /* kvTrace */, backrefTable, b,
+					); err != nil {
+						return err
+					}
+					scTable.OutboundFKs = append(scTable.OutboundFKs[:j], scTable.OutboundFKs[j+1:]...)
+					foundExisting = true
+					break
 				}
 				if !foundExisting {
 					log.VEventf(
@@ -393,13 +421,16 @@ func (sc *SchemaChanger) dropConstraints(
 				}
 			}
 		}
-		return nil
-	}
-
-	descs, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, nil)
-	if err != nil {
+		if err := descsCol.WriteDescToBatch(
+			ctx, true /* kvTrace */, scTable, b,
+		); err != nil {
+			return err
+		}
+		return txn.Run(ctx, b)
+	}); err != nil {
 		return nil, err
 	}
+
 	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
 		return nil, err
 	}
@@ -410,10 +441,25 @@ func (sc *SchemaChanger) dropConstraints(
 	}
 
 	log.Info(ctx, "finished dropping constraints")
-
-	tableDescs := make(map[descpb.ID]*tabledesc.Immutable)
-	for i := range descs {
-		tableDescs[i] = descs[i].(*tabledesc.Immutable)
+	tableDescs := make(map[descpb.ID]*tabledesc.Immutable, len(fksByBackrefTable)+1)
+	if err := sc.txn(ctx, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) (err error) {
+		if tableDescs[sc.descID], err = descsCol.GetTableVersionByID(
+			ctx, txn, sc.descID, tree.ObjectLookupFlagsWithRequired(),
+		); err != nil {
+			return err
+		}
+		for id := range fksByBackrefTable {
+			if tableDescs[id], err = descsCol.GetTableVersionByID(
+				ctx, txn, id, tree.ObjectLookupFlagsWithRequired(),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return tableDescs, nil
 }
@@ -434,19 +480,24 @@ func (sc *SchemaChanger) addConstraints(
 			fksByBackrefTable[c.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[c.ForeignKey.ReferencedTableID], c)
 		}
 	}
-	tableIDsToUpdate := make([]descpb.ID, 0, len(fksByBackrefTable)+1)
-	tableIDsToUpdate = append(tableIDsToUpdate, sc.descID)
-	for id := range fksByBackrefTable {
-		tableIDsToUpdate = append(tableIDsToUpdate, id)
-	}
 
 	// Create update closure for the table and all other tables with backreferences
-	update := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
-		scDesc, ok := descs[sc.descID]
-		if !ok {
-			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
+	if err := sc.txn(ctx, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		if err != nil {
+			return err
 		}
-		scTable := scDesc.(*tabledesc.Mutable)
+		// TODO(ajwerner): The need to do this implies that we should cache all
+		// mutable descriptors inside of the collection when they are resolved
+		// such that all attempts to resolve a mutable descriptor from a
+		// collection will always give you the same exact pointer.
+		scTable.MaybeIncrementVersion()
+		if err := descsCol.AddUncommittedDescriptor(scTable); err != nil {
+			return err
+		}
+		b := txn.NewBatch()
 		for i := range constraints {
 			constraint := &constraints[i]
 			switch constraint.ConstraintType {
@@ -492,21 +543,36 @@ func (sc *SchemaChanger) addConstraints(
 				}
 				if !foundExisting {
 					scTable.OutboundFKs = append(scTable.OutboundFKs, constraint.ForeignKey)
-					backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
-					if !ok {
-						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
+					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, constraint.ForeignKey.ReferencedTableID, txn)
+					if err != nil {
+						return err
 					}
-					backrefTable := backrefDesc.(*tabledesc.Mutable)
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
+
+					// Note that this code may add the same descriptor to the batch
+					// multiple times if it is referenced multiple times. That's fine as
+					// the last put will win but it's perhaps not ideal. We could add
+					// code to deduplicate but it doesn't seem worth the hassle.
+					if backrefTable != scTable {
+						if err := descsCol.WriteDescToBatch(
+							ctx, true /* kvTrace */, backrefTable, b,
+						); err != nil {
+							return err
+						}
+					}
 				}
 			}
 		}
-		return nil
-	}
-
-	if _, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, nil); err != nil {
+		if err := descsCol.WriteDescToBatch(
+			ctx, true /* kvTrace */, scTable, b,
+		); err != nil {
+			return err
+		}
+		return txn.Run(ctx, b)
+	}); err != nil {
 		return err
 	}
+
 	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
 		return err
 	}
