@@ -68,12 +68,13 @@ func NewS2GeometryIndex(cfg S2GeometryConfig) GeometryIndex {
 func DefaultGeometryIndexConfig() *Config {
 	return &Config{
 		S2Geometry: &S2GeometryConfig{
-			// Arbitrary bounding box.
-			MinX:     -10000,
-			MaxX:     10000,
-			MinY:     -10000,
-			MaxY:     10000,
-			S2Config: DefaultS2Config()},
+			// Bounding box similar to the circumference of the earth (~2B meters)
+			MinX:     -(1 << 31),
+			MaxX:     (1 << 31) - 1,
+			MinY:     -(1 << 31),
+			MaxY:     (1 << 31) - 1,
+			S2Config: DefaultS2Config(),
+		},
 	}
 }
 
