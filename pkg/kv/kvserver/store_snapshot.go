@@ -476,7 +476,7 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 		return err
 	}
 	repr := batch.Repr()
-	kvSS.batchSize += int64(len(repr))
+	kvSS.bytesSent += int64(len(repr))
 	batch.Close()
 	return stream.Send(&SnapshotRequest{KVBatch: repr})
 }

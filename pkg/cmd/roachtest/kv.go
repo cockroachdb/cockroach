@@ -204,14 +204,7 @@ func registerKVContention(r *testRegistry) {
 			// If requests ever get stuck on a transaction that was abandoned
 			// then it will take 10m for them to get unstuck, at which point the
 			// QPS threshold check in the test is guaranteed to fail.
-			//
-			// Additionally, ensure that even transactions that issue a 1PC
-			// batch begin heartbeating. This ensures that if they end up in
-			// part of a dependency cycle, they can never be expire without
-			// being actively aborted.
-			args := startArgs(
-				"--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600 COCKROACH_TXN_HEARTBEAT_DURING_1PC=true",
-			)
+			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
 			c.Start(ctx, t, args, c.Range(1, nodes))
 
 			conn := c.Conn(ctx, 1)
@@ -256,9 +249,9 @@ func registerKVContention(r *testRegistry) {
 
 				// Assert that the average throughput stayed above a certain
 				// threshold. In this case, assert that max throughput only
-				// dipped below 100 qps for 5% of the time.
-				const minQPS = 100
-				verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.05)
+				// dipped below 50 qps for 10% of the time.
+				const minQPS = 50
+				verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.1)
 				return nil
 			})
 			m.Wait()

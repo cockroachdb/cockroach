@@ -672,6 +672,20 @@ message EndTxnRequest {
   // from the TxnCoordSender on a failed heartbeat. It should only be set to
   // true when commit=false.
   bool poison = 9;
+  // TxnHeartbeating indicates that the transaction's coordinator has launched
+  // its heartbeat loop and that it may have created its transaction record as
+  // PENDING through a HeartbeatTxn request by the time that this EndTxn request
+  // evaluates. If the flag is not set and the transaction has not yet issued a
+  // successful EndTxn requests, the transaction's record can not already exist
+  // (but see the WARNING below).
+  //
+  // For details about transaction record state transitions, see the diagram on
+  // CanCreateTxnRecord. This diagram demonstrates that only EndTxn requests and
+  // HeartbeatTxn requests can create new transaction records.
+  //
+  // WARNING: this flag was introduced in the v20.2 release. v20.1 nodes may not
+  // set this properly so it should not be relied upon for correctness.
+  bool txn_heartbeating = 10;
   reserved 7;
 }
 
