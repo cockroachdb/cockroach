@@ -13,6 +13,7 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -75,6 +76,10 @@ var zipkinCollectorBatchSize = settings.RegisterNonNegativeIntSetting(
 	"if set, sets the maximum batch size after which traces will be collected",
 	100,
 )
+var zipkinSamplingRate = settings.RegisterNonNegativeFloatSetting(
+	"trace.zipkin.sampling.rate",
+	"if set, sets the percentage of traces that will be sampled; will max out at 1.0 if a value above 1.0 is set",
+	1.0)
 
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //
@@ -133,6 +138,7 @@ func (t *Tracer) Configure(sv *settings.Values) {
 			t.setShadowTracer(createZipkinTracer(
 				zipkinAddr,
 				zipkinCollectorBatchSize.Get(sv),
+				math.Min(1.0, zipkinSamplingRate.Get(sv)),
 			))
 		} else {
 			t.setShadowTracer(nil, nil)
@@ -150,6 +156,7 @@ func (t *Tracer) Configure(sv *settings.Values) {
 	lightstepToken.SetOnChange(sv, reconfigure)
 	zipkinCollector.SetOnChange(sv, reconfigure)
 	zipkinCollectorBatchSize.SetOnChange(sv, reconfigure)
+	zipkinSamplingRate.SetOnChange(sv, reconfigure)
 }
 
 func (t *Tracer) useNetTrace() bool {
