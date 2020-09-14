@@ -852,13 +852,25 @@ var recoverySnapshotRate = settings.RegisterPublicValidatedByteSizeSetting(
 	validatePositive,
 )
 
+// snapshotSenderBatchSize is the size that key-value batches are allowed to
+// grow to during Range snapshots before being sent to the receiver. This limit
+// places an upper-bound on the memory footprint of the sender of a Range
+// snapshot. It is also the granularity of rate limiting.
+var snapshotSenderBatchSize = settings.RegisterValidatedByteSizeSetting(
+	"kv.snapshot_sender.batch_size",
+	"size of key-value batches sent over the network during snapshots",
+	256<<10, // 256 KB
+	validatePositive,
+)
+
 // snapshotSSTWriteSyncRate is the size of chunks to write before fsync-ing.
 // The default of 2 MiB was chosen to be in line with the behavior in bulk-io.
 // See sstWriteSyncRate.
-var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
+var snapshotSSTWriteSyncRate = settings.RegisterValidatedByteSizeSetting(
 	"kv.snapshot_sst.sync_size",
 	"threshold after which snapshot SST writes must fsync",
 	bulkIOWriteBurst,
+	validatePositive,
 )
 
 func snapshotRateLimit(
@@ -942,12 +954,12 @@ func sendSnapshot(
 	durQueued := timeutil.Since(start)
 	start = timeutil.Now()
 
-	// The size of batches to send. This is the granularity of rate limiting.
-	const batchSize = 256 << 10 // 256 KB
+	// Consult cluster settings to determine rate limits and batch sizes.
 	targetRate, err := snapshotRateLimit(st, header.Priority)
 	if err != nil {
 		return errors.Wrapf(err, "%s", to)
 	}
+	batchSize := snapshotSenderBatchSize.Get(&st.SV)
 
 	// Convert the bytes/sec rate limit to batches/sec.
 	//
@@ -956,7 +968,7 @@ func sendSnapshot(
 	// which seems to disable the rate limiting, or call WaitN in smaller than
 	// burst size chunks which caused excessive slowness in testing. Would be
 	// nice to figure this out, but the batches/sec rate limit works for now.
-	limiter := rate.NewLimiter(targetRate/batchSize, 1 /* burst size */)
+	limiter := rate.NewLimiter(targetRate/rate.Limit(batchSize), 1 /* burst size */)
 
 	// Create a snapshotStrategy based on the desired snapshot strategy.
 	var ss snapshotStrategy
