@@ -217,7 +217,9 @@ func (s storage) acquire(
 		if err != nil {
 			return err
 		}
-		if err := catalog.FilterDescriptorState(desc); err != nil {
+		if err := catalog.FilterDescriptorState(
+			desc, tree.CommonLookupFlags{}, // filter all non-public state
+		); err != nil {
 			return err
 		}
 		// Once the descriptor is set it is immutable and care must be taken

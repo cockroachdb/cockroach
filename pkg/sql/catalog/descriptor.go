@@ -196,11 +196,11 @@ type TypeDescriptorResolver interface {
 // FilterDescriptorState inspects the state of a given descriptor and returns an
 // error if the state is anything but public. The error describes the state of
 // the descriptor.
-func FilterDescriptorState(desc Descriptor) error {
+func FilterDescriptorState(desc Descriptor, flags tree.CommonLookupFlags) error {
 	switch {
-	case desc.Dropped():
+	case desc.Dropped() && !flags.IncludeDropped:
 		return NewInactiveDescriptorError(ErrDescriptorDropped)
-	case desc.Offline():
+	case desc.Offline() && !flags.IncludeOffline:
 		err := errors.Errorf("%s %q is offline", desc.TypeName(), desc.GetName())
 		if desc.GetOfflineReason() != "" {
 			err = errors.Errorf("%s %q is offline: %s", desc.TypeName(), desc.GetName(), desc.GetOfflineReason())
