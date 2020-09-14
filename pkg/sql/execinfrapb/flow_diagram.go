@@ -202,9 +202,6 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	if !hj.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr))
 	}
-	if hj.MergedColumns {
-		details = append(details, fmt.Sprintf("Merged columns: %d", len(hj.LeftEqColumns)))
-	}
 
 	return name, details
 }
