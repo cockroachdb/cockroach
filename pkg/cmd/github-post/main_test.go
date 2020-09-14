@@ -222,27 +222,28 @@ TestXXA - 1.00s
 			defer file.Close()
 			curIssue := 0
 
-			f := func(_ context.Context, title, packageName, testName, testMessage, author string) error {
+			f := func(ctx context.Context, f failure) error {
 				if t.Failed() {
 					return nil
 				}
+				req := defaultFormatter(ctx, f)
 				if curIssue >= len(c.expIssues) {
-					t.Errorf("unexpected issue filed. title: %s", title)
+					t.Errorf("unexpected issue filed. title: %s", f.title)
 				}
-				if exp := c.expPkg; exp != packageName {
-					t.Errorf("expected package %s, but got %s", exp, packageName)
+				if exp := c.expPkg; exp != f.packageName {
+					t.Errorf("expected package %s, but got %s", exp, f.packageName)
 				}
-				if exp := c.expIssues[curIssue].testName; exp != testName {
-					t.Errorf("expected test name %s, but got %s", exp, testName)
+				if exp := c.expIssues[curIssue].testName; exp != f.testName {
+					t.Errorf("expected test name %s, but got %s", exp, f.testName)
 				}
-				if exp := c.expIssues[curIssue].author; exp != "" && exp != author {
-					t.Errorf("expected author %s, but got %s", exp, author)
+				if exp := c.expIssues[curIssue].author; exp != "" && exp != req.AuthorEmail {
+					t.Errorf("expected author %s, but got %s", exp, req.AuthorEmail)
 				}
-				if exp := c.expIssues[curIssue].title; exp != title {
-					t.Errorf("expected title %s, but got %s", exp, title)
+				if exp := c.expIssues[curIssue].title; exp != f.title {
+					t.Errorf("expected title %s, but got %s", exp, f.title)
 				}
-				if exp := c.expIssues[curIssue].message; !strings.Contains(testMessage, exp) {
-					t.Errorf("expected message containing %s, but got:\n%s", exp, testMessage)
+				if exp := c.expIssues[curIssue].message; !strings.Contains(f.testMessage, exp) {
+					t.Errorf("expected message containing %s, but got:\n%s", exp, f.testMessage)
 				}
 				// On next invocation, we'll check the next expected issue.
 				curIssue++

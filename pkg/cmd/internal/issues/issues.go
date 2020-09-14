@@ -93,7 +93,7 @@ Parameters:
 {{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
 {{else -}}
 {{threeticks}}
-make stressrace TESTS={{.TestName}} PKG=./pkg/{{shortpkg .PackageName}} TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1
+{{.ReproductionCommand}}
 {{threeticks}}
 
 {{end -}}
@@ -352,7 +352,7 @@ func (p *poster) execTemplate(ctx context.Context, tpl string, data TemplateData
 	tlp, err := template.New("").Funcs(template.FuncMap{
 		"threeticks": func() string { return "```" },
 		"commiturl": func(sha string) string {
-			return fmt.Sprintf("https://github.com/cockroachdb/cockroach/commits/%s", sha)
+			return fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.org, p.repo, p.sha)
 		},
 		"shortpkg": func(fullpkg string) string {
 			return strings.TrimPrefix(fullpkg, CockroachPkgPrefix)
@@ -540,7 +540,9 @@ type PostRequest struct {
 	// TODO(irfansharif): We should re-think this, and our general approach to
 	// issue assignment, and move away from assigning individual authors.
 	// #51653.
-	AuthorEmail string
+	AuthorEmail,
+	// The instructions to reproduce the failure.
+	ReproductionCommand string
 	// Additional labels that will be added to the issue. They will be created
 	// as necessary (as a side effect of creating an issue with them). An
 	// existing issue may be adopted even if it does not have these labels.
