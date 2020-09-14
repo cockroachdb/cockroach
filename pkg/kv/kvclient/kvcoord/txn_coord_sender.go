@@ -767,13 +767,16 @@ func (tc *TxnCoordSender) updateStateLocked(
 		}
 
 		txnID := ba.Txn.ID
-		errTxnID := pErr.GetTxn().ID // The ID of the txn that needs to be restarted.
-		if errTxnID != txnID {
-			// KV should not return errors for transactions other than the one in
-			// the BatchRequest.
-			log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
-				ba.Txn, pErr)
+		if errTxn := pErr.GetTxn(); errTxn != nil {
+			errTxnID := errTxn.ID // The ID of the txn that needs to be restarted.
+			if errTxnID != txnID {
+				// KV should not return errors for transactions other than the one in
+				// the BatchRequest.
+				log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
+					ba.Txn, pErr)
+			}
 		}
+		// TODO: should we update txn on pErr to be ba.Txn?
 		return roachpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
 	}
 
