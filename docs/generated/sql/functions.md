@@ -1241,6 +1241,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 | d  e  y_off |  | y |
 \ 0  0      1 /  \ 0 /</p>
 </span></td></tr>
+<tr><td><a name="st_angle"></a><code>st_angle(line1: geometry, line2: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the clockwise angle between two LINESTRING geometries, treating them as vectors between their start- and endpoints. Returns NULL if any vectors have 0 length.</p>
+</span></td></tr>
+<tr><td><a name="st_angle"></a><code>st_angle(point1: geometry, point2: geometry, point3: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the clockwise angle between the vectors formed by point2,point1 and point2,point3. The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.</p>
+</span></td></tr>
+<tr><td><a name="st_angle"></a><code>st_angle(point1: geometry, point2: geometry, point3: geometry, point4: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the clockwise angle between the vectors formed by point1,point2 and point3,point4. The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.</p>
+</span></td></tr>
 <tr><td><a name="st_area"></a><code>st_area(geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geography in meters^2. Uses a spheroid to perform the operation.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
@@ -2020,6 +2026,10 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 <tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, angle_radians: <a href="float.html">float</a>, origin_point: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.</p>
 </span></td></tr>
 <tr><td><a name="st_rotate"></a><code>st_rotate(g: geometry, angle_radians: <a href="float.html">float</a>, origin_x: <a href="float.html">float</a>, origin_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.</p>
+</span></td></tr>
+<tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the default index configuration.</p>
+</span></td></tr>
+<tr><td><a name="st_s2covering"></a><code>st_s2covering(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry which represents the S2 covering used by the index using the default index configuration.</p>
 </span></td></tr>
 <tr><td><a name="st_scale"></a><code>st_scale(g: geometry, factor: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry scaled by taking in a Geometry as the factor.</p>
 </span></td></tr>

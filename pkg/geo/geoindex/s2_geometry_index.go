@@ -12,6 +12,7 @@ package geoindex
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geomfn"
@@ -366,8 +367,8 @@ func (s *s2GeometryIndex) geomExceedsBounds(g geom.T) bool {
 	return false
 }
 
-// stToUV() and face0UVToXYZPoint() are adapted from unexported methods in
-// github.com/golang/geo/s2/stuv.go
+// stToUV, uvToST, xyzToFace0UV and face0UVToXYZPoint are adapted
+// from unexported methods in github.com/golang/geo/s2/stuv.go
 
 // stToUV converts an s or t value to the corresponding u or v value.
 // This is a non-linear transformation from [-1,1] to [-1,1] that
@@ -380,17 +381,42 @@ func stToUV(s float64) float64 {
 	return (1 / 3.) * (1 - 4*(1-s)*(1-s))
 }
 
+// uvToST is the inverse of the stToUV transformation. Note that it
+// is not always true that uvToST(stToUV(x)) == x due to numerical
+// errors.
+func uvToST(u float64) float64 {
+	if u >= 0 {
+		return 0.5 * math.Sqrt(1+3*u)
+	}
+	return 1 - 0.5*math.Sqrt(1-3*u)
+}
+
 // Specialized version of faceUVToXYZ() for face 0
 func face0UVToXYZPoint(u, v float64) s2.Point {
 	return s2.Point{Vector: r3.Vector{X: 1, Y: u, Z: v}}
 }
 
+// xyzToFace0UV converts a direction vector (not necessarily unit length) to
+// (u, v) coordinates on face 0.
+func xyzToFace0UV(r s2.Point) (u, v float64) {
+	return r.Y / r.X, r.Z / r.X
+}
+
+// planarPointToS2Point converts a planar point to an s2.Point.
 func (s *s2GeometryIndex) planarPointToS2Point(x float64, y float64) s2.Point {
 	ss := (x - s.minX) / (s.maxX - s.minX)
 	tt := (y - s.minY) / (s.maxY - s.minY)
 	u := stToUV(ss)
 	v := stToUV(tt)
 	return face0UVToXYZPoint(u, v)
+}
+
+// s2PointToPlanarPoints converts an s2.Point to a planar point.
+func (s *s2GeometryIndex) s2PointToPlanarPoint(p s2.Point) (x, y float64) {
+	u, v := xyzToFace0UV(p)
+	ss := uvToST(u)
+	tt := uvToST(v)
+	return ss*(s.maxX-s.minX) + s.minX, tt*(s.maxY-s.minY) + s.minY
 }
 
 // TODO(sumeer): this is similar to S2RegionsFromGeomT() but needs to do
@@ -463,4 +489,20 @@ func (s *s2GeometryIndex) TestingInnerCovering(g geo.Geometry) s2.CellUnion {
 	}
 	r := s.s2RegionsFromPlanarGeomT(gt)
 	return innerCovering(s.rc, r)
+}
+
+func (s *s2GeometryIndex) CoveringGeometry(
+	c context.Context, g geo.Geometry,
+) (geo.Geometry, error) {
+	keys, _, err := s.InvertedIndexKeys(c, g)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	t, err := makeGeomTFromKeys(keys, g.SRID(), func(p s2.Point) (float64, float64) {
+		return s.s2PointToPlanarPoint(p)
+	})
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return geo.MakeGeometryFromGeomT(t)
 }

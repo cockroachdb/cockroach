@@ -212,3 +212,20 @@ func (i *s2GeographyIndex) TestingInnerCovering(g geo.Geography) s2.CellUnion {
 	}
 	return innerCovering(i.rc, r)
 }
+
+func (i *s2GeographyIndex) CoveringGeography(
+	c context.Context, g geo.Geography,
+) (geo.Geography, error) {
+	keys, _, err := i.InvertedIndexKeys(c, g)
+	if err != nil {
+		return geo.Geography{}, err
+	}
+	t, err := makeGeomTFromKeys(keys, g.SRID(), func(p s2.Point) (float64, float64) {
+		latlng := s2.LatLngFromPoint(p)
+		return latlng.Lng.Degrees(), latlng.Lat.Degrees()
+	})
+	if err != nil {
+		return geo.Geography{}, err
+	}
+	return geo.MakeGeographyFromGeomT(t)
+}
