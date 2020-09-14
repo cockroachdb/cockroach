@@ -298,7 +298,6 @@ func newZigzagJoiner(
 		spec.OnExpr,
 		leftEqCols,
 		rightEqCols,
-		0, /* numMerged */
 		post,
 		output,
 		execinfra.ProcStateOpts{

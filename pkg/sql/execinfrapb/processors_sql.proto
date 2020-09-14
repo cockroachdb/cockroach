@@ -471,17 +471,11 @@ message MergeJoinerSpec {
 // left row (i+1).
 //
 // The "internal columns" of a HashJoiner (see ProcessorSpec) are the
-// concatenation of merged columns (if present), left input columns and right
-// input columns. Each merged column corresponds to a left and a right equality
-// column; its value is the value on the left if it is not NULL, otherwise it is
-// the value on the right. There are either zero or
-// E=len(left_eq_columns)=len(right_eq_columns) merged columns.
+// concatenation of left input columns and right input columns.
 //
 // If the left input has N columns and the right input has M columns, the
 // first N columns contain values from the left side and the following M columns
-// contain values from the right side. If merged columns are present, they
-// occupy first E positions followed by N values from the left side and M values
-// from the right side.
+// contain values from the right side.
 //
 // In the case of semi-join and anti-join, the processor core outputs only the
 // left columns.
@@ -496,7 +490,6 @@ message HashJoinerSpec {
   // stream has M columns, in this expression variables @1 to @N refer to
   // columns of the left stream and variables @N to @(N+M) refer to columns in
   // the right stream.
-  // Having "ON" expression implies no merged columns.
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
@@ -511,16 +504,7 @@ message HashJoinerSpec {
   // same set of values on the right equality columns.
   optional bool right_eq_columns_are_key = 9 [(gogoproto.nullable) = false];
 
-  // DEPRECATED
-  //
-  // Extra merged columns that are added in case of OUTER JOINS. These
-  // columns occupy first positions in a row amd it's the left value if it's not
-  // NULL, otherwise it's the right value. In INNER JOIN case no merged columns are
-  // needed since left stream values are guaranteed to be not NULL.
-  //
-  // This has been deprecated; the distsqlrun layer still supports it for
-  // backward compatibility during upgrade.
-  optional bool merged_columns = 7 [(gogoproto.nullable) = false];
+  reserved 7;
 }
 
 // InvertedJoinerSpec is the specification for an inverted join. The processor
