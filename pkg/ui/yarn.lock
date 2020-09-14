@@ -1806,23 +1806,46 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/admin-ui-components@^0.1.10":
-  version "0.1.10"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.10.tgz#e71e7f00ba4a51e868b01bae3479e3b28cff5014"
-  integrity sha512-t0fza4KPVEdsgmcfY8WW3QUC5r2+PvzZgWCiHShzTKyElZTqyXYbqpzTDsrJoD+wNXqy5L5Y/7yBvrINWEpCYw==
+"@cockroachlabs/admin-ui-components@^0.1.16":
+  version "0.1.16"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.16.tgz#01060843a1f66a545d5dc7f9b2c3e5ef228ed930"
+  integrity sha512-RM3D90NoubKm+fUjnUnFnTz3w17Neyk25mpJORiUh9t8feBWiv0Q6ORQe3qQvyyO48dEahOmMdQz5dHXX1mgPQ==
   dependencies:
+    "@cockroachlabs/crdb-protobuf-client" "^0.0.2"
     "@cockroachlabs/icons" "^0.2.2"
+    "@cockroachlabs/ui-components" "^0.2.8"
     "@popperjs/core" "^2.4.0"
+    babel-polyfill "^6.26.0"
+    highlight.js "^10.2.0"
     long "^4.0.0"
     react-helmet "^5.2.0"
     react-popper "^2.2.3"
     react-select "^1.2.1"
     reselect "^4.0.0"
 
+"@cockroachlabs/crdb-protobuf-client@^0.0.2":
+  version "0.0.2"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.2.tgz#0dff7158b75971adfa18e7f32e90b9d88d6215a7"
+  integrity sha512-p/FyoVLeXTluRwPPwkRE6dU/cfTq01ej4vBNC64nxM4PDEcKOdlAt3xT+j9GD1m/f8VYdk7kksdFUOty+Ilklw==
+
 "@cockroachlabs/icons@^0.2.2":
   version "0.2.9"
   resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.2.9.tgz#b626fe409ea49be66b19a9a0358a082d50ade2d0"
   integrity sha512-s1kH8sU/DeIGrGUwUMVMAjxGTOn6SHAK8q0tmJY6zcIUaoYb/5UfnQjzdG+ybflgBdyMTB41/bWTXnpsYxxSpw==
+
+"@cockroachlabs/icons@^0.3.0":
+  version "0.3.0"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.3.0.tgz#160573074396f266e92fcbe5e520c5ba1d8750f9"
+  integrity sha512-GJxhlXy8Z3/PYFb9C3iM1dvU9wajGoaA/+VCj0an2ipfbkI2fhToq+h0b33vu7JuZ3dS4QMRjfVE4uhlyIUH2Q==
+
+"@cockroachlabs/ui-components@^0.2.8":
+  version "0.2.10"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.10.tgz#3c1492ae4397204fba8dcafc6fe09e2a0e1aaa57"
+  integrity sha512-m3csfYolWh6Rn0xuDRf0wqr1vErLgK1RVYywzM6k7Tld5O2XI993NyhCi5GNCBjOfbov7Ikq+UE6uc3S3Di9dQ==
+  dependencies:
+    "@cockroachlabs/icons" "^0.3.0"
+    "@popperjs/core" "^2.4.3"
+    react-popper "^2.2.3"
 
 "@emotion/cache@^10.0.27":
   version "10.0.27"
@@ -1943,6 +1966,11 @@
   version "2.4.4"
   resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.4.4.tgz#11d5db19bd178936ec89cd84519c4de439574398"
   integrity sha512-1oO6+dN5kdIA3sKPZhRGJTfGVP4SWV6KqlMOwry4J3HfyD68sl/3KmG7DeYUzvN+RbhXDnv/D8vNNB8168tAMg==
+
+"@popperjs/core@^2.4.3":
+  version "2.5.2"
+  resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.5.2.tgz#d3217d5f630766c0c92fbd55cf285ba64de0578b"
+  integrity sha512-tVkIU9JQw5fYPxLQgok/a7I6J1eEZ79svwQGpe2mb3jlVsPADOleefOnQBiS/takK7jQuNeswCUicMH1VWVziA==
 
 "@protobufjs/aspromise@^1.1.1", "@protobufjs/aspromise@^1.1.2":
   version "1.1.2"
@@ -6858,6 +6886,11 @@ he@1.2.0, he@^1.2.0:
   version "1.2.0"
   resolved "https://registry.yarnpkg.com/he/-/he-1.2.0.tgz#84ae65fa7eafb165fddb61566ae14baf05664f0f"
   integrity sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==
+
+highlight.js@^10.2.0:
+  version "10.2.0"
+  resolved "https://registry.yarnpkg.com/highlight.js/-/highlight.js-10.2.0.tgz#367151bcf813adebc54822f1cb51d2e1e599619f"
+  integrity sha512-OryzPiqqNCfO/wtFo619W+nPYALM6u7iCQkum4bqRmmlcTikOkmlL06i009QelynBPAlNByTQU6cBB2cOBQtCw==
 
 highlight.js@^9.10.0:
   version "9.10.0"
