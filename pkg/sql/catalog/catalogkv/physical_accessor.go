@@ -76,9 +76,9 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	if !ok {
 		return nil, nil
 	}
-	if !descriptorInAcceptableState(db, flags) {
+	if err := catalog.FilterDescriptorState(db, flags); err != nil {
 		if flags.Required {
-			return nil, catalog.FilterDescriptorState(db)
+			return nil, err
 		}
 		return nil, nil
 	}
@@ -130,9 +130,9 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	if !ok {
 		return false, catalog.ResolvedSchema{}, nil
 	}
-	if !descriptorInAcceptableState(sc, flags) {
+	if err := catalog.FilterDescriptorState(sc, flags); err != nil {
 		if flags.Required {
-			return false, catalog.ResolvedSchema{}, catalog.FilterDescriptorState(sc)
+			return false, catalog.ResolvedSchema{}, err
 		}
 		return false, catalog.ResolvedSchema{}, nil
 	}
@@ -299,9 +299,9 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 	// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
 	// OFFLINE if the relevant flag is set.
-	if !descriptorInAcceptableState(desc, flags.CommonLookupFlags) {
+	if err := catalog.FilterDescriptorState(desc, flags.CommonLookupFlags); err != nil {
 		if flags.Required {
-			return nil, catalog.FilterDescriptorState(desc)
+			return nil, err
 		}
 		return nil, nil
 	}
@@ -326,11 +326,4 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		return desc, nil
 	}
 	return nil, nil
-}
-
-func descriptorInAcceptableState(desc catalog.Descriptor, flags tree.CommonLookupFlags) bool {
-	return desc.Public() ||
-		desc.Adding() ||
-		(desc.Dropped() && flags.IncludeDropped) ||
-		(desc.Offline() && flags.IncludeOffline)
 }
