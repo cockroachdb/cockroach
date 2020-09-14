@@ -439,6 +439,47 @@ var geoBuiltins = map[string]builtinDefinition{
 	"postgis_wagyu_version":      returnCompatibilityFixedStringBuiltin("0.4.3 (Internal)"),
 
 	//
+	// Indexing
+	//
+
+	"st_s2covering": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(evalCtx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				cfg, err := geoindex.GeometryIndexConfigForSRID(g.SRID())
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geoindex.NewS2GeometryIndex(*cfg.S2Geometry).CoveringGeometry(evalCtx.Context, g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a geometry which represents the S2 covering used by the index using the default index configuration.",
+			},
+			tree.VolatilityImmutable,
+		),
+		geographyOverload1(
+			func(evalCtx *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
+				cfg := geoindex.DefaultGeographyIndexConfig().S2Geography
+				ret, err := geoindex.NewS2GeographyIndex(*cfg).CoveringGeography(evalCtx.Context, g.Geography)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeography(ret), nil
+			},
+			types.Geography,
+			infoBuilder{
+				info: "Returns a geography which represents the S2 covering used by the index using the default index configuration.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+
+	//
 	// Input (Geometry)
 	//
 
@@ -4487,6 +4528,92 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 		},
 	),
 
+	"st_angle": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"point1", types.Geometry},
+				{"point2", types.Geometry},
+				{"point3", types.Geometry},
+				{"point4", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g1 := tree.MustBeDGeometry(args[0]).Geometry
+				g2 := tree.MustBeDGeometry(args[1]).Geometry
+				g3 := tree.MustBeDGeometry(args[2]).Geometry
+				g4 := tree.MustBeDGeometry(args[3]).Geometry
+				angle, err := geomfn.Angle(g1, g2, g3, g4)
+				if err != nil {
+					return nil, err
+				}
+				if angle == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDFloat(tree.DFloat(*angle)), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the clockwise angle between the vectors formed by point1,point2 and point3,point4. ` +
+					`The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"point1", types.Geometry},
+				{"point2", types.Geometry},
+				{"point3", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g1 := tree.MustBeDGeometry(args[0]).Geometry
+				g2 := tree.MustBeDGeometry(args[1]).Geometry
+				g3 := tree.MustBeDGeometry(args[2]).Geometry
+				g4, err := geo.MakeGeometryFromGeomT(geom.NewPointEmpty(geom.XY))
+				if err != nil {
+					return nil, err
+				}
+				angle, err := geomfn.Angle(g1, g2, g3, g4)
+				if err != nil {
+					return nil, err
+				}
+				if angle == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDFloat(tree.DFloat(*angle)), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the clockwise angle between the vectors formed by point2,point1 and point2,point3. ` +
+					`The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"line1", types.Geometry},
+				{"line2", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g1 := tree.MustBeDGeometry(args[0]).Geometry
+				g2 := tree.MustBeDGeometry(args[1]).Geometry
+				angle, err := geomfn.AngleLineString(g1, g2)
+				if err != nil {
+					return nil, err
+				}
+				if angle == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDFloat(tree.DFloat(*angle)), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the clockwise angle between two LINESTRING geometries, treating them as vectors ` +
+					`between their start- and endpoints. Returns NULL if any vectors have 0 length.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	//
 	// BoundingBox
 	//
@@ -4941,7 +5068,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	// Unimplemented.
 	//
 
-	"st_angle":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48866}),
 	"st_asencodedpolyline":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48872}),
 	"st_asgml":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
 	"st_aslatlontext":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),

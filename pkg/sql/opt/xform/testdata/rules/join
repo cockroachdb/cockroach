@@ -3276,6 +3276,42 @@ project
       └── filters
            └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
+# A lookup semi-join on a partial index should have the same cost as a lookup
+# semi-join on a non-partial index.
+exec-ddl
+CREATE INDEX full_idx ON partial_tab (i)
+----
+
+opt format=show-cost
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE n = i)
+----
+project
+ ├── columns: m:1
+ ├── cost: 234.836
+ └── semi-join (lookup partial_tab@full_idx)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── cost: 234.726
+      ├── scan small
+      │    ├── columns: m:1 n:2
+      │    └── cost: 14.52
+      └── filters (true)
+
+opt format=show-cost
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', 'bar', 'baz') AND n = i)
+----
+project
+ ├── columns: m:1
+ ├── cost: 234.836
+ └── semi-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── cost: 234.726
+      ├── scan small
+      │    ├── columns: m:1 n:2
+      │    └── cost: 14.52
+      └── filters (true)
+
 # -------------------------------------------------------
 # GenerateInvertedJoins + GenerateInvertedJoinsFromSelect
 # -------------------------------------------------------
@@ -5297,7 +5333,7 @@ ALTER TABLE abc INJECT STATISTICS '[
     "distinct_count": 100
   },
   {
-    "columns": ["a"],
+    "columns": ["b"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 100,
     "distinct_count": 100
