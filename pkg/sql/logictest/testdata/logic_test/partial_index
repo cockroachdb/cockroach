@@ -1128,6 +1128,7 @@ enum_table_show  CREATE TABLE public.enum_table_show (
 )
 
 # Inverted partial indexes.
+subtest inverted
 
 statement ok
 CREATE TABLE inv (j JSON, i INT, INVERTED INDEX (j) WHERE i > 0);
@@ -1135,7 +1136,82 @@ DROP TABLE inv;
 
 statement ok
 CREATE TABLE inv (k INT PRIMARY KEY, j JSON, s STRING);
-CREATE INVERTED INDEX ON inv (j) WHERE s IN ('foo', 'bar');
+CREATE INVERTED INDEX i ON inv (j) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO inv VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s = 'foo'
+----
+1  {"num": 1, "x": "y"}  foo
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 1}' AND s IN ('foo', 'bar')
+----
+1  {"num": 1, "x": "y"}  foo
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
+
+statement ok
+DELETE FROM inv WHERE k = 3
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+1  {"num": 1, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET j = '{"x": "y", "num": 10}' WHERE k = 1
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 10}' AND s = 'foo'
+----
+1  {"num": 10, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET k = 10 WHERE k = 1
+
+statement ok
+UPDATE inv SET s = 'bar' WHERE k = 2
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+2   {"num": 2, "x": "y"}   bar
+10  {"num": 10, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET s = 'baz' WHERE k = 10
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+2  {"num": 2, "x": "y"}  bar
+
+statement ok
+UPSERT INTO inv VALUES (3, '{"x": "y", "num": 3}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s = 'bar' ORDER BY k
+----
+2  {"num": 2, "x": "y"}  bar
+3  {"num": 3, "x": "y"}  bar
+
+statement ok
+UPSERT INTO inv VALUES (3, '{"x": "y", "num": 4}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 4}' AND s = 'bar'
+----
+3  {"num": 4, "x": "y"}  bar
 
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.
