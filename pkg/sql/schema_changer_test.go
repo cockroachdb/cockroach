@@ -6212,3 +6212,58 @@ CREATE INDEX i ON t.test (a) WHERE b > 2
 		t.Errorf("partial index contains an incorrect number of keys: expected %d, but found %d", expectedNumKeys, numKeys)
 	}
 }
+
+// TestDrainingNamesCannotBeResolved tests that during the draining names state
+// for renamed descriptors, old names cannot be used via the uncached name
+// resolution path.
+func TestDrainingNamesCannotBeResolved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		// Don't drain names. This also means that we don't wait for leases to
+		// drain before returning, which is fine since we're testing the non-
+		// leased name resolution path.
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SchemaChangeJobNoOp: func() bool { return true },
+		},
+		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+			TypeSchemaChangeJobNoOp: func() bool { return true },
+		},
+	}
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create descriptors and rename them so that the old names get stuck as
+	// draining names.
+	sqlRun.Exec(t, `
+CREATE TABLE tbl();
+ALTER TABLE tbl RENAME TO tbl2;
+
+CREATE TYPE typ AS ENUM();
+ALTER TYPE typ RENAME TO typ2;
+
+CREATE SCHEMA sc;
+ALTER SCHEMA sc RENAME TO sc2;
+
+CREATE DATABASE db;
+ALTER DATABASE db RENAME TO db2;
+`)
+
+	// Ensure that the old namespace entries still exist.
+	sqlRun.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'tbl'`, [][]string{{"1"}})
+	sqlRun.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'typ'`, [][]string{{"1"}})
+	sqlRun.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'sc'`, [][]string{{"1"}})
+	sqlRun.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'db'`, [][]string{{"1"}})
+
+	// Test uncached name resolution by attempting schema changes. As of 20.2 we
+	// have some internal inconsistency in error messages.
+	sqlRun.ExpectErr(t, `relation "tbl" does not exist`, `ALTER TABLE tbl RENAME TO tbl3`)
+	sqlRun.ExpectErr(t, `type "typ" does not exist`, `ALTER TYPE typ RENAME TO typ3`)
+	sqlRun.ExpectErr(t, `unknown schema "sc"`, `ALTER SCHEMA sc RENAME TO sc3`)
+	sqlRun.ExpectErr(t, `database "db" does not exist`, `ALTER DATABASE db RENAME TO db3`)
+}

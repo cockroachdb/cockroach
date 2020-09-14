@@ -92,6 +92,8 @@ type typeSchemaChanger struct {
 
 // TypeSchemaChangerTestingKnobs contains testing knobs for the typeSchemaChanger.
 type TypeSchemaChangerTestingKnobs struct {
+	// TypeSchemaChangeJobNoOp returning true will cause the job to be a no-op.
+	TypeSchemaChangeJobNoOp func() bool
 	// RunBeforeExec runs at the start of the typeSchemaChanger.
 	RunBeforeExec func() error
 	// RunBeforeEnumMemberPromotion runs before enum members are promoted from
@@ -265,9 +267,15 @@ type typeChangeResumer struct {
 func (t *typeChangeResumer) Resume(
 	ctx context.Context, phs interface{}, _ chan<- tree.Datums,
 ) error {
+	p := phs.(*planner)
+	if p.execCfg.TypeSchemaChangerTestingKnobs.TypeSchemaChangeJobNoOp != nil {
+		if p.execCfg.TypeSchemaChangerTestingKnobs.TypeSchemaChangeJobNoOp() {
+			return nil
+		}
+	}
 	tc := &typeSchemaChanger{
 		typeID:  t.job.Details().(jobspb.TypeSchemaChangeDetails).TypeID,
-		execCfg: phs.(*planner).execCfg,
+		execCfg: p.execCfg,
 	}
 	return tc.execWithRetry(ctx)
 }

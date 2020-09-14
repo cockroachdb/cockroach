@@ -730,6 +730,23 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", tree.ErrString(&t.NewName))
 			}
+			// If this is a unique or primary constraint, renames of the constraint
+			// lead to renames of the underlying index. Ensure that no index with this
+			// new name exists. This is what postgres does.
+			switch details.Kind {
+			case descpb.ConstraintTypeUnique, descpb.ConstraintTypePK:
+				if err := n.tableDesc.ForeachNonDropIndex(func(
+					descriptor *descpb.IndexDescriptor,
+				) error {
+					if descriptor.Name == string(t.NewName) {
+						return pgerror.Newf(pgcode.DuplicateRelation,
+							"relation %v already exists", t.NewName)
+					}
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
 
 			if err := params.p.CheckPrivilege(params.ctx, n.tableDesc, privilege.CREATE); err != nil {
 				return err
