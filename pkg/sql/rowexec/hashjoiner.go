@@ -149,10 +149,6 @@ func newHashJoiner(
 		rightSource:       rightSource,
 	}
 
-	numMergedColumns := 0
-	if spec.MergedColumns {
-		numMergedColumns = len(spec.LeftEqColumns)
-	}
 	if err := h.joinerBase.init(
 		h,
 		flowCtx,
@@ -163,7 +159,6 @@ func newHashJoiner(
 		spec.OnExpr,
 		spec.LeftEqColumns,
 		spec.RightEqColumns,
-		uint32(numMergedColumns),
 		post,
 		output,
 		execinfra.ProcStateOpts{
