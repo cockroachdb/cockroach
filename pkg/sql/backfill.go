@@ -545,7 +545,7 @@ func (sc *SchemaChanger) validateConstraints(
 			return runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 				switch c.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Expr); err != nil {
 						return err
 					}
 				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
@@ -553,7 +553,7 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				case sqlbase.ConstraintToUpdate_NOT_NULL:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Expr); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
 						// return a different error code in the former case
@@ -1349,8 +1349,24 @@ func runSchemaChangesInTxn(
 	// Only needed because columnBackfillInTxn() backfills
 	// all column mutations.
 	doneColumnBackfill := false
-	// Checks are validated after all other mutations have been applied.
-	var constraintsToValidate []sqlbase.ConstraintToUpdate
+
+	// Mutations are processed in multiple steps: First we process all mutations
+	// for schema changes other than adding check or FK constraints, then we
+	// validate those constraints, and only after that do we process the
+	// constraint mutations. We need an in-memory copy of the table descriptor
+	// that contains newly added columns (since constraints being added can
+	// reference them), but that doesn't contain constraints (since otherwise we'd
+	// plan the query assuming the constraint holds). This is a different
+	// procedure than in the schema changer for existing tables, since all the
+	// "steps" in the schema change occur within the same transaction here.
+	//
+	// In the future it would be good to either unify the two implementations more
+	// or make this in-transaction implementation more principled. We expect
+	// constraint validation to be refactored and treated as a first-class concept
+	// in the world of transactional schema changes.
+
+	// Collect constraint mutations to process later.
+	var constraintAdditionMutations []sqlbase.DescriptorMutation
 
 	// We use a range loop here as the processing of some mutations
 	// such as the primary key swap mutations result in queueing more
@@ -1360,7 +1376,7 @@ func runSchemaChangesInTxn(
 		immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc.TableDesc())
 		switch m.Direction {
 		case sqlbase.DescriptorMutation_ADD:
-			switch t := m.Descriptor_.(type) {
+			switch m.Descriptor_.(type) {
 			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
 				// Don't need to do anything here, as the call to MakeMutationComplete
 				// will perform the steps for this operation.
@@ -1379,41 +1395,9 @@ func runSchemaChangesInTxn(
 				}
 
 			case *sqlbase.DescriptorMutation_Constraint:
-				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
-					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
-				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
-					fk := t.Constraint.ForeignKey
-					var referencedTableDesc *sqlbase.MutableTableDescriptor
-					// We don't want to lookup/edit a second copy of the same table.
-					selfReference := tableDesc.ID == fk.ReferencedTableID
-					if selfReference {
-						referencedTableDesc = tableDesc
-					} else {
-						lookup, err := planner.Tables().getMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
-						if err != nil {
-							return errors.Errorf("error resolving referenced table ID %d: %v", fk.ReferencedTableID, err)
-						}
-						referencedTableDesc = lookup
-					}
-					referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs, fk)
-					tableDesc.OutboundFKs = append(tableDesc.OutboundFKs, fk)
-
-					// Write the other table descriptor here if it's not the current table
-					// we're already modifying.
-					if !selfReference {
-						// TODO (lucy): Have more consistent/informative names for dependent jobs.
-						if err := planner.writeSchemaChange(
-							ctx, referencedTableDesc, sqlbase.InvalidMutationID, "updating referenced table",
-						); err != nil {
-							return err
-						}
-					}
-				default:
-					return errors.AssertionFailedf(
-						"unsupported constraint type: %d", errors.Safe(t.Constraint.ConstraintType))
-				}
-				constraintsToValidate = append(constraintsToValidate, *t.Constraint)
+				// This is processed later. Do not proceed to MakeMutationComplete.
+				constraintAdditionMutations = append(constraintAdditionMutations, m)
+				continue
 
 			default:
 				return errors.AssertionFailedf(
@@ -1471,9 +1455,6 @@ func runSchemaChangesInTxn(
 			}
 
 		}
-		// TODO (lucy): This seems suspicious, since MakeMutationsComplete should
-		// add unvalidated foreign keys, but we unconditionally add them above. Do
-		// unvalidated FKs get added twice?
 		if err := tableDesc.MakeMutationComplete(m); err != nil {
 			return err
 		}
@@ -1525,17 +1506,22 @@ func runSchemaChangesInTxn(
 			}
 		}
 	}
-	tableDesc.Mutations = nil
+	// Clear all the mutations except for adding constraints.
+	tableDesc.Mutations = constraintAdditionMutations
 
 	// Now that the table descriptor is in a valid state with all column and index
-	// mutations applied, it can be used for validating check constraints
-	for _, c := range constraintsToValidate {
-		switch c.ConstraintType {
+	// mutations applied, it can be used for validating check/FK constraints.
+	for _, m := range constraintAdditionMutations {
+		constraint := m.GetConstraint()
+		switch constraint.ConstraintType {
 		case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
-			if err := validateCheckInTxn(
-				ctx, planner.Tables().leaseMgr, planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
-			); err != nil {
-				return err
+			if constraint.Check.Validity == sqlbase.ConstraintValidity_Validating {
+				if err := validateCheckInTxn(
+					ctx, planner.Tables().leaseMgr, planner.EvalContext(), tableDesc, planner.txn, constraint.Check.Expr,
+				); err != nil {
+					return err
+				}
+				constraint.Check.Validity = sqlbase.ConstraintValidity_Validated
 			}
 		case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
 			// We can't support adding a validated foreign key constraint in the same
@@ -1544,24 +1530,61 @@ func runSchemaChangesInTxn(
 			// for whatever rows were inserted into the referencing table in this
 			// transaction, which requires multiple schema changer states across
 			// multiple transactions.
-			// TODO (lucy): Add a validation job that runs after the user transaction.
-			// This won't roll back the original transaction if validation fails, but
-			// it will at least leave the constraint in the Validated state if
-			// validation succeeds.
+			//
+			// We could partially fix this by queuing a validation job to run post-
+			// transaction. Better yet would be to absorb this into the transactional
+			// schema change framework eventually.
+			//
+			// For now, just always add the FK as unvalidated.
+			constraint.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
+		default:
+			return errors.AssertionFailedf(
+				"unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
+		}
+	}
 
-			// For now, revert the constraint to an unvalidated state.
-			for i := range tableDesc.OutboundFKs {
-				desc := &tableDesc.OutboundFKs[i]
-				if desc.Name == c.ForeignKey.Name {
-					desc.Validity = sqlbase.ConstraintValidity_Unvalidated
-					break
+	// Finally, add the constraints. We bypass MakeMutationsComplete (which makes
+	// certain assumptions about the state in the usual schema changer) and just
+	// update the table descriptor directly.
+	for _, m := range constraintAdditionMutations {
+		constraint := m.GetConstraint()
+		switch constraint.ConstraintType {
+		case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
+			tableDesc.Checks = append(tableDesc.Checks, &constraint.Check)
+		case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+			fk := constraint.ForeignKey
+			var referencedTableDesc *MutableTableDescriptor
+			// We don't want to lookup/edit a second copy of the same table.
+			selfReference := tableDesc.ID == fk.ReferencedTableID
+			if selfReference {
+				referencedTableDesc = tableDesc
+			} else {
+				lookup, err := planner.Tables().getMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
+				if err != nil {
+					return errors.Errorf("error resolving referenced table ID %d: %v", fk.ReferencedTableID, err)
+				}
+				referencedTableDesc = lookup
+			}
+			referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs, fk)
+			tableDesc.OutboundFKs = append(tableDesc.OutboundFKs, fk)
+
+			// Write the other table descriptor here if it's not the current table
+			// we're already modifying.
+			if !selfReference {
+				if err := planner.writeSchemaChange(
+					ctx, referencedTableDesc, sqlbase.InvalidMutationID,
+					fmt.Sprintf("updating referenced FK table %s(%d) table %s(%d)",
+						referencedTableDesc.Name, referencedTableDesc.ID, tableDesc.Name, tableDesc.ID),
+				); err != nil {
+					return err
 				}
 			}
 		default:
 			return errors.AssertionFailedf(
-				"unsupported constraint type: %d", errors.Safe(c.ConstraintType))
+				"unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
 		}
 	}
+	tableDesc.Mutations = nil
 	return nil
 }
 
@@ -1583,7 +1606,7 @@ func validateCheckInTxn(
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
 	txn *kv.Txn,
-	checkName string,
+	checkExpr string,
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
@@ -1601,12 +1624,7 @@ func validateCheckInTxn(
 			ie.tcModifier = nil
 		}()
 	}
-
-	check, err := tableDesc.FindCheckByName(checkName)
-	if err != nil {
-		return err
-	}
-	return validateCheckExpr(ctx, check.Expr, tableDesc.TableDesc(), ie, txn)
+	return validateCheckExpr(ctx, checkExpr, tableDesc.TableDesc(), ie, txn)
 }
 
 // validateFkInTxn validates foreign key constraints within the provided
