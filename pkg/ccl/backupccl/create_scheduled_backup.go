@@ -558,7 +558,7 @@ func makeScheduledBackupEval(
 // scheduledBackupHeader is the header for "CREATE SCHEDULE..." statements results.
 var scheduledBackupHeader = colinfo.ResultColumns{
 	{Name: "schedule_id", Typ: types.Int},
-	{Name: "name", Typ: types.String},
+	{Name: "label", Typ: types.String},
 	{Name: "status", Typ: types.String},
 	{Name: "first_run", Typ: types.TimestampTZ},
 	{Name: "schedule", Typ: types.String},
