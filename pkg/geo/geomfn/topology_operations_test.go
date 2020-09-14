@@ -20,6 +20,36 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
+func TestBoundary(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected string
+	}{
+		{"POINT EMPTY", "POINT EMPTY"},
+		{"POINT (1 1)", "GEOMETRYCOLLECTION EMPTY"},
+		{"LINESTRING EMPTY", "LINESTRING EMPTY"},
+		{"LINESTRING (100 150, 50 60, 70 80, 160 170)", "MULTIPOINT (100 150, 160 170)"},
+		{"SRID=4000;LINESTRING (100 150, 50 60, 70 80, 160 170)", "SRID=4000;MULTIPOINT (100 150, 160 170)"},
+		{
+			"POLYGON ((10 130, 50 190, 110 190, 140 150, 150 80, 100 10, 20 40, 10 130), (70 40, 100 50, 120 80, 80 110, 50 90, 70 40))",
+			"MULTILINESTRING ((10 130, 50 190, 110 190, 140 150, 150 80, 100 10, 20 40, 10 130), (70 40, 100 50, 120 80, 80 110, 50 90, 70 40))",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := Boundary(g)
+			require.NoError(t, err)
+
+			wkt, err := geo.SpatialObjectToEWKT(ret.SpatialObject(), 0)
+			require.NoError(t, err)
+			require.EqualValues(t, tc.expected, wkt)
+		})
+	}
+}
+
 func TestCentroid(t *testing.T) {
 	testCases := []struct {
 		wkt      string
@@ -91,6 +121,39 @@ func TestConvexHull(t *testing.T) {
 			require.Equal(t, expected, ret)
 		})
 	}
+}
+
+func TestDifference(t *testing.T) {
+	testCases := []struct {
+		wkt1     string
+		wkt2     string
+		expected string
+	}{
+		{"POINT EMPTY", "LINESTRING EMPTY", "POINT EMPTY"},
+		{"LINESTRING EMPTY", "POINT EMPTY", "LINESTRING EMPTY"},
+		{"LINESTRING (50 100, 50 200)", "LINESTRING(50 50, 50 150)", "LINESTRING (50 150, 50 200)"},
+		{"SRID=4000;LINESTRING (50 100, 50 200)", "SRID=4000;LINESTRING(50 50, 50 150)", "SRID=4000;LINESTRING (50 150, 50 200)"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v - %v", tc.wkt2, tc.wkt1), func(t *testing.T) {
+			g1, err := geo.ParseGeometry(tc.wkt1)
+			require.NoError(t, err)
+			g2, err := geo.ParseGeometry(tc.wkt2)
+			require.NoError(t, err)
+			ret, err := Difference(g1, g2)
+			require.NoError(t, err)
+
+			wkt, err := geo.SpatialObjectToEWKT(ret.SpatialObject(), 0)
+			require.NoError(t, err)
+			require.EqualValues(t, tc.expected, wkt)
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Difference(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
 }
 
 func TestSimplify(t *testing.T) {

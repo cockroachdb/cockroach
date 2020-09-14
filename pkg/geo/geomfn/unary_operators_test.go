@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -201,6 +202,58 @@ func TestNormalize(t *testing.T) {
 			g, err := Normalize(tc.a)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, g)
+		})
+	}
+}
+
+func TestMinimumClearance(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected float64
+	}{
+		{"POINT (1 1)", math.Inf(1)},
+		{"POLYGON EMPTY", math.Inf(1)},
+		{"POLYGON ((0 0, 1 0, 1 1, 0.5 3.2e-4, 0 0))", 0.00032},
+		{"GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0.5 3.2e-4, 0 0)), POINT (1 1))", 0.00032},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := MinimumClearance(g)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+}
+
+func TestMinimumClearanceLine(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected string
+	}{
+		{"POINT (1 1)", "LINESTRING EMPTY"},
+		{"POLYGON EMPTY", "LINESTRING EMPTY"},
+		{"POLYGON ((0 0, 1 0, 1 1, 0.5 3.2e-4, 0 0))", "LINESTRING (0.5 0.00032, 0.5 0)"},
+		{
+			"GEOMETRYCOLLECTION (POLYGON ((0 0, 1 0, 1 1, 0.5 3.2e-4, 0 0)), POINT (1 1))",
+			"LINESTRING (0.5 0.00032, 0.5 0)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			srid := geopb.SRID(4000)
+			g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.wkt), srid, true)
+			require.NoError(t, err)
+
+			result, err := MinimumClearanceLine(g)
+			require.NoError(t, err)
+			wkt, err := geo.SpatialObjectToWKT(result.SpatialObject(), 10)
+			require.NoError(t, err)
+			require.EqualValues(t, tc.expected, wkt)
+			require.EqualValues(t, srid, result.SRID())
 		})
 	}
 }
