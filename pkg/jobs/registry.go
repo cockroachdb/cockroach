@@ -775,7 +775,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, s sqlliveness.Session) {
 func (r *Registry) maybeCancelJobsDeprecated(
 	ctx context.Context, nlw optionalnodeliveness.Container,
 ) {
-	nl, ok := nlw.Optional(47892)
+	nl, ok := nlw.Optional(54251)
 	if !ok {
 		// At most one container is running on behalf of a SQL tenant, so it must be
 		// this one, and there's no point canceling anything.

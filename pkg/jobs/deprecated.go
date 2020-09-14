@@ -86,7 +86,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 	// If no liveness is available, adopt all jobs. This is reasonable because this
 	// only affects SQL tenants, which have at most one SQL server running on their
 	// behalf at any given time.
-	if nl, ok := nlw.Optional(47892); ok {
+	if nl, ok := nlw.Optional(54251); ok {
 		// We subtract the leniency interval here to artificially
 		// widen the range of times over which the job registry will
 		// consider the node to be alive.  We rely on the fact that
