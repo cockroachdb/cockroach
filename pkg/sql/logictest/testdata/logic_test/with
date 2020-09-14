@@ -604,3 +604,34 @@ EXECUTE ctestmt (10)
 31
 41
 51
+
+# Verify that the query inside the CTE can refer to an outer CTE.
+statement ok
+DROP TABLE IF EXISTS ab
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO ab VALUES (1,1)
+
+query I rowsort
+WITH
+  cte1 AS MATERIALIZED (SELECT a FROM ab WHERE a = b)
+SELECT * FROM
+  (
+    WITH RECURSIVE
+      cte2 (x) AS (SELECT 1 UNION ALL SELECT x + a FROM cte2, cte1 WHERE x < 10)
+    SELECT * FROM cte2
+  )
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10

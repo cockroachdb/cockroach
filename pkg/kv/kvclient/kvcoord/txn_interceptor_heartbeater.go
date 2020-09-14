@@ -16,19 +16,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	opentracing "github.com/opentracing/opentracing-go"
 )
-
-// txnHeartbeatDuring1PC defines whether the txnHeartbeater should launch a
-// heartbeat loop for 1PC transactions. The value defaults to false even though
-// 1PC transactions leave intents around on retriable errors if the batch has
-// been split between ranges and may be pushed when in lock wait-queues because
-// we consider that unlikely enough so we prefer to not pay for a goroutine.
-var txnHeartbeatFor1PC = envutil.EnvOrDefaultBool("COCKROACH_TXN_HEARTBEAT_DURING_1PC", false)
 
 // txnHeartbeater is a txnInterceptor in charge of a transaction's heartbeat
 // loop. Transaction coordinators heartbeat their transaction record
@@ -141,6 +133,7 @@ func (h *txnHeartbeater) init(
 func (h *txnHeartbeater) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	etArg, hasET := ba.GetArg(roachpb.EndTxn)
 	firstLockingIndex, pErr := firstLockingIndex(&ba)
 	if pErr != nil {
 		return nil, pErr
@@ -157,15 +150,21 @@ func (h *txnHeartbeater) SendLocked(
 			ba.Txn.Key = anchor
 		}
 
-		// Start the heartbeat loop if it has not already started.
+		// Start the heartbeat loop if it has not already started and this batch
+		// is not intending to commit/abort the transaction.
 		if !h.mu.loopStarted {
-			_, haveEndTxn := ba.GetArg(roachpb.EndTxn)
-			if !haveEndTxn || txnHeartbeatFor1PC {
+			if !hasET {
 				if err := h.startHeartbeatLoopLocked(ctx); err != nil {
 					return nil, roachpb.NewError(err)
 				}
 			}
 		}
+	}
+
+	// Set the EndTxn request's TxnHeartbeating flag, if necessary.
+	if hasET {
+		et := etArg.(*roachpb.EndTxnRequest)
+		et.TxnHeartbeating = h.mu.loopStarted
 	}
 
 	// Forward the batch through the wrapped lockedSender.
@@ -383,7 +382,8 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
 		// concurrent requests from failing to notice the transaction was aborted.
-		Poison: true,
+		Poison:          true,
+		TxnHeartbeating: true,
 	})
 
 	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
