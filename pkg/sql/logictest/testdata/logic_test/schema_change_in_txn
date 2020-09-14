@@ -1771,3 +1771,69 @@ ALTER TABLE t42508 ADD COLUMN y INT DEFAULT nextval('s42508')
 
 statement error pgcode XXA00 unimplemented: cannot backfill such sequence operation.*\nHINT.*\n.*42508
 COMMIT
+
+# Test that NOT NULL constraints can be created and validated on a newly created
+# table.
+subtest 52501
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t_52501_valid(a INT)
+
+statement ok
+INSERT INTO t_52501_valid VALUES (1)
+
+statement ok
+ALTER TABLE t_52501_valid ALTER COLUMN a SET NOT NULL
+
+statement ok
+COMMIT
+
+query TTTTB
+SHOW CONSTRAINTS FROM t_52501_valid
+----
+t_52501_valid  a_auto_not_null  CHECK  CHECK ((a IS NOT NULL))  true
+
+statement ok
+DROP TABLE t_52501_valid
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t_52501_invalid(a INT)
+
+statement ok
+INSERT INTO t_52501_invalid VALUES (NULL)
+
+statement error pgcode 23514 validation of CHECK "a IS NOT NULL" failed
+ALTER TABLE t_52501_invalid ALTER COLUMN a SET NOT NULL
+
+statement ok
+ROLLBACK
+
+# Test that NOT VALID foreign keys can be added in the same transaction as the
+# table.
+subtest 54265
+
+statement ok
+CREATE TABLE parent_54265 (a INT PRIMARY KEY)
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE child_54265 (a INT)
+
+statement ok
+ALTER TABLE child_54265 ADD FOREIGN KEY (a) REFERENCES parent_54265 NOT VALID
+
+statement ok
+COMMIT
+
+query TTTTB
+SHOW CONSTRAINTS FROM child_54265
+----
+child_54265  fk_a_ref_parent_54265  FOREIGN KEY  FOREIGN KEY (a) REFERENCES parent_54265(a)  false

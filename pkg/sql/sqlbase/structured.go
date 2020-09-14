@@ -2547,18 +2547,6 @@ func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, boo
 	return nil, false, fmt.Errorf("index %q does not exist", name)
 }
 
-// FindCheckByName finds the check constraint with the specified name.
-func (desc *TableDescriptor) FindCheckByName(
-	name string,
-) (*TableDescriptor_CheckConstraint, error) {
-	for _, c := range desc.Checks {
-		if c.Name == name {
-			return c, nil
-		}
-	}
-	return nil, fmt.Errorf("check %q does not exist", name)
-}
-
 // NamesForColumnIDs returns the names for the given column ids, or an error
 // if one or more column ids was missing. Note - this allocates! It's not for
 // hot path code.
