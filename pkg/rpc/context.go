@@ -97,11 +97,10 @@ func spanInclusionFuncForServer(
 	t *tracing.Tracer, parentSpanCtx opentracing.SpanContext, method string, req, resp interface{},
 ) bool {
 	// Is client tracing?
-	return (parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)) ||
-		// Should we trace regardless of the client? This is useful for calls coming
-		// through the HTTP->RPC gateway (i.e. the AdminUI), where client is never
-		// tracing.
-		t.AlwaysTrace()
+	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
+	// Should we trace regardless of the client? This is useful for calls coming
+	// through the HTTP->RPC gateway (i.e. the AdminUI), where client is never
+	// tracing.
 }
 
 // spanInclusionFuncForClient is used as a SpanInclusionFunc for the client-side

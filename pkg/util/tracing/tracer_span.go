@@ -205,8 +205,7 @@ func (s *span) enableRecording(parent *span, recType RecordingType, separateReco
 // are recorded; also, all direct and indirect child spans started from now on
 // will be part of the same recording.
 //
-// Recording is not supported by noop spans; to ensure a real span is always
-// created, use the Recordable option to StartSpan.
+// Recording is a noop for noop spans
 //
 // If recording was already started on this span (either directly or because a
 // parent span is recording), the old recording is lost.
@@ -215,7 +214,7 @@ func StartRecording(os opentracing.Span, recType RecordingType) {
 		panic("StartRecording called with NoRecording")
 	}
 	if _, noop := os.(*noopSpan); noop {
-		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
+		return
 	}
 
 	// If we're already recording (perhaps because the parent was recording when
