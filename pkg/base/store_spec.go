@@ -458,6 +458,34 @@ func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
 	return err
 }
 
+// XXX:
+func (ssl StoreSpecList) PriorDecommMarkers() (err error) {
+	addError := func(newErr error) {
+		if err == nil {
+			err = errors.New("startup forbidden by prior critical alert")
+		}
+		// We use WithDetailf here instead of errors.CombineErrors
+		// because we want the details to be printed to the screen
+		// (combined errors only show up via %+v).
+		err = errors.WithDetailf(err, "%v", newErr)
+	}
+	for _, ss := range ssl.Specs {
+		path := ss.DecommMarkerFile()
+		if path == "" {
+			continue
+		}
+		b, err := ioutil.ReadFile(path)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				addError(errors.Wrapf(err, "%s", path))
+			}
+			continue
+		}
+		addError(errors.Newf("Found marker %s\n", path, b))
+	}
+	return err
+}
+
 // PreventedStartupFile returns the path to a file which, if it exists, should
 // prevent the server from starting up. Returns an empty string for in-memory
 // engines.
@@ -466,6 +494,14 @@ func (ss StoreSpec) PreventedStartupFile() string {
 		return ""
 	}
 	return PreventedStartupFile(filepath.Join(ss.Path, AuxiliaryDir))
+}
+
+// DecommMarkerFile XXX:
+func (ss StoreSpec) DecommMarkerFile() string {
+	if ss.InMemory {
+		return ""
+	}
+	return DecommMarkerFile(filepath.Join(ss.Path, AuxiliaryDir))
 }
 
 // Type returns the underlying type in string form. This is part of pflag's

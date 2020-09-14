@@ -457,6 +457,7 @@ func runDecommissionNodeImpl(
 			req := &serverpb.DecommissionRequest{
 				NodeIDs:          nodeIDs,
 				TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONED,
+				InAbsentia:       !nodeCtx.nodeDecommissionForce,
 			}
 			resp, err := c.Decommission(ctx, req)
 			if err != nil {

@@ -1722,7 +1722,7 @@ func (s *adminServer) Decommission(
 
 	// Mark the target nodes with their new membership status. They'll find out
 	// as they heartbeat their liveness.
-	if err := s.server.Decommission(ctx, req.TargetMembership, nodeIDs); err != nil {
+	if err := s.server.Decommission(ctx, req.TargetMembership, nodeIDs, req.InAbsentia); err != nil {
 		return nil, err
 	}
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})

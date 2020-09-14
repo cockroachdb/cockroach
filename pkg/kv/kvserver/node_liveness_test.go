@@ -949,14 +949,14 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	decommissioningNodeID := tc.Server(2).NodeID()
 	log.Infof(ctx, "marking node %d as decommissioning", decommissioningNodeID)
-	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decommissioningNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decommissioningNodeID}, false); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "marked node %d as decommissioning", decommissioningNodeID)
 
 	removedNodeID := tc.Server(3).NodeID()
 	log.Infof(ctx, "marking node %d as decommissioning and shutting it down", removedNodeID)
-	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{removedNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, kvserverpb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{removedNodeID}, false); err != nil {
 		t.Fatal(err)
 	}
 	tc.StopServer(3)

@@ -447,6 +447,11 @@ message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   cockroach.kv.kvserver.storagepb.MembershipStatus target_membership = 2;
+  // XXX: InAbsentia controls whether any of the target nodes are being
+  // decommissioned while not live. This is driven by `cockroach node
+  // decommission --force`. The flag comes with the guarantee by the user that
+  // the target nodes are never coming back.
+  bool in_absentia = 3;
 }
 
 // DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
@@ -880,6 +885,7 @@ service Admin {
   rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
   }
 
+  // FinalizeDecommission XXX:
   rpc FinalizeDecommission(FinalizeDecommissionRequest) returns (FinalizeDecommissionResponse) {
   }
 

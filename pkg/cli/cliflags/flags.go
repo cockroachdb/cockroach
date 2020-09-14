@@ -992,6 +992,11 @@ in the history of the cluster.`,
 as target of the decommissioning or recommissioning command.`,
 	}
 
+	NodeDecommissionForce = FlagInfo{
+		Name:        "force",
+		Description: `TODO(irfansharif): XXX: Stub this out.`,
+	}
+
 	SQLFmtLen = FlagInfo{
 		Name: "print-width",
 		Description: `

@@ -1386,6 +1386,8 @@ func (s *Server) Start(ctx context.Context) error {
 	//
 	//   536,870,912 bits/64 bits = 8,388,608 decommissioned node IDs.
 
+	// XXX: Check for decomm file existence.
+
 	// TODO(tbg): split this method here. Everything above this comment is
 	// the early stage of startup -- setting up listeners and determining the
 	// initState -- and everything after it is actually starting the server,
@@ -1929,9 +1931,7 @@ func (s *sqlServer) startServeSQL(
 }
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
-func (s *Server) Decommission(
-	ctx context.Context, targetStatus kvserverpb.MembershipStatus, nodeIDs []roachpb.NodeID,
-) error {
+func (s *Server) Decommission(ctx context.Context, targetStatus kvserverpb.MembershipStatus, nodeIDs []roachpb.NodeID, inAbsentia bool) error {
 	if !s.st.Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
 		if targetStatus.Decommissioned() {
 			// In mixed-version cluster settings, we need to ensure that we're
@@ -1946,7 +1946,7 @@ func (s *Server) Decommission(
 	// XXX: Consult our cache, return early if no-op. If we're attempting to
 	// mark a node as fully decommissioned, we want to send out a "prevent
 	// startup rpc" to it, which would persist a kill file.
-	if targetStatus.Decommissioned() {
+	if targetStatus.Decommissioned() && !inAbsentia {
 		for _, nodeID := range nodeIDs {
 			conn, err := s.nodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
 			if err != nil {
@@ -1958,9 +1958,9 @@ func (s *Server) Decommission(
 			_, err = client.FinalizeDecommission(ctx, req)
 			_ = conn.Close()
 			if err != nil {
+				// XXX: Wrap connection errors better, to make it clear when --force should be used.
 				return err
 			}
-			return nil
 		}
 	}
 
