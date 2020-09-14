@@ -206,7 +206,6 @@ func newJoinReader(
 		spec.OnExpr,
 		leftEqCols,
 		indexCols,
-		0, /* numMergedColumns */
 		post,
 		output,
 		execinfra.ProcStateOpts{
