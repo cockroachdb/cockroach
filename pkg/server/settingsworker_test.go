@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,9 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/thrift/gen-go/zipkincore"
 )
 
 const strKey = "testing.str"
@@ -352,4 +356,125 @@ func TestSettingsZipkinBatchSize(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestSettingsTraceSamplingRate tests that setting the sampling rate
+// of traces will correctly limit the percentage of traces sampled.
+func TestSettingsTraceSamplingRate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Start test cluster containing a test db and test table.
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	execStatement := func(statement string) {
+		if _, err := tc.ServerConn(rand.Intn(3)).Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	execStatement(`CREATE DATABASE t`)
+	execStatement(`CREATE TABLE test (k INT PRIMARY KEY, v INT)`)
+
+	// Set up tracing collector and variable to count the number of traces
+	// collected from INSERT INTO statements.
+	nTraces := int64(0)
+	collectorHandlerFcn := func(rw http.ResponseWriter, req *http.Request) {
+		bodyBytes, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			return
+		}
+		t := thrift.NewTMemoryBuffer()
+		if _, err = t.Write(bodyBytes); err != nil {
+			return
+		}
+		p := thrift.NewTBinaryProtocolTransport(t)
+		_, batchSize, err := p.ReadListBegin()
+		if err != nil {
+			return
+		}
+
+		for i := 0; i < batchSize; i += 1 {
+			span := zipkincore.Span{}
+			if err = span.Read(p); err != nil {
+				return
+			}
+
+			if span.Name == `exec stmt` {
+				for _, annotation := range span.Annotations {
+					if strings.Contains(annotation.Value, `INSERT INTO test VALUES`) &&
+						strings.Contains(annotation.Value, `in state: Open`) {
+						atomic.AddInt64(&nTraces, 1)
+					}
+				}
+			}
+		}
+	}
+	traceCollectorServer := httptest.NewServer(http.HandlerFunc(collectorHandlerFcn))
+	defer traceCollectorServer.Close()
+
+	// Configure tracing in the test cluster.
+	traceCollectorServerURL, err := url.Parse(traceCollectorServer.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setClusterTraceSamplingRate := func(rate float64) {
+		execStatement(fmt.Sprintf(`SET CLUSTER SETTING trace.sampling.rate = %f`, rate))
+	}
+	execStatement(fmt.Sprintf(`SET CLUSTER SETTING trace.zipkin.collector = '%s'`, traceCollectorServerURL.Host))
+
+	// startKey ensures that for every call to this function, it inserts
+	// rows with primary keys that are not already present
+	startKey := 0
+	writeRows := func(numOps int) {
+		waitGroup := sync.WaitGroup{}
+		for key := startKey; key < startKey+numOps; key += 25 {
+			waitGroup.Add(1)
+			go func(wg *sync.WaitGroup, k int) {
+				defer wg.Done()
+				for v := 0; v < 25; v++ {
+					execStatement(fmt.Sprintf(`INSERT INTO test VALUES (%d, %d)`, k+v, v))
+				}
+			}(&waitGroup, key)
+		}
+		waitGroup.Wait()
+		startKey = startKey + numOps
+	}
+
+	numOps := 500
+	tolerance := 100
+	if util.RaceEnabled {
+		numOps = 50
+		tolerance = 20
+	}
+	type testCase struct {
+		sampleRate float64
+	}
+
+	run := func(t *testing.T, tc testCase) {
+		setClusterTraceSamplingRate(tc.sampleRate)
+		atomic.StoreInt64(&nTraces, 0)
+		minAllowed := int64(float64(numOps)*tc.sampleRate - float64(tolerance)/2)
+		maxAllowed := int64(float64(numOps)*tc.sampleRate + float64(tolerance)/2)
+		writeRows(numOps)
+		testutils.SucceedsSoon(t, func() error {
+			currentTraces := atomic.LoadInt64(&nTraces)
+			if currentTraces < minAllowed || currentTraces > maxAllowed {
+				return errors.Errorf("expected between %d and %d traces at a sample rate of %f for %d ops, got %d",
+					minAllowed, maxAllowed, tc.sampleRate, numOps, currentTraces)
+			}
+			return nil
+		})
+	}
+
+	subtest := func(tc testCase) (string, func(t *testing.T)) {
+		return fmt.Sprintf("sampleRate=%f", tc.sampleRate), func(t *testing.T) { run(t, tc) }
+	}
+	for _, tc := range []testCase{
+		{1}, {.5}, {.1},
+	} {
+		t.Run(subtest(tc))
+	}
 }

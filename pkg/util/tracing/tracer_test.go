@@ -11,23 +11,32 @@
 package tracing
 
 import (
-	"testing"
-
 	"github.com/cockroachdb/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestStartSpanAlwaysTrace(t *testing.T) {
-	// Regression test: if tracing is on, don't erroneously return a noopSpan
-	// due to optimizations in StartSpan.
+	// Regression test: if net tracing is on and tr._samplingRate is unset,
+	// don't erroneously return a noopSpan due to optimizations in StartSpan.
 	tr := NewTracer()
-	tr._useNetTrace = 1
-	require.True(t, tr.AlwaysTrace())
 	nilMeta := tr.noopSpan.Meta()
+	tr._useNetTrace = 1
 	require.Nil(t, nilMeta)
 	sp := tr.StartSpan("foo", WithParentAndManualCollection(nilMeta))
+	require.False(t, sp.IsBlackHole())
+	require.False(t, sp.isNoop())
+	sp = tr.StartSpan("foo", WithParentAndAutoCollection(tr.noopSpan))
+	require.False(t, sp.IsBlackHole())
+	require.False(t, sp.isNoop())
+	tr._useNetTrace = 0
+
+	// Regression test: if a shadow tracer is set and tr._samplingRate is unset,
+	// don't erroneously return a noopSpan due to optimizations in StartSpan.
+	tr.setShadowTracer(createLightStepTracer("test_token"))
+	sp = tr.StartSpan("foo", WithParentAndManualCollection(nilMeta))
 	require.False(t, sp.IsBlackHole())
 	require.False(t, sp.isNoop())
 	sp = tr.StartSpan("foo", WithParentAndAutoCollection(tr.noopSpan))

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/trace"
@@ -84,6 +85,17 @@ var zipkinCollectorBatchSize = settings.RegisterIntSetting(
 	},
 )
 
+var samplingRate = settings.RegisterFloatSetting(
+	"trace.sampling.rate",
+	`if set, sets the fraction of traces that will be sampled for Zipkin, Lightstep, and Net tracing`,
+	1.0,
+	func(value float64) error {
+		if value < 0 || value > 1.0 {
+			return errors.New("must set trace.sampling.rate between 0.0 and 1.0")
+		}
+		return nil
+	})
+
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //
 //  - forwarding events to x/net/trace instances
@@ -112,6 +124,11 @@ type Tracer struct {
 
 	// Pointer to shadowTracer, if using one.
 	shadowTracer unsafe.Pointer
+
+	// _samplingRate is a *float64 represented as an unsafe pointer for atomics. It contains
+	// the fraction (between 0.0 and 1.0) of traces that will have shadow tracing and
+	// net tracing enabled. Set by changing the cluster settings. Accessed via t.samplingRate().
+	_samplingRate unsafe.Pointer
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -142,6 +159,9 @@ func (t *Tracer) Configure(sv *settings.Values) {
 			nt = 1
 		}
 		atomic.StoreInt32(&t._useNetTrace, nt)
+
+		sr := samplingRate.Get(sv)
+		atomic.SwapPointer(&t._samplingRate, unsafe.Pointer(&sr))
 	}
 
 	reconfigure()
@@ -150,6 +170,23 @@ func (t *Tracer) Configure(sv *settings.Values) {
 	lightstepToken.SetOnChange(sv, reconfigure)
 	zipkinCollector.SetOnChange(sv, reconfigure)
 	zipkinCollectorBatchSize.SetOnChange(sv, reconfigure)
+	samplingRate.SetOnChange(sv, reconfigure)
+}
+
+// samplingRate returns the sampling rate as set by t._samplingRate.
+// If t._samplingRate has not been set by t.Configure(), use 100% sampling.
+func (t *Tracer) samplingRate() float64 {
+	sr := (*float64)(atomic.LoadPointer(&t._samplingRate))
+	if sr == nil {
+		return 1
+	}
+	return *sr
+}
+
+// shouldSample randomly returns a sampling decision based on the effectiveSamplingRate.
+func (t *Tracer) shouldSample() bool {
+	sr := t.samplingRate()
+	return sr == 1 || (sr > 0 && rand.Float64() < sr)
 }
 
 func (t *Tracer) useNetTrace() bool {
@@ -191,13 +228,6 @@ func (t *Tracer) StartSpan(operationName string, os ...SpanOption) *Span {
 	return t.startSpanGeneric(operationName, opts)
 }
 
-// AlwaysTrace returns true if operations should be traced regardless of the
-// context.
-func (t *Tracer) AlwaysTrace() bool {
-	shadowTracer := t.getShadowTracer()
-	return t.useNetTrace() || shadowTracer != nil
-}
-
 // startSpanGeneric is the implementation of StartSpan.
 func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 	if opts.RefType != opentracing.ChildOfRef && opts.RefType != opentracing.FollowsFromRef {
@@ -215,10 +245,11 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 	// span is recording (which implies that there is a parent) then
 	// we also have to create a real child. Additionally, if the
 	// caller explicitly asked for a real span they need to get one.
+	// If shadow tracing or net tracing is enabled, create a real span
+	// only if the trace gets sampled.
 	// In all other cases, a noop span will do.
-	if !t.AlwaysTrace() &&
-		opts.recordingType() == RecordingOff &&
-		!opts.ForceRealSpan {
+	sample := t.shouldSample()
+	if opts.recordingType() == RecordingOff && !opts.ForceRealSpan && !(t.getShadowTracer() != nil && sample) && !(t.useNetTrace() && sample) {
 		return t.noopSpan
 	}
 
