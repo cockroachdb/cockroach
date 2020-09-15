@@ -649,6 +649,13 @@ func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 	return PartialIndexPredicate(tabMeta, s.Index)
 }
 
+// UsesPartialIndex returns true if the the LookupJoinPrivate looks-up via a
+// partial index.
+func (lj *LookupJoinPrivate) UsesPartialIndex(md *opt.Metadata) bool {
+	_, isPartialIndex := md.Table(lj.Table).Index(lj.Index).Predicate()
+	return isPartialIndex
+}
+
 // NeedResults returns true if the mutation operator can return the rows that
 // were mutated.
 func (m *MutationPrivate) NeedResults() bool {
