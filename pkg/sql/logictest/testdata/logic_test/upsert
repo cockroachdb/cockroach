@@ -1234,3 +1234,18 @@ statement ok
 RESET CLUSTER SETTING kv.raft.command.max_size;
 DROP TABLE src;
 DROP TABLE dest
+
+# Regression test for finishing UPSERT too early (#54456).
+statement ok
+CREATE TABLE t54456 (c INT PRIMARY KEY);
+UPSERT INTO t54456 SELECT i FROM generate_series(1, 25000) AS i
+
+query I
+SELECT count(*) FROM t54456
+----
+25000
+
+query I
+WITH cte(c) AS (UPSERT INTO t54456 SELECT i FROM generate_series(25001, 40000) AS i RETURNING c) SELECT count(*) FROM cte
+----
+15000

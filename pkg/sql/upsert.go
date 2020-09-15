@@ -83,6 +83,11 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 
 	tracing.AnnotateTrace()
 
+	// Advance one batch. First, clear the current batch.
+	if n.run.tw.collectRows {
+		n.run.tw.rowsUpserted.Clear(params.ctx)
+	}
+
 	// Now consume/accumulate the rows for this batch.
 	lastBatch := false
 	for {
@@ -136,13 +141,17 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 		n.run.done = true
 	}
 
+	// We've just finished processing this batch, and we need to remember how
+	// many rows were in it.
+	n.run.tw.rowsInLastProcessedBatch = batchSize
+
 	// Possibly initiate a run of CREATE STATISTICS.
 	params.ExecCfg().StatsRefresher.NotifyMutation(
 		n.run.tw.tableDesc().ID,
-		n.run.tw.batchedCount(),
+		n.run.tw.rowsInLastProcessedBatch,
 	)
 
-	return n.run.tw.batchedCount() > 0, nil
+	return n.run.tw.rowsInLastProcessedBatch > 0, nil
 }
 
 // processSourceRow processes one row from the source for upsertion.
@@ -172,10 +181,15 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 }
 
 // BatchedCount implements the batchedPlanNode interface.
-func (n *upsertNode) BatchedCount() int { return n.run.tw.batchedCount() }
+func (n *upsertNode) BatchedCount() int { return n.run.tw.rowsInLastProcessedBatch }
 
 // BatchedValues implements the batchedPlanNode interface.
-func (n *upsertNode) BatchedValues(rowIdx int) tree.Datums { return n.run.tw.batchedValues(rowIdx) }
+func (n *upsertNode) BatchedValues(rowIdx int) tree.Datums {
+	if !n.run.tw.collectRows {
+		panic("return row requested but collect rows was not set")
+	}
+	return n.run.tw.rowsUpserted.At(rowIdx)
+}
 
 func (n *upsertNode) Close(ctx context.Context) {
 	n.source.Close(ctx)
