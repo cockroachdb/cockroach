@@ -134,6 +134,9 @@ func (c *Column) ComputedExprStr() string {
 //
 // Must not be called if this is not a virtual column.
 func (c *Column) InvertedSourceColumnOrdinal() int {
+	if c.kind != Virtual {
+		panic(errors.AssertionFailedf("non-virtual columns have no inverted source column ordinal"))
+	}
 	return c.invertedSourceColumnOrdinal
 }
 
