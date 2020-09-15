@@ -1,4 +1,5 @@
 statement ok
+SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 CREATE DATABASE pgdatabase;
 CREATE TABLE pgdatabase.t1 (x INT PRIMARY KEY);
 CREATE DATABASE pgschema;
