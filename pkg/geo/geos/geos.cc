@@ -117,6 +117,14 @@ typedef CR_GEOS_Geometry (*CR_GEOS_PointOnSurface_r)(CR_GEOS_Handle, CR_GEOS_Geo
 typedef CR_GEOS_Geometry (*CR_GEOS_Interpolate_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double);
 
 typedef int (*CR_GEOS_Distance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry, double*);
+typedef int (*CR_GEOS_FrechetDistance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry,
+                                         double*);
+typedef int (*CR_GEOS_FrechetDistanceDensify_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry,
+                                                double, double*);
+typedef int (*CR_GEOS_HausdorffDistance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry,
+                                           double*);
+typedef int (*CR_GEOS_HausdorffDistanceDensify_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                  CR_GEOS_Geometry, double, double*);
 
 typedef char (*CR_GEOS_Covers_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_CoveredBy_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
@@ -213,6 +221,10 @@ struct CR_GEOS {
   CR_GEOS_Interpolate_r GEOSInterpolate_r;
 
   CR_GEOS_Distance_r GEOSDistance_r;
+  CR_GEOS_FrechetDistance_r GEOSFrechetDistance_r;
+  CR_GEOS_FrechetDistanceDensify_r GEOSFrechetDistanceDensify_r;
+  CR_GEOS_HausdorffDistance_r GEOSHausdorffDistance_r;
+  CR_GEOS_HausdorffDistanceDensify_r GEOSHausdorffDistanceDensify_r;
 
   CR_GEOS_Covers_r GEOSCovers_r;
   CR_GEOS_CoveredBy_r GEOSCoveredBy_r;
@@ -302,6 +314,10 @@ struct CR_GEOS {
     INIT(GEOSSymDifference_r);
     INIT(GEOSInterpolate_r);
     INIT(GEOSDistance_r);
+    INIT(GEOSFrechetDistance_r);
+    INIT(GEOSFrechetDistanceDensify_r);
+    INIT(GEOSHausdorffDistance_r);
+    INIT(GEOSHausdorffDistanceDensify_r);
     INIT(GEOSCovers_r);
     INIT(GEOSCoveredBy_r);
     INIT(GEOSContains_r);
@@ -1004,6 +1020,73 @@ CR_GEOS_Status CR_GEOS_Interpolate(CR_GEOS* lib, CR_GEOS_Slice a, double distanc
 
 CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double* ret) {
   return CR_GEOS_BinaryOperator(lib, lib->GEOSDistance_r, a, b, ret);
+}
+CR_GEOS_Status CR_GEOS_FrechetDistance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                       double* ret) {
+  return CR_GEOS_BinaryOperator(lib, lib->GEOSFrechetDistance_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_FrechetDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                              double densifyFrac, double* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geomA = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  auto geomB = lib->GEOSWKBReader_read_r(handle, wkbReader, b.data, b.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+
+  if (geomA != nullptr && geomB != nullptr) {
+    auto r = lib->GEOSFrechetDistanceDensify_r(handle, geomA, geomB, densifyFrac, ret);
+    // ret == 0 indicates an exception.
+    if (r == 0) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    }
+  }
+  if (geomA != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_HausdorffDistance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                         double* ret) {
+  return CR_GEOS_BinaryOperator(lib, lib->GEOSHausdorffDistance_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_HausdorffDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                                double densifyFrac, double* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geomA = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  auto geomB = lib->GEOSWKBReader_read_r(handle, wkbReader, b.data, b.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+
+  if (geomA != nullptr && geomB != nullptr) {
+    auto r = lib->GEOSHausdorffDistanceDensify_r(handle, geomA, geomB, densifyFrac, ret);
+    // ret == 0 indicates an exception.
+    if (r == 0) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    }
+  }
+  if (geomA != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
 }
 
 //

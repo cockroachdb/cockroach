@@ -2799,6 +2799,104 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_frechetdistance": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.FrechetDistance(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				if ret == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDFloat(tree.DFloat(*ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info:         `Returns the Frechet distance between the given geometries.`,
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+				{"geometry_b", types.Geometry},
+				{"densify_frac", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				densifyFrac := tree.MustBeDFloat(args[2])
+
+				ret, err := geomfn.FrechetDistanceDensify(a.Geometry, b.Geometry, float64(densifyFrac))
+				if err != nil {
+					return nil, err
+				}
+				if ret == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDFloat(tree.DFloat(*ret)), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the Frechet distance between the given geometries, with the given ` +
+					`segment densification (range 0.0-1.0, -1 to disable).`,
+				libraryUsage: usesGEOS,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_hausdorffdistance": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.HausdorffDistance(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				if ret == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDFloat(tree.DFloat(*ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info:         `Returns the Hausdorff distance between the given geometries.`,
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+				{"geometry_b", types.Geometry},
+				{"densify_frac", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				densifyFrac := tree.MustBeDFloat(args[2])
+
+				ret, err := geomfn.HausdorffDistanceDensify(a.Geometry, b.Geometry, float64(densifyFrac))
+				if err != nil {
+					return nil, err
+				}
+				if ret == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDFloat(tree.DFloat(*ret)), nil
+			},
+			Info: infoBuilder{
+				info: `Returns the Hausdorff distance between the given geometries, with the given ` +
+					`segment densification (range 0.0-1.0).`,
+				libraryUsage: usesGEOS,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_maxdistance": makeBuiltin(
 		defProps(),
 		geometryOverload2(
@@ -5087,10 +5185,8 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_dump":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
 	"st_dumppoints":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
 	"st_dumprings":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
-	"st_frechetdistance":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48940}),
 	"st_generatepoints":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48941}),
 	"st_geometricmedian":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
-	"st_hausdorffdistance":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48947}),
 	"st_interpolatepoint":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
 	"st_isvaliddetail":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
 	"st_length2dspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),

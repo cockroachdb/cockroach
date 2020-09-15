@@ -719,6 +719,66 @@ func Within(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 	return ret == 1, nil
 }
 
+// FrechetDistance returns the Frechet distance between the geometries.
+func FrechetDistance(a, b geopb.EWKB) (float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return 0, err
+	}
+	var distance C.double
+	if err := statusToError(
+		C.CR_GEOS_FrechetDistance(g, goToCSlice(a), goToCSlice(b), &distance),
+	); err != nil {
+		return 0, err
+	}
+	return float64(distance), nil
+}
+
+// FrechetDistanceDensify returns the Frechet distance between the geometries.
+func FrechetDistanceDensify(a, b geopb.EWKB, densifyFrac float64) (float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return 0, err
+	}
+	var distance C.double
+	if err := statusToError(
+		C.CR_GEOS_FrechetDistanceDensify(g, goToCSlice(a), goToCSlice(b), C.double(densifyFrac), &distance),
+	); err != nil {
+		return 0, err
+	}
+	return float64(distance), nil
+}
+
+// HausdorffDistance returns the Hausdorff distance between the geometries.
+func HausdorffDistance(a, b geopb.EWKB) (float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return 0, err
+	}
+	var distance C.double
+	if err := statusToError(
+		C.CR_GEOS_HausdorffDistance(g, goToCSlice(a), goToCSlice(b), &distance),
+	); err != nil {
+		return 0, err
+	}
+	return float64(distance), nil
+}
+
+// HausdorffDistanceDensify returns the Hausdorff distance between the geometries.
+func HausdorffDistanceDensify(a, b geopb.EWKB, densifyFrac float64) (float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return 0, err
+	}
+	var distance C.double
+	if err := statusToError(
+		C.CR_GEOS_HausdorffDistanceDensify(g, goToCSlice(a), goToCSlice(b), C.double(densifyFrac), &distance),
+	); err != nil {
+		return 0, err
+	}
+	return float64(distance), nil
+}
+
 //
 // DE-9IM related
 //
