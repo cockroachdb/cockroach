@@ -954,178 +954,189 @@ func (s *vectorizedFlowCreator) setupFlow(
 	processorSpecs []execinfrapb.ProcessorSpec,
 	opt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
-	streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
-	factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
-	// queue is a queue of indices into processorSpecs, for topologically
-	// ordered processing.
-	queue := make([]int, 0, len(processorSpecs))
-	for i := range processorSpecs {
-		hasLocalInput := false
-		for j := range processorSpecs[i].Input {
-			input := &processorSpecs[i].Input[j]
-			for k := range input.Streams {
-				stream := &input.Streams[k]
-				streamIDToSpecIdx[stream.StreamID] = i
-				if stream.Type != execinfrapb.StreamEndpointSpec_REMOTE {
-					hasLocalInput = true
-				}
-			}
-		}
-		if hasLocalInput {
-			continue
-		}
-		// Queue all processors with either no inputs or remote inputs.
-		queue = append(queue, i)
-	}
-
-	inputs := make([]colexecbase.Operator, 0, 2)
-	for len(queue) > 0 {
-		pspec := &processorSpecs[queue[0]]
-		queue = queue[1:]
-		if len(pspec.Output) > 1 {
-			return nil, errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
-		}
-
-		// metadataSourcesQueue contains all the MetadataSources that need to be
-		// drained. If in a given loop iteration no component that can drain
-		// metadata from these sources is found, the metadataSourcesQueue should be
-		// added as part of one of the last unconnected inputDAGs in
-		// streamIDToInputOp. This is to avoid cycles.
-		metadataSourcesQueue := make([]execinfrapb.MetadataSource, 0, 1)
-		// toClose is similar to metadataSourcesQueue with the difference that these
-		// components do not produce metadata and should be Closed even during
-		// non-graceful termination.
-		toClose := make([]colexec.Closer, 0, 1)
-		inputs = inputs[:0]
-		for i := range pspec.Input {
-			input, metadataSources, closers, err := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
-			if err != nil {
-				return nil, err
-			}
-			metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
-			toClose = append(toClose, closers...)
-			inputs = append(inputs, input)
-		}
-
-		args := &colexec.NewColOperatorArgs{
-			Spec:                 pspec,
-			Inputs:               inputs,
-			StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
-			ProcessorConstructor: rowexec.NewProcessor,
-			DiskQueueCfg:         s.diskQueueCfg,
-			FDSemaphore:          s.fdSemaphore,
-			ExprHelper:           s.exprHelper,
-		}
-		result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
-		// Even when err is non-nil, it is possible that the buffering memory
-		// monitor and account have been created, so we always want to accumulate
-		// them for a proper cleanup.
-		s.monitors = append(s.monitors, result.OpMonitors...)
-		s.accounts = append(s.accounts, result.OpAccounts...)
-		if err != nil {
-			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
-		}
-		if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
-			result.Op = colexec.NewInvariantsChecker(result.Op)
-		}
-		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
-			!result.IsStreaming {
-			return nil, errors.Errorf("non-streaming operator encountered when vectorize=201auto")
-		}
-		// We created a streaming memory account when calling NewColOperator above,
-		// so there is definitely at least one memory account, and it doesn't
-		// matter which one we grow.
-		if err = s.streamingMemAccounts[0].Grow(ctx, int64(result.InternalMemUsage)); err != nil {
-			return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
-		}
-		metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
-		if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
-			for _, closer := range result.ToClose {
-				func(c colexec.Closer) {
-					closed := false
-					toClose = append(toClose, &colexec.CallbackCloser{CloseCb: func(ctx context.Context) error {
-						if !closed {
-							closed = true
-							atomic.AddInt32(&s.numClosed, 1)
-						}
-						return c.Close(ctx)
-					}})
-				}(closer)
-			}
-			s.numClosers += int32(len(result.ToClose))
-		} else {
-			toClose = append(toClose, result.ToClose...)
-		}
-
-		op := result.Op
-		if s.recordingStats {
-			op, err = s.wrapWithVectorizedStatsCollector(
-				op, result.IOReader, inputs, pspec.ProcessorID,
-				execinfrapb.ProcessorIDTagKey, result.OpMonitors,
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if (flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto) &&
-			pspec.Output[0].Type == execinfrapb.OutputRouterSpec_BY_HASH {
-			// colexec.HashRouter is not supported when vectorize=auto since it can
-			// buffer an unlimited number of tuples, even though it falls back to
-			// disk. vectorize=on does support this.
-			return nil, errors.Errorf("hash router encountered when vectorize=201auto")
-		}
-		if err = s.setupOutput(
-			ctx, flowCtx, pspec, op, result.ColumnTypes, metadataSourcesQueue, toClose, factory,
-		); err != nil {
-			return nil, err
-		}
-
-		// Now queue all outputs from this op whose inputs are already all
-		// populated.
-	NEXTOUTPUT:
-		for i := range pspec.Output {
-			for j := range pspec.Output[i].Streams {
-				outputStream := &pspec.Output[i].Streams[j]
-				if outputStream.Type != execinfrapb.StreamEndpointSpec_LOCAL {
-					continue
-				}
-				procIdx, ok := streamIDToSpecIdx[outputStream.StreamID]
-				if !ok {
-					return nil, errors.Errorf("couldn't find stream %d", outputStream.StreamID)
-				}
-				outputSpec := &processorSpecs[procIdx]
-				for k := range outputSpec.Input {
-					for l := range outputSpec.Input[k].Streams {
-						inputStream := outputSpec.Input[k].Streams[l]
-						if inputStream.StreamID == outputStream.StreamID {
-							if err := assertTypesMatch(outputSpec.Input[k].ColumnTypes, result.ColumnTypes); err != nil {
-								return nil, err
-							}
-						}
-						if inputStream.Type == execinfrapb.StreamEndpointSpec_REMOTE {
-							// Remote streams are not present in streamIDToInputOp. The
-							// Inboxes that consume these streams are created at the same time
-							// as the operator that needs them, so skip the creation check for
-							// this input.
-							continue
-						}
-						if _, ok := s.streamIDToInputOp[inputStream.StreamID]; !ok {
-							continue NEXTOUTPUT
-						}
+	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
+		streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
+		factory := coldataext.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
+		// queue is a queue of indices into processorSpecs, for topologically
+		// ordered processing.
+		queue := make([]int, 0, len(processorSpecs))
+		for i := range processorSpecs {
+			hasLocalInput := false
+			for j := range processorSpecs[i].Input {
+				input := &processorSpecs[i].Input[j]
+				for k := range input.Streams {
+					stream := &input.Streams[k]
+					streamIDToSpecIdx[stream.StreamID] = i
+					if stream.Type != execinfrapb.StreamEndpointSpec_REMOTE {
+						hasLocalInput = true
 					}
 				}
-				// We found an input op for every single stream in this output. Queue
-				// it for processing.
-				queue = append(queue, procIdx)
+			}
+			if hasLocalInput {
+				continue
+			}
+			// Queue all processors with either no inputs or remote inputs.
+			queue = append(queue, i)
+		}
+
+		inputs := make([]colexecbase.Operator, 0, 2)
+		for len(queue) > 0 {
+			pspec := &processorSpecs[queue[0]]
+			queue = queue[1:]
+			if len(pspec.Output) > 1 {
+				err = errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
+				return
+			}
+
+			// metadataSourcesQueue contains all the MetadataSources that need to be
+			// drained. If in a given loop iteration no component that can drain
+			// metadata from these sources is found, the metadataSourcesQueue should be
+			// added as part of one of the last unconnected inputDAGs in
+			// streamIDToInputOp. This is to avoid cycles.
+			metadataSourcesQueue := make([]execinfrapb.MetadataSource, 0, 1)
+			// toClose is similar to metadataSourcesQueue with the difference that these
+			// components do not produce metadata and should be Closed even during
+			// non-graceful termination.
+			toClose := make([]colexec.Closer, 0, 1)
+			inputs = inputs[:0]
+			for i := range pspec.Input {
+				input, metadataSources, closers, localErr := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
+				if localErr != nil {
+					err = localErr
+					return
+				}
+				metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
+				toClose = append(toClose, closers...)
+				inputs = append(inputs, input)
+			}
+
+			args := &colexec.NewColOperatorArgs{
+				Spec:                 pspec,
+				Inputs:               inputs,
+				StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
+				ProcessorConstructor: rowexec.NewProcessor,
+				DiskQueueCfg:         s.diskQueueCfg,
+				FDSemaphore:          s.fdSemaphore,
+				ExprHelper:           s.exprHelper,
+			}
+			var result colexec.NewColOperatorResult
+			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
+			// Even when err is non-nil, it is possible that the buffering memory
+			// monitor and account have been created, so we always want to accumulate
+			// them for a proper cleanup.
+			s.monitors = append(s.monitors, result.OpMonitors...)
+			s.accounts = append(s.accounts, result.OpAccounts...)
+			if err != nil {
+				err = errors.Wrapf(err, "unable to vectorize execution plan")
+				return
+			}
+			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
+				result.Op = colexec.NewInvariantsChecker(result.Op)
+			}
+			if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
+				!result.IsStreaming {
+				err = errors.Errorf("non-streaming operator encountered when vectorize=201auto")
+				return
+			}
+			// We created a streaming memory account when calling NewColOperator above,
+			// so there is definitely at least one memory account, and it doesn't
+			// matter which one we grow.
+			if err = s.streamingMemAccounts[0].Grow(ctx, int64(result.InternalMemUsage)); err != nil {
+				err = errors.Wrapf(err, "not enough memory to setup vectorized plan")
+				return
+			}
+			metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
+			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
+				for _, closer := range result.ToClose {
+					func(c colexec.Closer) {
+						closed := false
+						toClose = append(toClose, &colexec.CallbackCloser{CloseCb: func(ctx context.Context) error {
+							if !closed {
+								closed = true
+								atomic.AddInt32(&s.numClosed, 1)
+							}
+							return c.Close(ctx)
+						}})
+					}(closer)
+				}
+				s.numClosers += int32(len(result.ToClose))
+			} else {
+				toClose = append(toClose, result.ToClose...)
+			}
+
+			op := result.Op
+			if s.recordingStats {
+				op, err = s.wrapWithVectorizedStatsCollector(
+					op, result.IOReader, inputs, pspec.ProcessorID,
+					execinfrapb.ProcessorIDTagKey, result.OpMonitors,
+				)
+				if err != nil {
+					return
+				}
+			}
+
+			if (flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto) &&
+				pspec.Output[0].Type == execinfrapb.OutputRouterSpec_BY_HASH {
+				// colexec.HashRouter is not supported when vectorize=auto since it can
+				// buffer an unlimited number of tuples, even though it falls back to
+				// disk. vectorize=on does support this.
+				err = errors.Errorf("hash router encountered when vectorize=201auto")
+				return
+			}
+			if err = s.setupOutput(
+				ctx, flowCtx, pspec, op, result.ColumnTypes, metadataSourcesQueue, toClose, factory,
+			); err != nil {
+				return
+			}
+
+			// Now queue all outputs from this op whose inputs are already all
+			// populated.
+		NEXTOUTPUT:
+			for i := range pspec.Output {
+				for j := range pspec.Output[i].Streams {
+					outputStream := &pspec.Output[i].Streams[j]
+					if outputStream.Type != execinfrapb.StreamEndpointSpec_LOCAL {
+						continue
+					}
+					procIdx, ok := streamIDToSpecIdx[outputStream.StreamID]
+					if !ok {
+						err = errors.Errorf("couldn't find stream %d", outputStream.StreamID)
+						return
+					}
+					outputSpec := &processorSpecs[procIdx]
+					for k := range outputSpec.Input {
+						for l := range outputSpec.Input[k].Streams {
+							inputStream := outputSpec.Input[k].Streams[l]
+							if inputStream.StreamID == outputStream.StreamID {
+								if err = assertTypesMatch(outputSpec.Input[k].ColumnTypes, result.ColumnTypes); err != nil {
+									return
+								}
+							}
+							if inputStream.Type == execinfrapb.StreamEndpointSpec_REMOTE {
+								// Remote streams are not present in streamIDToInputOp. The
+								// Inboxes that consume these streams are created at the same time
+								// as the operator that needs them, so skip the creation check for
+								// this input.
+								continue
+							}
+							if _, ok := s.streamIDToInputOp[inputStream.StreamID]; !ok {
+								continue NEXTOUTPUT
+							}
+						}
+					}
+					// We found an input op for every single stream in this output. Queue
+					// it for processing.
+					queue = append(queue, procIdx)
+				}
 			}
 		}
+		if len(s.vectorizedStatsCollectorsQueue) > 0 {
+			colexecerror.InternalError(errors.AssertionFailedf("not all vectorized stats collectors have been processed"))
+		}
+	}); vecErr != nil {
+		return s.leaves, vecErr
 	}
-
-	if len(s.vectorizedStatsCollectorsQueue) > 0 {
-		colexecerror.InternalError(errors.AssertionFailedf("not all vectorized stats collectors have been processed"))
-	}
-	return s.leaves, nil
+	return s.leaves, err
 }
 
 // assertTypesMatch checks whether expected types match with actual types and
@@ -1307,12 +1318,7 @@ func SupportsVectorized(
 			mon.Stop(ctx)
 		}
 	}()
-	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
-		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, fuseOpt)
-	}); vecErr != nil {
-		return leaves, vecErr
-	}
-	return leaves, err
+	return creator.setupFlow(ctx, flowCtx, processorSpecs, fuseOpt)
 }
 
 // VectorizeAlwaysException is an object that returns whether or not execution
