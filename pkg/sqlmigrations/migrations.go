@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -365,6 +366,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v20.2.
 		name:   "add CREATELOGIN privilege to roles with CREATEROLE",
 		workFn: extendCreateRoleWithCreateLogin,
+	},
+	{
+		// Introduced in v20.2.
+		name:                "mark non-terminal schema change jobs with a pre-20.1 format version as failed",
+		workFn:              markDeprecatedSchemaChangeJobsFailed,
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionLeasedDatabaseDescriptors),
 	},
 }
 
@@ -1066,6 +1073,65 @@ func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {
 	return r.execAsRootWithRetry(ctx,
 		"add CREATELOGIN where a role already has CREATEROLE",
 		upsertCreateRoleStmt)
+}
+
+func markDeprecatedSchemaChangeJobsFailed(ctx context.Context, r runner) error {
+	ctx = logtags.AddTag(ctx, "mark-deprecated-schema-changes-failed", nil)
+	const batchSize = 100
+	workLeft := true
+	prevBatchSize := 0
+	for workLeft {
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Get jobs in a non-terminal state.
+			rows, err := r.sqlExecutor.QueryEx(
+				ctx, "get-deprecated-schema-change-jobs", txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUser},
+				`SELECT id, status, payload FROM system.jobs WHERE status NOT IN ($1, $2, $3) LIMIT $4`,
+				jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, batchSize,
+			)
+			if err != nil {
+				return err
+			}
+			prevBatchSize = len(rows)
+			if len(rows) < batchSize {
+				workLeft = false
+			}
+			for _, row := range rows {
+				id := tree.MustBeDInt(row[0])
+				status := tree.MustBeDString(row[1])
+				payload, err := jobs.UnmarshalPayload(row[2])
+				if err != nil {
+					log.Errorf(ctx, "error unmarshaling job payload for id %d, skipping", id)
+					continue
+				}
+				schemaChangeDetails := payload.GetSchemaChange()
+				if schemaChangeDetails == nil {
+					log.VEventf(ctx, 3, "job %d is not a schema change job, skipping", id)
+					continue
+				}
+				if v := schemaChangeDetails.FormatVersion; v > jobspb.BaseFormatVersion {
+					log.VEventf(ctx, 2, "job %d is a schema change job with format version %d, skipping", id, v)
+					continue
+				}
+				if _, err := r.sqlExecutor.ExecEx(
+					ctx, "update-deprecated-schema-change-job", txn,
+					sessiondata.InternalExecutorOverride{User: security.RootUser},
+					`UPDATE system.jobs SET status = $1 WHERE id = $2`,
+					jobs.StatusFailed, id,
+				); err != nil {
+					return err
+				}
+				log.Warningf(ctx,
+					"marking deprecated schema change job %d as failed (previously %s): %+v",
+					id, status, payload)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		log.Infof(ctx, "checked %d jobs for existence of deprecated schema change jobs", prevBatchSize)
+	}
+	return nil
 }
 
 func createReportsMetaTable(ctx context.Context, r runner) error {

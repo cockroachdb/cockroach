@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -38,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -977,4 +981,47 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	newJobsTableAgain := catalogkv.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
 	require.Equal(t, newJobsTable, newJobsTableAgain)
+}
+
+func TestMarkDeprecatedSchemaChangeJobsFailed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "mark non-terminal schema change jobs with a pre-20.1 format version as failed")
+	mt.start(t, base.TestServerArgs{})
+
+	// Write some fake job records for schema changes with a pre-20.1 format
+	// version. Due to their format version, they will never be adopted. We just
+	// verify that the migration marks them as failed if in a non-terminal state,
+	// and otherwise leaves them alone.
+
+	payload := jobspb.Payload{
+		Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{
+			FormatVersion: jobspb.BaseFormatVersion,
+		}),
+	}
+	payloadBytes, err := protoutil.Marshal(&payload)
+	require.NoError(t, err)
+
+	idRunning := builtins.GenerateUniqueInt(base.SQLInstanceID(mt.server.NodeID()))
+	idReverting := builtins.GenerateUniqueInt(base.SQLInstanceID(mt.server.NodeID()))
+	idSucceeded := builtins.GenerateUniqueInt(base.SQLInstanceID(mt.server.NodeID()))
+	idCanceled := builtins.GenerateUniqueInt(base.SQLInstanceID(mt.server.NodeID()))
+
+	insertStmt := `INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`
+	mt.sqlDB.Exec(t, insertStmt, idRunning, jobs.StatusRunning, payloadBytes)
+	mt.sqlDB.Exec(t, insertStmt, idReverting, jobs.StatusReverting, payloadBytes)
+	mt.sqlDB.Exec(t, insertStmt, idSucceeded, jobs.StatusSucceeded, payloadBytes)
+	mt.sqlDB.Exec(t, insertStmt, idCanceled, jobs.StatusCanceled, payloadBytes)
+
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	query := `SELECT status FROM system.jobs WHERE id = $1`
+	require.Equal(t, [][]string{{string(jobs.StatusFailed)}}, mt.sqlDB.QueryStr(t, query, idRunning))
+	require.Equal(t, [][]string{{string(jobs.StatusFailed)}}, mt.sqlDB.QueryStr(t, query, idReverting))
+	require.Equal(t, [][]string{{string(jobs.StatusSucceeded)}}, mt.sqlDB.QueryStr(t, query, idSucceeded))
+	require.Equal(t, [][]string{{string(jobs.StatusCanceled)}}, mt.sqlDB.QueryStr(t, query, idCanceled))
 }
