@@ -222,3 +222,25 @@ NATURAL INNER MERGE JOIN (SELECT * FROM x WHERE a > 0) AS x2
 ----
 sql.plan.opt.node.join.algo.merge
 sql.plan.opt.node.join.type.inner
+
+# Tests for partial index counters.
+
+feature-allowlist
+sql.plan.opt.partial-index.scan
+sql.plan.opt.partial-index.lookup-join
+----
+
+exec
+CREATE INDEX i ON x (a) WHERE a > 0
+----
+
+feature-usage
+SELECT a FROM x@i WHERE a > 0
+----
+sql.plan.opt.partial-index.scan
+
+feature-usage
+SELECT x1.a FROM x x1 INNER LOOKUP JOIN x x2 ON x1.a = x2.a WHERE x2.a > 0
+----
+sql.plan.opt.partial-index.lookup-join
+sql.plan.opt.partial-index.scan
