@@ -799,12 +799,13 @@ func (nl *NodeLiveness) heartbeatInternal(
 		// Start off with our existing view of liveness.
 		newLiveness = oldLiveness
 	} else {
-		// We don't yet know about our own liveness record (which does exist, we
-		// maintain the invariant that there's always a liveness record for
-		// every given node). Let's retrieve it from KV before proceeding.
+		// We haven't seen our own liveness record yet[1]. This happens when
+		// we're heartbeating for the very first time. Let's retrieve it from KV
+		// before proceeding.
 		//
-		// If we didn't previously know about our liveness record, it indicates
-		// that we're heartbeating for the very first time.
+		// [1]: Elsewhere we maintain the invariant that there always exist a
+		// liveness record for every given node. See the join RPC and
+		// WriteInitialClusterData for where that's done.
 		kv, err := nl.db.Get(ctx, keys.NodeLivenessKey(nodeID))
 		if err != nil {
 			return errors.Wrap(err, "unable to get liveness")
