@@ -62,9 +62,10 @@ type optTableUpserter struct {
 	// collectRows is true.
 	insertReorderingRequired bool
 
-	// resultCount is the number of upserts. Mirrors rowsUpserted.Len() if
-	// collectRows is set, counted separately otherwise.
-	resultCount int
+	// rowsInLastProcessedBatch tracks the number of upserts that were
+	// performed in the last processed batch. If collectRows is true, it will
+	// be equal to rowsUpserted.Len() after the batch has been created.
+	rowsInLastProcessedBatch int
 
 	// fetchCols indicate which columns need to be fetched from the target table,
 	// in order to detect whether a conflict has occurred, as well as to provide
@@ -148,22 +149,7 @@ func (tu *optTableUpserter) init(
 
 // flushAndStartNewBatch is part of the tableWriter interface.
 func (tu *optTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
-	tu.resultCount = 0
-	if tu.collectRows {
-		tu.rowsUpserted.Clear(ctx)
-	}
 	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
-}
-
-// batchedCount is part of the batchedTableWriter interface.
-func (tu *optTableUpserter) batchedCount() int { return tu.resultCount }
-
-// batchedValues is part of the batchedTableWriter interface.
-func (tu *optTableUpserter) batchedValues(rowIdx int) tree.Datums {
-	if !tu.collectRows {
-		panic("return row requested but collect rows was not set")
-	}
-	return tu.rowsUpserted.At(rowIdx)
 }
 
 // close is part of the tableWriter interface.
@@ -210,7 +196,6 @@ func (*optTableUpserter) desc() string { return "opt upserter" }
 // row is part of the tableWriter interface.
 func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bool) error {
 	tu.batchSize++
-	tu.resultCount++
 
 	// Consult the canary column to determine whether to insert or update. For
 	// more details on how canary columns work, see the block comment on
