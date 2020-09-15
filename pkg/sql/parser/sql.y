@@ -583,7 +583,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
+%token <str> CONFLICT CONNECTION CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
 %token <str> CONVERSION CONVERT COPY COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
@@ -922,6 +922,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.ValidationBehavior> opt_validate_behavior
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+%type <int32> opt_connection_limit
 
 %type <tree.IsolationLevel> transaction_iso_level
 %type <tree.UserPriority> transaction_user_priority
@@ -7214,7 +7215,7 @@ transaction_deferrable_mode:
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
 // %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
-  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
   {
     $$.val = &tree.CreateDatabase{
       Name: tree.Name($3),
@@ -7222,9 +7223,10 @@ create_database_stmt:
       Encoding: $6,
       Collate: $7,
       CType: $8,
+      ConnectionLimit: $9.int32(),
     }
   }
-| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
   {
     $$.val = &tree.CreateDatabase{
       IfNotExists: true,
@@ -7233,8 +7235,9 @@ create_database_stmt:
       Encoding: $9,
       Collate: $10,
       CType: $11,
+      ConnectionLimit: $12.int32(),
     }
-   }
+  }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
 
 opt_template_clause:
@@ -7275,6 +7278,20 @@ opt_lc_ctype_clause:
 | /* EMPTY */
   {
     $$ = ""
+  }
+
+opt_connection_limit:
+  CONNECTION LIMIT opt_equal signed_iconst
+  {
+    ret, err := $4.numVal().AsInt32()
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = ret
+  }
+| /* EMPTY */
+  {
+    $$.val = int32(-1)
   }
 
 opt_equal:
@@ -11413,6 +11430,7 @@ unreserved_keyword:
 | CONFIGURATION
 | CONFIGURATIONS
 | CONFIGURE
+| CONNECTION
 | CONSTRAINTS
 | CONTROLCHANGEFEED
 | CONTROLJOB
