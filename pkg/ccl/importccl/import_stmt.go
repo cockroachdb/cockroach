@@ -975,8 +975,12 @@ func prepareNewTableDescsForIngestion(
 		}
 		seqVals[id] = tableDesc.SeqVal
 	}
-
-	if err := backupccl.RewriteTableDescs(newMutableTableDescriptors, tableRewrites, ""); err != nil {
+	// TODO(ajwerner): Remove this in 21.1.
+	canResetModTime := p.ExecCfg().Settings.Version.IsActive(
+		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
+	if err := backupccl.RewriteTableDescs(
+		newMutableTableDescriptors, tableRewrites, "", canResetModTime,
+	); err != nil {
 		return nil, err
 	}
 
