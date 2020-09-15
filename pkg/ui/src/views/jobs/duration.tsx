@@ -9,39 +9,40 @@
 // licenses/APL.txt.
 
 import React from "react";
-import {TimestampToMoment} from "src/util/convert";
-import {
-  JOB_STATUS_PENDING,
-  JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED,
-  jobHasOneOfStatuses,
-} from "src/views/jobs/jobStatusOptions";
-import {
-  formatDuration,
-
-} from "src/views/jobs/index";
-import _ from "lodash";
+import { TimestampToMoment } from "src/util/convert";
+import { JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED } from "src/views/jobs/jobStatusOptions";
+import { formatDuration } from "src/views/jobs/index";
 import moment from "moment";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import {cockroach} from "src/js/protos";
 
 export class Duration extends React.PureComponent<{ job: Job }> {
   render() {
-    const started = TimestampToMoment(this.props.job.started);
-    const finished = TimestampToMoment(this.props.job.finished);
-    const modified = TimestampToMoment(this.props.job.modified);
-    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_PENDING)) {
-      return "Waiting for GG TCL";
-    } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_RUNNING)) {
-      const fractionCompleted = this.props.job.fraction_completed;
-      if (fractionCompleted > 0) {
-        const duration = modified.diff(started);
-        const remaining = duration / fractionCompleted - duration;
-        return <span
-          className="jobs-table__duration--right">{formatDuration(moment.duration(remaining)) + " remaining"}</span>;
-      }
-    } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED)) {
-      return "Duration: " + formatDuration(moment.duration(finished.diff(started)));
+    const {job} = this.props;
+    // Parse timestamp to default value NULL instead of Date.now.
+    // Conversion dates to Date.now causes traling dates and constant
+    // duration increase even when job is finished.
+    const startedAt = TimestampToMoment(job.started, null);
+    const modifiedAt = TimestampToMoment(job.modified, null);
+    const finishedAt = TimestampToMoment(job.finished, null);
+
+    switch (job.status) {
+      case JOB_STATUS_RUNNING:
+        const fractionCompleted = job.fraction_completed;
+        if (fractionCompleted > 0) {
+          const duration = modifiedAt.diff(startedAt);
+          const remaining = duration / fractionCompleted - duration;
+          return (
+            <span className="jobs-table__duration--right">
+              {formatDuration(moment.duration(remaining)) + " remaining"}
+            </span>
+          );
+        }
+        return null;
+      case JOB_STATUS_SUCCEEDED:
+        return "Duration: " + formatDuration(moment.duration(finishedAt.diff(startedAt)));
+      default:
+        return null;
     }
-    return null;
   }
 }
