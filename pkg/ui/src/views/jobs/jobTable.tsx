@@ -52,7 +52,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Status",
-    cell: job => <JobStatusCell job={job} />,
+    cell: job => <JobStatusCell job={job} compact />,
     sort: job => job.fraction_completed,
   },
 ];
