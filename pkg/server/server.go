@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -616,6 +617,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
 
+	gcJobNotifier := gcjobnotifier.New(cfg.Settings, s.gossip, s.stopper)
+
 	// Set up Lease Manager
 	var lmKnobs sql.LeaseManagerTestingKnobs
 	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
@@ -820,6 +823,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		QueryCache:                 querycache.New(s.cfg.SQLQueryCacheSize),
 		ProtectedTimestampProvider: s.protectedtsProvider,
+
+		GCJobNotifier: gcJobNotifier,
 	}
 
 	s.stopper.AddCloser(execCfg.ExecLogger)
@@ -1642,6 +1647,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	})
 
+	s.execCfg.GCJobNotifier.Start(ctx)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, s.stopper)
 
