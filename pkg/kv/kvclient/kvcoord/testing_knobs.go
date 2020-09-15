@@ -18,6 +18,9 @@ type ClientTestingKnobs struct {
 	// The RPC dispatcher. Defaults to grpc but can be changed here for
 	// testing purposes.
 	TransportFactory TransportFactory
+	// If set, the DistSender will try the replicas in the order they appear in
+	// the descriptor, instead of trying to reorder them by latency.
+	DontReorderReplicas bool
 
 	// The maximum number of times a txn will attempt to refresh its
 	// spans for a single transactional batch.
