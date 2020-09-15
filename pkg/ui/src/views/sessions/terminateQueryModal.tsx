@@ -55,10 +55,10 @@ const TerminateQueryModal = (props: TerminateQueryModalProps, ref: React.RefObje
       onCancel={onCancelHandler}
       okText="Yes"
       cancelText="No"
-      title="Terminate the Query?"
+      title="Terminate the Statement?"
     >
       <Text>
-        Terminating a query ends the query, returning an error to the session.
+        Terminating a statement ends the statement, returning an error to the session.
       </Text>
     </Modal>
   );
