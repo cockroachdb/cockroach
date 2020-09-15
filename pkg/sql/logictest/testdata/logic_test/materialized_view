@@ -149,3 +149,21 @@ REFRESH MATERIALIZED VIEW with_options WITH NO DATA
 
 query I
 SELECT * FROM with_options
+
+# Regression test for #53819
+statement ok
+CREATE SEQUENCE regression_53819_seq;
+CREATE MATERIALIZED VIEW regression_53819_mat_view AS SELECT nextval('regression_53819_seq')
+
+query I
+SELECT * FROM regression_53819_mat_view
+----
+1
+
+statement ok
+REFRESH MATERIALIZED VIEW regression_53819_mat_view WITH DATA
+
+query I
+SELECT * FROM regression_53819_mat_view
+----
+2

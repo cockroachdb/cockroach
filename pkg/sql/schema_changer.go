@@ -249,6 +249,16 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			return err
 		}
 
+		// Set the database in SessionData to the database in the descriptor.
+		// This is otherwise the system table which can result with issues in functions such as nextval,
+		// which relies on the planner scope being the same as the scope that ran the initial schema
+		// query.
+		db, err := catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, table.GetParentID())
+		if err != nil {
+			return err
+		}
+		localPlanner.sessionDataMutator.SetDatabase(db.Name)
+
 		// Construct an optimized logical plan of the AS source stmt.
 		localPlanner.stmt = &Statement{Statement: stmt}
 		localPlanner.optPlanningCtx.init(localPlanner)
