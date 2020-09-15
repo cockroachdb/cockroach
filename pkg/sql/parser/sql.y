@@ -5188,6 +5188,10 @@ targets_roles:
   {
      $$.val = tree.TargetList{ForRoles: true, Roles: $2.nameList()}
   }
+| SCHEMA name_list
+  {
+     $$.val = tree.TargetList{Schemas: $2.nameList().ToStrings()}
+  }
 | targets
 
 for_grantee_clause:

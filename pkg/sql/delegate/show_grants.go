@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // delegateShowGrants implements SHOW GRANTS which returns grant details for the
@@ -29,6 +30,12 @@ func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, erro
 	var params []string
 
 	const dbPrivQuery = `
+SELECT table_catalog AS database_name,
+       table_schema AS schema_name,
+       grantee,
+       privilege_type
+  FROM "".information_schema.schema_privileges`
+	const schemaPrivQuery = `
 SELECT table_catalog AS database_name,
        table_schema AS schema_name,
        grantee,
@@ -46,7 +53,7 @@ FROM "".information_schema.table_privileges`
 	var cond bytes.Buffer
 	var orderBy string
 
-	if n.Targets != nil && n.Targets.Databases != nil {
+	if n.Targets != nil && len(n.Targets.Databases) > 0 {
 		// Get grants of database from information_schema.schema_privileges
 		// if the type of target is database.
 		dbNames := n.Targets.Databases.ToStrings()
@@ -73,6 +80,38 @@ FROM "".information_schema.table_privileges`
 			cond.WriteString(`WHERE false`)
 		} else {
 			fmt.Fprintf(&cond, `WHERE database_name IN (%s)`, strings.Join(params, ","))
+		}
+	} else if n.Targets != nil && len(n.Targets.Schemas) > 0 {
+		var dbName string
+		for _, schema := range n.Targets.Schemas {
+			name := cat.SchemaName{
+				SchemaName:     tree.Name(schema),
+				ExplicitSchema: true,
+			}
+			s, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &name)
+			if err != nil {
+				return nil, err
+			}
+			if dbName == "" {
+				dbName = s.Name().Catalog()
+			} else if dbName != s.Name().Catalog() {
+				return nil, errors.AssertionFailedf("schema %q in unexpected database %q", schema, dbName)
+			}
+			params = append(params, lex.EscapeSQLString(schema))
+		}
+		fmt.Fprint(&source, schemaPrivQuery)
+		orderBy = "1,2,3,4"
+		if len(params) == 0 {
+			// There are no rows, but we can't simply return emptyNode{} because
+			// the result columns must still be defined.
+			cond.WriteString(`WHERE false`)
+		} else {
+			fmt.Fprintf(
+				&cond,
+				`WHERE database_name = %s AND schema_name IN (%s)`,
+				lex.EscapeSQLString(dbName),
+				strings.Join(params, ","),
+			)
 		}
 	} else {
 		fmt.Fprint(&source, tablePrivQuery)
