@@ -290,6 +290,25 @@ SHOW statement_timeout
 ----
 100
 
+# Set the statement timeout to something absurdly small, so that no query would
+# presumably be able to go through. It should still be possible to get out of
+# this "bad state" by resetting the statement timeout.
+subtest impossible_statement_timeout_recovery
+
+statement ok
+SET statement_timeout = '1us'
+
+statement error query execution canceled due to statement timeout
+SHOW statement_timeout
+
+statement ok
+SET statement_timeout = 0
+
+query T
+SHOW statement_timeout
+----
+0
+
 # Test that composite variable names get rejected properly, especially
 # when "tracing" is used as prefix.
 
