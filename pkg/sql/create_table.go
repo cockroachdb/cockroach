@@ -1555,6 +1555,7 @@ func NewTableDesc(
 			}
 			if d.Predicate != nil {
 				if d.Inverted {
+					telemetry.Inc(sqltelemetry.PartialInvertedIndexErrorCounter)
 					return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
 				}
 
@@ -1563,6 +1564,7 @@ func NewTableDesc(
 					return nil, err
 				}
 				idx.Predicate = expr
+				telemetry.Inc(sqltelemetry.PartialIndexCounter)
 			}
 			if err := applyStorageParameters(
 				ctx,
@@ -1611,6 +1613,7 @@ func NewTableDesc(
 					return nil, err
 				}
 				idx.Predicate = expr
+				telemetry.Inc(sqltelemetry.PartialIndexCounter)
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return nil, err
