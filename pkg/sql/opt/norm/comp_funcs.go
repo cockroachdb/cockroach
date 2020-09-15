@@ -236,11 +236,14 @@ func (c *CustomFuncs) makeSTDWithin(
 			name = incName
 		}
 	}
-	props, overload, ok := memo.FindFunction(&args, name)
+
+	// The distance parameter must be type float.
+	newArgs := append(args, c.f.ConstructCast(bound, types.Float))
+	props, overload, ok := memo.FindFunction(&newArgs, name)
 	if !ok {
 		panic(errors.AssertionFailedf("could not find overload for %s", name))
 	}
-	within := c.f.ConstructFunction(append(args, bound), &memo.FunctionPrivate{
+	within := c.f.ConstructFunction(newArgs, &memo.FunctionPrivate{
 		Name:       name,
 		Typ:        types.Bool,
 		Properties: props,

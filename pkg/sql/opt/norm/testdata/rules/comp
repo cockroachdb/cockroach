@@ -844,6 +844,37 @@ select
  └── filters
       └── st_dwithinexclusive(geog:2, '0101000020E610000000000000000000000000000000000000', 5.0) [outer=(2), immutable]
 
+# Regression test for #54326. Ensure the distance param is cast to a float.
+norm expect=FoldCmpSTDistanceLeft format=(show-scalars,show-types)
+SELECT * FROM geom_geog WHERE st_distance(geog, 'point(0.0 0.0)') < 5::int
+----
+select
+ ├── columns: geom:1(geometry) geog:2(geography) val:3(float)
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1(geometry) geog:2(geography) val:3(float)
+ └── filters
+      └── function: st_dwithinexclusive [type=bool, outer=(2), immutable]
+           ├── variable: geog:2 [type=geography]
+           ├── const: '0101000020E610000000000000000000000000000000000000' [type=geography]
+           └── const: 5.0 [type=float]
+
+norm expect=FoldCmpSTDistanceLeft format=(show-scalars,show-types)
+SELECT * FROM geom_geog WHERE st_distance(geog, 'point(0.0 0.0)') < val::int
+----
+select
+ ├── columns: geom:1(geometry) geog:2(geography) val:3(float)
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1(geometry) geog:2(geography) val:3(float)
+ └── filters
+      └── function: st_dwithinexclusive [type=bool, outer=(2,3), immutable]
+           ├── variable: geog:2 [type=geography]
+           ├── const: '0101000020E610000000000000000000000000000000000000' [type=geography]
+           └── cast: FLOAT8 [type=float]
+                └── cast: INT8 [type=int]
+                     └── variable: val:3 [type=float]
+
 # --------------------------------------------------
 # FoldCmpSTDistanceRight
 # --------------------------------------------------
