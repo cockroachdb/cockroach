@@ -400,7 +400,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 	}
 
-	if ex.sessionData.StmtTimeout > 0 {
+	// We exempt `SET` statements from the statement timeout, particularly so as
+	// not to block the `SET statement_timeout` command itself.
+	if ex.sessionData.StmtTimeout > 0 && stmt.AST.StatementTag() != "SET" {
 		timerDuration := ex.sessionData.StmtTimeout - timeutil.Since(ex.phaseTimes[sessionQueryReceived])
 		// There's no need to proceed with execution if the timer has already expired.
 		if timerDuration < 0 {
