@@ -513,21 +513,6 @@ func (n *createTableNode) Close(ctx context.Context) {
 	}
 }
 
-// resolveFK on the planner calls resolveFK() on the current txn.
-//
-// The caller must make sure the planner is configured to look up
-// descriptors without caching. See the comment on resolveFK().
-func (p *planner) resolveFK(
-	ctx context.Context,
-	tbl *tabledesc.Mutable,
-	d *tree.ForeignKeyConstraintTableDef,
-	backrefs map[descpb.ID]*tabledesc.Mutable,
-	ts FKTableState,
-	validationBehavior tree.ValidationBehavior,
-) error {
-	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts, validationBehavior, p.EvalContext())
-}
-
 func qualifyFKColErrorWithDB(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, tbl *tabledesc.Mutable, col string,
 ) string {
@@ -547,7 +532,7 @@ func qualifyFKColErrorWithDB(
 	return tree.ErrString(tree.NewUnresolvedName(db.GetName(), schema, tbl.Name, col))
 }
 
-// FKTableState is the state of the referencing table resolveFK() is called on.
+// FKTableState is the state of the referencing table ResolveFK() is called on.
 type FKTableState int
 
 const (
@@ -661,6 +646,14 @@ func ResolveFK(
 	target, err := resolver.ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return err
+	}
+	if target.ParentID != tbl.ParentID {
+		if !allowCrossDatabaseFKs.Get(&evalCtx.Settings.SV) {
+			return pgerror.Newf(pgcode.InvalidForeignKey,
+				"foreign references between databases are not allowed (see the '%s' cluster setting)",
+				allowCrossDatabaseFKsSetting,
+			)
+		}
 	}
 	if tbl.Temporary != target.Temporary {
 		persistenceType := "permanent"
@@ -1205,7 +1198,7 @@ func newTableDescIfAs(
 // The caller must also ensure that the SchemaResolver is configured
 // to bypass caching and enable visibility of just-added descriptors.
 // This is used to resolve sequence and FK dependencies. Also see the
-// comment at the start of the global scope resolveFK().
+// comment at the start of ResolveFK().
 //
 // If the table definition *may* use the SERIAL type, the caller is
 // also responsible for processing serial types using
@@ -1823,7 +1816,7 @@ func newTableDesc(
 	// We need to run NewTableDesc with caching disabled, because
 	// it needs to pull in descriptors from FK depended-on tables
 	// and interleaved parents using their current state in KV.
-	// See the comment at the start of NewTableDesc() and resolveFK().
+	// See the comment at the start of NewTableDesc() and ResolveFK().
 	params.p.runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: parentID}, func() {
 		ret, err = NewTableDesc(
 			params.ctx,

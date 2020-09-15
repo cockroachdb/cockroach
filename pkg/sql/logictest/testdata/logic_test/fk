@@ -1,5 +1,8 @@
 # LogicTest: !3node-tenant(49854)
 
+statement ok
+SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE
+
 # Randomize the use of insert fast path.
 # The let statement will also log the value.
 let $enable_insert_fast_path
@@ -3524,3 +3527,75 @@ SELECT
     *
 FROM
     a
+
+# Test that we disallow cross-database foreign key references, depending on the
+# cluster setting.
+
+subtest cross_db_fks
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_fks.enabled = FALSE
+
+statement ok
+CREATE DATABASE db1
+
+statement ok
+CREATE DATABASE db2
+
+statement ok
+USE db1
+
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE child1 (c INT PRIMARY KEY, p INT REFERENCES parent(p))
+
+statement ok
+CREATE TABLE child2 (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
+
+statement ok
+CREATE TABLE db1.public.child3 (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
+
+statement error foreign references between databases are not allowed
+CREATE TABLE db2.public.child (c INT PRIMARY KEY, p INT REFERENCES parent(p))
+
+statement ok
+CREATE SCHEMA sc1
+
+# Cross-schema references should always be allowed.
+statement ok
+CREATE TABLE db1.sc1.child (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
+
+statement ok
+USE db2
+
+statement error foreign references between databases are not allowed
+CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
+
+statement error foreign references between databases are not allowed
+CREATE TABLE db2.public.child (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT)
+
+statement error foreign references between databases are not allowed
+ALTER TABLE child ADD CONSTRAINT fk FOREIGN KEY (p) REFERENCES db1.public.parent(p)
+
+statement ok
+USE db1
+
+statement error foreign references between databases are not allowed
+ALTER TABLE db2.public.child ADD CONSTRAINT fk FOREIGN KEY (p) REFERENCES parent(p)
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE
+
+statement ok
+ALTER TABLE db2.public.child ADD CONSTRAINT fk FOREIGN KEY (p) REFERENCES parent(p)
+
+statement ok
+USE db2
+
+statement ok
+CREATE TABLE child2 (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
