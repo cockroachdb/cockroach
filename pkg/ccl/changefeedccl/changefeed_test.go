@@ -1355,8 +1355,26 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	assertFailuresCounter := func(t *testing.T, m *Metrics, exp int64) {
+		t.Helper()
+		// If this changefeed is running as a job, we anticipate that it will move
+		// through the failed state and will increment the metric. Sinkless feeds
+		// don't contribute to the failures counter.
+		if strings.Contains(t.Name(), `sinkless`) {
+			return
+		}
+		testutils.SucceedsSoon(t, func() error {
+			if got := m.Failures.Count(); got != exp {
+				return errors.Errorf("expected %d failures, got %d", exp, got)
+			}
+			return nil
+		})
+	}
+
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
+		registry := f.Server().JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
 
 		sqlDB.Exec(t, `CREATE TABLE truncate (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE truncate_cascade (b INT PRIMARY KEY REFERENCES truncate (a))`)
@@ -1377,6 +1395,7 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		) {
 			t.Fatalf(`expected ""truncate_cascade" was truncated" error got: %+v`, err)
 		}
+		assertFailuresCounter(t, metrics, 2)
 
 		sqlDB.Exec(t, `CREATE TABLE rename (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO rename VALUES (1)`)
@@ -1388,6 +1407,7 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		if _, err := rename.Next(); !testutils.IsError(err, `"rename" was renamed to "renamed"`) {
 			t.Errorf(`expected ""rename" was renamed to "renamed"" error got: %+v`, err)
 		}
+		assertFailuresCounter(t, metrics, 3)
 
 		sqlDB.Exec(t, `CREATE TABLE drop (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO drop VALUES (1)`)
@@ -1398,6 +1418,7 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		if _, err := drop.Next(); !testutils.IsError(err, `"drop" was dropped or truncated`) {
 			t.Errorf(`expected ""drop" was dropped or truncated" error got: %+v`, err)
 		}
+		assertFailuresCounter(t, metrics, 4)
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
@@ -1464,6 +1485,9 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.flushes`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
+			if c := s.MustGetSQLCounter(`changefeed.running`); c != 1 {
+				return errors.Errorf(`expected 1 got %d`, c)
+			}
 			if c := s.MustGetSQLCounter(`changefeed.flush_nanos`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
@@ -1529,11 +1553,15 @@ func TestChangefeedMonitoring(t *testing.T) {
 			return nil
 		})
 
-		// Cancel all the changefeeds and check that max_behind_nanos returns to 0.
+		// Cancel all the changefeeds and check that max_behind_nanos returns to 0
+		// and the number running returns to 0.
 		require.NoError(t, foo.Close())
 		require.NoError(t, fooCopy.Close())
 		testutils.SucceedsSoon(t, func() error {
 			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
+				return errors.Errorf(`expected 0 got %d`, c)
+			}
+			if c := s.MustGetSQLCounter(`changefeed.running`); c != 0 {
 				return errors.Errorf(`expected 0 got %d`, c)
 			}
 			return nil
