@@ -632,6 +632,7 @@ func TestDumpAllTables(t *testing.T) {
 		{
 			name: " dump_all",
 			create: `
+SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 CREATE DATABASE db1;
 USE db1;
 CREATE TABLE t1(id INT NOT NULL, pkey STRING PRIMARY KEY);
