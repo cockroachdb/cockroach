@@ -993,8 +993,11 @@ as target of the decommissioning or recommissioning command.`,
 	}
 
 	NodeDecommissionForce = FlagInfo{
-		Name:        "force",
-		Description: `TODO(irfansharif): XXX: Stub this out.`,
+		Name: "force",
+		Description: `
+Decommission the target nodes away in absentia. This flag should only be used
+when operators can guarantee that the target nodes are not going to re-join the
+cluster.`,
 	}
 
 	SQLFmtLen = FlagInfo{

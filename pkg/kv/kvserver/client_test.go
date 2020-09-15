@@ -908,7 +908,7 @@ func (m *multiTestContext) addStore(idx int) {
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = kvserver.NewNodeLiveness(
 		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
-		nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
+		nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval, m.nodeDialer,
 	)
 	m.populateStorePool(idx, cfg, m.nodeLivenesses[idx])
 	cfg.DB = m.dbs[idx]
@@ -1088,7 +1088,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = kvserver.NewNodeLiveness(
 		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i],
-		m.gossips[i], nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
+		m.gossips[i], nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval, m.nodeDialer,
 	)
 	m.populateStorePool(i, cfg, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]

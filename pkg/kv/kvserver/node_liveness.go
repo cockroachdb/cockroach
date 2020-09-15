@@ -13,6 +13,9 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"sync/atomic"
 	"time"
 
@@ -174,6 +177,7 @@ type NodeLiveness struct {
 	heartbeatPaused uint32
 	heartbeatToken  chan struct{}
 	metrics         LivenessMetrics
+	nodeDialer      *nodedialer.Dialer
 
 	mu struct {
 		syncutil.RWMutex
@@ -208,6 +212,7 @@ func NewNodeLiveness(
 	renewalDuration time.Duration,
 	st *cluster.Settings,
 	histogramWindow time.Duration,
+	nodeDialer *nodedialer.Dialer,
 ) *NodeLiveness {
 	nl := &NodeLiveness{
 		ambientCtx:        ambient,
@@ -220,6 +225,7 @@ func NewNodeLiveness(
 		st:                st,
 		otherSem:          make(chan struct{}, 1),
 		heartbeatToken:    make(chan struct{}, 1),
+		nodeDialer:        nodeDialer,
 	}
 	nl.metrics = LivenessMetrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -280,7 +286,7 @@ func (nl *NodeLiveness) SetDraining(
 // to change the membership status (as opposed to it returning early when
 // finding the target status possibly set by another node).
 func (nl *NodeLiveness) SetMembershipStatus(
-	ctx context.Context, nodeID roachpb.NodeID, targetStatus kvserverpb.MembershipStatus,
+	ctx context.Context, nodeID roachpb.NodeID, targetStatus kvserverpb.MembershipStatus, inAbsentia bool,
 ) (statusChanged bool, err error) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 
@@ -348,7 +354,7 @@ func (nl *NodeLiveness) SetMembershipStatus(
 		// liveness, the previous view is correct. This, too, is required to
 		// de-flake TestNodeLivenessDecommissionAbsent.
 		nl.maybeUpdate(oldLivenessRec)
-		return nl.setMembershipStatusInternal(ctx, nodeID, oldLivenessRec, targetStatus)
+		return nl.setMembershipStatusInternal(ctx, nodeID, oldLivenessRec, targetStatus, inAbsentia)
 	}
 
 	for {
@@ -448,6 +454,8 @@ type livenessUpdate struct {
 	//
 	// oldRaw must not be set when ignoreCache is not set.
 	oldRaw []byte
+	// inAbsentia XXX:
+	inAbsentia bool
 }
 
 func (nl *NodeLiveness) setMembershipStatusInternal(
@@ -455,6 +463,7 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 	nodeID roachpb.NodeID,
 	oldLivenessRec LivenessRecord,
 	targetStatus kvserverpb.MembershipStatus,
+	inAbsentia bool,
 ) (statusChanged bool, err error) {
 	// Let's compute what our new liveness record should be.
 	var newLiveness kvserverpb.Liveness
@@ -503,6 +512,7 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 		oldLiveness: oldLivenessRec.Liveness,
 		oldRaw:      oldLivenessRec.raw,
 		ignoreCache: true,
+		inAbsentia:  inAbsentia,
 	}
 	statusChanged = true
 	if _, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
@@ -1067,6 +1077,29 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			return LivenessRecord{}, handleCondFailed(l)
 		}
 		oldRaw = l.raw
+	}
+
+	// XXX: We can alternatively forward the decomm request to each node, and
+	// have each node write to local disk if needed (instead of a new RPC).
+	// Seems unnecessary though.
+
+	// XXX: If we're attempting to mark a node as fully decommissioned, we want
+	// to inform the node that the process, which would persist a kill file.
+	if !update.inAbsentia && update.newLiveness.Membership.Decommissioned() {
+		conn, err := nl.nodeDialer.Dial(ctx, update.newLiveness.NodeID, rpc.DefaultClass)
+		if err != nil {
+			return LivenessRecord{}, err
+		}
+
+		adminClient := serverpb.NewAdminClient(conn)
+		req := &serverpb.FinalizeDecommissionRequest{}
+		_, err = adminClient.FinalizeDecommission(ctx, req)
+		_ = conn.Close()
+		if err != nil {
+			// XXX: Wrap connection errors better, to make it clear when
+			// --force should be used.
+			return LivenessRecord{}, err
+		}
 	}
 
 	v := new(roachpb.Value)

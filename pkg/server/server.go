@@ -122,10 +122,9 @@ type Server struct {
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc       *grpcServer
-	gossip     *gossip.Gossip
-	nodeDialer *nodedialer.Dialer
-	// XXX:
+	grpc         *grpcServer
+	gossip       *gossip.Gossip
+	nodeDialer   *nodedialer.Dialer
 	nodeLiveness *kvserver.NodeLiveness
 	storePool    *kvserver.StorePool
 	tcsFactory   *kvcoord.TxnCoordSenderFactory
@@ -386,6 +385,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nlRenewal,
 		st,
 		cfg.HistogramWindowInterval(),
+		nodeDialer,
 	)
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
@@ -1386,8 +1386,6 @@ func (s *Server) Start(ctx context.Context) error {
 	//
 	//   536,870,912 bits/64 bits = 8,388,608 decommissioned node IDs.
 
-	// XXX: Check for decomm file existence.
-
 	// TODO(tbg): split this method here. Everything above this comment is
 	// the early stage of startup -- setting up listeners and determining the
 	// initState -- and everything after it is actually starting the server,
@@ -1931,7 +1929,12 @@ func (s *sqlServer) startServeSQL(
 }
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
-func (s *Server) Decommission(ctx context.Context, targetStatus kvserverpb.MembershipStatus, nodeIDs []roachpb.NodeID, inAbsentia bool) error {
+func (s *Server) Decommission(
+	ctx context.Context,
+	targetStatus kvserverpb.MembershipStatus,
+	nodeIDs []roachpb.NodeID,
+	inAbsentia bool,
+) error {
 	if !s.st.Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
 		if targetStatus.Decommissioned() {
 			// In mixed-version cluster settings, we need to ensure that we're
@@ -1940,27 +1943,6 @@ func (s *Server) Decommission(ctx context.Context, targetStatus kvserverpb.Membe
 			// simply disallow the setting of the fully decommissioned state until
 			// we're guaranteed to be on v20.2.
 			targetStatus = kvserverpb.MembershipStatus_DECOMMISSIONING
-		}
-	}
-
-	// XXX: Consult our cache, return early if no-op. If we're attempting to
-	// mark a node as fully decommissioned, we want to send out a "prevent
-	// startup rpc" to it, which would persist a kill file.
-	if targetStatus.Decommissioned() && !inAbsentia {
-		for _, nodeID := range nodeIDs {
-			conn, err := s.nodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
-			if err != nil {
-				return err
-			}
-
-			client := serverpb.NewAdminClient(conn)
-			req := &serverpb.FinalizeDecommissionRequest{}
-			_, err = client.FinalizeDecommission(ctx, req)
-			_ = conn.Close()
-			if err != nil {
-				// XXX: Wrap connection errors better, to make it clear when --force should be used.
-				return err
-			}
 		}
 	}
 
@@ -1977,7 +1959,7 @@ func (s *Server) Decommission(ctx context.Context, targetStatus kvserverpb.Membe
 	}
 
 	for _, nodeID := range nodeIDs {
-		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
+		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus, inAbsentia)
 		if err != nil {
 			return err
 		}

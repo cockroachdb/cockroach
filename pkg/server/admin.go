@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"io"
 	"net/http"
 	"sort"
@@ -46,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1710,42 +1710,41 @@ func (s *adminServer) DecommissionStatus(
 // Decommission sets the decommission flag to the specified value on the
 // specified node(s).
 //
-// XXX: This is where we start.
+// XXX: This is where the server codepaths start.
 func (s *adminServer) Decommission(
 	ctx context.Context, req *serverpb.DecommissionRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
-	nodeIDs := req.NodeIDs
-
-	if len(nodeIDs) == 0 {
+	if len(req.NodeIDs) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "no node ID specified")
 	}
 
 	// Mark the target nodes with their new membership status. They'll find out
 	// as they heartbeat their liveness.
-	if err := s.server.Decommission(ctx, req.TargetMembership, nodeIDs, req.InAbsentia); err != nil {
+	if err := s.server.Decommission(ctx, req.TargetMembership, req.NodeIDs, req.InAbsentia); err != nil {
 		return nil, err
 	}
-	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
+	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: req.NodeIDs})
 }
 
-// XXX: FinalizeDecommission
+// FinalizeDecommission informs the target node that it has been fully
+// decommissioned. The target node is to then persist a local file to prevent
+// itself from starting back up again when terminated.
 func (s *adminServer) FinalizeDecommission(
-	ctx context.Context, _ *serverpb.FinalizeDecommissionRequest,
+	_ context.Context, _ *serverpb.FinalizeDecommissionRequest,
 ) (*serverpb.FinalizeDecommissionResponse, error) {
-	firstEng := s.server.engines[0]
-	auxDir := firstEng.GetAuxiliaryDir()
-	_ = firstEng.MkdirAll(auxDir)
-	path := base.DecommMarkerFile(auxDir)
-	preventStartupMsg := fmt.Sprintf(`YO:
+	for _, eng := range s.server.engines {
+		auxDir := eng.GetAuxiliaryDir()
+		_ = eng.MkdirAll(auxDir)
+		path := base.DecommMarkerFile(auxDir)
+		preventStartupMsg :=
+			fmt.Sprintf(`
+This node (n%d) has been fully decommissioned.
+A file preventing this node from restarting was placed at: %s
+`, s.server.NodeID(), path)
 
-This node has been fully decommissioned.
-
-A file preventing this node from restarting was placed at:
-%s
-`, path)
-
-	if err := fs.WriteFile(firstEng, path, []byte(preventStartupMsg)); err != nil {
-		log.Warningf(ctx, "%v", err)
+		if err := fs.WriteFile(eng, path, []byte(preventStartupMsg)); err != nil {
+			return nil, err
+		}
 	}
 
 	return &serverpb.FinalizeDecommissionResponse{}, nil

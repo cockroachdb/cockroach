@@ -413,13 +413,12 @@ const AuxiliaryDir = "auxiliary"
 
 // PreventedStartupFile is the filename (relative to 'dir') used for files that
 // can block server startup.
-// XXX: Can use something similar.
 func PreventedStartupFile(dir string) string {
 	return filepath.Join(dir, "_CRITICAL_ALERT.txt")
 }
 
-// DecommMarkerFile is the filename (relative to 'dir') used for files that
-// can block server startup because the node has been decommissioned
+// DecommMarkerFile is the filename (relative to 'dir') used for a file that
+// will block server startup because the node has been fully decommissioned.
 func DecommMarkerFile(dir string) string {
 	return filepath.Join(dir, "DECOMMISSIONED.txt")
 }
@@ -458,7 +457,11 @@ func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
 	return err
 }
 
-// XXX:
+// PriorDecommMarkers attempts to read the DecommMarkerFile for each store
+// directory and returns their contents as a structured error.
+//
+// These files indicate that the node was wholly decommissioned, and is
+// disallowed from starting back up again.
 func (ssl StoreSpecList) PriorDecommMarkers() (err error) {
 	addError := func(newErr error) {
 		if err == nil {
@@ -467,6 +470,7 @@ func (ssl StoreSpecList) PriorDecommMarkers() (err error) {
 		// We use WithDetailf here instead of errors.CombineErrors
 		// because we want the details to be printed to the screen
 		// (combined errors only show up via %+v).
+		// XXX: Is this stuff needed?
 		err = errors.WithDetailf(err, "%v", newErr)
 	}
 	for _, ss := range ssl.Specs {
@@ -496,7 +500,10 @@ func (ss StoreSpec) PreventedStartupFile() string {
 	return PreventedStartupFile(filepath.Join(ss.Path, AuxiliaryDir))
 }
 
-// DecommMarkerFile XXX:
+// DecommMarkerFile returns the path to a file which, if it exists, should
+// prevent the server from starting up. It's used to indicate that this server
+// has been wholly decommissioned, is barred from rejoining the cluster.
+// Returns an empty string for in-memory engines.
 func (ss StoreSpec) DecommMarkerFile() string {
 	if ss.InMemory {
 		return ""
