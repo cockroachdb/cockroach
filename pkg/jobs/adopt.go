@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
 )
@@ -177,6 +178,17 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	errCh := make(chan error, 1)
 	aj := &adoptedJob{sid: s.ID(), cancel: cancel}
 	r.addAdoptedJob(jobID, aj)
+
+	if err := job.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Payload.StartedMicros == 0 {
+			md.Payload.StartedMicros = timeutil.ToUnixMicros(job.registry.clock.Now().GoTime())
+			ju.UpdatePayload(md.Payload)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
 		r.runJob(resumeCtx, resumer, resultsCh, errCh, job, status, job.taskName(), nil)
 	}); err != nil {
