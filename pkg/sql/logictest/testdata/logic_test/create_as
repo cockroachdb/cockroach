@@ -362,3 +362,13 @@ SELECT * FROM t
 ----
 1  1  false
 2  2  true
+
+# Regression test for #53819
+statement ok
+CREATE SEQUENCE regression_53819_seq;
+CREATE TABLE regression_53819_table AS SELECT nextval('regression_53819_seq')
+
+query I
+SELECT * FROM regression_53819_table
+----
+2
