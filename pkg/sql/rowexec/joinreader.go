@@ -181,7 +181,13 @@ func newJoinReader(
 	var leftEqCols []uint32
 	switch readerType {
 	case indexJoinReaderType:
-		leftTypes = columnTypes
+		// Index join performs a join between a secondary index, the `input`,
+		// and the primary index of the same table, `desc`, to retrieve columns
+		// which are not stored in the secondary index. It outputs the looked
+		// up rows as is (meaning that the output rows before post-processing
+		// will contain all columns from the table) whereas the columns that
+		// came from the secondary index (input rows) are ignored. As a result,
+		// we leave leftTypes as empty.
 		leftEqCols = indexCols
 	case lookupJoinReaderType:
 		leftTypes = input.OutputTypes()
