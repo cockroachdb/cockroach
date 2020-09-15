@@ -325,5 +325,5 @@ func sendBatch(
 	routing, err := ds.getRoutingInfo(ctx, desc.StartKey, EvictionToken{}, false /* useReverseScan */)
 	require.NoError(t, err)
 
-	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, routing, false /* withCommit */)
+	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, &routing, false /* withCommit */)
 }

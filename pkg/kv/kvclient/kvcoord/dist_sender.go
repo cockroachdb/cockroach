@@ -250,10 +250,13 @@ type DistSender struct {
 	// This is not required if a RangeDescriptorDB is supplied.
 	firstRangeProvider FirstRangeProvider
 	transportFactory   TransportFactory
-	rpcContext         *rpc.Context
-	nodeDialer         *nodedialer.Dialer
-	rpcRetryOptions    retry.Options
-	asyncSenderSem     *quotapool.IntPool
+	// If set, the DistSender will try the replicas in the order they appear in
+	// the descriptor, instead of trying to reorder them by latency.
+	dontReorderReplicas bool
+	rpcContext          *rpc.Context
+	nodeDialer          *nodedialer.Dialer
+	rpcRetryOptions     retry.Options
+	asyncSenderSem      *quotapool.IntPool
 	// clusterID is used to verify access to enterprise features.
 	// It is copied out of the rpcContext at construction time and used in
 	// testing.
@@ -353,6 +356,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	} else {
 		ds.transportFactory = GRPCTransportFactory
 	}
+	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	if cfg.RPCRetryOptions != nil {
 		ds.rpcRetryOptions = *cfg.RPCRetryOptions
@@ -1450,8 +1454,8 @@ func (ds *DistSender) sendPartialBatch(
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
 		attempts++
 		pErr = nil
-		// If we've cleared the descriptor on a send failure, re-lookup.
-		if routing.Empty() {
+		// If we've invalidated the descriptor on a send failure, re-lookup.
+		if !routing.Valid() {
 			var descKey roachpb.RKey
 			if isReverse {
 				descKey = rs.EndKey
@@ -1486,7 +1490,8 @@ func (ds *DistSender) sendPartialBatch(
 			}
 		}
 
-		reply, err = ds.sendToReplicas(ctx, ba, routing, withCommit)
+		prevTok = routing
+		reply, err = ds.sendToReplicas(ctx, ba, &routing, withCommit)
 
 		const slowDistSenderThreshold = time.Minute
 		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && !tBegin.IsZero() {
@@ -1512,15 +1517,17 @@ func (ds *DistSender) sendPartialBatch(
 			switch {
 			case errors.HasType(err, sendError{}):
 				// We've tried all the replicas without success. Either they're all down,
-				// or we're using an out-of-date range descriptor. Invalidate the cache
-				// and try again with the new metadata. Re-sending the request is ok even
+				// or we're using an out-of-date range descriptor. Evict from the cache
+				// and try again with an updated descriptor. Re-sending the request is ok even
 				// though it might have succeeded the first time around because of
 				// idempotency.
-				log.VEventf(ctx, 1, "evicting range desc %s after %s", routing.entry, err)
-				routing.Evict(ctx)
+				// Note that if routing has been invalidated, the eviction already
+				// occurred.
+				if routing.Valid() {
+					log.VEventf(ctx, 1, "evicting range desc %s after %s", routing.entry, err)
+					routing.Evict(ctx)
+				}
 				// Clear the routing info to reload on the next attempt.
-				prevTok = routing
-				routing = EvictionToken{}
 				continue
 			}
 			break
@@ -1739,6 +1746,11 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 // internally by retrying (NotLeaseholderError, RangeNotFoundError), and falls
 // back to a sendError when it runs out of replicas to try.
 //
+// routing is an input-output param. It dictates what replicas will be tried. It
+// can be updated with a more up-to-date descriptor/lease from the range cache.
+// If that happens and the request still cannot be satisfied, the caller should
+// use this updated information to evict a stale descriptor from the cache.
+//
 // withCommit declares whether a transaction commit is either in this batch or
 // in-flight concurrently with this batch. If withCommit is false (i.e. either
 // no EndTxn is in flight, or it is attempting to abort), ambiguous results will
@@ -1749,7 +1761,7 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 // that do not definitively rule out the possibility that the batch could have
 // succeeded are transformed into AmbiguousResultErrors.
 func (ds *DistSender) sendToReplicas(
-	ctx context.Context, ba roachpb.BatchRequest, routing EvictionToken, withCommit bool,
+	ctx context.Context, ba roachpb.BatchRequest, routing *EvictionToken, withCommit bool,
 ) (*roachpb.BatchResponse, error) {
 	desc := routing.Desc()
 	ba.RangeID = desc.RangeID
@@ -1761,7 +1773,9 @@ func (ds *DistSender) sendToReplicas(
 
 	// Rearrange the replicas so that they're ordered in expectation of
 	// request latency. Leaseholder considerations come below.
-	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+	if !ds.dontReorderReplicas {
+		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
+	}
 
 	// Try the leaseholder first, if the request wants it.
 	{
@@ -1818,7 +1832,7 @@ func (ds *DistSender) sendToReplicas(
 		if lastErr == nil && br != nil {
 			lastErr = br.Error.GoError()
 		}
-		err = skipStaleReplicas(transport, routing, ambiguousError, lastErr)
+		err = skipStaleReplicas(transport, *routing, ambiguousError, lastErr)
 		if err != nil {
 			return nil, err
 		}
@@ -1925,7 +1939,7 @@ func (ds *DistSender) sendToReplicas(
 			// talk to a replica that tells us who the leaseholder is.
 			if ctx.Err() == nil {
 				if lh := routing.Leaseholder(); lh != nil && *lh == curReplica {
-					routing = routing.ClearLease(ctx)
+					routing.ClearLease(ctx)
 				}
 			}
 		} else {
@@ -1972,10 +1986,10 @@ func (ds *DistSender) sendToReplicas(
 
 					var ok bool
 					if tErr.Lease != nil {
-						routing, ok = routing.UpdateLease(ctx, tErr.Lease)
+						ok = routing.UpdateLease(ctx, tErr.Lease)
 					} else if tErr.LeaseHolder != nil {
 						// tErr.LeaseHolder might be set when tErr.Lease isn't.
-						routing = routing.UpdateLeaseholder(ctx, *tErr.LeaseHolder)
+						routing.UpdateLeaseholder(ctx, *tErr.LeaseHolder)
 						ok = true
 					}
 					// Move the new leaseholder to the head of the queue for the next
