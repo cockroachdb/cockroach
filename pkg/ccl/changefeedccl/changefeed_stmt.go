@@ -646,6 +646,13 @@ func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, planHookState in
 	progress := b.job.Progress()
 	b.maybeCleanUpProtectedTimestamp(ctx, execCfg.DB, execCfg.ProtectedTimestampProvider,
 		progress.GetChangefeed().ProtectedTimestampRecord)
+
+	// If this job has failed (not canceled), increment the counter.
+	if !jobs.HasErrJobCanceled(
+		errors.DecodeError(ctx, *b.job.Payload().FinalResumeError),
+	) {
+		phs.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
+	}
 	return nil
 }
 
