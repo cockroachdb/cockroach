@@ -150,6 +150,14 @@ var JoinTypeSemiUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.ty
 // planned.
 var JoinTypeAntiUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.anti")
 
+// PartialIndexScanUseCounter is to be incremented whenever a partial index scan
+// node is planned.
+var PartialIndexScanUseCounter = telemetry.GetCounterOnce("sql.plan.opt.partial-index.scan")
+
+// PartialIndexLookupJoinUseCounter is to be incremented whenever a lookup join
+// on a partial index is planned.
+var PartialIndexLookupJoinUseCounter = telemetry.GetCounterOnce("sql.plan.opt.partial-index.lookup-join")
+
 // CancelQueriesUseCounter is to be incremented whenever CANCEL QUERY or
 // CANCEL QUERIES is run.
 var CancelQueriesUseCounter = telemetry.GetCounterOnce("sql.session.cancel-queries")
