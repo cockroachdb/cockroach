@@ -708,6 +708,7 @@ INSERT INTO public.t2 (id, pkey) VALUES
 			name:     "dump_cross_references",
 			recreate: true,
 			create: `
+SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 CREATE DATABASE dbB;
 USE dbB;
 
