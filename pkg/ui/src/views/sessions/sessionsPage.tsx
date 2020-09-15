@@ -60,7 +60,7 @@ export class SessionsPage extends React.Component<SessionsPageProps, SessionsPag
     super(props);
     const defaultState = {
       sortSetting: {
-        sortKey: 2, // Sort by Query Age column as default option.
+        sortKey: 2, // Sort by Statement Age column as default option.
         ascending: false,
       },
       pagination: {
