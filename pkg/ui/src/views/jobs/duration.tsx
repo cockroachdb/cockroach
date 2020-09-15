@@ -26,12 +26,20 @@ import {cockroach} from "src/js/protos";
 
 export class Duration extends React.PureComponent<{ job: Job }> {
   render() {
-    const started = TimestampToMoment(this.props.job.started);
-    const finished = TimestampToMoment(this.props.job.finished);
-    const modified = TimestampToMoment(this.props.job.modified);
     if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_PENDING)) {
       return "Waiting for GG TCL";
-    } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_RUNNING)) {
+    }
+    // Parse timestamp to default value NULL instead of Date.now.
+    // Conversion dates to Date.now causes traling dates and constant
+    // duration increase even when job is finished.
+    const started = TimestampToMoment(this.props.job.started, null);
+    const modified = TimestampToMoment(this.props.job.modified, null);
+    const finished = TimestampToMoment(this.props.job.finished, null);
+
+    if (!started) {
+      return null;
+    }
+    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_RUNNING) && !!modified) {
       const fractionCompleted = this.props.job.fraction_completed;
       if (fractionCompleted > 0) {
         const duration = modified.diff(started);
@@ -39,7 +47,7 @@ export class Duration extends React.PureComponent<{ job: Job }> {
         return <span
           className="jobs-table__duration--right">{formatDuration(moment.duration(remaining)) + " remaining"}</span>;
       }
-    } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED)) {
+    } else if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED) && !!finished) {
       return "Duration: " + formatDuration(moment.duration(finished.diff(started)));
     }
     return null;
