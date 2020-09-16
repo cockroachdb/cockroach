@@ -285,6 +285,21 @@ user root
 statement ok
 GRANT CREATE ON SCHEMA privs TO testuser
 
+statement ok
+CREATE DATABASE db2; USE db2; CREATE SCHEMA privs; USE test
+
+statement error target database or schema does not exist
+SHOW GRANTS ON SCHEMA non_existent
+
+query TTTT
+SELECT database_name, schema_name, grantee, privilege_type FROM
+[SHOW GRANTS ON SCHEMA privs]
+ORDER BY database_name, schema_name, grantee
+----
+test  privs  admin     ALL
+test  privs  root      ALL
+test  privs  testuser  CREATE
+
 user testuser
 
 # Now the testuser can create objects.
