@@ -135,11 +135,15 @@ func (tu *optTableUpserter) init(
 	return nil
 }
 
-// flushAndStartNewBatch is part of the tableWriter interface.
-func (tu *optTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
+func (tu *optTableUpserter) clearLastBatch(ctx context.Context) {
+	tu.tableWriterBase.clearLastBatch(ctx)
 	if tu.collectRows {
 		tu.rowsUpserted.Clear(ctx)
 	}
+}
+
+// flushAndStartNewBatch is part of the tableWriter interface.
+func (tu *optTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
 	return tu.tableWriterBase.flushAndStartNewBatch(ctx)
 }
 
