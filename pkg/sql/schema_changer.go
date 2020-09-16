@@ -968,10 +968,11 @@ func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID des
 }
 
 // done finalizes the mutations (adds new cols/indexes to the table).
-// It ensures that all nodes are on the current (pre-update) version of the
-// schema.
+// It ensures that all nodes are on the current (pre-update) version of
+// sc.descID and that all nodes are on the new (post-update) version of
+// any other modified descriptors.
+//
 // It also kicks off GC jobs as needed.
-// Returns the updated descriptor.
 func (sc *SchemaChanger) done(ctx context.Context) error {
 
 	// Get the other tables whose foreign key backreferences need to be removed.
@@ -983,7 +984,9 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// descriptor updates are published.
 	var childJobs []*jobs.StartableJob
 	var didUpdate bool
-	err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+	modified, err := sc.txnWithModified(ctx, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
 		childJobs = nil
 		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
 		interleaveParents = make(map[descpb.ID]struct{})
@@ -1325,6 +1328,17 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			log.Warningf(ctx, "starting job %d failed with error: %v", *job.ID(), err)
 		}
 		log.VEventf(ctx, 2, "started job %d", *job.ID())
+	}
+	// Wait for the modified versions of tables other than the table we're
+	// updating to have their leases updated.
+	for _, desc := range modified {
+		// sc.descID gets waited for above this call in sc.exec().
+		if desc.ID == sc.descID {
+			continue
+		}
+		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, desc.ID); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1875,12 +1889,28 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 func (sc *SchemaChanger) txn(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) error {
+	_, err := sc.txnWithModified(ctx, f)
+	return err
+}
+
+// txnWithModified is a convenient wrapper around descs.Txn() which additionally
+// returns the set of modified descriptors.
+func (sc *SchemaChanger) txnWithModified(
+	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
+) (descsWithNewVersions []lease.IDVersion, _ error) {
 	ie := sc.ieFactory(ctx, newFakeSessionData())
-	return descs.Txn(ctx, sc.settings, sc.leaseMgr, ie, sc.db, func(
+	if err := descs.Txn(ctx, sc.settings, sc.leaseMgr, ie, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		return f(ctx, txn, descsCol)
-	})
+		if err := f(ctx, txn, descsCol); err != nil {
+			return err
+		}
+		descsWithNewVersions = descsCol.GetDescriptorsWithNewVersion()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return descsWithNewVersions, nil
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.

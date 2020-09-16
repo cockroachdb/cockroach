@@ -67,7 +67,7 @@ export function makeSessionsColumns(
         if (session.session.active_queries?.length > 0) {
           return AgeLabel({
             start: TimestampToMoment(session.session.active_queries[0].start),
-            thingName: "Query",
+            thingName: "Statement",
           });
         }
         return "N/A";
@@ -124,7 +124,7 @@ export function makeSessionsColumns(
                   }
                 }}
               >
-                Terminate Query
+                Terminate Statement
               </Anchor>
             </Menu.Item>
             <Menu.Item>
