@@ -101,10 +101,6 @@ type kvBatchSnapshotStrategy struct {
 	limiter *rate.Limiter
 	// Only used on the sender side.
 	newBatch func() storage.Batch
-	// bytesSent is updated in sendBatch and returned from Send(). It does not
-	// reflect the log entries sent (which are never sent in newer versions of
-	// CRDB, as of VersionUnreplicatedTruncatedState).
-	bytesSent int64
 
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk. Only used on the receiver side.
@@ -318,42 +314,50 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 ) (int64, error) {
 	assertStrategy(ctx, header, SnapshotRequest_KV_BATCH)
 
+	// bytesSent is updated as key-value batches are sent with sendBatch. It
+	// does not reflect the log entries sent (which are never sent in newer
+	// versions of CRDB, as of VersionUnreplicatedTruncatedState).
+	bytesSent := int64(0)
+
 	// Iterate over all keys using the provided iterator and stream out batches
 	// of key-values.
-	n := 0
+	kvs := 0
 	var b storage.Batch
+	defer func() {
+		if b != nil {
+			b.Close()
+		}
+	}()
 	for iter := snap.Iter; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return 0, err
 		} else if !ok {
 			break
 		}
-		key := iter.Key()
-		value := iter.Value()
-		n++
+		kvs++
+		unsafeKey := iter.UnsafeKey()
+		unsafeValue := iter.UnsafeValue()
 		if b == nil {
 			b = kvSS.newBatch()
 		}
-		if err := b.Put(key, value); err != nil {
-			b.Close()
+		if err := b.Put(unsafeKey, unsafeValue); err != nil {
 			return 0, err
 		}
 
-		if int64(b.Len()) >= kvSS.batchSize {
+		if bLen := int64(b.Len()); bLen >= kvSS.batchSize {
 			if err := kvSS.sendBatch(ctx, stream, b); err != nil {
 				return 0, err
 			}
+			bytesSent += bLen
+			b.Close()
 			b = nil
-			// We no longer need the keys and values in the batch we just sent,
-			// so reset ReplicaDataIterator's allocator and allow its data to
-			// be garbage collected.
-			iter.ResetAllocator()
 		}
 	}
 	if b != nil {
 		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
 			return 0, err
 		}
+		bytesSent += int64(b.Len())
 	}
 
 	// Iterate over the specified range of Raft entries and send them all out
@@ -462,11 +466,11 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 		}
 	}
-	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", n, len(logEntries))
+	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", kvs, len(logEntries))
 	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries}); err != nil {
 		return 0, err
 	}
-	return kvSS.bytesSent, nil
+	return bytesSent, nil
 }
 
 func (kvSS *kvBatchSnapshotStrategy) sendBatch(
@@ -475,10 +479,7 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 	if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
 		return err
 	}
-	repr := batch.Repr()
-	kvSS.bytesSent += int64(len(repr))
-	batch.Close()
-	return stream.Send(&SnapshotRequest{KVBatch: repr})
+	return stream.Send(&SnapshotRequest{KVBatch: batch.Repr()})
 }
 
 // Status implements the snapshotStrategy interface.
@@ -852,13 +853,25 @@ var recoverySnapshotRate = settings.RegisterPublicValidatedByteSizeSetting(
 	validatePositive,
 )
 
+// snapshotSenderBatchSize is the size that key-value batches are allowed to
+// grow to during Range snapshots before being sent to the receiver. This limit
+// places an upper-bound on the memory footprint of the sender of a Range
+// snapshot. It is also the granularity of rate limiting.
+var snapshotSenderBatchSize = settings.RegisterValidatedByteSizeSetting(
+	"kv.snapshot_sender.batch_size",
+	"size of key-value batches sent over the network during snapshots",
+	256<<10, // 256 KB
+	validatePositive,
+)
+
 // snapshotSSTWriteSyncRate is the size of chunks to write before fsync-ing.
 // The default of 2 MiB was chosen to be in line with the behavior in bulk-io.
 // See sstWriteSyncRate.
-var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
+var snapshotSSTWriteSyncRate = settings.RegisterValidatedByteSizeSetting(
 	"kv.snapshot_sst.sync_size",
 	"threshold after which snapshot SST writes must fsync",
 	bulkIOWriteBurst,
+	validatePositive,
 )
 
 func snapshotRateLimit(
@@ -942,12 +955,12 @@ func sendSnapshot(
 	durQueued := timeutil.Since(start)
 	start = timeutil.Now()
 
-	// The size of batches to send. This is the granularity of rate limiting.
-	const batchSize = 256 << 10 // 256 KB
+	// Consult cluster settings to determine rate limits and batch sizes.
 	targetRate, err := snapshotRateLimit(st, header.Priority)
 	if err != nil {
 		return errors.Wrapf(err, "%s", to)
 	}
+	batchSize := snapshotSenderBatchSize.Get(&st.SV)
 
 	// Convert the bytes/sec rate limit to batches/sec.
 	//
@@ -956,7 +969,7 @@ func sendSnapshot(
 	// which seems to disable the rate limiting, or call WaitN in smaller than
 	// burst size chunks which caused excessive slowness in testing. Would be
 	// nice to figure this out, but the batches/sec rate limit works for now.
-	limiter := rate.NewLimiter(targetRate/batchSize, 1 /* burst size */)
+	limiter := rate.NewLimiter(targetRate/rate.Limit(batchSize), 1 /* burst size */)
 
 	// Create a snapshotStrategy based on the desired snapshot strategy.
 	var ss snapshotStrategy
