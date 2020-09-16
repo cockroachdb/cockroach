@@ -12,12 +12,12 @@ package sql
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -68,7 +68,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 		if !isReset {
 			typedValues = make([]tree.TypedExpr, len(n.Values))
 			for i, expr := range n.Values {
-				expr = unresolvedNameToStrVal(expr)
+				expr = paramparse.UnresolvedNameToStrVal(expr)
 
 				var dummyHelper tree.IndexedVarHelper
 				typedValue, err := p.analyzeExpr(
@@ -95,15 +95,6 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	}
 
 	return &setVarNode{name: name, v: v, typedValues: typedValues}, nil
-}
-
-// Special rule for SET: because SET doesn't apply in the context
-// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
-func unresolvedNameToStrVal(expr tree.Expr) tree.Expr {
-	if s, ok := expr.(*tree.UnresolvedName); ok {
-		return tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
-	}
-	return expr
 }
 
 func (n *setVarNode) startExec(params runParams) error {
@@ -164,72 +155,18 @@ func (n *setVarNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setVarNode) Values() tree.Datums            { return nil }
 func (n *setVarNode) Close(_ context.Context)        {}
 
-func datumAsString(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (string, error) {
-	val, err := value.Eval(evalCtx)
-	if err != nil {
-		return "", err
-	}
-	s, ok := tree.AsDString(val)
-	if !ok {
-		err = pgerror.Newf(pgcode.InvalidParameterValue,
-			"parameter %q requires a string value", name)
-		err = errors.WithDetailf(err,
-			"%s is a %s", value, errors.Safe(val.ResolvedType()))
-		return "", err
-	}
-	return string(s), nil
-}
-
 func getStringVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (string, error) {
 	if len(values) != 1 {
 		return "", newSingleArgVarError(name)
 	}
-	return datumAsString(evalCtx, name, values[0])
-}
-
-func datumAsFloat(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (float64, error) {
-	val, err := value.Eval(evalCtx)
-	if err != nil {
-		return 0, err
-	}
-	switch v := tree.UnwrapDatum(evalCtx, val).(type) {
-	case *tree.DString:
-		return strconv.ParseFloat(string(*v), 64)
-	case *tree.DInt:
-		return float64(*v), nil
-	case *tree.DFloat:
-		return float64(*v), nil
-	case *tree.DDecimal:
-		return v.Decimal.Float64()
-	}
-	err = pgerror.Newf(pgcode.InvalidParameterValue,
-		"parameter %q requires an float value", name)
-	err = errors.WithDetailf(err,
-		"%s is a %s", value, errors.Safe(val.ResolvedType()))
-	return 0, err
-}
-
-func datumAsInt(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (int64, error) {
-	val, err := value.Eval(evalCtx)
-	if err != nil {
-		return 0, err
-	}
-	iv, ok := tree.AsDInt(val)
-	if !ok {
-		err = pgerror.Newf(pgcode.InvalidParameterValue,
-			"parameter %q requires an integer value", name)
-		err = errors.WithDetailf(err,
-			"%s is a %s", value, errors.Safe(val.ResolvedType()))
-		return 0, err
-	}
-	return int64(iv), nil
+	return paramparse.DatumAsString(evalCtx, name, values[0])
 }
 
 func getIntVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (int64, error) {
 	if len(values) != 1 {
 		return 0, newSingleArgVarError(name)
 	}
-	return datumAsInt(evalCtx, name, values[0])
+	return paramparse.DatumAsInt(evalCtx, name, values[0])
 }
 
 func timeZoneVarGetStringVal(
