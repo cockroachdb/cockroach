@@ -30,14 +30,6 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Jobs)
 
-	if n.Schedules != nil {
-		// Limit the jobs displayed to the ones started by specified schedules.
-		return parse(fmt.Sprintf(`
-SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_id IN (%s)
-`, jobs.CreatedByScheduledJobs, n.Schedules.String()),
-		)
-	}
-
 	const (
 		selectClause = `SELECT job_id, job_type, description, statement, user_name, status,
 				       running_status, created, started, finished, modified,
