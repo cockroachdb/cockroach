@@ -21,6 +21,14 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+// ProtoIndexer is an interface specifying protocol message to
+// JSONB transformation for the purpose of (inverted) index creation.
+type ProtoIndexer interface {
+	// ProtoToJSONBForIndex returns JSONB object corresponding to the
+	// specified message to be used for index creation.
+	ProtoToJSONBForIndex() (jsonb.JSON, error)
+}
+
 // NewMessage creates a new protocol message object, given its fully
 // qualified name.
 func NewMessage(name string) (protoutil.Message, error) {
