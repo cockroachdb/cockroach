@@ -3901,28 +3901,194 @@ project
            └── const-agg [as=c.geom:10, outer=(10)]
                 └── c.geom:10
 
-# We don't yet support inverted joins with anti-joins.
-opt expect=GenerateInvertedJoins
+# Anti-joins are supported by converting them to a left join join wrapped in a
+# select. The left join is later converted to an inner join.
+
+# Anti-join in which the right-hand side is a Scan.
+# In this test, all columns from the subquery (right hand side of the anti-join)
+# are pruned during normalization, so ConvertAntiToLeftJoin has to add back a
+# not-null column (the primary key) using EnsureNotNullCol.
+opt expect=(ConvertAntiToLeftJoin,GenerateInvertedJoins)
 SELECT *
 FROM nyc_census_blocks AS c
 WHERE NOT EXISTS (
-  SELECT * FROM nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n WHERE ST_Covers(c.geom, n.geom)
+  SELECT * FROM nyc_neighborhoods AS n WHERE ST_Covers(c.geom, n.geom)
 )
 ----
-anti-join (cross)
+project
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
- ├── scan c
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
- │    ├── key: (1)
- │    └── fd: (1)-->(2-10)
- ├── scan n
- │    ├── columns: n.geom:16
- │    └── flags: force-index=nyc_neighborhoods_geo_idx
- └── filters
-      └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+ └── select
+      ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.geom:16
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(13,16), (1)-->(2-10)
+      ├── with &1
+      │    ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.geom:16
+      │    ├── immutable
+      │    ├── key: (1,13)
+      │    ├── fd: (1)-->(2-10), (13)-->(16)
+      │    ├── project
+      │    │    ├── columns: gid:19!null blkid:20 popn_total:21 popn_white:22 popn_black:23 popn_nativ:24 popn_asian:25 popn_other:26 boroname:27 geom:28
+      │    │    ├── key: (19)
+      │    │    ├── fd: (19)-->(20-28)
+      │    │    ├── scan c
+      │    │    │    ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2-10)
+      │    │    └── projections
+      │    │         ├── c.gid:1 [as=gid:19, outer=(1)]
+      │    │         ├── c.blkid:2 [as=blkid:20, outer=(2)]
+      │    │         ├── c.popn_total:3 [as=popn_total:21, outer=(3)]
+      │    │         ├── c.popn_white:4 [as=popn_white:22, outer=(4)]
+      │    │         ├── c.popn_black:5 [as=popn_black:23, outer=(5)]
+      │    │         ├── c.popn_nativ:6 [as=popn_nativ:24, outer=(6)]
+      │    │         ├── c.popn_asian:7 [as=popn_asian:25, outer=(7)]
+      │    │         ├── c.popn_other:8 [as=popn_other:26, outer=(8)]
+      │    │         ├── c.boroname:9 [as=boroname:27, outer=(9)]
+      │    │         └── c.geom:10 [as=geom:28, outer=(10)]
+      │    └── project
+      │         ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.geom:16
+      │         ├── immutable
+      │         ├── fd: (1)-->(2-10), (13)-->(16)
+      │         └── right-join (hash)
+      │              ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.geom:16 gid:29 geom:38
+      │              ├── immutable
+      │              ├── key: (1,13,29)
+      │              ├── fd: (1)-->(2-10), (29)-->(38), (13)-->(16)
+      │              ├── inner-join (lookup nyc_neighborhoods)
+      │              │    ├── columns: n.gid:13!null n.geom:16 gid:29!null geom:38
+      │              │    ├── key columns: [13] = [13]
+      │              │    ├── lookup columns are key
+      │              │    ├── immutable
+      │              │    ├── key: (13,29)
+      │              │    ├── fd: (29)-->(38), (13)-->(16)
+      │              │    ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │              │    │    ├── columns: n.gid:13!null gid:29!null geom:38
+      │              │    │    ├── inverted-expr
+      │              │    │    │    └── st_covers(geom:38, n.geom:16)
+      │              │    │    ├── key: (13,29)
+      │              │    │    ├── fd: (29)-->(38)
+      │              │    │    ├── with-scan &1
+      │              │    │    │    ├── columns: gid:29!null geom:38
+      │              │    │    │    ├── mapping:
+      │              │    │    │    │    ├──  gid:19 => gid:29
+      │              │    │    │    │    └──  geom:28 => geom:38
+      │              │    │    │    ├── key: (29)
+      │              │    │    │    └── fd: (29)-->(38)
+      │              │    │    └── filters (true)
+      │              │    └── filters
+      │              │         └── st_covers(geom:38, n.geom:16) [outer=(16,38), immutable]
+      │              ├── with-scan &1
+      │              │    ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10
+      │              │    ├── mapping:
+      │              │    │    ├──  gid:19 => c.gid:1
+      │              │    │    ├──  blkid:20 => c.blkid:2
+      │              │    │    ├──  popn_total:21 => c.popn_total:3
+      │              │    │    ├──  popn_white:22 => c.popn_white:4
+      │              │    │    ├──  popn_black:23 => c.popn_black:5
+      │              │    │    ├──  popn_nativ:24 => c.popn_nativ:6
+      │              │    │    ├──  popn_asian:25 => c.popn_asian:7
+      │              │    │    ├──  popn_other:26 => c.popn_other:8
+      │              │    │    ├──  boroname:27 => c.boroname:9
+      │              │    │    └──  geom:28 => c.geom:10
+      │              │    ├── key: (1)
+      │              │    └── fd: (1)-->(2-10)
+      │              └── filters
+      │                   └── c.gid:1 = gid:29 [outer=(1,29), constraints=(/1: (/NULL - ]; /29: (/NULL - ]), fd=(1)==(29), (29)==(1)]
+      └── filters
+           └── n.gid:13 IS NOT DISTINCT FROM CAST(NULL AS INT8) [outer=(13), constraints=(/13: [/NULL - /NULL]; tight), fd=()-->(13)]
+
+# Anti-join in which the right-hand side is a Scan wrapped in a Select.
+# In this test, the nyc_neighborhoods.name column is needed for the predicate.
+# Since n.name LIKE 'Upper%' is a null-rejecting predicate, there is no need to
+# add another not-null column to the right-hand side (so EnsureNotNullCol is a
+# no-op).
+opt expect=(ConvertAntiToLeftJoin,GenerateInvertedJoinsFromSelect)
+SELECT boroname
+FROM nyc_census_blocks AS c
+WHERE NOT EXISTS (
+  SELECT 1 FROM nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n WHERE ST_Covers(c.geom, n.geom)
+  AND c.boroname = 'Manhattan' AND n.name LIKE 'Upper%'
+)
+----
+project
+ ├── columns: boroname:9
+ ├── immutable
+ └── project
+      ├── columns: c.boroname:9 c.geom:10
+      ├── immutable
+      └── select
+           ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+           ├── immutable
+           ├── fd: ()-->(15)
+           ├── with &1
+           │    ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+           │    ├── immutable
+           │    ├── project
+           │    │    ├── columns: gid:20!null boroname:21 geom:22
+           │    │    ├── key: (20)
+           │    │    ├── fd: (20)-->(21,22)
+           │    │    ├── scan c
+           │    │    │    ├── columns: c.gid:1!null c.boroname:9 c.geom:10
+           │    │    │    ├── key: (1)
+           │    │    │    └── fd: (1)-->(9,10)
+           │    │    └── projections
+           │    │         ├── c.gid:1 [as=gid:20, outer=(1)]
+           │    │         ├── c.boroname:9 [as=boroname:21, outer=(9)]
+           │    │         └── c.geom:10 [as=geom:22, outer=(10)]
+           │    └── project
+           │         ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+           │         ├── immutable
+           │         └── left-join (hash)
+           │              ├── columns: c.gid:1!null c.boroname:9 c.geom:10 name:15 n.geom:16 gid:23 boroname:24 geom:25
+           │              ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+           │              ├── immutable
+           │              ├── fd: (1)-->(9,10), (23)-->(25)
+           │              ├── with-scan &1
+           │              │    ├── columns: c.gid:1!null c.boroname:9 c.geom:10
+           │              │    ├── mapping:
+           │              │    │    ├──  gid:20 => c.gid:1
+           │              │    │    ├──  boroname:21 => c.boroname:9
+           │              │    │    └──  geom:22 => c.geom:10
+           │              │    ├── key: (1)
+           │              │    └── fd: (1)-->(9,10)
+           │              ├── inner-join (lookup nyc_neighborhoods)
+           │              │    ├── columns: name:15!null n.geom:16 gid:23!null boroname:24!null geom:25
+           │              │    ├── key columns: [13] = [13]
+           │              │    ├── lookup columns are key
+           │              │    ├── immutable
+           │              │    ├── fd: ()-->(24), (23)-->(25)
+           │              │    ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+           │              │    │    ├── columns: n.gid:13!null gid:23!null boroname:24!null geom:25
+           │              │    │    ├── inverted-expr
+           │              │    │    │    └── st_covers(geom:25, n.geom:16)
+           │              │    │    ├── key: (13,23)
+           │              │    │    ├── fd: ()-->(24), (23)-->(25)
+           │              │    │    ├── select
+           │              │    │    │    ├── columns: gid:23!null boroname:24!null geom:25
+           │              │    │    │    ├── key: (23)
+           │              │    │    │    ├── fd: ()-->(24), (23)-->(25)
+           │              │    │    │    ├── with-scan &1
+           │              │    │    │    │    ├── columns: gid:23!null boroname:24 geom:25
+           │              │    │    │    │    ├── mapping:
+           │              │    │    │    │    │    ├──  gid:20 => gid:23
+           │              │    │    │    │    │    ├──  boroname:21 => boroname:24
+           │              │    │    │    │    │    └──  geom:22 => geom:25
+           │              │    │    │    │    ├── key: (23)
+           │              │    │    │    │    └── fd: (23)-->(24,25)
+           │              │    │    │    └── filters
+           │              │    │    │         └── boroname:24 = 'Manhattan' [outer=(24), constraints=(/24: [/'Manhattan' - /'Manhattan']; tight), fd=()-->(24)]
+           │              │    │    └── filters (true)
+           │              │    └── filters
+           │              │         ├── st_covers(geom:25, n.geom:16) [outer=(16,25), immutable]
+           │              │         └── name:15 LIKE 'Upper%' [outer=(15), constraints=(/15: [/'Upper' - /'Uppes'); tight)]
+           │              └── filters
+           │                   └── c.gid:1 = gid:23 [outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ]), fd=(1)==(23), (23)==(1)]
+           └── filters
+                └── name:15 IS NOT DISTINCT FROM CAST(NULL AS VARCHAR(64)) [outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
 
 # Left joins are supported by converting them to an inner join wrapped in a
 # left join.
