@@ -1049,33 +1049,33 @@ Empty GeometryCollection                  Point middle of Right Square          
 Empty GeometryCollection                  Square (left)                             GEOMETRYCOLLECTION EMPTY                   true
 Empty GeometryCollection                  Square (right)                            GEOMETRYCOLLECTION EMPTY                   true
 Empty GeometryCollection                  Square overlapping left and right square  GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Faraway point                             GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Line going through left and right square  GEOMETRYCOLLECTION EMPTY                   true
+Empty LineString                          Empty GeometryCollection                  LINESTRING EMPTY                           true
+Empty LineString                          Empty LineString                          LINESTRING EMPTY                           true
+Empty LineString                          Empty Point                               LINESTRING EMPTY                           true
+Empty LineString                          Faraway point                             LINESTRING EMPTY                           true
+Empty LineString                          Line going through left and right square  LINESTRING EMPTY                           true
 Empty LineString                          NULL                                      NULL                                       NULL
-Empty LineString                          Nested Geometry Collection                GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Point middle of Left Square               GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Point middle of Right Square              GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Square (left)                             GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Square (right)                            GEOMETRYCOLLECTION EMPTY                   true
-Empty LineString                          Square overlapping left and right square  GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Faraway point                             GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Line going through left and right square  GEOMETRYCOLLECTION EMPTY                   true
+Empty LineString                          Nested Geometry Collection                LINESTRING EMPTY                           true
+Empty LineString                          Point middle of Left Square               LINESTRING EMPTY                           true
+Empty LineString                          Point middle of Right Square              LINESTRING EMPTY                           true
+Empty LineString                          Square (left)                             LINESTRING EMPTY                           true
+Empty LineString                          Square (right)                            LINESTRING EMPTY                           true
+Empty LineString                          Square overlapping left and right square  LINESTRING EMPTY                           true
+Empty Point                               Empty GeometryCollection                  POINT EMPTY                                true
+Empty Point                               Empty LineString                          POINT EMPTY                                true
+Empty Point                               Empty Point                               POINT EMPTY                                true
+Empty Point                               Faraway point                             POINT EMPTY                                true
+Empty Point                               Line going through left and right square  POINT EMPTY                                true
 Empty Point                               NULL                                      NULL                                       NULL
-Empty Point                               Nested Geometry Collection                GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Point middle of Left Square               GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Point middle of Right Square              GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Square (left)                             GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Square (right)                            GEOMETRYCOLLECTION EMPTY                   true
-Empty Point                               Square overlapping left and right square  GEOMETRYCOLLECTION EMPTY                   true
+Empty Point                               Nested Geometry Collection                POINT EMPTY                                true
+Empty Point                               Point middle of Left Square               POINT EMPTY                                true
+Empty Point                               Point middle of Right Square              POINT EMPTY                                true
+Empty Point                               Square (left)                             POINT EMPTY                                true
+Empty Point                               Square (right)                            POINT EMPTY                                true
+Empty Point                               Square overlapping left and right square  POINT EMPTY                                true
 Faraway point                             Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Faraway point                             Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Faraway point                             Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
+Faraway point                             Empty LineString                          LINESTRING EMPTY                           true
+Faraway point                             Empty Point                               POINT EMPTY                                true
 Faraway point                             Faraway point                             POINT (5 5)                                true
 Faraway point                             Line going through left and right square  POINT EMPTY                                true
 Faraway point                             NULL                                      NULL                                       NULL
@@ -1086,8 +1086,8 @@ Faraway point                             Square (left)                         
 Faraway point                             Square (right)                            POINT EMPTY                                true
 Faraway point                             Square overlapping left and right square  POINT EMPTY                                true
 Line going through left and right square  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Line going through left and right square  Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Line going through left and right square  Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
+Line going through left and right square  Empty LineString                          LINESTRING EMPTY                           true
+Line going through left and right square  Empty Point                               POINT EMPTY                                true
 Line going through left and right square  Faraway point                             POINT EMPTY                                true
 Line going through left and right square  Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)             true
 Line going through left and right square  NULL                                      NULL                                       NULL
@@ -1110,8 +1110,8 @@ NULL                                      Square (left)                         
 NULL                                      Square (right)                            NULL                                       NULL
 NULL                                      Square overlapping left and right square  NULL                                       NULL
 Nested Geometry Collection                Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Nested Geometry Collection                Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Nested Geometry Collection                Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
+Nested Geometry Collection                Empty LineString                          LINESTRING EMPTY                           true
+Nested Geometry Collection                Empty Point                               POINT EMPTY                                true
 Nested Geometry Collection                Faraway point                             POINT EMPTY                                true
 Nested Geometry Collection                Line going through left and right square  POINT EMPTY                                true
 Nested Geometry Collection                NULL                                      NULL                                       NULL
@@ -1122,8 +1122,8 @@ Nested Geometry Collection                Square (left)                         
 Nested Geometry Collection                Square (right)                            POINT (0 0)                                true
 Nested Geometry Collection                Square overlapping left and right square  POINT (0 0)                                true
 Point middle of Left Square               Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Point middle of Left Square               Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Point middle of Left Square               Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
+Point middle of Left Square               Empty LineString                          LINESTRING EMPTY                           true
+Point middle of Left Square               Empty Point                               POINT EMPTY                                true
 Point middle of Left Square               Faraway point                             POINT EMPTY                                true
 Point middle of Left Square               Line going through left and right square  POINT (-0.5 0.5)                           true
 Point middle of Left Square               NULL                                      NULL                                       NULL
@@ -1134,8 +1134,8 @@ Point middle of Left Square               Square (left)                         
 Point middle of Left Square               Square (right)                            POINT EMPTY                                true
 Point middle of Left Square               Square overlapping left and right square  POINT EMPTY                                true
 Point middle of Right Square              Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Point middle of Right Square              Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Point middle of Right Square              Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
+Point middle of Right Square              Empty LineString                          LINESTRING EMPTY                           true
+Point middle of Right Square              Empty Point                               POINT EMPTY                                true
 Point middle of Right Square              Faraway point                             POINT EMPTY                                true
 Point middle of Right Square              Line going through left and right square  POINT (0.5 0.5)                            true
 Point middle of Right Square              NULL                                      NULL                                       NULL
@@ -1146,8 +1146,8 @@ Point middle of Right Square              Square (left)                         
 Point middle of Right Square              Square (right)                            POINT (0.5 0.5)                            true
 Point middle of Right Square              Square overlapping left and right square  POINT (0.5 0.5)                            true
 Square (left)                             Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Square (left)                             Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Square (left)                             Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
+Square (left)                             Empty LineString                          LINESTRING EMPTY                           true
+Square (left)                             Empty Point                               POINT EMPTY                                true
 Square (left)                             Faraway point                             POINT EMPTY                                true
 Square (left)                             Line going through left and right square  LINESTRING (-0.5 0.5, 0 0.5)               true
 Square (left)                             NULL                                      NULL                                       NULL
@@ -1158,8 +1158,8 @@ Square (left)                             Square (left)                         
 Square (left)                             Square (right)                            LINESTRING (0 0, 0 1)                      true
 Square (left)                             Square overlapping left and right square  POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))  true
 Square (right)                            Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Square (right)                            Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Square (right)                            Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
+Square (right)                            Empty LineString                          LINESTRING EMPTY                           true
+Square (right)                            Empty Point                               POINT EMPTY                                true
 Square (right)                            Faraway point                             POINT EMPTY                                true
 Square (right)                            Line going through left and right square  LINESTRING (0 0.5, 0.5 0.5)                true
 Square (right)                            NULL                                      NULL                                       NULL
@@ -1170,8 +1170,8 @@ Square (right)                            Square (left)                         
 Square (right)                            Square (right)                            POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))        true
 Square (right)                            Square overlapping left and right square  POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))        true
 Square overlapping left and right square  Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                   true
-Square overlapping left and right square  Empty LineString                          GEOMETRYCOLLECTION EMPTY                   true
-Square overlapping left and right square  Empty Point                               GEOMETRYCOLLECTION EMPTY                   true
+Square overlapping left and right square  Empty LineString                          LINESTRING EMPTY                           true
+Square overlapping left and right square  Empty Point                               POINT EMPTY                                true
 Square overlapping left and right square  Faraway point                             POINT EMPTY                                true
 Square overlapping left and right square  Line going through left and right square  LINESTRING (-0.1 0.5, 0.5 0.5)             true
 Square overlapping left and right square  NULL                                      NULL                                       NULL
@@ -4572,7 +4572,7 @@ FROM ( VALUES
   ('intersecting', 'LINESTRING (0 0, 1 1)'::geography, 'LINESTRING (0 1, 1 0)'::geography)
 ) t(dsc, a, b)
 ----
-empty             SRID=4326;GEOMETRYCOLLECTION EMPTY
+empty             SRID=4326;POINT EMPTY
 non intersecting  SRID=4326;POINT EMPTY
 intersecting      SRID=4326;POINT (0.50019 0.50006)
 

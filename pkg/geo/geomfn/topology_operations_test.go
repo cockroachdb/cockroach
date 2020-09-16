@@ -263,6 +263,8 @@ func TestIntersection(t *testing.T) {
 		expected geo.Geometry
 	}{
 		{rightRect, rightRect, geo.MustParseGeometry("POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))")},
+		{geo.MustParseGeometry("LINESTRING EMPTY"), geo.MustParseGeometry("POINT(5 5)"), geo.MustParseGeometry("LINESTRING EMPTY")},
+		{geo.MustParseGeometry("POINT(5 5)"), geo.MustParseGeometry("LINESTRING EMPTY"), geo.MustParseGeometry("LINESTRING EMPTY")},
 		{rightRect, rightRectPoint, rightRectPoint},
 		{rightRectPoint, rightRectPoint, rightRectPoint},
 	}

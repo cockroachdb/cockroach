@@ -106,6 +106,13 @@ func Intersection(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 	if a.SRID() != b.SRID() {
 		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
+	// Match PostGIS.
+	if a.Empty() {
+		return a, nil
+	}
+	if b.Empty() {
+		return b, nil
+	}
 	retEWKB, err := geos.Intersection(a.EWKB(), b.EWKB())
 	if err != nil {
 		return geo.Geometry{}, err
