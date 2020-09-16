@@ -1162,6 +1162,25 @@ uds    typ        schema
 statement error pq: cannot create "fakedb.typ" because the target database or schema does not exist
 CREATE TYPE fakedb.typ AS ENUM ('schema')
 
+# Regression test that hydrating descriptors does not happen on dropped
+# descriptors. See #54343.
+
+subtest dropped_database_with_enum
+
+statement ok
+CREATE DATABASE to_drop;
+USE to_drop;
+CREATE TYPE greeting AS ENUM ('hi');
+CREATE TABLE t(a greeting);
+USE defaultdb;
+DROP DATABASE to_drop CASCADE;
+
+# Before the bug-fix which introduced this test, this call would load all
+# descriptors, including dropped ones, and hydrate them, causing a panic as
+# the referenced type no longer exists.
+statement ok
+SELECT * FROM crdb_internal.tables;
+
 # Test the behavior of dropping a not-null enum colums
 
 subtest drop_not_null
