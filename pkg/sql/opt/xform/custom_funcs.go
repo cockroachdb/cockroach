@@ -1682,8 +1682,8 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //                                       Input
 //
 //     For example:
-//      CREATE TABLE abc (a PRIMARY KEY, b INT, c INT)
-//      CREATE TABLE xyz (x PRIMARY KEY, y INT, z INT, INDEX (y))
+//      CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+//      CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, INDEX (y))
 //      SELECT * FROM abc JOIN xyz ON a=y
 //
 //     We want to first join abc with the index on y (which provides columns y, x)
@@ -1707,6 +1707,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		return
 	}
 	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
 	inputProps := input.Relational()
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
@@ -1717,10 +1718,24 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 	var pkCols opt.ColList
 
-	// TODO(mgartner): Use partial indexes for lookup joins when the predicate
-	// is implied by the on filter.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes|rejectPartialIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes)
 	for iter.Next() {
+		onFilters := on
+
+		// If the secondary index is a partial index, it must be implied by the
+		// ON filters.
+		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
+		if isPartialIndex {
+			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			remainingFilters, ok := c.im.FiltersImplyPredicate(onFilters, pred)
+			if !ok {
+				// The ON filters do not imply the predicate, so the partial
+				// index cannot be used.
+				continue
+			}
+			onFilters = remainingFilters
+		}
+
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
 		numIndexKeyCols := iter.Index().LaxKeyColumnCount()
@@ -1734,7 +1749,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// in most cases.
 		firstIdxCol := scanPrivate.Table.IndexColumnID(iter.Index(), 0)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			if _, _, ok := c.findConstantFilter(on, firstIdxCol); !ok {
+			if _, _, ok := c.findConstantFilter(onFilters, firstIdxCol); !ok {
 				continue
 			}
 		}
@@ -1763,7 +1778,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// value. We cannot use a NULL value because the lookup join implements
 			// logic equivalent to simple equality between columns (where NULL never
 			// equals anything).
-			foundVal, onIdx, ok := c.findConstantFilter(on, idxCol)
+			foundVal, onIdx, ok := c.findConstantFilter(onFilters, idxCol)
 			if !ok || foundVal == tree.DNull {
 				break
 			}
@@ -1788,7 +1803,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			needProjection = true
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
-			constFilters = append(constFilters, on[onIdx])
+			constFilters = append(constFilters, onFilters[onIdx])
 		}
 
 		if len(lookupJoin.KeyCols) == 0 {
@@ -1807,7 +1822,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		// Remove the redundant filters and update the lookup condition.
-		lookupJoin.On = memo.ExtractRemainingJoinFilters(on, lookupJoin.KeyCols, rightSideCols)
+		lookupJoin.On = memo.ExtractRemainingJoinFilters(onFilters, lookupJoin.KeyCols, rightSideCols)
 		lookupJoin.On.RemoveCommonFilters(constFilters)
 		lookupJoin.ConstFilters = constFilters
 
@@ -1816,6 +1831,41 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			lookupJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
 			c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
 			continue
+		}
+
+		if isPartialIndex && (joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp) {
+			// Typically, the index must cover all columns in the scanPrivate in
+			// order to generate a lookup join without an additional index join
+			// (case 1, see function comment). However, if the index is a
+			// partial index, the filters remaining after proving
+			// filter-predicate implication may no longer reference some
+			// columns. A lookup semi- or anti-join can be generated if the
+			// columns in the new filters from the right side of the join are
+			// covered by the index. Consider the example:
+			//
+			//   CREATE TABLE a (a INT)
+			//   CREATE TABLE xy (x INT, y INT, INDEX (x) WHERE y > 0)
+			//
+			//   SELECT a FROM a WHERE EXISTS (SELECT 1 FROM xyz WHERE a = x AND y > 0)
+			//
+			// The original ON filters of the semi-join are (a = x AND y > 0).
+			// The (y > 0) expression in the filter is an exact match to the
+			// partial index predicate, so the remaining ON filters are (a = x).
+			// Column y is no longer referenced, so a lookup semi-join can be
+			// created despite the partial index not covering y.
+			//
+			// Note that this is a special case that only works for semi- and
+			// anti-joins because they never include columns from the right side
+			// in their output columns. Other joins include columns from the
+			// right side in their output columns, so even if the ON filters no
+			// longer reference an un-covered column, they must be fetched (case
+			// 2, see function comment).
+			filterColsFromRight := scanPrivate.Cols.Intersection(onFilters.OuterCols(c.e.mem))
+			if filterColsFromRight.SubsetOf(iter.IndexColumns()) {
+				lookupJoin.Cols = filterColsFromRight.Union(inputProps.OutputCols)
+				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
+				continue
+			}
 		}
 
 		// All code that follows is for case 2 (see function comment).

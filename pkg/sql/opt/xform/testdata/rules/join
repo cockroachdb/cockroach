@@ -2151,6 +2151,18 @@ left-join (lookup abcd@secondary)
  │    └── columns: m:1 n:2
  └── filters (true)
 
+# Covering case, left-join, extra filter bound by index.
+opt
+SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>n
+----
+left-join (lookup abcd@secondary)
+ ├── columns: a:5 b:6 n:2 m:1
+ ├── key columns: [1] = [5]
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters
+      └── b:6 > n:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
 # Non-covering case.
 opt
 SELECT * FROM small JOIN abcd ON a=m
@@ -3013,6 +3025,292 @@ anti-join (hash)
  └── filters
       ├── m:1 = a:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── n:2 = c:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
+# --------------------------------------------------
+# GenerateLookupJoinsWithFilter + Partial Indexes
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE partial_tab (
+    k INT PRIMARY KEY,
+    i INT,
+    s STRING
+)
+----
+
+exec-ddl
+ALTER TABLE partial_tab INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 50
+  }
+]'
+----
+
+# Storing the index predicate column.
+
+exec-ddl
+CREATE INDEX partial_idx ON partial_tab (i) STORING (s) WHERE s IN ('foo', 'bar', 'baz')
+----
+
+# Lookup inner-join with no remaining filters.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s IN ('foo', 'bar', 'baz')
+----
+project
+ ├── columns: m:1
+ └── inner-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── key columns: [2] = [6]
+      ├── fd: (2)==(6), (6)==(2)
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# Lookup inner-join with remaining filters.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s = 'foo'
+----
+project
+ ├── columns: m:1
+ └── inner-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── key columns: [2] = [6]
+      ├── fd: ()-->(7), (2)==(6), (6)==(2)
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters
+           └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# Lookup semi-join.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
+----
+project
+ ├── columns: m:1
+ └── semi-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters
+           └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# Lookup anti-join.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
+----
+project
+ ├── columns: m:1
+ └── anti-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters
+           └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# Do not generate a lookup join when the predicate is not implied by the filter.
+opt
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s = 'not_implied'
+----
+project
+ ├── columns: m:1
+ └── inner-join (hash)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── fd: ()-->(7), (2)==(6), (6)==(2)
+      ├── select
+      │    ├── columns: i:6 s:7!null
+      │    ├── fd: ()-->(7)
+      │    ├── scan partial_tab
+      │    │    ├── columns: i:6 s:7
+      │    │    └── partial index predicates
+      │    │         └── partial_idx: filters
+      │    │              └── s:7 IN ('bar', 'baz', 'foo') [outer=(7), constraints=(/7: [/'bar' - /'bar'] [/'baz' - /'baz'] [/'foo' - /'foo']; tight)]
+      │    └── filters
+      │         └── s:7 = 'not_implied' [outer=(7), constraints=(/7: [/'not_implied' - /'not_implied']; tight), fd=()-->(7)]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters
+           └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+exec-ddl
+DROP INDEX partial_idx
+----
+
+# Not storing the index predicate column.
+
+exec-ddl
+CREATE INDEX partial_idx ON partial_tab (i) WHERE s IN ('foo', 'bar', 'baz')
+----
+
+# The remaining filters are empty when the query filters exactly match the
+# partial index predicate.
+#
+# TODO(mgartner): The outer inner-join is not necessary here and should be
+# eliminated, like in EliminateIndexJoinInsideProject.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s IN ('foo', 'bar', 'baz')
+----
+project
+ ├── columns: m:1
+ └── inner-join (lookup partial_tab)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── fd: (2)==(6), (6)==(2)
+      ├── inner-join (lookup partial_tab@partial_idx,partial)
+      │    ├── columns: m:1 n:2!null k:5!null i:6!null
+      │    ├── key columns: [2] = [6]
+      │    ├── fd: (5)-->(6), (2)==(6), (6)==(2)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── filters (true)
+      └── filters (true)
+
+# The remaining filters are not empty when the query filters imply but do not
+# exactly match the partial index predicate.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s = 'foo'
+----
+project
+ ├── columns: m:1
+ └── inner-join (lookup partial_tab)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── fd: ()-->(7), (2)==(6), (6)==(2)
+      ├── inner-join (lookup partial_tab@partial_idx,partial)
+      │    ├── columns: m:1 n:2!null k:5!null i:6!null
+      │    ├── key columns: [2] = [6]
+      │    ├── fd: (5)-->(6), (2)==(6), (6)==(2)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── filters (true)
+      └── filters
+           └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# Generate a lookup semi-join when the index does not cover "s", but the
+# reference to "s" no longer exists in the filters.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', 'bar', 'baz') AND n = i)
+----
+project
+ ├── columns: m:1
+ └── semi-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# We should not generate a lookup semi-join when the index does not cover "s"
+# which is referenced in the remaining filter.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
+----
+project
+ ├── columns: m:1
+ └── semi-join (hash)
+      ├── columns: m:1 n:2
+      ├── scan small
+      │    └── columns: m:1 n:2
+      ├── select
+      │    ├── columns: i:6 s:7!null
+      │    ├── fd: ()-->(7)
+      │    ├── index-join partial_tab
+      │    │    ├── columns: i:6 s:7
+      │    │    └── scan partial_tab@partial_idx,partial
+      │    │         ├── columns: k:5!null i:6
+      │    │         ├── key: (5)
+      │    │         └── fd: (5)-->(6)
+      │    └── filters
+      │         └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+      └── filters
+           └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# Generate a lookup anti-join when the index does not cover "s", but the
+# reference to "s" no longer exists in the filters.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', 'bar', 'baz') AND n = i)
+----
+project
+ ├── columns: m:1
+ └── anti-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# We should not generate a lookup anti-join when the index does not cover "s"
+# which is referenced in the remaining filter.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
+----
+project
+ ├── columns: m:1
+ └── anti-join (hash)
+      ├── columns: m:1 n:2
+      ├── scan small
+      │    └── columns: m:1 n:2
+      ├── select
+      │    ├── columns: i:6 s:7!null
+      │    ├── fd: ()-->(7)
+      │    ├── index-join partial_tab
+      │    │    ├── columns: i:6 s:7
+      │    │    └── scan partial_tab@partial_idx,partial
+      │    │         ├── columns: k:5!null i:6
+      │    │         ├── key: (5)
+      │    │         └── fd: (5)-->(6)
+      │    └── filters
+      │         └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+      └── filters
+           └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# A lookup semi-join on a partial index should have the same cost as a lookup
+# semi-join on a non-partial index.
+exec-ddl
+CREATE INDEX full_idx ON partial_tab (i)
+----
+
+opt format=show-cost
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE n = i)
+----
+project
+ ├── columns: m:1
+ ├── cost: 234.836
+ └── semi-join (lookup partial_tab@full_idx)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── cost: 234.726
+      ├── scan small
+      │    ├── columns: m:1 n:2
+      │    └── cost: 14.52
+      └── filters (true)
+
+opt format=show-cost
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', 'bar', 'baz') AND n = i)
+----
+project
+ ├── columns: m:1
+ ├── cost: 234.836
+ └── semi-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── cost: 234.726
+      ├── scan small
+      │    ├── columns: m:1 n:2
+      │    └── cost: 14.52
+      └── filters (true)
 
 # -------------------------------------------------------
 # GenerateInvertedJoins + GenerateInvertedJoinsFromSelect
@@ -4869,7 +5167,7 @@ ALTER TABLE abc INJECT STATISTICS '[
     "distinct_count": 100
   },
   {
-    "columns": ["a"],
+    "columns": ["b"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 100,
     "distinct_count": 100
