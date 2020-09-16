@@ -1237,6 +1237,7 @@ CREATE TABLE pg_catalog.pg_database (
 	datfrozenxid INT,
 	datminmxid INT,
 	dattablespace OID,
+  databaseowner NAME,
 	datacl STRING[]
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -1258,6 +1259,7 @@ CREATE TABLE pg_catalog.pg_database (
 					tree.DNull,                 // datfrozenxid
 					tree.DNull,                 // datminmxid
 					oidZero,                    // dattablespace
+					getOwnerName(db),           // databaseowner
 					tree.DNull,                 // datacl
 				)
 			})

@@ -52,6 +52,7 @@ SELECT ns.nspname AS schema_name,
        WHEN pc.relkind = 'S' THEN 'sequence'
        ELSE 'table'
        END AS type,
+       pg_catalog.pg_get_userbyid(pc.relowner) AS table_owner,
        s.estimated_row_count AS estimated_row_count
        %[3]s
   FROM %[1]s.pg_catalog.pg_class AS pc

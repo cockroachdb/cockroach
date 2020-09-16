@@ -19,7 +19,7 @@ import (
 
 func (d *delegator) delegateShowDatabases(stmt *tree.ShowDatabases) (tree.Statement, error) {
 	query := `SELECT
-	name AS database_name
+	datname AS database_name, databaseowner as database_owner
 `
 
 	if stmt.WithComment {
@@ -28,7 +28,7 @@ func (d *delegator) delegateShowDatabases(stmt *tree.ShowDatabases) (tree.Statem
 
 	query += `
 FROM
-  "".crdb_internal.databases d
+  pg_catalog.pg_database d
 `
 	if stmt.WithComment {
 		query += fmt.Sprintf(`
@@ -42,7 +42,7 @@ LEFT JOIN
 			type = %d
 	) c
 ON
-	c.object_id = d.id`, keys.DatabaseCommentType)
+	c.object_id = d.oid`, keys.DatabaseCommentType)
 	}
 
 	query += `
