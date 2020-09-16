@@ -947,6 +947,7 @@ unreserved_keyword ::=
 	| 'RANGE'
 	| 'RANGES'
 	| 'READ'
+	| 'REASSIGN'
 	| 'RECURRING'
 	| 'RECURSIVE'
 	| 'REF'

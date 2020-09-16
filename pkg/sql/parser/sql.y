@@ -644,7 +644,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 
 %token <str> QUERIES QUERY
 
-%token <str> RANGE RANGES READ REAL RECURSIVE RECURRING REF REFERENCES REFRESH
+%token <str> RANGE RANGES READ REAL REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
@@ -818,6 +818,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.Statement> import_stmt
 %type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt
 %type <*tree.Select>   for_schedules_clause
+%type <tree.Statement> reassign_owned_stmt
 %type <tree.Statement> release_stmt
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt
@@ -1246,6 +1247,7 @@ stmt:
 | prepare_stmt      // EXTEND WITH HELP: PREPARE
 | revoke_stmt       // EXTEND WITH HELP: REVOKE
 | savepoint_stmt    // EXTEND WITH HELP: SAVEPOINT
+| reassign_owned_stmt // EXTEND WITH HELP: REASSIGN OWNED
 | release_stmt      // EXTEND WITH HELP: RELEASE
 | refresh_stmt      // EXTEND WITH HELP: REFRESH
 | nonpreparable_set_stmt // help texts in sub-rule
@@ -7514,6 +7516,25 @@ multiple_set_clause:
     $$.val = &tree.UpdateExpr{Tuple: true, Names: $2.nameList(), Expr: $5.expr()}
   }
 
+// %Help: REASSIGN OWNED - change ownership of all objects
+// %Category: Priv
+// %Text: REASSIGN OWNED BY <name> TO <name>
+// TODO(angelaw): Confirm category
+
+reassign_owned_stmt:
+	// TODO(angelaw): Implement and remove error
+	REASSIGN OWNED BY string_or_placeholder TO string_or_placeholder error {
+	/* SKIP DOC */
+	return unimplementedWithIssue(sqllex, 52022)
+	}
+//{
+//	$$.val = &tree.ReassignOwned{
+//		OldRole: $4.expr(),
+//		NewRole: $6.expr(),
+//	}
+//}
+| REASSIGN OWNED BY role_or_group_or_user error // SHOW HELP: REASSIGN OWNED
+
 // A complete SELECT statement looks like this.
 //
 // The rule returns either a single select_stmt node or a tree of them,
@@ -11612,6 +11633,7 @@ unreserved_keyword:
 | RANGE
 | RANGES
 | READ
+| REASSIGN
 | RECURRING
 | RECURSIVE
 | REF
