@@ -13,8 +13,10 @@ package sql
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -63,6 +65,26 @@ func (n *createViewNode) startExec(params runParams) error {
 	viewName := n.viewName.Object()
 	persistence := n.persistence
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
+
+	if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
+		// Sort the ids so errors are deterministic.
+		ids := make([]descpb.ID, 0, len(n.planDeps))
+		for id := range n.planDeps {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(i, j int) bool {
+			return ids[i] < ids[j]
+		})
+
+		for _, id := range ids {
+			if id := n.planDeps[id].desc.ParentID; id != n.dbDesc.ID && id != keys.SystemDatabaseID {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"the view cannot refer to other databases; (see the '%s' cluster setting)",
+					allowCrossDatabaseViewsSetting,
+				)
+			}
+		}
+	}
 
 	// First check the backrefs and see if any of them are temporary.
 	// If so, promote this view to temporary.
