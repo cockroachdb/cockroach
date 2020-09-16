@@ -546,6 +546,11 @@ func (b *Builder) scanParams(
 func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
+
+	if !b.disableTelemetry && scan.UsesPartialIndex(md) {
+		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
+	}
+
 	params, outputCols, err := b.scanParams(tab, scan)
 	if err != nil {
 		return execPlan{}, err
@@ -1375,17 +1380,21 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
+	md := b.mem.Metadata()
+
 	if !b.disableTelemetry {
 		telemetry.Inc(sqltelemetry.JoinAlgoLookupUseCounter)
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
+
+		if join.UsesPartialIndex(md) {
+			telemetry.Inc(sqltelemetry.PartialIndexLookupJoinUseCounter)
+		}
 	}
 
 	input, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
-
-	md := b.mem.Metadata()
 
 	keyCols := make([]exec.NodeColumnOrdinal, len(join.KeyCols))
 	for i, c := range join.KeyCols {

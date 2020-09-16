@@ -226,6 +226,7 @@ func MakeIndexDescriptor(
 
 	if n.Predicate != nil {
 		if n.Inverted {
+			telemetry.Inc(sqltelemetry.PartialInvertedIndexErrorCounter)
 			return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
 		}
 
@@ -235,6 +236,7 @@ func MakeIndexDescriptor(
 			return nil, err
 		}
 		indexDesc.Predicate = expr
+		telemetry.Inc(sqltelemetry.PartialIndexCounter)
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {

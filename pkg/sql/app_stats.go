@@ -475,9 +475,9 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	return a
 }
 
-// resetAndMaybeDumpStats clears all the stored per-app and per-statement
-// statistics. If target s not nil, then the stats in s will be flushed
-// into target.
+// resetAndMaybeDumpStats clears all the stored per-app, per-statement and
+// per-transaction statistics. If target s not nil, then the stats in s will be
+// flushed into target.
 func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats) {
 	// Note: we do not clear the entire s.apps map here. We would need
 	// to do so to prevent problems with a runaway client running `SET
@@ -518,13 +518,14 @@ func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats)
 
 		// Only save a copy of a if we need to dump a copy of the stats.
 		if target != nil {
-			aCopy := &appStats{st: a.st, stmts: a.stmts}
+			aCopy := &appStats{st: a.st, stmts: a.stmts, txns: a.txns}
 			appStatsCopy[appName] = aCopy
 		}
 
 		// Clear the map, to release the memory; make the new map somewhat already
 		// large for the likely future workload.
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
+		a.txns = make(map[txnKey]*txnStats, len(a.txns)/2)
 		a.Unlock()
 	}
 	s.lastReset = timeutil.Now()
