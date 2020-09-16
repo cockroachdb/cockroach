@@ -49,6 +49,17 @@ func makeNodeLocalURIWithNodeID(nodeID roachpb.NodeID, path string) string {
 	return fmt.Sprintf("nodelocal://%d/%s", nodeID, path)
 }
 
+// TestingMakeLocalStorage is used by tests.
+func TestingMakeLocalStorage(
+	ctx context.Context,
+	cfg roachpb.ExternalStorage_LocalFilePath,
+	settings *cluster.Settings,
+	blobClientFactory blobs.BlobClientFactory,
+	ioConf base.ExternalIODirConfig,
+) (cloud.ExternalStorage, error) {
+	return makeLocalStorage(ctx, cfg, settings, blobClientFactory, ioConf)
+}
+
 func makeLocalStorage(
 	ctx context.Context,
 	cfg roachpb.ExternalStorage_LocalFilePath,
