@@ -2640,6 +2640,232 @@ func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
 	}
 }
 
+// AddWithBinding adds a With binding for the given binding expression.
+// Returns the WithID associated with the binding.
+func (c *CustomFuncs) AddWithBinding(expr memo.RelExpr) opt.WithID {
+	withID := c.e.mem.NextWithID()
+	c.e.mem.Metadata().AddWithBinding(withID, expr)
+	return withID
+}
+
+// MakeWithScan constructs a WithScan expression that scans the With expression
+// with the given WithID. It creates new columns in the metadata for the
+// WithScan output columns.
+func (c *CustomFuncs) MakeWithScan(withID opt.WithID) memo.RelExpr {
+	binding := c.e.mem.Metadata().WithBinding(withID).(memo.RelExpr)
+	cols := binding.Relational().OutputCols
+	inCols := make(opt.ColList, cols.Len())
+	outCols := make(opt.ColList, len(inCols))
+
+	i := 0
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		colMeta := c.e.mem.Metadata().ColumnMeta(col)
+		inCols[i] = col
+		outCols[i] = c.e.mem.Metadata().AddColumn(colMeta.Alias, colMeta.Type)
+		i++
+	}
+
+	return c.e.f.ConstructWithScan(&memo.WithScanPrivate{
+		With:    withID,
+		InCols:  inCols,
+		OutCols: outCols,
+		ID:      c.e.mem.Metadata().NextUniqueID(),
+	})
+}
+
+// MakeWithScanUsingCols constructs a WithScan expression that scans the With
+// expression with the given WithID. It uses the provided columns for the
+// output columns of the WithScan.
+func (c *CustomFuncs) MakeWithScanUsingCols(withID opt.WithID, outColSet opt.ColSet) memo.RelExpr {
+	binding := c.e.mem.Metadata().WithBinding(withID).(memo.RelExpr)
+	inColSet := binding.Relational().OutputCols
+	if outColSet.Len() != inColSet.Len() {
+		panic(errors.AssertionFailedf(
+			"outColSet.Len() must match the number of output columns of the given With expression (%d != %d)",
+			outColSet.Len(), inColSet.Len(),
+		))
+	}
+	inCols := make(opt.ColList, inColSet.Len())
+	outCols := make(opt.ColList, outColSet.Len())
+
+	i := 0
+	for col, ok := inColSet.Next(0); ok; col, ok = inColSet.Next(col + 1) {
+		inCols[i] = col
+		i++
+	}
+
+	i = 0
+	for col, ok := outColSet.Next(0); ok; col, ok = outColSet.Next(col + 1) {
+		outCols[i] = col
+		i++
+	}
+
+	return c.e.f.ConstructWithScan(&memo.WithScanPrivate{
+		With:    withID,
+		InCols:  inCols,
+		OutCols: outCols,
+		ID:      c.e.mem.Metadata().NextUniqueID(),
+	})
+}
+
+// MakeWithScanKeyEqualityFilters takes two WithScan expressions that scan the
+// same With expression. It returns a filters expression that contains equality
+// conditions between the primary key columns from each side. For example,
+// if WithScans a and b are both scanning a With expression that has key
+// columns x and y, MakeWithScanKeyEqualityFilters will return filters
+// a.x = b.x AND a.y = b.y.
+func (c *CustomFuncs) MakeWithScanKeyEqualityFilters(left, right opt.Expr) memo.FiltersExpr {
+	leftWithScan := left.(*memo.WithScanExpr)
+	rightWithScan := right.(*memo.WithScanExpr)
+	if leftWithScan.With != rightWithScan.With {
+		panic(errors.AssertionFailedf(
+			"attempt to make equality filters between WithScans of different With expressions",
+		))
+	}
+	if !leftWithScan.InCols.Equals(rightWithScan.InCols) {
+		panic(errors.AssertionFailedf(
+			"attempt to make equality filters between WithScans with different input columns",
+		))
+	}
+
+	binding := c.e.mem.Metadata().WithBinding(leftWithScan.With).(memo.RelExpr)
+	keyCols, ok := binding.Relational().FuncDeps.StrictKey()
+	if !ok {
+		panic(errors.AssertionFailedf("WithBinding has no key (was EnsureKey called?)"))
+	}
+
+	filters := make(memo.FiltersExpr, keyCols.Len())
+	keyIdx := 0
+	for i := 0; i < len(leftWithScan.InCols); i++ {
+		if !keyCols.Contains(leftWithScan.InCols[i]) {
+			continue
+		}
+
+		filters[keyIdx] = c.e.f.ConstructFiltersItem(c.e.f.ConstructEq(
+			c.e.f.ConstructVariable(leftWithScan.OutCols[i]),
+			c.e.f.ConstructVariable(rightWithScan.OutCols[i]),
+		))
+		keyIdx++
+	}
+
+	return filters
+}
+
+// MakeWithPrivate returns a WithPrivate containing the given WithID.
+func (c *CustomFuncs) MakeWithPrivate(id opt.WithID) *memo.WithPrivate {
+	return &memo.WithPrivate{
+		ID: id,
+	}
+}
+
+// ReplaceOutputCols replaces the output columns of the given expression by
+// wrapping the expression in a project expression that projects each of the
+// original output columns as a new column with a new ColumnID.
+func (c *CustomFuncs) ReplaceOutputCols(expr memo.RelExpr) memo.RelExpr {
+	srcCols := expr.Relational().OutputCols
+	projections := make(memo.ProjectionsExpr, srcCols.Len())
+
+	i := 0
+	for srcCol, ok := srcCols.Next(0); ok; srcCol, ok = srcCols.Next(srcCol + 1) {
+		colMeta := c.e.mem.Metadata().ColumnMeta(srcCol)
+		dstCol := c.e.mem.Metadata().AddColumn(colMeta.Alias, colMeta.Type)
+		projections[i] = c.e.f.ConstructProjectionsItem(c.e.f.ConstructVariable(srcCol), dstCol)
+		i++
+	}
+
+	return c.e.f.ConstructProject(expr, projections, opt.ColSet{})
+}
+
+// MapFilterCols returns a new FiltersExpr with all the src column IDs in
+// the input expression replaced with column IDs in dst.
+//
+// NOTE: Every ColumnID in src must map to the a ColumnID in dst with the same
+// relative position in the ColSets. For example, if src and dst are (1, 5, 6)
+// and (7, 12, 15), then the following mapping would be applied:
+//
+//   1 => 7
+//   5 => 12
+//   6 => 15
+func (c *CustomFuncs) MapFilterCols(
+	filters memo.FiltersExpr, src, dst opt.ColSet,
+) memo.FiltersExpr {
+	if src.Len() != dst.Len() {
+		panic(errors.AssertionFailedf(
+			"src and dst must have the same number of columns, src: %v, dst: %v",
+			src,
+			dst,
+		))
+	}
+
+	// Map each column in src to a column in dst based on the relative position
+	// of both the src and dst ColumnIDs in the ColSet.
+	var colMap opt.ColMap
+	dstCol, _ := dst.Next(0)
+	for srcCol, ok := src.Next(0); ok; srcCol, ok = src.Next(srcCol + 1) {
+		colMap.Set(int(srcCol), int(dstCol))
+		dstCol, _ = dst.Next(dstCol + 1)
+	}
+
+	newFilters := c.RemapCols(&filters, colMap).(*memo.FiltersExpr)
+	return *newFilters
+}
+
+// CanGenerateInvertedJoin is a best-effort check that returns true if it
+// may be possible to generate an inverted join with the given right-side input
+// and on conditions. It may return some false positives, but it is used to
+// avoid applying certain rules such as ConvertLeftToInnerJoin in cases where
+// they may not be beneficial.
+func (c *CustomFuncs) CanGenerateInvertedJoin(rightInput memo.RelExpr, on memo.FiltersExpr) bool {
+	// The right-side input must be either a canonical Scan or a Select wrapping a
+	// canonical Scan on a table that has inverted indexes. These are the conditions
+	// checked by GenerateInvertedJoins and GenerateInvertedJoinsFromSelect,
+	// so they are required for generating an inverted join.
+	scan, ok := rightInput.(*memo.ScanExpr)
+	if !ok {
+		sel, ok := rightInput.(*memo.SelectExpr)
+		if !ok {
+			return false
+		}
+		scan, ok = sel.Input.(*memo.ScanExpr)
+		if !ok {
+			return false
+		}
+	}
+
+	if !c.IsCanonicalScan(&scan.ScanPrivate) || !c.HasInvertedIndexes(&scan.ScanPrivate) {
+		return false
+	}
+
+	// Check whether any of the ON conditions contain a geospatial function or
+	// operator that can be index-accelerated.
+	for i := range on {
+		if c.exprContainsGeoIndexRelationship(on[i].Condition) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// exprContainsGeoIndexRelationship returns true if the given expression
+// contains a geospatial function or bounding box operator that can be
+// index accelerated. It is not a guarantee that an inverted join will be
+// produced for the given ON condition, but it eliminates expressions that
+// definitely cannot produce an inverted join.
+func (c *CustomFuncs) exprContainsGeoIndexRelationship(expr opt.ScalarExpr) bool {
+	switch t := expr.(type) {
+	case *memo.AndExpr:
+		return c.exprContainsGeoIndexRelationship(t.Left) || c.exprContainsGeoIndexRelationship(t.Right)
+	case *memo.OrExpr:
+		return c.exprContainsGeoIndexRelationship(t.Left) || c.exprContainsGeoIndexRelationship(t.Right)
+	default:
+		if _, ok := invertedidx.GetGeoIndexRelationship(expr); ok {
+			return true
+		}
+		return false
+	}
+}
+
 // ----------------------------------------------------------------------
 //
 // GroupBy Rules
@@ -3038,25 +3264,7 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols 
 func (c *CustomFuncs) MapScanFilterCols(
 	filters memo.FiltersExpr, src *memo.ScanPrivate, dst *memo.ScanPrivate,
 ) memo.FiltersExpr {
-	if src.Cols.Len() != dst.Cols.Len() {
-		panic(errors.AssertionFailedf(
-			"src and dst must have the same number of columns, src.Cols: %v, dst.Cols: %v",
-			src.Cols,
-			dst.Cols,
-		))
-	}
-
-	// Map each column in src to a column in dst based on the relative position
-	// of both the src and dst ColumnIDs in the ColSet.
-	var colMap opt.ColMap
-	dstCol, _ := dst.Cols.Next(0)
-	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
-		colMap.Set(int(srcCol), int(dstCol))
-		dstCol, _ = dst.Cols.Next(dstCol + 1)
-	}
-
-	newFilters := c.RemapCols(&filters, colMap).(*memo.FiltersExpr)
-	return *newFilters
+	return c.MapFilterCols(filters, src.Cols, dst.Cols)
 }
 
 // MakeSetPrivateForSplitDisjunction constructs a new SetPrivate with column sets
