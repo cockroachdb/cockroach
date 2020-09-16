@@ -1384,3 +1384,21 @@ primary                         rowid
 regression_54196_col2_col3_idx  col2
 regression_54196_col2_col3_idx  col3
 regression_54196_col2_col3_idx  rowid
+
+# Test to ensure that renaming a constraint on top of an existing index
+# fails with the correct error.
+
+statement ok
+CREATE TABLE t_cannot_rename_constraint_over_index (
+    k INT PRIMARY KEY,
+    v INT,
+    CONSTRAINT v_unique UNIQUE (v),
+    INDEX idx_v (v)
+);
+
+statement error relation idx_v already exists
+ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT v_unique TO idx_v;
+
+statement error relation idx_v already exists
+ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT "primary" TO idx_v;
+
