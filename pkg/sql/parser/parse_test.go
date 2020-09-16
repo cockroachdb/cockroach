@@ -616,6 +616,8 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS`},
 		{`EXPLAIN SHOW GRANTS`},
 		{`SHOW GRANTS ON TABLE foo`},
+		{`SHOW GRANTS ON SCHEMA foo`},
+		{`SHOW GRANTS ON SCHEMA foo, bar`},
 		{`SHOW GRANTS ON TABLE foo, db.foo`},
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
