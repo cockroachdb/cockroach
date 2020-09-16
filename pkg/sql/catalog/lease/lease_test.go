@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1165,41 +1166,40 @@ COMMIT;
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-
-	tx, err := sqlDB.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Insert an entry so that the transaction is guaranteed to be
-	// assigned a timestamp.
-	if _, err := tx.Exec(`
+	var updated bool
+	if err := crdb.ExecuteTx(context.Background(), sqlDB, nil, func(tx *gosql.Tx) error {
+		// Insert an entry so that the transaction is guaranteed to be
+		// assigned a timestamp.
+		if _, err := tx.Exec(`
 INSERT INTO t.timestamp VALUES ('a', 'b');
 `); err != nil {
-		t.Fatal(err)
-	}
+			return errors.WithStack(err)
+		}
 
-	// Increment the table version after the txn has started.
-	leaseMgr := s.LeaseManager().(*lease.Manager)
-	if _, err := leaseMgr.Publish(
-		context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
-			// Do nothing: increments the version.
-			return nil
-		}, nil); err != nil {
-		t.Error(err)
-	}
+		// Increment the table version after the txn has started. Only do this once
+		// even if there's a retry.
+		if !updated {
+			leaseMgr := s.LeaseManager().(*lease.Manager)
+			if _, err := leaseMgr.Publish(
+				context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
+					// Do nothing: increments the version.
+					return nil
+				}, nil); err != nil {
+				t.Fatal(err)
+			}
+			updated = true
+		}
 
-	// This select will see version 1 of the table. It will first
-	// acquire a lease on version 2 and note that the table descriptor is
-	// invalid for the transaction, so it will read the previous version
-	// and use it.
-	rows, err := tx.Query(`SELECT * FROM t.kv`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rows.Close()
-
-	if err := tx.Commit(); err != nil {
+		// This select will see version 1 of the table. It will first
+		// acquire a lease on version 2 and note that the table descriptor is
+		// invalid for the transaction, so it will read the previous version
+		// and use it.
+		rows, err := tx.Query(`SELECT * FROM t.kv`)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		return errors.WithStack(rows.Close())
+	}); err != nil {
 		t.Fatal(err)
 	}
 
