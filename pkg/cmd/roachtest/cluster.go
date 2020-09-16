@@ -1281,6 +1281,9 @@ func (f *clusterFactory) newCluster(
 	// Attempt to create a cluster several times, cause them clouds be flaky that
 	// my phone says it's snowing.
 	for i := 0; i < 3; i++ {
+		if i > 0 {
+			l.PrintfCtx(ctx, "Retrying cluster creation (attempt #%d)", i+1)
+		}
 		err = execCmd(ctx, l, sargs...)
 		if err == nil {
 			success = true
