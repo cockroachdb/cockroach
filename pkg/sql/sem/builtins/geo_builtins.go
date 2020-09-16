@@ -22,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geotransform"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -462,6 +465,39 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"settings", types.String}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				params := tree.MustBeDString(args[1])
+
+				startCfg, err := geoindex.GeometryIndexConfigForSRID(g.SRID())
+				if err != nil {
+					return nil, err
+				}
+				cfg, err := applyGeoindexConfigStorageParams(evalCtx, *startCfg, string(params))
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geoindex.NewS2GeometryIndex(*cfg.S2Geometry).CoveringGeometry(evalCtx.Context, g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `
+Returns a geometry which represents the S2 covering used by the index using the index configuration specified
+by the settings parameter.
+
+The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX ... WITH (...),
+e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
+SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3').
+`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 		geographyOverload1(
 			func(evalCtx *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
 				cfg := geoindex.DefaultGeographyIndexConfig().S2Geography
@@ -477,6 +513,36 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geography", types.Geography}, {"settings", types.String}},
+			ReturnType: tree.FixedReturnType(types.Geography),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeography(args[0])
+				params := tree.MustBeDString(args[1])
+
+				startCfg := geoindex.DefaultGeographyIndexConfig()
+				cfg, err := applyGeoindexConfigStorageParams(evalCtx, *startCfg, string(params))
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geoindex.NewS2GeographyIndex(*cfg.S2Geography).CoveringGeography(evalCtx.Context, g.Geography)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeography(ret), nil
+			},
+			Info: infoBuilder{
+				info: `
+Returns a geography which represents the S2 covering used by the index using the index configuration specified
+by the settings parameter.
+
+The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX ... WITH (...),
+e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
+SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
+`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 
 	//
@@ -5875,4 +5941,27 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 			Volatility: tree.VolatilityImmutable,
 		},
 	)
+}
+
+func applyGeoindexConfigStorageParams(
+	evalCtx *tree.EvalContext, cfg geoindex.Config, params string,
+) (geoindex.Config, error) {
+	indexDesc := &descpb.IndexDescriptor{GeoConfig: cfg}
+	stmt, err := parser.ParseOne(
+		fmt.Sprintf("CREATE INDEX t_idx ON t USING GIST(geom) WITH (%s)", params),
+	)
+	if err != nil {
+		return geoindex.Config{}, errors.Newf("invalid storage parameters specified: %s", params)
+	}
+	semaCtx := tree.MakeSemaContext()
+	if err := paramparse.ApplyStorageParameters(
+		evalCtx.Context,
+		&semaCtx,
+		evalCtx,
+		stmt.AST.(*tree.CreateIndex).StorageParams,
+		&paramparse.IndexStorageParamObserver{IndexDesc: indexDesc},
+	); err != nil {
+		return geoindex.Config{}, err
+	}
+	return indexDesc.GeoConfig, nil
 }
