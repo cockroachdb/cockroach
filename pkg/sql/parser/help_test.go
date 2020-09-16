@@ -242,6 +242,9 @@ func TestContextualHelp(t *testing.T) {
 		{`PAUSE SCHEDULE ??`, `PAUSE SCHEDULES`},
 		{`PAUSE SCHEDULES ??`, `PAUSE SCHEDULES`},
 
+		{`REASSIGN OWNED BY ?? TO ??`, `REASSIGN OWNED BY`},
+		{`REASSIGN OWNED BY foo, bar TO ??`, `REASSIGN OWNED BY`},
+
 		{`RESUME ??`, `RESUME`},
 		{`RESUME JOB ??`, `RESUME JOBS`},
 		{`RESUME JOBS ??`, `RESUME JOBS`},
