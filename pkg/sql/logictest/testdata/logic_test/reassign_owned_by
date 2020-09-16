@@ -1,0 +1,22 @@
+statement ok
+CREATE TABLE t()
+
+# Ensure old role must exist.
+# statement error pq: role/user "fake_role" does not exist
+statement error unimplemented
+REASSIGN OWNED BY fake_role TO new_role
+
+statement ok
+CREATE ROLE old_role
+
+# Ensure new role must exist.
+# statement error pq: role/user "fake_role" does not exist
+statement error unimplemented
+REASSIGN OWNED BY old_role TO fake_role
+
+statement ok
+CREATE ROLE new_role
+
+# statement ok
+statement error unimplemented
+REASSIGN OWNED BY old_role TO fake_role
