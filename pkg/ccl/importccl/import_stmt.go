@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1109,7 +1110,10 @@ func (r *importResumer) prepareTableDescsForIngestion(
 					hasExistingTables = true
 				} else {
 					newTablenameToIdx[table.Desc.Name] = i
-					newTableDescs = append(newTableDescs, table)
+					// Make a deep copy of the table descriptor so that rewrites do not
+					// partially clobber the descriptor stored in details.
+					newTableDescs = append(newTableDescs,
+						*protoutil.Clone(&table).(*jobspb.ImportDetails_Table))
 				}
 			}
 
