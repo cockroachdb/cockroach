@@ -284,7 +284,8 @@ func getLocalityInfo(
 				origLocalityKV := desc.LocalityKV
 				kv := roachpb.Tier{}
 				if err := kv.FromString(origLocalityKV); err != nil {
-					return info, errors.Wrapf(err, "reading backup manifest from %s", uris[i])
+					return info, errors.Wrapf(err, "reading backup manifest from %s",
+						RedactURIForErrorMessage(uris[i]))
 				}
 				if _, ok := urisByOrigLocality[origLocalityKV]; ok {
 					return info, errors.Errorf("duplicate locality %s found in backup", origLocalityKV)
@@ -593,6 +594,16 @@ func writeEncryptionOptions(
 	return nil
 }
 
+// RedactURIForErrorMessage redacts any storage secrets before returning a URI which is safe to
+// return to the client in an error message.
+func RedactURIForErrorMessage(uri string) string {
+	redactedURI, err := cloud.SanitizeExternalStorageURI(uri, []string{})
+	if err != nil {
+		return "<uri_failed_to_redact>"
+	}
+	return redactedURI
+}
+
 // VerifyUsableExportTarget ensures that the target location does not already
 // contain a BACKUP or checkpoint and writes an empty checkpoint, both verifying
 // that the location is writable and locking out accidental concurrent
@@ -603,16 +614,17 @@ func VerifyUsableExportTarget(
 	ctx context.Context,
 	settings *cluster.Settings,
 	exportStore cloud.ExternalStorage,
-	readable string,
+	defaultURI string,
 	encryption *roachpb.FileEncryptionOptions,
 ) error {
+	redactedURI := RedactURIForErrorMessage(defaultURI)
 	if r, err := exportStore.ReadFile(ctx, BackupManifestName); err == nil {
 		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
 		// returns (and then wrap/tag them), we could narrow this check.
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
-			readable, BackupManifestName)
+			redactedURI, BackupManifestName)
 	}
 	if r, err := exportStore.ReadFile(ctx, BackupManifestName); err == nil {
 		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
@@ -620,18 +632,18 @@ func VerifyUsableExportTarget(
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
-			readable, BackupManifestName)
+			redactedURI, BackupManifestName)
 	}
 	if r, err := exportStore.ReadFile(ctx, BackupManifestCheckpointName); err == nil {
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file (is another operation already in progress?)",
-			readable, BackupManifestCheckpointName)
+			redactedURI, BackupManifestCheckpointName)
 	}
 	if err := writeBackupManifest(
 		ctx, settings, exportStore, BackupManifestCheckpointName, encryption, &BackupManifest{},
 	); err != nil {
-		return errors.Wrapf(err, "cannot write to %s", readable)
+		return errors.Wrapf(err, "cannot write to %s", redactedURI)
 	}
 	return nil
 }
