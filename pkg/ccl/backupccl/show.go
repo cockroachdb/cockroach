@@ -391,6 +391,9 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 	} else if table := descpb.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
 		privDesc = table.GetPrivileges()
 		objectType = privilege.Table
+	} else if schema := descriptor.GetSchema(); schema != nil {
+		privDesc = schema.GetPrivileges()
+		objectType = privilege.Schema
 	}
 	if privDesc == nil {
 		return ""
@@ -398,10 +401,10 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 	for _, userPriv := range privDesc.Show(objectType) {
 		user := userPriv.User
 		privs := userPriv.Privileges
-		privStringBuilder.WriteString("GRANT ")
 		if len(privs) == 0 {
 			continue
 		}
+		privStringBuilder.WriteString("GRANT ")
 
 		for j, priv := range privs {
 			if j != 0 {
