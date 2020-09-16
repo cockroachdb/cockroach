@@ -254,6 +254,9 @@ SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1
 ----
 1  2  1
 
+statement error index "idx_c_b_gt_1" is a partial index that does not contain all the rows needed to execute this query
+SELECT * FROM a@idx_c_b_gt_1 WHERE b = 0
+
 # Return error if evaluating the predicate errs and do not insert or update the
 # row.
 
@@ -1128,15 +1131,93 @@ enum_table_show  CREATE TABLE public.enum_table_show (
 )
 
 # Inverted partial indexes.
-
-statement error pgcode 0A000 unimplemented: partial inverted indexes not supported
-CREATE TABLE inv (j JSON, i INT, INVERTED INDEX (j) WHERE i > 0)
+subtest inverted
 
 statement ok
-CREATE TABLE inv (j JSON, i INT)
+CREATE TABLE inv (j JSON, i INT, INVERTED INDEX (j) WHERE i > 0);
+DROP TABLE inv;
 
-statement error pgcode 0A000 unimplemented: partial inverted indexes not supported
-CREATE INVERTED INDEX ON inv (j) WHERE i > 0
+statement ok
+CREATE TABLE inv (k INT PRIMARY KEY, j JSON, s STRING);
+CREATE INVERTED INDEX i ON inv (j) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO inv VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s = 'foo'
+----
+1  {"num": 1, "x": "y"}  foo
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 1}' AND s IN ('foo', 'bar')
+----
+1  {"num": 1, "x": "y"}  foo
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
+
+statement ok
+DELETE FROM inv WHERE k = 3
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+1  {"num": 1, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET j = '{"x": "y", "num": 10}' WHERE k = 1
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 10}' AND s = 'foo'
+----
+1  {"num": 10, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET k = 10 WHERE k = 1
+
+statement ok
+UPDATE inv SET s = 'bar' WHERE k = 2
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+2   {"num": 2, "x": "y"}   bar
+10  {"num": 10, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET s = 'baz' WHERE k = 10
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+2  {"num": 2, "x": "y"}  bar
+
+statement ok
+UPSERT INTO inv VALUES (3, '{"x": "y", "num": 3}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s = 'bar' ORDER BY k
+----
+2  {"num": 2, "x": "y"}  bar
+3  {"num": 3, "x": "y"}  bar
+
+statement ok
+UPSERT INTO inv VALUES (3, '{"x": "y", "num": 4}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 4}' AND s = 'bar'
+----
+3  {"num": 4, "x": "y"}  bar
+
+statement error index "i" is a partial inverted index and cannot be used for this query
+SELECT * FROM inv@i WHERE j @> '{"num": 2}' AND s = 'baz'
 
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.

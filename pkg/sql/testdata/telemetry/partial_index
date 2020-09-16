@@ -24,15 +24,13 @@ sql.schema.partial_index
 feature-usage
 CREATE TABLE c (i INT, j JSON, INVERTED INDEX (j) WHERE i > 0)
 ----
-error: pq: unimplemented: partial inverted indexes not supported
-sql.schema.partial_inverted_index_error
+sql.schema.partial_index
 
 exec
-CREATE TABLE c (i INT, j JSON)
+CREATE TABLE d (i INT, j JSON)
 ----
 
 feature-usage
-CREATE INVERTED INDEX i ON c (j) WHERE i > 0
+CREATE INVERTED INDEX i ON d (j) WHERE i > 0
 ----
-error: pq: unimplemented: partial inverted indexes not supported
-sql.schema.partial_inverted_index_error
+sql.schema.partial_index
