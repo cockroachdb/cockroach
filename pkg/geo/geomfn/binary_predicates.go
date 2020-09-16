@@ -13,6 +13,8 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/errors"
+	"github.com/twpayne/go-geom"
 )
 
 // Covers returns whether geometry A covers geometry B.
@@ -104,6 +106,112 @@ func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 		return false, nil
 	}
 	return geos.Intersects(a.EWKB(), b.EWKB())
+}
+
+// OrderingEquals returns whether geometry A is equal to B, with all constituents
+// and coordinates in the same order.
+func OrderingEquals(a, b geo.Geometry) (bool, error) {
+	if a.SRID() != b.SRID() {
+		return false, nil
+	}
+	aBox, bBox := a.CartesianBoundingBox(), b.CartesianBoundingBox()
+	switch {
+	case aBox == nil && bBox == nil:
+	case aBox == nil || bBox == nil:
+		return false, nil
+	case aBox.Compare(bBox) != 0:
+		return false, nil
+	}
+
+	geomA, err := a.AsGeomT()
+	if err != nil {
+		return false, err
+	}
+	geomB, err := b.AsGeomT()
+	if err != nil {
+		return false, err
+	}
+	return orderingEqualsFromGeomT(geomA, geomB)
+}
+
+// orderingEqualsFromGeomT returns whether geometry A is equal to B.
+func orderingEqualsFromGeomT(a, b geom.T) (bool, error) {
+	if a.Layout() != b.Layout() {
+		return false, nil
+	}
+	switch a := a.(type) {
+	case *geom.Point:
+		if b, ok := b.(*geom.Point); ok {
+			// Point.Coords() panics on empty points
+			switch {
+			case a.Empty() && b.Empty():
+				return true, nil
+			case a.Empty() || b.Empty():
+				return false, nil
+			default:
+				return a.Coords().Equal(b.Layout(), b.Coords()), nil
+			}
+		}
+	case *geom.LineString:
+		if b, ok := b.(*geom.LineString); ok && a.NumCoords() == b.NumCoords() {
+			for i := 0; i < a.NumCoords(); i++ {
+				if !a.Coord(i).Equal(b.Layout(), b.Coord(i)) {
+					return false, nil
+				}
+			}
+			return true, nil
+		}
+	case *geom.Polygon:
+		if b, ok := b.(*geom.Polygon); ok && a.NumLinearRings() == b.NumLinearRings() {
+			for i := 0; i < a.NumLinearRings(); i++ {
+				for j := 0; j < a.LinearRing(i).NumCoords(); j++ {
+					if !a.LinearRing(i).Coord(j).Equal(b.Layout(), b.LinearRing(i).Coord(j)) {
+						return false, nil
+					}
+				}
+			}
+			return true, nil
+		}
+	case *geom.MultiPoint:
+		if b, ok := b.(*geom.MultiPoint); ok && a.NumPoints() == b.NumPoints() {
+			for i := 0; i < a.NumPoints(); i++ {
+				if eq, err := orderingEqualsFromGeomT(a.Point(i), b.Point(i)); err != nil || !eq {
+					return false, err
+				}
+			}
+			return true, nil
+		}
+	case *geom.MultiLineString:
+		if b, ok := b.(*geom.MultiLineString); ok && a.NumLineStrings() == b.NumLineStrings() {
+			for i := 0; i < a.NumLineStrings(); i++ {
+				if eq, err := orderingEqualsFromGeomT(a.LineString(i), b.LineString(i)); err != nil || !eq {
+					return false, err
+				}
+			}
+			return true, nil
+		}
+	case *geom.MultiPolygon:
+		if b, ok := b.(*geom.MultiPolygon); ok && a.NumPolygons() == b.NumPolygons() {
+			for i := 0; i < a.NumPolygons(); i++ {
+				if eq, err := orderingEqualsFromGeomT(a.Polygon(i), b.Polygon(i)); err != nil || !eq {
+					return false, err
+				}
+			}
+			return true, nil
+		}
+	case *geom.GeometryCollection:
+		if b, ok := b.(*geom.GeometryCollection); ok && a.NumGeoms() == b.NumGeoms() {
+			for i := 0; i < a.NumGeoms(); i++ {
+				if eq, err := orderingEqualsFromGeomT(a.Geom(i), b.Geom(i)); err != nil || !eq {
+					return false, err
+				}
+			}
+			return true, nil
+		}
+	default:
+		return false, errors.AssertionFailedf("unknown geometry type: %T", a)
+	}
+	return false, nil
 }
 
 // Overlaps returns whether geometry A overlaps geometry B.
