@@ -146,9 +146,9 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 // ----------------------------------------------------------------------
 
 // GeneratePartialIndexScans generates unconstrained index scans over all
-// partial indexes with predicates that are implied by the filters. Partial
-// indexes with predicates which cannot be proven to be implied by the filters
-// are disregarded.
+// non-inverted, partial indexes with predicates that are implied by the
+// filters. Partial indexes with predicates which cannot be proven to be implied
+// by the filters are disregarded.
 //
 // When a filter completely matches the predicate, the remaining filters are
 // simplified so that they do not include the filter. A redundant filter is
@@ -213,7 +213,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	tabMeta := md.TableMeta(scanPrivate.Table)
 
 	// Iterate over all partial indexes.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes|rejectInvertedIndexes)
 	for iter.Next() {
 		pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
 		remainingFilters, ok := c.im.FiltersImplyPredicate(filters, pred)
@@ -345,9 +345,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// If the index is a partial index, check whether or not the filter
 		// implies the predicate.
 		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
-		var pred memo.FiltersExpr
 		if isPartialIndex {
-			pred = memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
 			remainingFilters, ok := c.im.FiltersImplyPredicate(explicitFilters, pred)
 			if !ok {
 				// The filters do not imply the predicate, so the partial index
@@ -993,27 +992,42 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	sb.init(c, scanPrivate.Table)
 
 	// Iterate over all inverted indexes.
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes)
 	for iter.Next() {
 		var spanExpr *invertedexpr.SpanExpression
 		var spansToRead invertedexpr.InvertedSpans
 		var constraint *constraint.Constraint
-		var remaining memo.FiltersExpr
 		var geoOk, nonGeoOk bool
+		remaining := filters
+
+		// If the index is a partial index, check whether or not the filter
+		// implies the predicate.
+		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
+		if isPartialIndex {
+			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			remainingFilters, ok := c.im.FiltersImplyPredicate(remaining, pred)
+			if !ok {
+				// The filters do not imply the predicate, so the partial index
+				// cannot be used.
+				continue
+			}
+			remaining = remainingFilters
+		}
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
 		spanExpr, geoOk = invertedidx.TryConstrainGeoIndex(
-			c.e.evalCtx.Context, c.e.f, filters, scanPrivate.Table, iter.Index(),
+			c.e.evalCtx.Context, c.e.f, remaining, scanPrivate.Table, iter.Index(),
 		)
 		if geoOk {
-			// Geo index scans can never be tight, so remaining filters is always the
-			// same as filters.
-			remaining = filters
+			// Geo index scans can never be tight, so the remaining filters do
+			// not change.
 			spansToRead = spanExpr.SpansToRead
 		} else {
 			constraint, remaining, nonGeoOk = c.tryConstrainIndex(
-				filters,
+				remaining,
 				nil, /* optionalFilters */
 				scanPrivate.Table,
 				iter.IndexOrdinal(),

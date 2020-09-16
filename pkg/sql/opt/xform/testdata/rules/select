@@ -2333,6 +2333,196 @@ project
       └── filters
            └── geom:3 ~ '01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
+# Tests for partial inverted indexes.
+
+exec-ddl
+CREATE TABLE pi (
+    k INT PRIMARY KEY,
+    s STRING,
+    j JSON
+)
+----
+
+# Partial inverted index scan.
+
+exec-ddl
+CREATE INVERTED INDEX idx ON pi (j) WHERE s = 'foo'
+----
+
+opt
+SELECT k FROM pi WHERE j @> '{"a": "b"}' AND s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan pi@idx,partial
+      ├── columns: k:1!null
+      ├── constraint: /3/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Partial inverted index scan with indexed column in predicate.
+
+exec-ddl
+CREATE INVERTED INDEX idx ON pi (j) WHERE j @> '{"group": 1}'
+----
+
+opt
+SELECT k FROM pi WHERE j @> '{"a": "b"}' AND j @> '{"group": 1}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan pi@idx,partial
+      ├── columns: k:1!null
+      ├── constraint: /3/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Partial inverted index scan with index-join.
+
+exec-ddl
+CREATE INVERTED INDEX idx ON pi (j) WHERE s = 'foo'
+----
+
+opt
+SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'foo'
+----
+index-join pi
+ ├── columns: k:1!null s:2!null j:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ └── scan pi@idx,partial
+      ├── columns: k:1!null
+      ├── constraint: /3/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      └── key: (1)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Partial inverted index scan with additional filters.
+
+exec-ddl
+CREATE INVERTED INDEX idx ON pi (j) WHERE s IN ('foo', 'bar')
+----
+
+opt
+SELECT * FROM pi WHERE j @> '{"a": "b"}' AND j @> '{"group": 1}' AND s = 'foo'
+----
+select
+ ├── columns: k:1!null s:2!null j:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── index-join pi
+ │    ├── columns: k:1!null s:2 j:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan pi@idx,partial
+ │         ├── columns: k:1!null
+ │         ├── constraint: /3/1: [/'{"a": "b"}' - /'{"a": "b"}']
+ │         └── key: (1)
+ └── filters
+      ├── j:3 @> '{"group": 1}' [outer=(3), immutable]
+      └── s:2 = 'foo' [outer=(2), constraints=(/2: [/'foo' - /'foo']; tight), fd=()-->(2)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Generate multiple partial inverted index scans in the memo when the filter
+# implies multiple partial index predicates.
+
+exec-ddl
+CREATE INVERTED INDEX idx ON pi (j) WHERE s IN ('foo', 'bar')
+----
+
+exec-ddl
+CREATE INVERTED INDEX idx2 ON pi (j) WHERE s = 'bar'
+----
+
+memo
+SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'bar'
+----
+memo (optimized, ~8KB, required=[presentation: k:1,s:2,j:3])
+ ├── G1: (select G2 G3) (select G4 G5) (index-join G6 pi,cols=(1-3))
+ │    └── [presentation: k:1,s:2,j:3]
+ │         ├── best: (index-join G6 pi,cols=(1-3))
+ │         └── cost: 9.63
+ ├── G2: (scan pi,cols=(1-3))
+ │    └── []
+ │         ├── best: (scan pi,cols=(1-3))
+ │         └── cost: 1064.02
+ ├── G3: (filters G7 G8)
+ ├── G4: (index-join G9 pi,cols=(1-3))
+ │    └── []
+ │         ├── best: (index-join G9 pi,cols=(1-3))
+ │         └── cost: 15.24
+ ├── G5: (filters G8)
+ ├── G6: (scan pi@idx2,partial,cols=(1),constrained)
+ │    └── []
+ │         ├── best: (scan pi@idx2,partial,cols=(1),constrained)
+ │         └── cost: 5.14
+ ├── G7: (contains G10 G11)
+ ├── G8: (eq G12 G13)
+ ├── G9: (scan pi@idx,partial,cols=(1),constrained)
+ │    └── []
+ │         ├── best: (scan pi@idx,partial,cols=(1),constrained)
+ │         └── cost: 6.28
+ ├── G10: (variable j)
+ ├── G11: (const '{"a": "b"}')
+ ├── G12: (variable s)
+ └── G13: (const 'bar')
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+DROP INDEX idx2
+----
+
+# Do not generate a partial inverted index scan when the predicate is not
+# implied by the filter.
+
+exec-ddl
+CREATE INVERTED INDEX idx ON pi (j) WHERE s IN ('foo', 'bar')
+----
+
+memo expect-not=GenerateInvertedIndexScans
+SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'baz'
+----
+memo (optimized, ~5KB, required=[presentation: k:1,s:2,j:3])
+ ├── G1: (select G2 G3)
+ │    └── [presentation: k:1,s:2,j:3]
+ │         ├── best: (select G2 G3)
+ │         └── cost: 1074.05
+ ├── G2: (scan pi,cols=(1-3))
+ │    └── []
+ │         ├── best: (scan pi,cols=(1-3))
+ │         └── cost: 1064.02
+ ├── G3: (filters G4 G5)
+ ├── G4: (contains G6 G7)
+ ├── G5: (eq G8 G9)
+ ├── G6: (variable j)
+ ├── G7: (const '{"a": "b"}')
+ ├── G8: (variable s)
+ └── G9: (const 'baz')
+
+exec-ddl
+DROP INDEX idx
+----
+
 # --------------------------------------------------
 # SplitDisjunction
 # --------------------------------------------------
