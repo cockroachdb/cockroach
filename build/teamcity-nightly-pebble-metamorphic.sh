@@ -15,6 +15,7 @@ definitely_ccache
 # with test files too.
 rm -fr vendor/github.com/cockroachdb/pebble
 git clone https://github.com/cockroachdb/pebble vendor/github.com/cockroachdb/pebble
+git -C vendor/github.com/cockroachdb/pebble checkout 9af7bb126851ce2da84e8e74200d83fe09bf87b4
 
 PEBBLE_SHA=$(git -C vendor/github.com/cockroachdb/pebble rev-parse HEAD)
 echo "Pebble SHA: $PEBBLE_SHA"
