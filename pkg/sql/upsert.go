@@ -195,7 +195,7 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 func (n *upsertNode) BatchedCount() int { return n.run.tw.lastBatchSize }
 
 // BatchedValues implements the batchedPlanNode interface.
-func (n *upsertNode) BatchedValues(rowIdx int) tree.Datums { return n.run.tw.batchedValues(rowIdx) }
+func (n *upsertNode) BatchedValues(rowIdx int) tree.Datums { return n.run.tw.rows.At(rowIdx) }
 
 func (n *upsertNode) Close(ctx context.Context) {
 	n.source.Close(ctx)
