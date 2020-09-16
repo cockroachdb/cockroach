@@ -631,12 +631,12 @@ func backupPlanHook(
 		// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
 		// backupDestination struct.
 		collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-			resolveDest(ctx, p, backupStmt, defaultURI, urisByLocalityKV, makeCloudStorage, endTime,
-				to, incrementalFrom, subdir)
+			resolveDest(ctx, p.User(), backupStmt.Nested, backupStmt.AppendToLatest, defaultURI,
+				urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom, subdir)
 		if err != nil {
 			return err
 		}
-		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p, makeCloudStorage, prevs,
+		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p.User(), makeCloudStorage, prevs,
 			encryptionParams)
 		if err != nil {
 			return err
