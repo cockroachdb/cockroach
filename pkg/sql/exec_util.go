@@ -129,6 +129,14 @@ var allowCrossDatabaseFKs = settings.RegisterPublicBoolSetting(
 	false,
 )
 
+const allowCrossDatabaseViewsSetting = "sql.cross_db_views.enabled"
+
+var allowCrossDatabaseViews = settings.RegisterPublicBoolSetting(
+	allowCrossDatabaseViewsSetting,
+	"if true, creating views that refer to other databases is allowed",
+	false,
+)
+
 // traceTxnThreshold can be used to log SQL transactions that take
 // longer than duration to complete. For example, traceTxnThreshold=1s
 // will log the trace for any transaction that takes 1s or longer. To
