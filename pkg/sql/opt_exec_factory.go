@@ -930,6 +930,11 @@ func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Node
 
 // ConstructScanBuffer is part of the exec.Factory interface.
 func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
+	if n, ok := ref.(*explain.Node); ok {
+		// This can happen if we used explain on the main query but we construct the
+		// scan buffer inside a separate plan (e.g. recursive CTEs).
+		ref = n.WrappedNode()
+	}
 	return &scanBufferNode{
 		buffer: ref.(*bufferNode),
 		label:  label,
