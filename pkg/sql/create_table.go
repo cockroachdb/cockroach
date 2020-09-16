@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -75,96 +76,6 @@ type createTableRun struct {
 	// whether or not a row_id was synthesized as part of the planning stage, if a
 	// user defined PK is not specified.
 	fromHeuristicPlanner bool
-}
-
-// storageParamObserver applies a storage parameter to an underlying item.
-type storageParamObserver interface {
-	apply(evalCtx *tree.EvalContext, key string, datum tree.Datum) error
-	runPostChecks() error
-}
-
-type tableStorageParamObserver struct{}
-
-var _ storageParamObserver = (*tableStorageParamObserver)(nil)
-
-func applyFillFactorStorageParam(evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-	val, err := datumAsFloat(evalCtx, key, datum)
-	if err != nil {
-		return err
-	}
-	if val < 0 || val > 100 {
-		return errors.Newf("%q must be between 0 and 100", key)
-	}
-	if evalCtx != nil {
-		evalCtx.ClientNoticeSender.SendClientNotice(
-			evalCtx.Context,
-			pgnotice.Newf("storage parameter %q is ignored", key),
-		)
-	}
-	return nil
-}
-
-func (a *tableStorageParamObserver) runPostChecks() error {
-	return nil
-}
-
-func (a *tableStorageParamObserver) apply(
-	evalCtx *tree.EvalContext, key string, datum tree.Datum,
-) error {
-	switch key {
-	case `fillfactor`:
-		return applyFillFactorStorageParam(evalCtx, key, datum)
-	case `autovacuum_enabled`:
-		var boolVal bool
-		if stringVal, err := datumAsString(evalCtx, key, datum); err == nil {
-			boolVal, err = parseBoolVar(key, stringVal)
-			if err != nil {
-				return err
-			}
-		} else {
-			s, err := getSingleBool(key, datum)
-			if err != nil {
-				return err
-			}
-			boolVal = bool(*s)
-		}
-		if !boolVal && evalCtx != nil {
-			evalCtx.ClientNoticeSender.SendClientNotice(
-				evalCtx.Context,
-				pgnotice.Newf(`storage parameter "%s = %s" is ignored`, key, datum.String()),
-			)
-		}
-		return nil
-	case `toast_tuple_target`,
-		`parallel_workers`,
-		`toast.autovacuum_enabled`,
-		`autovacuum_vacuum_threshold`,
-		`toast.autovacuum_vacuum_threshold`,
-		`autovacuum_vacuum_scale_factor`,
-		`toast.autovacuum_vacuum_scale_factor`,
-		`autovacuum_analyze_threshold`,
-		`autovacuum_analyze_scale_factor`,
-		`autovacuum_vacuum_cost_delay`,
-		`toast.autovacuum_vacuum_cost_delay`,
-		`autovacuum_vacuum_cost_limit`,
-		`autovacuum_freeze_min_age`,
-		`toast.autovacuum_freeze_min_age`,
-		`autovacuum_freeze_max_age`,
-		`toast.autovacuum_freeze_max_age`,
-		`autovacuum_freeze_table_age`,
-		`toast.autovacuum_freeze_table_age`,
-		`autovacuum_multixact_freeze_min_age`,
-		`toast.autovacuum_multixact_freeze_min_age`,
-		`autovacuum_multixact_freeze_max_age`,
-		`toast.autovacuum_multixact_freeze_max_age`,
-		`autovacuum_multixact_freeze_table_age`,
-		`toast.autovacuum_multixact_freeze_table_age`,
-		`log_autovacuum_min_duration`,
-		`toast.log_autovacuum_min_duration`,
-		`user_catalog_table`:
-		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
-	}
-	return errors.Errorf("invalid storage parameter %q", key)
 }
 
 // minimumTypeUsageVersions defines the minimum version needed for a new
@@ -1323,12 +1234,12 @@ func NewTableDesc(
 		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, persistence,
 	)
 
-	if err := applyStorageParameters(
+	if err := paramparse.ApplyStorageParameters(
 		ctx,
 		semaCtx,
 		evalCtx,
 		n.StorageParams,
-		&tableStorageParamObserver{},
+		&paramparse.TableStorageParamObserver{},
 	); err != nil {
 		return nil, err
 	}
@@ -1564,12 +1475,12 @@ func NewTableDesc(
 				}
 				idx.Predicate = expr
 			}
-			if err := applyStorageParameters(
+			if err := paramparse.ApplyStorageParameters(
 				ctx,
 				semaCtx,
 				evalCtx,
 				d.StorageParams,
-				&indexStorageParamObserver{indexDesc: &idx},
+				&paramparse.IndexStorageParamObserver{IndexDesc: &idx},
 			); err != nil {
 				return nil, err
 			}
@@ -1843,43 +1754,6 @@ func NewTableDesc(
 	}
 
 	return &desc, nil
-}
-
-func applyStorageParameters(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-	params tree.StorageParams,
-	paramObserver storageParamObserver,
-) error {
-	for _, sp := range params {
-		key := string(sp.Key)
-		if sp.Value == nil {
-			return errors.Errorf("storage parameter %q requires a value", key)
-		}
-		// Expressions may be an unresolved name.
-		// Cast these as strings.
-		expr := unresolvedNameToStrVal(sp.Value)
-
-		// Convert the expressions to a datum.
-		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
-		if err != nil {
-			return err
-		}
-		if typedExpr, err = evalCtx.NormalizeExpr(typedExpr); err != nil {
-			return err
-		}
-		datum, err := typedExpr.Eval(evalCtx)
-		if err != nil {
-			return err
-		}
-
-		// Apply the param.
-		if err := paramObserver.apply(evalCtx, key, datum); err != nil {
-			return err
-		}
-	}
-	return paramObserver.runPostChecks()
 }
 
 // newTableDesc creates a table descriptor from a CreateTable statement.

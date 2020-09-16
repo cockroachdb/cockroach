@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1270,7 +1271,7 @@ func (ex *connExecutor) runSetTracing(
 
 	modes := make([]string, len(n.Values))
 	for i, v := range n.Values {
-		v = unresolvedNameToStrVal(v)
+		v = paramparse.UnresolvedNameToStrVal(v)
 		var strMode string
 		switch val := v.(type) {
 		case *tree.StrVal:
