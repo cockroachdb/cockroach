@@ -1,3 +1,6 @@
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
 query T
 SHOW DATABASES
 ----

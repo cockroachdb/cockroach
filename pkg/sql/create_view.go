@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -63,6 +64,18 @@ func (n *createViewNode) startExec(params runParams) error {
 	viewName := n.viewName.Object()
 	persistence := n.persistence
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
+
+	// Check that the view does not contain references to other databases.
+	if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
+		for _, dep := range n.planDeps {
+			if dbID := dep.desc.ParentID; dbID != n.dbDesc.ID && dbID != keys.SystemDatabaseID {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"the view cannot refer to other databases; (see the '%s' cluster setting)",
+					allowCrossDatabaseViewsSetting,
+				)
+			}
+		}
+	}
 
 	// First check the backrefs and see if any of them are temporary.
 	// If so, promote this view to temporary.

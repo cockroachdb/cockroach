@@ -709,6 +709,7 @@ INSERT INTO public.t2 (id, pkey) VALUES
 			recreate: true,
 			create: `
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE;
 CREATE DATABASE dbB;
 USE dbB;
 
