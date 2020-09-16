@@ -732,8 +732,10 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 }
 
 // done finalizes the mutations (adds new cols/indexes to the table).
-// It ensures that all nodes are on the current (pre-update) version of the
-// schema.
+// It ensures that all nodes are on the current (pre-update) version of
+// sc.tableID and that all nodes are on the new (post-update) version of
+// any other modified descriptors.
+//
 // It also kicks off GC jobs as needed.
 // Returns the updated descriptor.
 func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescriptor, error) {
@@ -1016,6 +1018,17 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			log.Warningf(ctx, "starting job %d failed with error: %v", *job.ID(), err)
 		}
 		log.VEventf(ctx, 2, "started job %d", *job.ID())
+	}
+	// Wait for the modified versions of tables other than the table we're
+	// updating to have their leases updated.
+	for _, id := range tableIDsToUpdate {
+		// sc.tableID gets waited for above this call in sc.exec().
+		if id == sc.tableID {
+			continue
+		}
+		if err := sc.waitToUpdateLeases(ctx, id); err != nil {
+			return nil, err
+		}
 	}
 	return descs[sc.tableID], nil
 }
