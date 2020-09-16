@@ -121,6 +121,14 @@ var defaultIntSize = func() *settings.IntSetting {
 	return s
 }()
 
+const allowCrossDatabaseFKsSetting = "sql.cross_db_fks.enabled"
+
+var allowCrossDatabaseFKs = settings.RegisterPublicBoolSetting(
+	allowCrossDatabaseFKsSetting,
+	"if true, creating foreign key references across databases is allowed",
+	false,
+)
+
 // traceTxnThreshold can be used to log SQL transactions that take
 // longer than duration to complete. For example, traceTxnThreshold=1s
 // will log the trace for any transaction that takes 1s or longer. To

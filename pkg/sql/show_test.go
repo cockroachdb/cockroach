@@ -42,6 +42,7 @@ func TestShowCreateTable(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
+    SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 		CREATE DATABASE d;
 		SET DATABASE = d;
 		CREATE TABLE items (
