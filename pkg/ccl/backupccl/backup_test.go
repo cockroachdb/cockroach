@@ -471,22 +471,22 @@ func TestBackupRestoreAppend(t *testing.T) {
 		`userfile:///bar/3`
 	makeBackups := func(b1, b2, b3 string) []interface{} {
 		return []interface{}{
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", b1, url.QueryEscape("default")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", b2, url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", b3, url.QueryEscape("dc=dc2"))}
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b1, url.QueryEscape("default")),
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b2, url.QueryEscape("dc=dc1")),
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b3, url.QueryEscape("dc=dc2"))}
 	}
 	makeCollections := func(c1, c2, c3 string) []interface{} {
 		return []interface{}{
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c1, url.QueryEscape("default")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c2, url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c3, url.QueryEscape("dc=dc2"))}
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c1, url.QueryEscape("default")),
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c2, url.QueryEscape("dc=dc1")),
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c3, url.QueryEscape("dc=dc2"))}
 	}
 
 	makeCollectionsWithSubdir := func(c1, c2, c3 string) []interface{} {
 		return []interface{}{
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s", c1, "foo", url.QueryEscape("default")),
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s", c2, "foo", url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s", c3, "foo", url.QueryEscape("dc=dc2"))}
+			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c1, "foo", url.QueryEscape("default")),
+			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c2, "foo", url.QueryEscape("dc=dc1")),
+			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c3, "foo", url.QueryEscape("dc=dc2"))}
 	}
 
 	// for testing backup *into* with specified subdirectory.
