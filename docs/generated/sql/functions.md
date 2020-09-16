@@ -1241,6 +1241,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 | d  e  y_off |  | y |
 \ 0  0      1 /  \ 0 /</p>
 </span></td></tr>
+<tr><td><a name="st_angle"></a><code>st_angle(line1: geometry, line2: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the clockwise angle between two LINESTRING geometries, treating them as vectors between their start- and endpoints. Returns NULL if any vectors have 0 length.</p>
+</span></td></tr>
+<tr><td><a name="st_angle"></a><code>st_angle(point1: geometry, point2: geometry, point3: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the clockwise angle between the vectors formed by point2,point1 and point2,point3. The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.</p>
+</span></td></tr>
+<tr><td><a name="st_angle"></a><code>st_angle(point1: geometry, point2: geometry, point3: geometry, point4: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the clockwise angle between the vectors formed by point1,point2 and point3,point4. The arguments must be POINT geometries. Returns NULL if any vectors have 0 length.</p>
+</span></td></tr>
 <tr><td><a name="st_area"></a><code>st_area(geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geography in meters^2. Uses a spheroid to perform the operation.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
@@ -1376,6 +1382,9 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geometries, or NULL if the two points are coincident.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
+</span></td></tr>
+<tr><td><a name="st_boundary"></a><code>st_boundary(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the closure of the combinatorial boundary of this Geometry.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_box2dfromgeohash"></a><code>st_box2dfromgeohash(geohash: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Return a Box2D from a GeoHash string with max precision.</p>
 </span></td></tr>
@@ -1549,6 +1558,9 @@ from the given Geometry.</p>
 <tr><td><a name="st_dfullywithinexclusive"></a><code>st_dfullywithinexclusive(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
 </span></td></tr>
+<tr><td><a name="st_difference"></a><code>st_difference(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the difference of two Geometries.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_dimension"></a><code>st_dimension(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of topological dimensions of a given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_disjoint"></a><code>st_disjoint(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a does not overlap, touch or is within geometry_b.</p>
@@ -1641,6 +1653,12 @@ Bottom Left.</p>
 </span></td></tr>
 <tr><td><a name="st_forcepolygoncw"></a><code>st_forcepolygoncw(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry where all Polygon objects have exterior rings in the clockwise orientation and interior rings in the counter-clockwise orientation. Non-Polygon objects are unchanged.</p>
 </span></td></tr>
+<tr><td><a name="st_frechetdistance"></a><code>st_frechetdistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Frechet distance between the given geometries.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_frechetdistance"></a><code>st_frechetdistance(geometry_a: geometry, geometry_b: geometry, densify_frac: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Frechet distance between the given geometries, with the given segment densification (range 0.0-1.0, -1 to disable).</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_geogfromewkb"></a><code>st_geogfromewkb(val: <a href="bytes.html">bytes</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an EWKB representation.</p>
 </span></td></tr>
 <tr><td><a name="st_geogfromewkt"></a><code>st_geogfromewkt(val: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an EWKT representation.</p>
@@ -1705,6 +1723,12 @@ Bottom Left.</p>
 <tr><td><a name="st_geomfromwkb"></a><code>st_geomfromwkb(bytes: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with the given SRID set.</p>
 </span></td></tr>
 <tr><td><a name="st_geomfromwkb"></a><code>st_geomfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation.</p>
+</span></td></tr>
+<tr><td><a name="st_hausdorffdistance"></a><code>st_hausdorffdistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Hausdorff distance between the given geometries.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_hausdorffdistance"></a><code>st_hausdorffdistance(geometry_a: geometry, geometry_b: geometry, densify_frac: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Hausdorff distance between the given geometries, with the given segment densification (range 0.0-1.0).</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_interiorringn"></a><code>st_interiorringn(geometry: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the n-th (1-indexed) interior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon, or the ring does not exist.</p>
 </span></td></tr>
@@ -1838,6 +1862,10 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_maxdistance"></a><code>st_maxdistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the maximum distance across every pair of points comprising the given geometries. Note if the geometries are the same, it will return the maximum distance between the geometry’s vertexes.</p>
 </span></td></tr>
+<tr><td><a name="st_minimumclearance"></a><code>st_minimumclearance(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the minimum distance a vertex can move before producing an invalid geometry. Returns Infinity if no minimum clearance can be found (e.g. for a single point).</p>
+</span></td></tr>
+<tr><td><a name="st_minimumclearanceline"></a><code>st_minimumclearanceline(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a LINESTRING spanning the minimum distance a vertex can move before producing an invalid geometry. If no minimum clearance can be found (e.g. for a single point), an empty LINESTRING is returned.</p>
+</span></td></tr>
 <tr><td><a name="st_mlinefromtext"></a><code>st_mlinefromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_mlinefromtext"></a><code>st_mlinefromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
@@ -1969,6 +1997,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_polyfromwkb"></a><code>st_polyfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not Polygon, NULL is returned.</p>
 </span></td></tr>
+<tr><td><a name="st_polygon"></a><code>st_polygon(geometry: geometry, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Polygon from the given LineString and sets its SRID. It is equivalent to ST_MakePolygon with a single argument followed by ST_SetSRID.</p>
+</span></td></tr>
 <tr><td><a name="st_polygonfromtext"></a><code>st_polygonfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not Polygon, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_polygonfromtext"></a><code>st_polygonfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not Polygon, NULL is returned.</p>
@@ -1985,6 +2015,9 @@ East is azimuth π/2 (90 degrees); south is azimuth π (180 degrees); west is az
 Negative azimuth values and values greater than 2π (360 degrees) are supported.</p>
 </span></td></tr>
 <tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the DE-9IM spatial relation between geometry_a and geometry_b.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry, bnr: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the DE-9IM spatial relation between geometry_a and geometry_b using the given boundary node rule (1:OGC/MOD2, 2:Endpoint, 3:MultivalentEndpoint, 4:MonovalentEndpoint).</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_relate"></a><code>st_relate(geometry_a: geometry, geometry_b: geometry, pattern: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the DE-9IM spatial relation between geometry_a and geometry_b matches the DE-9IM pattern.</p>
