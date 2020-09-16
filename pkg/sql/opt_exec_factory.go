@@ -1531,7 +1531,7 @@ func (ef *execFactory) ConstructUpsert(
 		// in the table.
 		ups.run.tw.tabColIdxToRetIdx = row.ColMapping(tabDesc.Columns, returnColDescs)
 		ups.run.tw.returnCols = returnColDescs
-		ups.run.tw.collectRows = true
+		ups.run.tw.rowsNeeded = true
 	}
 
 	if autoCommit {
