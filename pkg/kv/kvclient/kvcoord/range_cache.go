@@ -1179,7 +1179,7 @@ func compareEntryDescs(a, b *rangeCacheEntry) int {
 		}
 	}
 
-	if a.desc.Equal(b.desc) {
+	if a.desc.Equal(&b.desc) {
 		return 0
 	}
 
