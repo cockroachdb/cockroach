@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -100,7 +101,7 @@ func (p *planner) SetClusterSetting(
 		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.
 		if _, ok := n.Value.(tree.DefaultVal); !ok {
 			expr := n.Value
-			expr = unresolvedNameToStrVal(expr)
+			expr = paramparse.UnresolvedNameToStrVal(expr)
 
 			var requiredType *types.T
 			var dummyHelper tree.IndexedVarHelper

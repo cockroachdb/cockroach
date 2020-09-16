@@ -2041,7 +2041,19 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td></tr>
 <tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the default index configuration.</p>
 </span></td></tr>
+<tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography, settings: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the index configuration specified
+by the settings parameter.</p>
+<p>The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX … WITH (…),
+e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
+SELECT ST_S2Covering(geography, ‘s2_max_level=15,s2_level_mod=3’).</p>
+</span></td></tr>
 <tr><td><a name="st_s2covering"></a><code>st_s2covering(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry which represents the S2 covering used by the index using the default index configuration.</p>
+</span></td></tr>
+<tr><td><a name="st_s2covering"></a><code>st_s2covering(geometry: geometry, settings: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry which represents the S2 covering used by the index using the index configuration specified
+by the settings parameter.</p>
+<p>The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX … WITH (…),
+e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
+SELECT ST_S2Covering(geometry, ‘s2_max_level=15,s2_level_mod=3’).</p>
 </span></td></tr>
 <tr><td><a name="st_scale"></a><code>st_scale(g: geometry, factor: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry scaled by taking in a Geometry as the factor.</p>
 </span></td></tr>
