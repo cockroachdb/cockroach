@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCancelSelectQuery(t *testing.T) {
@@ -609,7 +610,6 @@ func TestIdleInSessionTimeout(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	var err error
 	conn, err := tc.ServerConn(0).Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -848,6 +848,42 @@ func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
 		t.Fatal("expected the connection to be killed " +
 			"but the connection is still alive")
 	}
+}
+
+func TestStatementTimeoutRetryableErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.QueryContext(ctx,
+		`SET statement_timeout = '0.1s'`)
+	require.NoError(t, err)
+
+	testutils.RunTrueAndFalse(t, "test statement timeout with explicit txn",
+		func(t *testing.T, explicitTxn bool) {
+			query := `SELECT crdb_internal.force_retry('2s');`
+			if explicitTxn {
+				query = `BEGIN; ` + query + ` COMMIT;`
+			}
+			startTime := timeutil.Now()
+			_, err = conn.QueryContext(ctx, query)
+			require.Regexp(t, "pq: query execution canceled due to statement timeout", err)
+
+			// The query timeout should be triggered and therefore the force retry
+			// should not last for 2 seconds as specified.
+			if timeutil.Since(startTime) >= 2*time.Second {
+				t.Fatal("expected the query to error out due to the statement_timeout.")
+			}
+		})
 }
 
 func getUserConn(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {

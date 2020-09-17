@@ -280,11 +280,34 @@ func (ex *connExecutor) execStmtInOpenState(
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
 		if res != nil && ctx.Err() != nil && res.Err() != nil {
-			if queryTimedOut {
-				res.SetError(sqlerrors.QueryTimeoutError)
-			} else {
-				res.SetError(cancelchecker.QueryCanceledError)
+			// Even in the cases where the error is a retryable error, we want to
+			// intercept the event and payload returned here to ensure that the query
+			// is not retried.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(stmt.AST)),
 			}
+			res.SetError(cancelchecker.QueryCanceledError)
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
+		}
+
+		// If the query timed out, we intercept the error, payload, and event here
+		// for the same reasons we intercept them for canceled queries above.
+		// Overriding queries with a QueryTimedOut error needs to happen after
+		// we've checked for canceled queries as some queries may be canceled
+		// because of a timeout, in which case the appropriate error to return to
+		// the client is one that indicates the timeout, rather than the more general
+		// query canceled error. It's important to note that a timed out query may
+		// not have been canceled (eg. We never even start executing a query
+		// because the timeout has already expired), and therefore this check needs
+		// to happen outside the canceled query check above.
+		if queryTimedOut {
+			// A timed out query should never produce retryable errors/events/payloads
+			// so we intercept and overwrite them all here.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(stmt.AST)),
+			}
+			res.SetError(sqlerrors.QueryTimeoutError)
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 		}
 	}
 	// Generally we want to unregister after the auto-commit below. However, in
@@ -376,9 +399,22 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
-	if ex.sessionData.StmtTimeout > 0 {
+	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
+		ev, payload := ex.makeErrEvent(err, stmt.AST)
+		return ev, payload, nil
+	}
+
+	// We exempt `SET` statements from the statement timeout, particularly so as
+	// not to block the `SET statement_timeout` command itself.
+	if ex.sessionData.StmtTimeout > 0 && stmt.AST.StatementTag() != "SET" {
+		timerDuration := ex.sessionData.StmtTimeout - timeutil.Since(ex.phaseTimes[sessionQueryReceived])
+		// There's no need to proceed with execution if the timer has already expired.
+		if timerDuration < 0 {
+			queryTimedOut = true
+			return makeErrEvent(sqlerrors.QueryTimeoutError)
+		}
 		timeoutTicker = time.AfterFunc(
-			ex.sessionData.StmtTimeout-timeutil.Since(ex.phaseTimes[sessionQueryReceived]),
+			timerDuration,
 			func() {
 				ex.cancelQuery(stmt.queryID)
 				queryTimedOut = true
@@ -404,11 +440,6 @@ func (ex *connExecutor) execStmtInOpenState(
 			return
 		}
 	}()
-
-	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, stmt.AST)
-		return ev, payload, nil
-	}
 
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:

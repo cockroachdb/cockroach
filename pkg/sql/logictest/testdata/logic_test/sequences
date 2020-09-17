@@ -890,7 +890,7 @@ DROP SEQUENCE sv
 subtest generator_timeout
 
 statement ok
-SET statement_timeout = 1
+SET statement_timeout = 10
 
 statement error pq: query execution canceled due to statement timeout
 select * from generate_series(1,10000000) where generate_series = 0;
