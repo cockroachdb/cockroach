@@ -1237,8 +1237,8 @@ create_database_stmt ::=
 	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
 
 create_index_stmt ::=
-	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
-	| 'CREATE' opt_unique 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	| 'CREATE' opt_unique 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
 
@@ -1703,7 +1703,7 @@ opt_unique ::=
 opt_index_name ::=
 	opt_name
 
-opt_using_gin_btree ::=
+opt_index_access_method ::=
 	'USING' name
 	| 
 
@@ -2129,7 +2129,9 @@ opt_name ::=
 	| 
 
 index_elem ::=
-	a_expr opt_asc_desc opt_nulls_order
+	func_expr_windowless index_elem_options
+	| '(' a_expr ')' index_elem_options
+	| name index_elem_options
 
 storing ::=
 	'COVERING'
@@ -2424,15 +2426,12 @@ tuple1_ambiguous_values ::=
 	| a_expr ','
 	| a_expr ',' expr_list
 
-opt_asc_desc ::=
-	'ASC'
-	| 'DESC'
-	| 
+func_expr_windowless ::=
+	func_application
+	| func_expr_common_subexpr
 
-opt_nulls_order ::=
-	'NULLS' 'FIRST'
-	| 'NULLS' 'LAST'
-	| 
+index_elem_options ::=
+	opt_class opt_asc_desc opt_nulls_order
 
 list_partitions ::=
 	( list_partition ) ( ( ',' list_partition ) )*
@@ -2453,6 +2452,16 @@ materialize_clause ::=
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
+
+opt_asc_desc ::=
+	'ASC'
+	| 'DESC'
+	| 
+
+opt_nulls_order ::=
+	'NULLS' 'FIRST'
+	| 'NULLS' 'LAST'
+	| 
 
 col_qualification ::=
 	'CONSTRAINT' constraint_name col_qualification_elem
@@ -2506,10 +2515,6 @@ join_type ::=
 join_qual ::=
 	'USING' '(' name_list ')'
 	| 'ON' a_expr
-
-func_expr_windowless ::=
-	func_application
-	| func_expr_common_subexpr
 
 rowsfrom_list ::=
 	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
@@ -2686,6 +2691,10 @@ opt_slice_bound ::=
 
 when_clause ::=
 	'WHEN' a_expr 'THEN' a_expr
+
+opt_class ::=
+	name
+	| 
 
 list_partition ::=
 	partition 'VALUES' 'IN' '(' expr_list ')' opt_partition_by

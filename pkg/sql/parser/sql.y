@@ -685,7 +685,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 // needed to make the grammar LALR(1). GENERATED_ALWAYS is needed to support
 // the Postgres syntax for computed columns along with our family related
 // extensions (CREATE FAMILY/CREATE FAMILY family_name).
-%token NOT_LA WITH_LA AS_LA GENERATED_ALWAYS
+%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS
 
 %union {
   id    int32
@@ -935,7 +935,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.KVOption> role_option password_clause valid_until_clause
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name func_name_no_crdb_extra
-%type <str> opt_collate
+%type <str> opt_class opt_collate
 
 %type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
@@ -1014,7 +1014,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.Expr> overlay_placing
 
 %type <bool> opt_unique opt_concurrently opt_cluster
-%type <bool> opt_using_gin_btree
+%type <bool> opt_index_access_method
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
 %type <tree.Expr> select_fetch_first_value
@@ -1055,7 +1055,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.AliasClause> alias_clause opt_alias_clause
 %type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
-%type <tree.IndexElem> index_elem create_as_param
+%type <tree.IndexElem> index_elem index_elem_options create_as_param
 %type <tree.TableExpr> table_ref numeric_table_ref func_table
 %type <tree.Exprs> rowsfrom_list
 %type <tree.Expr> rowsfrom_item
@@ -6618,7 +6618,7 @@ enum_val_list:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
+  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -6636,7 +6636,7 @@ create_index_stmt:
       Concurrently:  $4.bool(),
     }
   }
-| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
+| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     table := $10.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -6692,7 +6692,7 @@ create_index_stmt:
   }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
 
-opt_using_gin_btree:
+opt_index_access_method:
   USING name
   {
     /* FORCE DOC */
@@ -6747,12 +6747,36 @@ index_params:
 // expressions in parens. For backwards-compatibility reasons, we allow an
 // expression that is just a function call to be written without parens.
 index_elem:
-  a_expr opt_asc_desc opt_nulls_order
+  func_expr_windowless index_elem_options
   {
     /* FORCE DOC */
-    e := $1.expr()
+    return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", $1))
+  }
+| '(' a_expr ')' index_elem_options
+  {
+    /* FORCE DOC */
+    return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", $2))
+  }
+| name index_elem_options
+  {
+    e := $2.idxElem()
+    e.Column = tree.Name($1)
+    $$.val = e
+  }
+
+index_elem_options:
+  opt_class opt_asc_desc opt_nulls_order
+  {
+    /* FORCE DOC */
+    opClass := $1
     dir := $2.dir()
     nullsOrder := $3.nullsOrder()
+    if opClass != "" {
+      if opClass == "gin_trgm_ops" || opClass == "gist_trgm_ops" {
+        return unimplementedWithIssueDetail(sqllex, 41285, "index using " + opClass)
+      }
+      return unimplementedWithIssue(sqllex, 47420)
+    }
     // We currently only support the opposite of Postgres defaults.
     if nullsOrder != tree.DefaultNullsOrder {
       if dir == tree.Descending && nullsOrder == tree.NullsFirst {
@@ -6762,12 +6786,12 @@ index_elem:
         return unimplementedWithIssue(sqllex, 6224)
       }
     }
-    if colName, ok := e.(*tree.UnresolvedName); ok && colName.NumParts == 1 {
-      $$.val = tree.IndexElem{Column: tree.Name(colName.Parts[0]), Direction: dir, NullsOrder: nullsOrder}
-    } else {
-      return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", e))
-    }
+    $$.val = tree.IndexElem{Direction: dir, NullsOrder: nullsOrder}
   }
+
+opt_class:
+  name { $$ = $1 }
+| /* EMPTY */ { $$ = "" }
 
 opt_collate:
   COLLATE collation_name { $$ = $2 }
@@ -8010,11 +8034,11 @@ sortby:
   }
 
 opt_nulls_order:
-  NULLS FIRST
+  NULLS_LA FIRST
   {
     $$.val = tree.NullsFirst
   }
-| NULLS LAST
+| NULLS_LA LAST
   {
     $$.val = tree.NullsLast
   }
