@@ -593,6 +593,7 @@ statistics                         NULL
 table_constraints                  NULL
 table_privileges                   NULL
 tables                             NULL
+type_privileges                    NULL
 user_privileges                    NULL
 views                              NULL
 pg_aggregate                       NULL
