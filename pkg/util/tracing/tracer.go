@@ -71,6 +71,19 @@ var zipkinCollector = settings.RegisterStringSetting(
 	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
 ).WithPublic()
 
+// The default comes from zipkintracer.defaultHTTPBatchSize
+var zipkinCollectorBatchSize = settings.RegisterIntSetting(
+	"trace.zipkin.collector.batch.size",
+	"if set, sets the maximum batch size after which traces will be collected",
+	100,
+	func(value int64) error {
+		if value < 1 {
+			return errors.New("batch sizes must be greater or equal to 1")
+		}
+		return nil
+	},
+)
+
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //
 //  - forwarding events to x/net/trace instances
@@ -117,7 +130,10 @@ func (t *Tracer) Configure(sv *settings.Values) {
 		if lsToken := lightstepToken.Get(sv); lsToken != "" {
 			t.setShadowTracer(createLightStepTracer(lsToken))
 		} else if zipkinAddr := zipkinCollector.Get(sv); zipkinAddr != "" {
-			t.setShadowTracer(createZipkinTracer(zipkinAddr))
+			t.setShadowTracer(createZipkinTracer(
+				zipkinAddr,
+				zipkinCollectorBatchSize.Get(sv),
+			))
 		} else {
 			t.setShadowTracer(nil, nil)
 		}
@@ -133,6 +149,7 @@ func (t *Tracer) Configure(sv *settings.Values) {
 	enableNetTrace.SetOnChange(sv, reconfigure)
 	lightstepToken.SetOnChange(sv, reconfigure)
 	zipkinCollector.SetOnChange(sv, reconfigure)
+	zipkinCollectorBatchSize.SetOnChange(sv, reconfigure)
 }
 
 func (t *Tracer) useNetTrace() bool {
