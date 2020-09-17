@@ -256,6 +256,14 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
 	}
 	cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck = true
+
+	if params.Knobs.SQLExecutor == nil {
+		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
+	}
+	if !params.DisableTestingDescriptorValidation {
+		cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs).TestingDescriptorValidation = true
+	}
+
 	return cfg
 }
 

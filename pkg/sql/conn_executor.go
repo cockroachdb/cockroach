@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1282,14 +1283,22 @@ func (ex *connExecutor) resetExtraTxnState(
 // Ctx returns the transaction's ctx, if we're inside a transaction, or the
 // session's context otherwise.
 func (ex *connExecutor) Ctx() context.Context {
+	ctx := ex.state.Ctx
 	if _, ok := ex.machine.CurState().(stateNoTxn); ok {
-		return ex.ctxHolder.ctx()
+		ctx = ex.ctxHolder.ctx()
 	}
 	// stateInternalError is used by the InternalExecutor.
 	if _, ok := ex.machine.CurState().(stateInternalError); ok {
-		return ex.ctxHolder.ctx()
+		ctx = ex.ctxHolder.ctx()
 	}
-	return ex.state.Ctx
+	return ex.DescriptorValidationContext(ctx)
+}
+
+func (ex *connExecutor) DescriptorValidationContext(ctx context.Context) context.Context {
+	if ex.server.cfg.TestingKnobs.TestingDescriptorValidation {
+		return context.WithValue(ctx, tabledesc.PerformTestingDescriptorValidation, true)
+	}
+	return ctx
 }
 
 // activate engages the use of resources that must be cleaned up

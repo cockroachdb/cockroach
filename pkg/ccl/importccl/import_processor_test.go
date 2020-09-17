@@ -92,10 +92,10 @@ func TestConverterFlushesBatches(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(nil)
 
 	tests := []testSpec{
-		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
-		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
-		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
-		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_OCF), "testdata/avro/simple.ocf"),
+		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_OCF), "testdata/avro/simple.ocf"),
 	}
 
 	const endBatchSize = -1
@@ -226,6 +226,7 @@ var eofOffset int64 = math.MaxInt64
 func TestImportIgnoresProcessedFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	evalCtx := tree.MakeTestingEvalContext(nil)
 	flowCtx := &execinfra.FlowCtx{
@@ -251,32 +252,32 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	}{
 		{
 			"csv-two-invalid",
-			newTestSpec(t, csvFormat(), "__invalid__", "testdata/csv/data-0", "/_/missing/_"),
+			newTestSpec(ctx, t, csvFormat(), "__invalid__", "testdata/csv/data-0", "/_/missing/_"),
 			[]int64{eofOffset, 0, eofOffset},
 		},
 		{
 			"csv-all-invalid",
-			newTestSpec(t, csvFormat(), "__invalid__", "../../&"),
+			newTestSpec(ctx, t, csvFormat(), "__invalid__", "../../&"),
 			[]int64{eofOffset, eofOffset},
 		},
 		{
 			"csv-all-valid",
-			newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
+			newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
 			[]int64{0},
 		},
 		{
 			"mysql-one-invalid",
-			newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql", "/_/missing/_"),
+			newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql", "/_/missing/_"),
 			[]int64{0, eofOffset},
 		},
 		{
 			"pgdump-one-input",
-			newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+			newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
 			[]int64{0},
 		},
 		{
 			"avro-one-invalid",
-			newTestSpec(t, avroFormat(t, roachpb.AvroOptions_OCF), "__invalid__", "testdata/avro/simple.ocf"),
+			newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_OCF), "__invalid__", "testdata/avro/simple.ocf"),
 			[]int64{eofOffset, 0},
 		},
 	}
@@ -307,7 +308,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 				t.Fatalf("Could not create data processor: %v", err)
 			}
 
-			processor.Run(context.Background())
+			processor.Run(ctx)
 		})
 	}
 }
@@ -325,6 +326,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
 
 	pkBulkAdder := &doNothingKeyAdder{}
+	ctx := context.Background()
 
 	evalCtx := tree.MakeTestingEvalContext(nil)
 	flowCtx := &execinfra.FlowCtx{
@@ -352,12 +354,12 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	// NB: We assume that the (external) test files are sorted and
 	// contain sufficient number of rows.
 	testSpecs := []testSpec{
-		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
-		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
-		newTestSpec(t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
-		newTestSpec(t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
-		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
-		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
+		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(ctx, t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
+		newTestSpec(ctx, t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
+		newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
 	}
 
 	resumes := []int64{0, 10, 64, eofOffset}
@@ -416,7 +418,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					}
 				}()
 
-				_, err := runImport(context.Background(), flowCtx, spec, progCh)
+				_, err := runImport(ctx, flowCtx, spec, progCh)
 
 				if err != nil {
 					t.Fatal(err)
@@ -450,6 +452,7 @@ func (a *duplicateKeyErrorAdder) Add(_ context.Context, k roachpb.Key, v []byte)
 func TestImportHandlesDuplicateKVs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	batchSize := 13
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
@@ -473,12 +476,12 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 	// In this test, we'll attempt to import different input formats.
 	// All imports produce a DuplicateKeyError, which we expect to be propagated.
 	testSpecs := []testSpec{
-		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
-		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
-		newTestSpec(t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
-		newTestSpec(t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
-		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
-		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
+		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(ctx, t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(ctx, t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
+		newTestSpec(ctx, t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
+		newTestSpec(ctx, t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(ctx, t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
 	}
 
 	for _, testCase := range testSpecs {
@@ -492,7 +495,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 				}
 			}()
 
-			_, err := runImport(context.Background(), flowCtx, spec, progCh)
+			_, err := runImport(ctx, flowCtx, spec, progCh)
 			require.True(t, errors.HasType(err, &kvserverbase.DuplicateKeyError{}))
 		})
 	}
@@ -897,7 +900,9 @@ func externalStorageFactory(
 }
 
 // Helper to create and initialize testSpec.
-func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) testSpec {
+func newTestSpec(
+	ctx context.Context, t *testing.T, format roachpb.IOFileFormat, inputs ...string,
+) testSpec {
 	spec := testSpec{
 		format: format,
 		inputs: make(map[int32]string),
@@ -908,7 +913,7 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 	var descr *tabledesc.Mutable
 	switch format.Format {
 	case roachpb.IOFileFormat_CSV:
-		descr = descForTable(t,
+		descr = descForTable(ctx, t,
 			"CREATE TABLE simple (i INT PRIMARY KEY, s text )", 10, 20, NoFKs)
 	case
 		roachpb.IOFileFormat_Mysqldump,
@@ -916,7 +921,7 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 		roachpb.IOFileFormat_PgDump,
 		roachpb.IOFileFormat_PgCopy,
 		roachpb.IOFileFormat_Avro:
-		descr = descForTable(t,
+		descr = descForTable(ctx, t,
 			"CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 10, 20, NoFKs)
 	default:
 		t.Fatalf("Unsupported input format: %v", format)

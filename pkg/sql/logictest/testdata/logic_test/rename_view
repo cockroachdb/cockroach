@@ -1,3 +1,6 @@
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
 statement error pgcode 42P01 relation "foo" does not exist
 ALTER VIEW foo RENAME TO bar
 

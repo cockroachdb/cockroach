@@ -94,7 +94,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	}
 	// Assign an ID to the newly-added shard column, which is needed for the creation
 	// of a valid check constraint.
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err
 	}
 
@@ -373,7 +373,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	if n.n.Concurrently {
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are created concurrently"),
 		)
@@ -382,7 +382,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
 	if n.n.PartitionBy == nil && n.tableDesc.PrimaryIndex.Partitioning.NumColumns > 0 {
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			errors.WithHint(
 				pgnotice.Newf("creating non-partitioned index on partitioned table may not be performant"),
@@ -422,7 +422,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if err := n.tableDesc.AddIndexMutation(indexDesc, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := n.tableDesc.AllocateIDs(); err != nil {
+	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
 		return err
 	}
 	// The index name may have changed as a result of

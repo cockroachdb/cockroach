@@ -114,7 +114,7 @@ func (p *planner) addEnumValue(
 	for _, member := range n.desc.EnumMembers {
 		if member.LogicalRepresentation == node.NewVal {
 			if node.IfNotExists {
-				p.SendClientNotice(
+				p.BufferClientNotice(
 					ctx,
 					pgnotice.Newf("enum label %q already exists, skipping", node.NewVal),
 				)

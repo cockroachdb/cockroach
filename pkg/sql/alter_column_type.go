@@ -123,7 +123,7 @@ func AlterColumnType(
 		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, tree.AsStringWithFQNames(t, params.Ann()), tableDesc.ClusterVersion.NextMutationID); err != nil {
 			return err
 		}
-		params.p.SendClientNotice(params.ctx, pgnotice.Newf("ALTER COLUMN TYPE changes are finalized asynchronously; "+
+		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("ALTER COLUMN TYPE changes are finalized asynchronously; "+
 			"further schema changes on this table may be restricted until the job completes; "+
 			"some writes to the altered column may be rejected until the schema change is finalized"))
 	default:
@@ -352,7 +352,7 @@ func alterColumnTypeGeneral(
 
 	tableDesc.AddColumnMutation(&newCol, descpb.DescriptorMutation_ADD)
 
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err
 	}
 

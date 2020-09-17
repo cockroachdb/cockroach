@@ -76,7 +76,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("index"))
 
 	if n.n.Concurrently {
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are dropped concurrently"),
 		)
@@ -170,7 +170,7 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 		}
 	}
 
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.AllocateIDs(params.ctx); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion.NextMutationID
@@ -514,7 +514,7 @@ func (p *planner) dropIndexByName(
 	if err := p.writeSchemaChange(ctx, tableDesc, mutationID, jobDesc); err != nil {
 		return err
 	}
-	p.SendClientNotice(
+	p.BufferClientNotice(
 		ctx,
 		errors.WithHint(
 			pgnotice.Newf("the data for dropped indexes is reclaimed asynchronously"),

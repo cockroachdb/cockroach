@@ -174,7 +174,7 @@ func (p *planner) AlterPrimaryKey(
 	if err := tableDesc.AddIndexMutation(newPrimaryIndexDesc, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err
 	}
 
@@ -223,7 +223,7 @@ func (p *planner) AlterPrimaryKey(
 		// Make the copy of the old primary index not-interleaved. This decision
 		// can be revisited based on user experience.
 		oldPrimaryIndexCopy.Interleave = descpb.InterleaveDescriptor{}
-		if err := addIndexMutationWithSpecificPrimaryKey(tableDesc, oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
+		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
 			return err
 		}
 	}
@@ -281,7 +281,7 @@ func (p *planner) AlterPrimaryKey(
 		newIndex := protoutil.Clone(idx).(*descpb.IndexDescriptor)
 		basename := newIndex.Name + "_rewrite_for_primary_key_change"
 		newIndex.Name = tabledesc.GenerateUniqueConstraintName(basename, nameExists)
-		if err := addIndexMutationWithSpecificPrimaryKey(tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
+		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
 			return err
 		}
 		// If the index that we are rewriting is interleaved, we need to setup the rewritten
@@ -315,7 +315,7 @@ func (p *planner) AlterPrimaryKey(
 
 	// Send a notice to users about the async cleanup jobs.
 	// TODO(knz): Mention the job ID in the client notice.
-	p.SendClientNotice(
+	p.BufferClientNotice(
 		ctx,
 		pgnotice.Newf(
 			"primary key changes are finalized asynchronously; "+

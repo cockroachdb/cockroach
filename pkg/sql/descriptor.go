@@ -163,7 +163,7 @@ func (p *planner) createDescriptorWithID(
 		}
 	case *tabledesc.Mutable:
 		isTable = true
-		if err := desc.ValidateTable(); err != nil {
+		if err := desc.ValidateTable(ctx); err != nil {
 			return err
 		}
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {

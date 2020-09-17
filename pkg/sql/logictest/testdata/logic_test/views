@@ -1,3 +1,6 @@
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
 # NOTE: Keep this table at the beginning of the file to ensure that its numeric
 #       reference is 53 (the numeric reference of the first table). If the
 #       numbering scheme in cockroach changes, this test will break.
@@ -762,3 +765,70 @@ CREATE VIEW vregclass AS SELECT 1 FROM (SELECT 1) AS foo WHERE 'tregclass'::regc
 
 statement error pq: cannot drop relation "tregclass" because view "vregclass" depends on it
 DROP TABLE tregclass
+
+# Test that we disallow cross-database references from views, depending on the
+# cluster setting.
+subtest cross_db_views
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = FALSE
+
+statement ok
+CREATE DATABASE db1
+
+statement ok
+CREATE DATABASE db2
+
+statement ok
+USE db1
+
+statement ok
+CREATE TABLE ab (a INT, b INT)
+
+statement ok
+CREATE VIEW v1 AS SELECT a+b FROM ab
+
+statement ok
+CREATE VIEW db1.public.v2 AS SELECT a+b FROM db1.public.ab
+
+statement error the view cannot refer to other databases
+CREATE VIEW db2.v AS SELECT a+b FROM db1.public.ab
+
+# Verify that cross-schema views are allowed.
+statement ok
+CREATE SCHEMA sc2
+
+statement ok
+CREATE VIEW db1.sc2.v AS SELECT a+b FROM db1.public.ab
+
+statement ok
+CREATE TABLE db1.sc2.cd (c INT, d INT)
+
+statement ok
+CREATE VIEW db1.public.v3 AS SELECT a+b+c+d FROM db1.public.ab, db1.sc2.cd
+
+# Verify that views involving system tables are allowed.
+
+statement ok
+CREATE VIEW sys AS SELECT id FROM system.descriptor
+
+statement ok
+CREATE VIEW sys2 AS SELECT id, a+b FROM system.descriptor, ab
+
+statement ok
+USE db2
+
+statement ok
+CREATE TABLE cd (c INT, d INT)
+
+statement error the view cannot refer to other databases
+CREATE VIEW v AS SELECT a+b+c+d FROM cd, db1.public.ab
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
+
+statement ok
+CREATE VIEW db2.v1 AS SELECT a+b FROM db1.public.ab
+
+statement ok
+CREATE VIEW db2.v2 AS SELECT a+b+c+d FROM cd, db1.public.ab

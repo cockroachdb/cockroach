@@ -330,7 +330,7 @@ func unwrapDescriptorMutable(
 		if err != nil {
 			return nil, err
 		}
-		if err := mutTable.ValidateTable(); err != nil {
+		if err := mutTable.ValidateTable(ctx); err != nil {
 			return nil, err
 		}
 		return mutTable, nil

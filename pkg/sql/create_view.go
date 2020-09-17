@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -64,6 +65,18 @@ func (n *createViewNode) startExec(params runParams) error {
 	persistence := n.persistence
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
+	// Check that the view does not contain references to other databases.
+	if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
+		for _, dep := range n.planDeps {
+			if dbID := dep.desc.ParentID; dbID != n.dbDesc.ID && dbID != keys.SystemDatabaseID {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"the view cannot refer to other databases; (see the '%s' cluster setting)",
+					allowCrossDatabaseViewsSetting,
+				)
+			}
+		}
+	}
+
 	// First check the backrefs and see if any of them are temporary.
 	// If so, promote this view to temporary.
 	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable, len(n.planDeps))
@@ -74,7 +87,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 		if !persistence.IsTemporary() && backRefMutable.Temporary {
 			// This notice is sent from pg, let's imitate.
-			params.p.SendClientNotice(
+			params.p.BufferClientNotice(
 				params.ctx,
 				pgnotice.Newf(`view "%s" will be a temporary view`, viewName),
 			)
@@ -176,7 +189,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			desc.IsMaterializedView = true
 			desc.State = descpb.DescriptorState_ADD
 			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
-			if err := desc.AllocateIDs(); err != nil {
+			if err := desc.AllocateIDs(params.ctx); err != nil {
 				return err
 			}
 		}
@@ -394,7 +407,7 @@ func addResultColumns(
 		}
 		desc.AddColumn(col)
 	}
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		return err
 	}
 	return nil

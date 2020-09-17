@@ -316,14 +316,15 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s := "CREATE TABLE foo.test (a INT, b INT, CONSTRAINT c UNIQUE (b))"
-	desc, err := CreateTestTableDescriptor(context.Background(), 1, 100, s,
+	ctx := context.Background()
+	desc, err := CreateTestTableDescriptor(ctx, 1, 100, s,
 		descpb.NewDefaultPrivilegeDescriptor(security.AdminRole))
 	if err != nil {
 		t.Fatal(err)
 	}
 	desc.PrimaryIndex = descpb.IndexDescriptor{}
 
-	err = desc.ValidateTable()
+	err = desc.ValidateTable(ctx)
 	if !testutils.IsError(err, tabledesc.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
 	}

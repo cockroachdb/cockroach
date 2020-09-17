@@ -285,7 +285,7 @@ func (p *planner) writeTableDescToBatch(
 		}
 	}
 
-	if err := tableDesc.ValidateTable(); err != nil {
+	if err := tableDesc.ValidateTable(ctx); err != nil {
 		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 

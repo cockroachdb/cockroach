@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -688,13 +689,13 @@ type CommandResultClose interface {
 type RestrictedCommandResult interface {
 	CommandResultErrBase
 
-	// AppendParamStatusUpdate appends a parameter status update to the result.
+	// BufferParamStatusUpdate buffers a parameter status update to the result.
 	// This gets flushed only when the CommandResult is closed.
-	AppendParamStatusUpdate(string, string)
+	BufferParamStatusUpdate(string, string)
 
-	// AppendNotice appends a notice to the result.
+	// BufferNotice appends a notice to the result.
 	// This gets flushed only when the CommandResult is closed.
-	AppendNotice(noticeErr error)
+	BufferNotice(notice pgnotice.Notice)
 
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
@@ -883,13 +884,13 @@ func (r *bufferedCommandResult) SetColumns(_ context.Context, cols colinfo.Resul
 	r.cols = cols
 }
 
-// AppendParamStatusUpdate is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) AppendParamStatusUpdate(key string, val string) {
+// BufferParamStatusUpdate is part of the RestrictedCommandResult interface.
+func (r *bufferedCommandResult) BufferParamStatusUpdate(key string, val string) {
 	panic("unimplemented")
 }
 
-// AppendNotice is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) AppendNotice(noticeErr error) {
+// BufferNotice is part of the RestrictedCommandResult interface.
+func (r *bufferedCommandResult) BufferNotice(notice pgnotice.Notice) {
 	panic("unimplemented")
 }
 
