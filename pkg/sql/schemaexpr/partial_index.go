@@ -214,12 +214,13 @@ func FormatIndexForDisplay(
 	}
 
 	if index.IsPartial() {
-		f.WriteString(" WHERE ")
 		pred, err := FormatExprForDisplay(ctx, table, index.Predicate, semaCtx, tree.FmtParsable)
 		if err != nil {
 			return "", err
 		}
+		f.WriteString(" WHERE (")
 		f.WriteString(pred)
+		f.WriteString(")")
 	}
 
 	return f.CloseAndGetString(), nil

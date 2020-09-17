@@ -2084,12 +2084,12 @@ CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test USING btree 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_idx'))
 ----
-CREATE INDEX pg_indexdef_partial_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE a > 0
+CREATE INDEX pg_indexdef_partial_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (a > 0)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_enum_idx'))
 ----
-CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE e IN ('foo'::public.testenum, 'bar'::public.testenum)
+CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::public.testenum, 'bar'::public.testenum))
 
 query T
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -2186,7 +2186,7 @@ FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
 UNIQUE (b ASC)
-UNIQUE (a ASC) WHERE d = 'foo'::STRING
+UNIQUE (a ASC) WHERE (d = 'foo'::STRING)
 FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
 CHECK ((c > a))
 

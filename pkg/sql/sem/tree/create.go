@@ -179,8 +179,9 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString(")")
 	}
 	if node.Predicate != nil {
-		ctx.WriteString(" WHERE ")
+		ctx.WriteString(" WHERE (")
 		ctx.FormatNode(node.Predicate)
+		ctx.WriteString(")")
 	}
 }
 
