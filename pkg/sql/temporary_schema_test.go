@@ -327,12 +327,17 @@ func TestTemporarySchemaDropDatabase(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `DROP DATABASE drop_me CASCADE`)
 
-		var tempObjectCount int
-		sqlDB.QueryRow(
-			t,
-			`SELECT count(1) FROM system.namespace WHERE name LIKE 'pg_temp%' OR name IN ('t', 't2')`,
-		).Scan(&tempObjectCount)
-		assert.Equal(t, 0, tempObjectCount)
+		testutils.SucceedsSoon(t, func() error {
+			var tempObjectCount int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(1) FROM system.namespace WHERE name LIKE 'pg_temp%' OR name IN ('t', 't2')`,
+			).Scan(&tempObjectCount)
+			if tempObjectCount == 0 {
+				return nil
+			}
+			return errors.AssertionFailedf("expected count 0, got %d", tempObjectCount)
+		})
 	}
 }
 
