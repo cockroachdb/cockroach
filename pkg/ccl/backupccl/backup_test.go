@@ -5216,6 +5216,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 
 	// Setup for sequence ownership backup/restore tests in the same database.
 	backupLoc := LocalFoo + `/d`
+	origDB.Exec(t, "SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE")
 	origDB.Exec(t, `CREATE DATABASE d`)
 	origDB.Exec(t, `CREATE TABLE d.t(a int)`)
 	origDB.Exec(t, `CREATE SEQUENCE d.seq OWNED BY d.t.a`)
