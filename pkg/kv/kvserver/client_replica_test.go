@@ -1854,7 +1854,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 				if len(desc.Replicas().Learners()) > 0 {
 					return false, fmt.Errorf("descriptor contains learners: %v", desc)
 				}
-				if existing, ok := replicas[desc.RangeID]; ok && !existing.Equal(desc) {
+				if existing, ok := replicas[desc.RangeID]; ok && !existing.Equal(&desc) {
 					return false, fmt.Errorf("mismatch between\n%s\n%s", &existing, &desc)
 				}
 				replicas[desc.RangeID] = desc
