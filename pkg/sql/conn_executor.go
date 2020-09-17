@@ -292,10 +292,12 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		Metrics:         makeMetrics(false /*internal*/),
 		InternalMetrics: makeMetrics(true /*internal*/),
 		// dbCache will be updated on Start().
-		dbCache:       newDatabaseCacheHolder(database.NewCache(cfg.Codec, systemCfg)),
-		pool:          pool,
-		sqlStats:      sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
-		reportedStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		dbCache: newDatabaseCacheHolder(database.NewCache(cfg.Codec, systemCfg)),
+		pool:    pool,
+		// TODO(arul): Is it okay to hang this boundAccount off the pool or do we
+		// need another monitor that is a child of pool?
+		sqlStats:      sqlStats{st: cfg.Settings, apps: make(map[string]*appStats), sqlStatsMemAccount: pool.MakeBoundAccount()},
+		reportedStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats), sqlStatsMemAccount: pool.MakeBoundAccount()},
 		reCache:       tree.NewRegexpCache(512),
 	}
 }

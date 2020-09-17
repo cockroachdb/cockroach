@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -344,6 +346,25 @@ func (a *appStats) Add(other *appStats) {
 	a.txnCounts.mu.Unlock()
 }
 
+// size returns the approximate size of appStats by accounting for the stored
+// transaction and statement statistics. These are the interesting fields that
+// make the bulk of the size and may grow unboundedly.
+func (a *appStats) size() int {
+	a.Lock()
+	defer a.Unlock()
+	size := 0
+	for k, v := range a.stmts {
+		size += int(unsafe.Sizeof(k))
+		size += int(unsafe.Sizeof(*v))
+	}
+
+	for k, v := range a.txns {
+		size += int(unsafe.Sizeof(k))
+		size += int(unsafe.Sizeof(*v))
+	}
+	return size
+}
+
 func anonymizeStmt(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
@@ -458,6 +479,9 @@ type sqlStats struct {
 	lastReset time.Time
 	// apps is the container for all the per-application statistics objects.
 	apps map[string]*appStats
+	// sqlStatsMemAccount is used to ensure the memory usage of collected stats
+	// doesn't grow too large.
+	sqlStatsMemAccount mon.BoundAccount
 }
 
 func (s *sqlStats) getStatsForApplication(appName string) *appStats {
@@ -473,6 +497,34 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	}
 	s.apps[appName] = a
 	return a
+}
+
+func (s *sqlStats) resetStatsIfUsingTooMuchMemory(ctx context.Context, target *sqlStats) {
+	size := int64(s.size())
+	s.Lock()
+	err := s.sqlStatsMemAccount.ResizeTo(ctx, size)
+	s.Unlock()
+	// If we are unable to resize the account (err != nil), we've run out of
+	// memory before sqlStats could be cleared by the periodic loop that's
+	// responsible for ensuring sqlStats doesn't get too big. We manually reset
+	// sqlStats in this case.
+	if err != nil {
+		log.Infof(ctx, "resetting sql stats because memory limit %d reached\n", size)
+		s.resetAndMaybeDumpStats(ctx, target)
+	}
+}
+
+// size calculates the approximate size of sqlStats by measuring the size of
+// individual appStats, which make the bulk of sqlStats, and may grow
+// unboundedly.
+func (s *sqlStats) size() int {
+	s.Lock()
+	defer s.Unlock()
+	size := 0
+	for _, a := range s.apps {
+		size += a.size()
+	}
+	return size
 }
 
 // resetAndMaybeDumpStats clears all the stored per-app, per-statement and
@@ -495,6 +547,9 @@ func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats)
 	var appStatsCopy map[string]*appStats
 
 	s.Lock()
+
+	// Clear the memory accounting accumulated so far.
+	s.sqlStatsMemAccount.Clear(ctx)
 
 	if target != nil {
 		appStatsCopy = make(map[string]*appStats, len(s.apps))
@@ -538,6 +593,9 @@ func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats)
 			// Add manages locks for itself, so we don't need to guard it with locks.
 			stats.Add(v)
 		}
+
+		// We may want to clear the target if it got too large because of the dump.
+		target.resetStatsIfUsingTooMuchMemory(ctx, nil /* target */)
 	}
 }
 

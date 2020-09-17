@@ -183,6 +183,10 @@ func (ex *connExecutor) recordStatementSummary(
 		parseLat, planLat, runLat, svcLat, execOverhead, stats,
 	)
 
+	// We just recorded some metrics to the server's sql stats, which may have
+	// resulted in the sqlStats datastructure to grow beyond the permitted amount.
+	ex.statsCollector.sqlStats.resetStatsIfUsingTooMuchMemory(ctx, &ex.server.reportedStats)
+
 	// Do some transaction level accounting for the transaction this statement is
 	// a part of.
 
