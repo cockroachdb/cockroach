@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -99,6 +100,12 @@ type Inbox struct {
 	// regardless of whether or not Next is called.
 	flowCtx context.Context
 
+	// rowsRead contains the total number of rows Inbox has read so far.
+	rowsRead int64
+
+	// bytesRead contains the number of bytes sent to the Inbox.
+	bytesRead int64
+
 	scratch struct {
 		data []*array.Data
 		b    coldata.Batch
@@ -106,6 +113,7 @@ type Inbox struct {
 }
 
 var _ colexecbase.Operator = &Inbox{}
+var _ execinfra.IOReader = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
@@ -297,6 +305,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 			// Protect against Deserialization panics by skipping empty messages.
 			continue
 		}
+		i.bytesRead += int64(len(m.Data.RawBytes))
 		i.scratch.data = i.scratch.data[:0]
 		if err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes); err != nil {
 			colexecerror.InternalError(err)
@@ -309,8 +318,19 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		if err := i.converter.ArrowToBatch(i.scratch.data, i.scratch.b); err != nil {
 			colexecerror.InternalError(err)
 		}
+		i.rowsRead += int64(i.scratch.b.Length())
 		return i.scratch.b
 	}
+}
+
+// GetBytesRead is part of the execinfra.IOReader interface.
+func (i *Inbox) GetBytesRead() int64 {
+	return i.bytesRead
+}
+
+// GetRowsRead is part of the execinfra.IOReader interface.
+func (i *Inbox) GetRowsRead() int64 {
+	return i.rowsRead
 }
 
 func (i *Inbox) sendDrainSignal(ctx context.Context) error {
