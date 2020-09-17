@@ -114,7 +114,9 @@ func createLightStepTracer(token string) (shadowTracerManager, opentracing.Trace
 
 var zipkinLogEveryN = util.Every(5 * time.Second)
 
-func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.Tracer) {
+func createZipkinTracer(
+	collectorAddr string, collectorBatchSize int64,
+) (shadowTracerManager, opentracing.Tracer) {
 	// Create our HTTP collector.
 	collector, err := zipkin.NewHTTPCollector(
 		fmt.Sprintf("http://%s/api/v1/spans", collectorAddr),
@@ -127,6 +129,7 @@ func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.
 			}
 			return nil
 		})),
+		zipkin.HTTPBatchSize(int(collectorBatchSize)),
 	)
 	if err != nil {
 		panic(err)

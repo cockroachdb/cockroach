@@ -13,18 +13,26 @@ package server_test
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"math/rand"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/apache/thrift/lib/go/thrift"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 const strKey = "testing.str"
@@ -292,4 +300,78 @@ func TestSettingsShowAll(t *testing.T) {
 	if !hasIntKey || !hasStrKey {
 		t.Fatalf("show all did not find the test keys: %q", rows)
 	}
+}
+
+// TestSettingsZipkinBatchSize tests that a batch size of 1
+// can be configured for the zipkin trace collector
+func TestSettingsZipkinBatchSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set up collector handler function and batch size reporting
+	type CollectorReport struct {
+		ObservedBatchSize int
+		Error             error
+	}
+	batchSizeReportingChan := make(chan CollectorReport, 1)
+	sendObservedBatchSizeReport := func(observedBatchSize int, err error) {
+		report := CollectorReport{
+			ObservedBatchSize: observedBatchSize,
+			Error:             err,
+		}
+		select {
+		case batchSizeReportingChan <- report:
+		default:
+		}
+	}
+
+	collectorHandlerFcn := func(rw http.ResponseWriter, req *http.Request) {
+		bodyBytes, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			sendObservedBatchSizeReport(-1, err)
+			return
+		}
+		t := thrift.NewTMemoryBuffer()
+		t.Write(bodyBytes)
+		p := thrift.NewTBinaryProtocolTransport(t)
+		_, batchSize, err := p.ReadListBegin()
+		if err != nil {
+			sendObservedBatchSizeReport(-1, err)
+			return
+		}
+
+		sendObservedBatchSizeReport(batchSize, nil)
+	}
+	traceCollectorServer := httptest.NewServer(http.HandlerFunc(collectorHandlerFcn))
+	traceCollectorServerURL, err := url.Parse(traceCollectorServer.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer traceCollectorServer.Close()
+
+	// Start test cluster containing a test db and test table
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	execStatement := func(statement string) {
+		if _, err := tc.ServerConn(rand.Intn(3)).Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Configure tracing with a batch size of 1 in the test cluster
+	execStatement(`SET CLUSTER SETTING trace.zipkin.collector.batch.size = 1`)
+	execStatement(fmt.Sprintf(`SET CLUSTER SETTING trace.zipkin.collector = '%s'`, traceCollectorServerURL.Host))
+
+	// Run statements to be traced
+	execStatement(`CREATE DATABASE t`)
+	execStatement(`CREATE TABLE test (k INT PRIMARY KEY, v INT)`)
+	execStatement(`INSERT INTO test VALUES (1,1)`)
+
+	// Test that the collector observed a batch size of 1 with no error
+	observedBatchReport := <-batchSizeReportingChan
+	if observedBatchReport.Error != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, observedBatchReport.ObservedBatchSize, 1)
 }
