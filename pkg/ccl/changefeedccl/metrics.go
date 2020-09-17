@@ -101,6 +101,12 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedFailures = metric.Metadata{
+		Name:        "changefeed.failures",
+		Help:        "Total number of changefeed jobs which have failed",
+		Measurement: "Changefeed Jobs",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	metaChangefeedProcessingNanos = metric.Metadata{
 		Name:        "changefeed.processing_nanos",
@@ -126,6 +132,12 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaChangefeedRunning = metric.Metadata{
+		Name:        "changefeed.running",
+		Help:        "Number of currently running changefeeds, including sinkless",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// TODO(dan): This was intended to be a measure of the minimum distance of
 	// any changefeed ahead of its gc ttl threshold, but keeping that correct in
@@ -146,11 +158,14 @@ type Metrics struct {
 	EmittedBytes    *metric.Counter
 	Flushes         *metric.Counter
 	ErrorRetries    *metric.Counter
+	Failures        *metric.Counter
 
 	ProcessingNanos    *metric.Counter
 	TableMetadataNanos *metric.Counter
 	EmitNanos          *metric.Counter
 	FlushNanos         *metric.Counter
+
+	Running *metric.Gauge
 
 	mu struct {
 		syncutil.Mutex
@@ -171,14 +186,16 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
 		Flushes:         metric.NewCounter(metaChangefeedFlushes),
 		ErrorRetries:    metric.NewCounter(metaChangefeedErrorRetries),
+		Failures:        metric.NewCounter(metaChangefeedFailures),
 
 		ProcessingNanos:    metric.NewCounter(metaChangefeedProcessingNanos),
 		TableMetadataNanos: metric.NewCounter(metaChangefeedTableMetadataNanos),
 		EmitNanos:          metric.NewCounter(metaChangefeedEmitNanos),
 		FlushNanos:         metric.NewCounter(metaChangefeedFlushNanos),
+		Running:            metric.NewGauge(metaChangefeedRunning),
 	}
 	m.mu.resolved = make(map[int]hlc.Timestamp)
-
+	m.mu.id = 1 // start the first id at 1 so we can detect initialization
 	m.MaxBehindNanos = metric.NewFunctionalGauge(metaChangefeedMaxBehindNanos, func() int64 {
 		now := timeutil.Now()
 		var maxBehind time.Duration

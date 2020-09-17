@@ -2340,7 +2340,6 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-
 	registry := s.JobRegistry().(*jobs.Registry)
 
 	// The default FormatVersion value in SchemaChangeDetails corresponds to a
@@ -2361,8 +2360,8 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 			},
 		}
 	})
-
-	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, nil /* txn */)
+	before := timeutil.Now()
+	j, err := registry.CreateAdoptableJobWithTxn(ctx, rec, nil /* txn */)
 	require.NoError(t, err)
 	registry.TestingNudgeAdoptionQueue()
 	// We want the job to be resumed very rapidly. We set this long timeout of 2s
@@ -2374,6 +2373,11 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 	case <-time.After(aLongTime):
 		t.Fatal("job was not adopted")
 	}
+	loaded, err := registry.LoadJob(ctx, *j.ID())
+	require.NoError(t, err)
+	started := timeutil.Unix(0, loaded.Payload().StartedMicros*1000)
+	require.True(t, started.After(before),
+		"started: %v, before:	%v", started, before)
 }
 
 func TestStatusSafeFormatter(t *testing.T) {
