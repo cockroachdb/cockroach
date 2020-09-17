@@ -3153,6 +3153,16 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			},
 		),
 	),
+	"st_orderingequals": makeBuiltin(
+		defProps(),
+		geometryOverload2BinaryPredicate(
+			geomfn.OrderingEquals,
+			infoBuilder{
+				info: "Returns true if geometry_a is exactly equal to geometry_b, having all coordinates " +
+					"in the same order, as well as the same type, SRID, bounding box, and so on.",
+			},
+		),
+	),
 	"st_normalize": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -5264,7 +5274,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_minimumboundingcircle":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
 	"st_minimumboundingradius":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48988}),
 	"st_node":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
-	"st_orderingequals":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49002}),
 	"st_orientedenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
 	"st_pointinsidecircle":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49007}),
 	"st_polygonize":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
