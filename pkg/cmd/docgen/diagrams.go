@@ -431,7 +431,7 @@ var specs = []stmtSpec{
 	{
 		name:   "backup",
 		stmt:   "backup_stmt",
-		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options"},
+		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options", "as_of_clause", "opt_with_backup_options"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP'")},
 		replace: map[string]string{
 			"opt_backup_":                                     "",
@@ -439,9 +439,12 @@ var specs = []stmtSpec{
 			"'AS' 'OF' 'SYSTEM' 'TIME' a_expr":                "'AS OF SYSTEM TIME' timestamp",
 			"'INCREMENTAL' 'FROM' string_or_placeholder_list": "'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* )",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'":         "",
-			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"targets":                        "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder_opt_list": "destination",
+			"scont_or_placeholder":           "destination",
+			"sconst_or_placeholder":          "subdirectory",
 		},
-		unlink: []string{"destination", "timestamp", "full_backup_location", "incremental_backup_location"},
+		unlink: []string{"destination", "timestamp", "full_backup_location", "incremental_backup_location", "destination"},
 	},
 	{
 		name: "begin_transaction",
@@ -962,12 +965,13 @@ var specs = []stmtSpec{
 	{
 		name:   "restore",
 		stmt:   "restore_stmt",
-		inline: []string{"opt_as_of_clause", "opt_with_options", "as_of_clause"},
+		inline: []string{"opt_as_of_clause", "as_of_clause", "opt_with_restore_options"},
 		replace: map[string]string{
-			"a_expr":                  "timestamp",
-			"partitioned_backup_list": "full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*)",
+			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
-			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"targets":                                "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder":                  "subdirectory",
+			"list_of_string_or_placeholder_opt_list": "full_backup_location ( | partitioned_backup_location ( ',' partitioned_backup_location )*)",
 		},
 		unlink: []string{"timestamp", "full_backup_location", "incremental_backup_location"},
 	},
@@ -1172,7 +1176,11 @@ var specs = []stmtSpec{
 		name:    "show_backup",
 		stmt:    "show_backup_stmt",
 		inline:  []string{"opt_with_options"},
-		replace: map[string]string{"'BACKUPS' 'IN' string_or_placeholder": "'BACKUPS' 'IN' location", "'BACKUP' string_or_placeholder 'IN'": "'BACKUP' full_backup 'IN'", "string_or_placeholder opt_with_options": "backup_collection opt_with_options"},
+		replace: map[string]string{
+			"'BACKUPS' 'IN' string_or_placeholder": "'BACKUPS' 'IN' location",
+			"'BACKUP' string_or_placeholder 'IN' string_or_placeholder": "'BACKUP' subdirectory 'IN' location",
+			"'BACKUP' 'SCHEMAS' string_or_placeholder": "'BACKUP' 'SCHEMAS' location"
+		},
 		unlink:  []string{"location"},
 	},
 	{

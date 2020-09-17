@@ -1,11 +1,11 @@
 show_backup_stmt ::=
 	'SHOW' 'BACKUPS' 'IN' location
-	| 'SHOW' 'BACKUP' backup_collection 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' backup_collection 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' backup_collection
-	| 'SHOW' 'BACKUP' full_backup 'IN' backup_collection 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' full_backup 'IN' backup_collection 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' full_backup 'IN' backup_collection
-	| 'SHOW' 'BACKUP' 'SCHEMAS' backup_collection 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' 'SCHEMAS' backup_collection 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' 'SCHEMAS' backup_collection
+	| 'SHOW' 'BACKUP' location 'WITH' kv_option_list
+	| 'SHOW' 'BACKUP' location 'WITH' 'OPTIONS' '(' kv_option_list ')'
+	| 'SHOW' 'BACKUP' location
+	| 'SHOW' 'BACKUP' subdirectory 'IN' location 'WITH' kv_option_list
+	| 'SHOW' 'BACKUP' subdirectory 'IN' location 'WITH' 'OPTIONS' '(' kv_option_list ')'
+	| 'SHOW' 'BACKUP' subdirectory 'IN' location
+	| 'SHOW' 'BACKUP' 'SCHEMAS' location 'WITH' kv_option_list
+	| 'SHOW' 'BACKUP' 'SCHEMAS' location 'WITH' 'OPTIONS' '(' kv_option_list ')'
+	| 'SHOW' 'BACKUP' 'SCHEMAS' location 
