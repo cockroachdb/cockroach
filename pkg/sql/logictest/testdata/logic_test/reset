@@ -15,7 +15,7 @@ RESET SEARCH_PATH
 query T
 SHOW SEARCH_PATH
 ----
-public
+$user,public
 
 statement error parameter "server_version" cannot be changed
 RESET SERVER_VERSION
@@ -39,7 +39,7 @@ RESET search_path
 query T
 SHOW search_path
 ----
-public
+$user,public
 
 statement ok
 RESET client_encoding; RESET NAMES

@@ -459,3 +459,77 @@ CREATE TABLE new_db.public.bar()
 
 statement ok
 CREATE TABLE new_db.testuser.bar()
+
+# cleanup the testuser schema created as part of the CREATE SCHEMA AUTHORIZATION
+# command above
+statement ok
+DROP SCHEMA testuser CASCADE
+
+# If a schema with a username exists, then that should be the first entry in
+# the search path.
+subtest user_schema_search_path
+
+# Test setup
+user root
+
+statement ok
+CREATE SCHEMA testuser
+
+statement ok
+GRANT ALL ON SCHEMA testuser TO testuser
+
+statement ok
+CREATE TABLE public.public_table(a INT)
+
+statement ok
+GRANT SELECT ON public.public_table TO testuser
+
+user testuser
+
+statement ok
+CREATE TABLE test_table(a INT);
+
+statement error pq: relation "public.test_table" does not exist
+SELECT * FROM public.test_table
+
+statement ok
+SELECT * FROM testuser.test_table
+
+# Only root has privs to create inside public
+user root
+
+statement ok
+CREATE TABLE public.test_table(a INT, b INT)
+
+statement ok
+GRANT SELECT ON public.test_table TO testuser
+
+user testuser
+
+query I colnames
+SELECT * FROM test_table
+----
+a
+
+query II colnames
+SELECT * FROM public.test_table
+----
+a  b
+
+query I colnames
+SELECT * FROM public_table
+----
+a
+
+# The search path is configured to be user specific.
+user root
+
+query II colnames
+SELECT * FROM test_table
+----
+a  b
+
+query I colnames
+SELECT * FROM testuser.test_table
+----
+a
