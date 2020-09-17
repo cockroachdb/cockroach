@@ -1,3 +1,5 @@
+# LogicTest: !3node-tenant(49854)
+
 statement ok
 GRANT CREATE ON DATABASE test TO testuser
 
@@ -188,7 +190,7 @@ user root
 statement ok
 REVOKE ALL ON DATABASE test FROM testuser
 
-statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table t
+statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table test.public.t.*\n.*owner of table d.public.t
 DROP ROLE testuser
 
 # Cannot drop object due to owned objects message should only show the owned
@@ -200,5 +202,28 @@ user testuser2
 statement ok
 CREATE TABLE t2()
 
-statement error pq: role testuser2 cannot be dropped because some objects depend on it.*\n.*owner of table t
+statement error pq: role testuser2 cannot be dropped because some objects depend on it.*\n.*owner of table test.public.t2
 DROP ROLE testuser2, testuser
+
+# Ensure role cannot be dropped if it is an owner of a schema.
+
+user testuser
+
+statement ok
+USE d
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE TYPE typ AS ENUM ()
+
+user root
+
+statement ok
+REVOKE ALL ON DATABASE test FROM testuser
+
+user testuser
+
+statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table test.public.t.*\n.*owner of table d.public.t.*\n.*owner of schema s.*\n.*owner of type d.public._?typ.*\n.*owner of type d.public._?typ
+DROP ROLE testuser

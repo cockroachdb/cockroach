@@ -152,8 +152,6 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	}
 
 	lCtx := newInternalLookupCtx(params.ctx, descs, nil /*prefix - we want all descriptors */)
-	// TODO(richardjcai): Also need to add privilege checking for types and
-	// user defined schemas when they are added.
 	// privileges are added.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
@@ -161,11 +159,15 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			continue
 		}
 		if _, ok := userNames[table.GetPrivileges().Owner]; ok {
+			tn, err := getTableNameFromTableDescriptor(lCtx, table, "")
+			if err != nil {
+				return err
+			}
 			userNames[table.GetPrivileges().Owner] = append(
 				userNames[table.GetPrivileges().Owner],
 				objectAndType{
 					ObjectType: "table",
-					ObjectName: table.GetName(),
+					ObjectName: tn.String(),
 				})
 		}
 		for _, u := range table.GetPrivileges().Users {
@@ -178,6 +180,39 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				f.FormatNode(&tn)
 				break
 			}
+		}
+	}
+	for _, schemaDesc := range lCtx.schemaDescs {
+		if !descriptorIsVisible(schemaDesc, true /* allowAdding */) {
+			continue
+		}
+		// TODO(arul): Ideally this should be the fully qualified name of the schema,
+		// but at the time of writing there doesn't seem to be a clean way of doing
+		// this.
+		if _, ok := userNames[schemaDesc.GetPrivileges().Owner]; ok {
+			userNames[schemaDesc.GetPrivileges().Owner] = append(
+				userNames[schemaDesc.GetPrivileges().Owner],
+				objectAndType{
+					ObjectType: "schema",
+					ObjectName: schemaDesc.GetName(),
+				})
+		}
+	}
+	for _, typDesc := range lCtx.typDescs {
+		if _, ok := userNames[typDesc.GetPrivileges().Owner]; ok {
+			if !descriptorIsVisible(typDesc, true /* allowAdding */) {
+				continue
+			}
+			tn, err := getTypeNameFromTypeDescriptor(lCtx, typDesc)
+			if err != nil {
+				return err
+			}
+			userNames[typDesc.GetPrivileges().Owner] = append(
+				userNames[typDesc.GetPrivileges().Owner],
+				objectAndType{
+					ObjectType: "type",
+					ObjectName: tn.String(),
+				})
 		}
 	}
 
