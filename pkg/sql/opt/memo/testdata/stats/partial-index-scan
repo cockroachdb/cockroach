@@ -775,3 +775,341 @@ scan hist@idx,partial
 exec-ddl
 DROP INDEX idx
 ----
+
+# ----------------------------------
+# Tests for partial inverted indexes
+# ----------------------------------
+
+exec-ddl
+CREATE TABLE inv (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  s STRING,
+  INVERTED INDEX partial (j) WHERE s IN ('foo', 'bar')
+)
+----
+
+exec-ddl
+ALTER TABLE inv INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 500,
+    "null_count": 50
+  }
+]'
+----
+
+opt
+SELECT k FROM inv@partial WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=2.20440882]
+ ├── key: (1)
+ └── scan inv@partial,partial
+      ├── columns: k:1(int!null)
+      ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+      ├── flags: force-index=partial
+      ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+      └── key: (1)
+
+opt
+SELECT * FROM inv@partial WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+index-join inv
+ ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan inv@partial,partial
+      ├── columns: k:1(int!null)
+      ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+      ├── flags: force-index=partial
+      ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+      └── key: (1)
+
+opt
+SELECT k FROM inv@partial WHERE j @> '{"x": "y"}' AND s = 'foo'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=1.10220441]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) j:3(jsonb!null) s:4(string!null)
+      ├── immutable
+      ├── stats: [rows=1.10220441, distinct(4)=1, null(4)=0]
+      ├── key: (1)
+      ├── fd: ()-->(4), (1)-->(3)
+      ├── index-join inv
+      │    ├── columns: k:1(int!null) j:3(jsonb) s:4(string)
+      │    ├── stats: [rows=2.20440882]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3,4)
+      │    └── scan inv@partial,partial
+      │         ├── columns: k:1(int!null)
+      │         ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+      │         ├── flags: force-index=partial
+      │         ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+      │         └── key: (1)
+      └── filters
+           └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+opt
+SELECT * FROM inv@partial WHERE j @> '{"x": "y"}' AND s = 'foo'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=1.10220441, distinct(4)=1, null(4)=0]
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── index-join inv
+ │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
+ │    ├── stats: [rows=2.20440882]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan inv@partial,partial
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+ │         ├── flags: force-index=partial
+ │         ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+ │         └── key: (1)
+ └── filters
+      └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+opt
+SELECT * FROM inv@partial WHERE j @> '{"x": "y"}' AND s = 'foo' AND i > 0 AND i < 10
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=0.901983968, distinct(2)=0.901983968, null(2)=0, distinct(4)=0.901983968, null(4)=0, distinct(2,4)=0.901983968, null(2,4)=0]
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── index-join inv
+ │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
+ │    ├── stats: [rows=2.20440882]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan inv@partial,partial
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /3/1: [/'{"x": "y"}' - /'{"x": "y"}']
+ │         ├── flags: force-index=partial
+ │         ├── stats: [rows=2.20440882, distinct(4)=2, null(4)=0]
+ │         └── key: (1)
+ └── filters
+      ├── (i:2 > 0) AND (i:2 < 10) [type=bool, outer=(2), constraints=(/2: [/1 - /9]; tight)]
+      └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# --------------------------------------------------
+# Tests for partial inverted indexes with histograms
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE inv_hist (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  s STRING,
+  INVERTED INDEX partial (j) WHERE s IN ('apple', 'banana', 'cherry')
+)
+----
+
+# Histogram boundaries are from JSON values '{"a": 1}', '{"g": 7}', and '{"n":
+# 14}'.
+exec-ddl
+ALTER TABLE inv_hist INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 41,
+    "null_count": 30,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 201,
+    "null_count": 200,
+    "histo_col_type": "bytes",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "\\\\x376100012a0200"},
+      {"num_eq": 100, "num_range": 200, "distinct_range": 99, "upper_bound": "\\\\x376700012a0e00"},
+      {"num_eq": 200, "num_range": 300, "distinct_range": 99, "upper_bound": "\\\\x376e00012a1c00"}
+    ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "pineapple"}
+    ]
+  }
+]'
+----
+
+opt
+SELECT k FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s IN ('apple', 'banana', 'cherry')
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=17.7777778]
+ ├── key: (1)
+ └── scan inv_hist@partial,partial
+      ├── columns: k:1(int!null)
+      ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+      ├── flags: force-index=partial
+      ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+      │   histogram(4)=  0   8.8889   0   8.8889
+      │                <--- 'banana' --- 'cherry'
+      └── key: (1)
+
+opt
+SELECT * FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s IN ('apple', 'banana', 'cherry')
+----
+index-join inv_hist
+ ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+ │   histogram(4)=  0   8.8889   0   8.8889
+ │                <--- 'banana' --- 'cherry'
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan inv_hist@partial,partial
+      ├── columns: k:1(int!null)
+      ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+      ├── flags: force-index=partial
+      ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+      │   histogram(4)=  0   8.8889   0   8.8889
+      │                <--- 'banana' --- 'cherry'
+      └── key: (1)
+
+opt
+SELECT k FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s = 'banana'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=8.88888889]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) j:3(jsonb!null) s:4(string!null)
+      ├── immutable
+      ├── stats: [rows=8.88888889, distinct(4)=1, null(4)=0]
+      │   histogram(4)=  0   8.8889
+      │                <--- 'banana'
+      ├── key: (1)
+      ├── fd: ()-->(4), (1)-->(3)
+      ├── index-join inv_hist
+      │    ├── columns: k:1(int!null) j:3(jsonb) s:4(string)
+      │    ├── stats: [rows=17.7777778]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3,4)
+      │    └── scan inv_hist@partial,partial
+      │         ├── columns: k:1(int!null)
+      │         ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+      │         ├── flags: force-index=partial
+      │         ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+      │         │   histogram(4)=  0   8.8889   0   8.8889
+      │         │                <--- 'banana' --- 'cherry'
+      │         └── key: (1)
+      └── filters
+           └── s:4 = 'banana' [type=bool, outer=(4), constraints=(/4: [/'banana' - /'banana']; tight), fd=()-->(4)]
+
+opt
+SELECT * FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s = 'banana'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=8.88888889, distinct(4)=1, null(4)=0]
+ │   histogram(4)=  0   8.8889
+ │                <--- 'banana'
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── index-join inv_hist
+ │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
+ │    ├── stats: [rows=17.7777778]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan inv_hist@partial,partial
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+ │         ├── flags: force-index=partial
+ │         ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+ │         │   histogram(4)=  0   8.8889   0   8.8889
+ │         │                <--- 'banana' --- 'cherry'
+ │         └── key: (1)
+ └── filters
+      └── s:4 = 'banana' [type=bool, outer=(4), constraints=(/4: [/'banana' - /'banana']; tight), fd=()-->(4)]
+
+opt
+SELECT * FROM inv_hist@partial WHERE j @> '{"g": 7}' AND s IN ('apple', 'banana', 'cherry') AND i > 0 AND i <= 100
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) j:3(jsonb!null) s:4(string!null)
+ ├── immutable
+ ├── stats: [rows=2.81695304, distinct(2)=2.81695304, null(2)=0, distinct(4)=2, null(4)=0, distinct(2,4)=2.81695304, null(2,4)=0]
+ │   histogram(2)=  0  0  2.5353 0.2817
+ │                <--- 0 -------- 100 -
+ │   histogram(4)=  0   1.4085   0   1.4085
+ │                <--- 'banana' --- 'cherry'
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join inv_hist
+ │    ├── columns: k:1(int!null) i:2(int) j:3(jsonb) s:4(string)
+ │    ├── stats: [rows=17.7777778]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan inv_hist@partial,partial
+ │         ├── columns: k:1(int!null)
+ │         ├── constraint: /3/1: [/'{"g": 7}' - /'{"g": 7}']
+ │         ├── flags: force-index=partial
+ │         ├── stats: [rows=17.7777778, distinct(4)=2, null(4)=0]
+ │         │   histogram(4)=  0   8.8889   0   8.8889
+ │         │                <--- 'banana' --- 'cherry'
+ │         └── key: (1)
+ └── filters
+      └── (i:2 > 0) AND (i:2 <= 100) [type=bool, outer=(2), constraints=(/2: [/1 - /100]; tight)]
