@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPebbleTimeBoundPropCollector(t *testing.T) {
@@ -271,6 +273,24 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 		})
 	}
 
+}
+
+func TestPebbleDiskSlowEmit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eng := createTestPebbleEngine()
+	defer eng.Close()
+
+	p := eng.(*Pebble)
+	require.Equal(t, uint64(0), p.diskSlowCount)
+	require.Equal(t, uint64(0), p.diskStallCount)
+	p.eventListener.DiskSlow(pebble.DiskSlowInfo{Duration: 1 * time.Second})
+	require.Equal(t, uint64(1), p.diskSlowCount)
+	require.Equal(t, uint64(0), p.diskStallCount)
+	p.eventListener.DiskSlow(pebble.DiskSlowInfo{Duration: 1 * time.Minute})
+	require.Equal(t, uint64(1), p.diskSlowCount)
+	require.Equal(t, uint64(1), p.diskStallCount)
 }
 
 func BenchmarkMVCCKeyCompare(b *testing.B) {

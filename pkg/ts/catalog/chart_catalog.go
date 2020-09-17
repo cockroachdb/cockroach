@@ -2154,6 +2154,13 @@ var charts = []sectionDescription{
 					"capacity.used",
 				},
 			},
+			{
+				Title: "Disk Health",
+				Metrics: []string{
+					"storage.disk-slow",
+					"storage.disk-stalled",
+				},
+			},
 		},
 	},
 	{
