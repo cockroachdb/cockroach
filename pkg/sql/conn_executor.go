@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -545,7 +544,7 @@ func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
 		}
 	}
 	if len(sd.SearchPath.GetPathArray()) == 0 {
-		sd.SearchPath = catconstants.DefaultSearchPath
+		sd.SearchPath = sessiondata.DefaultSearchPathForUser(sd.User)
 	}
 }
 

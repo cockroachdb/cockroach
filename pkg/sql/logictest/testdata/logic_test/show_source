@@ -67,7 +67,7 @@ reorder_joins_limit                            8
 require_explicit_primary_keys                  off
 results_buffer_size                            16384
 row_security                                   off
-search_path                                    public
+search_path                                    $user,public
 serial_normalization                           rowid
 server_encoding                                UTF8
 server_version                                 9.5.0
