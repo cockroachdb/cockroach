@@ -133,7 +133,7 @@ func (ds *DistSender) partialRangeFeed(
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
 		// If we've cleared the descriptor on a send failure, re-lookup.
-		if rangeInfo.token.Empty() {
+		if !rangeInfo.token.Valid() {
 			var err error
 			ri, err := ds.getRoutingInfo(ctx, rangeInfo.rs.Key, EvictionToken{}, false)
 			if err != nil {
