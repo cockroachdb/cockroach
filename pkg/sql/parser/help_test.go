@@ -117,6 +117,8 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE DATABASE IF NOT ??`, `CREATE DATABASE`},
 		{`CREATE DATABASE blih ??`, `CREATE DATABASE`},
 
+		{`CREATE EXTENSION ??`, `CREATE EXTENSION`},
+
 		{`CREATE USER blih ??`, `CREATE ROLE`},
 		{`CREATE USER blih WITH ??`, `CREATE ROLE`},
 
