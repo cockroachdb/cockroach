@@ -99,6 +99,7 @@ test           information_schema  statistics                         public   S
 test           information_schema  table_constraints                  public   SELECT
 test           information_schema  table_privileges                   public   SELECT
 test           information_schema  tables                             public   SELECT
+test           information_schema  type_privileges                    public   SELECT
 test           information_schema  user_privileges                    public   SELECT
 test           information_schema  views                              public   SELECT
 test           pg_catalog          NULL                               admin    ALL

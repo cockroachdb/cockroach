@@ -112,6 +112,7 @@ var informationSchema = virtualSchema{
 		"transforms",
 		"triggered_update_columns",
 		"triggers",
+		"type_privileges",
 		"udt_privileges",
 		"usage_privileges",
 		"user_defined_types",
@@ -130,6 +131,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaColumnsTableID:                    informationSchemaColumnsTable,
 		catconstants.InformationSchemaColumnUDTUsageID:                  informationSchemaColumnUDTUsage,
 		catconstants.InformationSchemaConstraintColumnUsageTableID:      informationSchemaConstraintColumnUsageTable,
+		catconstants.InformationSchemaTypePrivilegesID:                  informationSchemaTypePrivilegesTable,
 		catconstants.InformationSchemaEnabledRolesID:                    informationSchemaEnabledRoles,
 		catconstants.InformationSchemaKeyColumnUsageTableID:             informationSchemaKeyColumnUsageTable,
 		catconstants.InformationSchemaParametersTableID:                 informationSchemaParametersTable,
@@ -1027,6 +1029,76 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 						tree.DNull,                    // sql_path
 						yesOrNoDatum(sc.Kind == catalog.SchemaUserDefined), // crdb_is_user_defined
 					)
+				})
+			})
+	},
+}
+
+// Custom; PostgreSQL has data_type_privileges, which only shows one row per type,
+// which may result in confusing semantics for the user compared to this table
+// which has one row for each grantee.
+var informationSchemaTypePrivilegesTable = virtualSchemaTable{
+	comment: `type privileges (incomplete; may contain excess users or roles)
+` + base.DocsURL("information-schema.html#type_privileges"),
+	schema: `
+CREATE TABLE information_schema.type_privileges (
+	GRANTEE         STRING NOT NULL,
+	TYPE_CATALOG    STRING NOT NULL,
+	TYPE_SCHEMA     STRING NOT NULL,
+	TYPE_NAME       STRING NOT NULL,
+	PRIVILEGE_TYPE  STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+			func(db *dbdesc.Immutable) error {
+				dbNameStr := tree.NewDString(db.GetName())
+				pgCatalogStr := tree.NewDString("pg_catalog")
+
+				// Generate one for each existing type.
+				for _, typ := range types.OidToType {
+					for _, it := range []struct {
+						grantee   *tree.DString
+						privilege *tree.DString
+					}{
+						{tree.NewDString(security.RootUser), tree.NewDString(privilege.ALL.String())},
+						{tree.NewDString(security.AdminRole), tree.NewDString(privilege.ALL.String())},
+						{tree.NewDString(security.PublicRole), tree.NewDString(privilege.USAGE.String())},
+					} {
+						typeNameStr := tree.NewDString(typ.Name())
+						if err := addRow(
+							it.grantee,
+							dbNameStr,
+							pgCatalogStr,
+							typeNameStr,
+							it.privilege,
+						); err != nil {
+							return err
+						}
+					}
+				}
+
+				// And for all user defined types.
+				return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc *typedesc.Immutable) error {
+					scNameStr := tree.NewDString(sc)
+					typeNameStr := tree.NewDString(typeDesc.Name)
+					// TODO(knz): This should filter for the current user, see
+					// https://github.com/cockroachdb/cockroach/issues/35572
+					privs := typeDesc.TypeDescriptor.GetPrivileges().Show(privilege.Type)
+					for _, u := range privs {
+						userNameStr := tree.NewDString(u.User)
+						for _, priv := range u.Privileges {
+							if err := addRow(
+								userNameStr,           // grantee
+								dbNameStr,             // type_catalog
+								scNameStr,             // type_schema
+								typeNameStr,           // type_name
+								tree.NewDString(priv), // privilege_type
+							); err != nil {
+								return err
+							}
+						}
+					}
+					return nil
 				})
 			})
 	},
