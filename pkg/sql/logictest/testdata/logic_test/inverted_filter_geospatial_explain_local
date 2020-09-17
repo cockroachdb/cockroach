@@ -52,11 +52,11 @@ filter                     ·                ·
       │                    table            geo_table2@primary
       └── inverted filter  ·                ·
            │               inverted column  geom_inverted_key
-           │               num spans        20
+           │               num spans        30
            └── scan        ·                ·
 ·                          missing stats    ·
 ·                          table            geo_table2@geom_index
-·                          spans            20 spans
+·                          spans            30 spans
 
 # Bounding box operations.
 statement ok
@@ -107,11 +107,11 @@ filter                     ·                ·
       │                    table            geo_table2@primary
       └── inverted filter  ·                ·
            │               inverted column  geom_inverted_key
-           │               num spans        38
+           │               num spans        33
            └── scan        ·                ·
 ·                          missing stats    ·
 ·                          table            geo_table2@geom_index
-·                          spans            38 spans
+·                          spans            33 spans
 
 query TTT
 EXPLAIN SELECT k FROM geo_table2 WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d
@@ -124,8 +124,8 @@ filter                     ·                ·
       │                    table            geo_table2@primary
       └── inverted filter  ·                ·
            │               inverted column  geom_inverted_key
-           │               num spans        93
+           │               num spans        30
            └── scan        ·                ·
 ·                          missing stats    ·
 ·                          table            geo_table2@geom_index
-·                          spans            93 spans
+·                          spans            30 spans
