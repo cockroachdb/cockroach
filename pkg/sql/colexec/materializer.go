@@ -49,10 +49,9 @@ type Materializer struct {
 	// row is the memory used for the output row.
 	row rowenc.EncDatumRow
 
-	// Fields to store the returned results of next() to be passed through an
+	// outputRow stores the returned results of next() to be passed through an
 	// adapter.
-	outputRow      rowenc.EncDatumRow
-	outputMetadata *execinfrapb.ProducerMetadata
+	outputRow rowenc.EncDatumRow
 
 	// cancelFlow will return a function to cancel the context of the flow. It is
 	// a function in order to be lazily evaluated, since the context cancellation
@@ -208,50 +207,56 @@ func (m *Materializer) Start(ctx context.Context) context.Context {
 	return m.ProcessorBase.StartInternal(ctx, materializerProcName)
 }
 
+// next is the logic of Next() extracted in a separate method to be used by an
+// adapter to be able to wrap the latter with a catcher. nil is returned when a
+// zero-length batch is encountered.
+func (m *Materializer) next() rowenc.EncDatumRow {
+	if m.batch == nil || m.curIdx >= m.batch.Length() {
+		// Get a fresh batch.
+		m.batch = m.input.Next(m.Ctx)
+		if m.batch.Length() == 0 {
+			return nil
+		}
+		m.curIdx = 0
+		m.converter.ConvertBatchAndDeselect(m.batch)
+	}
+
+	for colIdx := range m.typs {
+		// Note that we don't need to apply the selection vector of the
+		// batch to index m.curIdx because vecToDatumConverter returns a
+		// "dense" datum column.
+		m.row[colIdx].Datum = m.converter.GetDatumColumn(colIdx)[m.curIdx]
+	}
+	m.curIdx++
+	// Note that there is no post-processing to be done in the
+	// materializer, so we do not use ProcessRowHelper and emit the row
+	// directly.
+	return m.row
+}
+
 // nextAdapter calls next() and saves the returned results in m. For internal
 // use only. The purpose of having this function is to not create an anonymous
 // function on every call to Next().
 func (m *Materializer) nextAdapter() {
-	m.outputRow, m.outputMetadata = m.next()
-}
-
-// next is the logic of Next() extracted in a separate method to be used by an
-// adapter to be able to wrap the latter with a catcher.
-func (m *Materializer) next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if m.State == execinfra.StateRunning {
-		if m.batch == nil || m.curIdx >= m.batch.Length() {
-			// Get a fresh batch.
-			m.batch = m.input.Next(m.Ctx)
-			if m.batch.Length() == 0 {
-				m.MoveToDraining(nil /* err */)
-				return nil, m.DrainHelper()
-			}
-			m.curIdx = 0
-			m.converter.ConvertBatchAndDeselect(m.batch)
-		}
-
-		for colIdx := range m.typs {
-			// Note that we don't need to apply the selection vector of the
-			// batch to index m.curIdx because vecToDatumConverter returns a
-			// "dense" datum column.
-			m.row[colIdx].Datum = m.converter.GetDatumColumn(colIdx)[m.curIdx]
-		}
-		m.curIdx++
-		// Note that there is no post-processing to be done in the
-		// materializer, so we do not use ProcessRowHelper and emit the row
-		// directly.
-		return m.row, nil
-	}
-	return nil, m.DrainHelper()
+	m.outputRow = m.next()
 }
 
 // Next is part of the execinfra.RowSource interface.
 func (m *Materializer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if err := colexecerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
-		m.MoveToDraining(err)
-		return nil, m.DrainHelper()
+	for m.State == execinfra.StateRunning {
+		if err := colexecerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
+			m.MoveToDraining(err)
+			continue
+		}
+		if m.outputRow == nil {
+			// Zero-length batch was encountered, move to draining.
+			m.MoveToDraining(nil /* err */)
+			continue
+		}
+		return m.outputRow, nil
 	}
-	return m.outputRow, m.outputMetadata
+	// Forward any metadata.
+	return nil, m.DrainHelper()
 }
 
 // InternalClose helps implement the execinfra.RowSource interface.
