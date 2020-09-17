@@ -433,7 +433,7 @@ func backupPlanHook(
 						ctx, uri, makeCloudStorage, encryption,
 					)
 					if err != nil {
-						return errors.Wrapf(err, "failed to read backup from %q", uri)
+						return errors.Wrapf(err, "failed to read backup from %q", RedactURIForErrorMessage(uri))
 					}
 					prevBackups[i] = desc
 					return nil
