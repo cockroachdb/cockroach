@@ -194,7 +194,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 				EndKey: roachpb.RKey("w"),
 			},
 		},
-		eventC: make(chan event, 100),
+		eventC: make(chan *event, 100),
 	}
 
 	// Run an init rts scan over a test iterator with the following keys.
@@ -230,7 +230,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 	require.True(t, iter.closed)
 
 	// Compare the event channel to the expected events.
-	expEvents := []event{
+	expEvents := []*event{
 		{ops: []enginepb.MVCCLogicalOp{
 			writeIntentOpWithKey(txn2, []byte("txnKey2"), hlc.Timestamp{WallTime: 21}),
 		}},
@@ -346,7 +346,7 @@ func TestTxnPushAttempt(t *testing.T) {
 	})
 
 	// Mock processor. We just needs its eventC.
-	p := Processor{eventC: make(chan event, 100)}
+	p := Processor{eventC: make(chan *event, 100)}
 	p.TxnPusher = &tp
 
 	txns := []enginepb.TxnMeta{txn1Meta, txn2Meta, txn3Meta, txn4Meta}
@@ -356,7 +356,7 @@ func TestTxnPushAttempt(t *testing.T) {
 	<-doneC // check if closed
 
 	// Compare the event channel to the expected events.
-	expEvents := []event{
+	expEvents := []*event{
 		{ops: []enginepb.MVCCLogicalOp{
 			updateIntentOp(txn1, hlc.Timestamp{WallTime: 15}),
 			updateIntentOp(txn2, hlc.Timestamp{WallTime: 2}),
