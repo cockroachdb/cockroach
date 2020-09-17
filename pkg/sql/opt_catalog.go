@@ -252,6 +252,13 @@ func (oc *optCatalog) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types
 	return oc.planner.ResolveTypeByOID(ctx, oid)
 }
 
+// ResolveType is part of the cat.Catalog interface.
+func (oc *optCatalog) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	return oc.planner.ResolveType(ctx, name)
+}
+
 func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, error) {
 	switch t := o.(type) {
 	case *optSchema:
