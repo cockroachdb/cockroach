@@ -17,13 +17,17 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestColumnarizeMaterialize(t *testing.T) {
@@ -166,6 +170,59 @@ func TestMaterializeTypes(t *testing.T) {
 			t.Fatal("unequal datums", inDatum, outDatum)
 		}
 	}
+}
+
+func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testError := errors.New("test-induced error")
+	metadataSource := &execinfrapb.CallbackMetadataSource{DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
+		execerror.VectorizedInternalPanic(testError)
+		// Unreachable
+		return nil
+	}}
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+	}
+
+	m, err := NewMaterializer(
+		flowCtx,
+		0, /* processorID */
+		&CallbackOperator{},
+		nil,                            /* typ */
+		&execinfrapb.PostProcessSpec{}, /* post */
+		nil,                            /* output */
+		[]execinfrapb.MetadataSource{metadataSource},
+		nil, /* toClose */
+		nil, /* outputStatsToTrace */
+		nil, /* cancelFlow */
+	)
+	require.NoError(t, err)
+
+	m.Start(ctx)
+	// We expect ConsumerDone to panic since it immediately moves the materializer
+	// into the trailing meta state which will produce the panic. The key is that
+	// the materializer is moved into the draining state first.
+	testutils.IsError(
+		execerror.CatchVectorizedRuntimeError(func() {
+			// Call ConsumerDone.
+			m.ConsumerDone()
+		}),
+		testError.Error(),
+	)
+	// We expect Next to panic since DrainMeta panics are currently not caught by
+	// the materializer and it's not clear whether they should be since
+	// implementers of DrainMeta do not return errors as panics.
+	testutils.IsError(
+		execerror.CatchVectorizedRuntimeError(func() {
+			m.Next()
+		}),
+		testError.Error(),
+	)
 }
 
 func BenchmarkColumnarizeMaterialize(b *testing.B) {
