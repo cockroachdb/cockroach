@@ -446,8 +446,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 func TestBackupRestoreAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// TODO(adityamaru): Unskip once #53727 is merged.
-	skip.WithIssue(t, 54039, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
