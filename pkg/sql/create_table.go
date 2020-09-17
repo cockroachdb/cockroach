@@ -196,7 +196,7 @@ func getTableCreateParams(
 
 	if persistence.IsUnlogged() {
 		telemetry.Inc(sqltelemetry.CreateUnloggedTableCounter)
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			pgnotice.Newf("UNLOGGED TABLE will behave as a regular table in CockroachDB"),
 		)
@@ -262,7 +262,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		for _, def := range n.n.Defs {
 			if d, ok := def.(*tree.IndexTableDef); ok {
 				if d.PartitionBy == nil {
-					params.p.SendClientNotice(
+					params.p.BufferClientNotice(
 						params.ctx,
 						errors.WithHint(
 							pgnotice.Newf("creating non-partitioned index on partitioned table may not be performant"),
