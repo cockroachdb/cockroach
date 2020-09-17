@@ -85,6 +85,9 @@ func (e *scheduledBackupExecutor) executeBackup(
 		}
 	}
 
+	log.Infof(ctx, "Starting scheduled backup %d: %s",
+		sj.ScheduleID(), tree.AsString(backupStmt))
+
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn, sj.Owner())
 	defer cleanup()
