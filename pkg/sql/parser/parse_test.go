@@ -1507,6 +1507,9 @@ func TestParse(t *testing.T) {
 		{`ALTER TYPE t SET SCHEMA newschema`},
 		{`ALTER TYPE t OWNER TO foo`},
 
+		{`REASSIGN OWNED BY foo TO bar`},
+		{`REASSIGN OWNED BY foo, bar TO third`},
+
 		{`COMMENT ON COLUMN a.b IS 'a'`},
 		{`COMMENT ON COLUMN a.b IS NULL`},
 		{`COMMENT ON COLUMN a.b.c IS 'a'`},
@@ -2595,8 +2598,11 @@ SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS,
 		{`SELECT 1::db.int4.typ array`, `SELECT 1::db.int4.typ[]`},
 		{`CREATE TABLE t (x int4.type array [1])`, `CREATE TABLE t (x int4.type[])`},
 
-		{`ALTER TYPE t OWNER TO CURRENT_USER`, "ALTER TYPE t OWNER TO \"current_user\""},
-		{`ALTER TYPE t OWNER TO SESSION_USER`, "ALTER TYPE t OWNER TO \"session_user\""},
+		{`ALTER TYPE t OWNER TO CURRENT_USER`, `ALTER TYPE t OWNER TO "current_user"`},
+		{`ALTER TYPE t OWNER TO SESSION_USER`, `ALTER TYPE t OWNER TO "session_user"`},
+
+		{`REASSIGN OWNED BY CURRENT_USER TO foo`, `REASSIGN OWNED BY "current_user" TO foo`},
+		{`REASSIGN OWNED BY SESSION_USER TO foo`, `REASSIGN OWNED BY "session_user" TO foo`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
