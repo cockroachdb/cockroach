@@ -810,6 +810,31 @@ func getTableNameFromTableDescriptor(
 	return tableName, nil
 }
 
+// getTypeNameFromTypeDescriptor returns a TypeName object for a given
+// TableDescriptor.
+func getTypeNameFromTypeDescriptor(
+	l simpleSchemaResolver, typ catalog.TypeDescriptor,
+) (tree.TypeName, error) {
+	var typeName tree.TypeName
+	tableDbDesc, err := l.getDatabaseByID(typ.GetParentID())
+	if err != nil {
+		return typeName, err
+	}
+	var parentSchemaName string
+	if typ.GetParentSchemaID() == keys.PublicSchemaID {
+		parentSchemaName = tree.PublicSchema
+	} else {
+		parentSchema, err := l.getSchemaByID(typ.GetParentSchemaID())
+		if err != nil {
+			return typeName, err
+		}
+		parentSchemaName = parentSchema.Name
+	}
+	typeName = tree.MakeNewQualifiedTypeName(tableDbDesc.GetName(),
+		parentSchemaName, typ.GetName())
+	return typeName, nil
+}
+
 // ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.
 func (p *planner) ResolveMutableTypeDescriptor(
 	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
