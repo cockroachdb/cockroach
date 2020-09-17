@@ -36,6 +36,7 @@ information_schema  statistics                         table  NULL
 information_schema  table_constraints                  table  NULL
 information_schema  table_privileges                   table  NULL
 information_schema  tables                             table  NULL
+information_schema  type_privileges                    table  NULL
 information_schema  user_privileges                    table  NULL
 information_schema  views                              table  NULL
 
@@ -144,6 +145,7 @@ information_schema  statistics                         table  NULL
 information_schema  table_constraints                  table  NULL
 information_schema  table_privileges                   table  NULL
 information_schema  tables                             table  NULL
+information_schema  type_privileges                    table  NULL
 information_schema  user_privileges                    table  NULL
 information_schema  views                              table  NULL
 
@@ -281,6 +283,7 @@ information_schema  statistics
 information_schema  table_constraints
 information_schema  table_privileges
 information_schema  tables
+information_schema  type_privileges
 information_schema  user_privileges
 information_schema  views
 pg_catalog          pg_aggregate
@@ -433,6 +436,7 @@ statistics
 table_constraints
 table_privileges
 tables
+type_privileges
 user_privileges
 views
 pg_aggregate
@@ -519,6 +523,7 @@ zones
 xyz
 views
 user_privileges
+type_privileges
 tables
 tables
 table_row_statistics
@@ -593,6 +598,7 @@ system         information_schema  statistics                         SYSTEM VIE
 system         information_schema  table_constraints                  SYSTEM VIEW  NO                  1
 system         information_schema  table_privileges                   SYSTEM VIEW  NO                  1
 system         information_schema  tables                             SYSTEM VIEW  NO                  1
+system         information_schema  type_privileges                    SYSTEM VIEW  NO                  1
 system         information_schema  user_privileges                    SYSTEM VIEW  NO                  1
 system         information_schema  views                              SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_aggregate                       SYSTEM VIEW  NO                  1
@@ -1700,6 +1706,7 @@ NULL     public   system         information_schema  statistics                 
 NULL     public   system         information_schema  table_constraints                  SELECT          NULL          YES
 NULL     public   system         information_schema  table_privileges                   SELECT          NULL          YES
 NULL     public   system         information_schema  tables                             SELECT          NULL          YES
+NULL     public   system         information_schema  type_privileges                    SELECT          NULL          YES
 NULL     public   system         information_schema  user_privileges                    SELECT          NULL          YES
 NULL     public   system         information_schema  views                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_aggregate                       SELECT          NULL          YES
@@ -2077,6 +2084,7 @@ NULL     public   system         information_schema  statistics                 
 NULL     public   system         information_schema  table_constraints                  SELECT          NULL          YES
 NULL     public   system         information_schema  table_privileges                   SELECT          NULL          YES
 NULL     public   system         information_schema  tables                             SELECT          NULL          YES
+NULL     public   system         information_schema  type_privileges                    SELECT          NULL          YES
 NULL     public   system         information_schema  user_privileges                    SELECT          NULL          YES
 NULL     public   system         information_schema  views                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_aggregate                       SELECT          NULL          YES
@@ -2892,6 +2900,32 @@ statement ok
 CREATE TYPE typ1 AS ENUM ('hello');
 CREATE TYPE typ2 AS ENUM ('bye');
 CREATE TABLE tb_enum_cols (x typ1, y INT, z typ2, w typ2)
+
+query TTTTT colnames
+SELECT * FROM information_schema.type_privileges WHERE type_name IN ('int', 'typ2')
+----
+grantee  type_catalog  type_schema  type_name  privilege_type
+root     test          pg_catalog   int        ALL
+admin    test          pg_catalog   int        ALL
+public   test          pg_catalog   int        USAGE
+admin    test          public       typ2       ALL
+public   test          public       typ2       USAGE
+root     test          public       typ2       ALL
+
+statement ok
+GRANT ALL ON TYPE typ2 TO testuser
+
+query TTTTT colnames
+SELECT * FROM information_schema.type_privileges WHERE type_name IN ('int', 'typ2')
+----
+grantee   type_catalog  type_schema  type_name  privilege_type
+root      test          pg_catalog   int        ALL
+admin     test          pg_catalog   int        ALL
+public    test          pg_catalog   int        USAGE
+admin     test          public       typ2       ALL
+public    test          public       typ2       USAGE
+root      test          public       typ2       ALL
+testuser  test          public       typ2       ALL
 
 query TTTTTTT colnames
 SELECT * FROM information_schema.column_udt_usage
