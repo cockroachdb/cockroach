@@ -735,8 +735,8 @@ func (p *PreFilterer) PreFilter(
 	if err != nil {
 		return false, err
 	}
-	switch p.typ {
-	case types.Geometry:
+	switch p.typ.Family() {
+	case types.GeometryFamily:
 		var bb geo.CartesianBoundingBox
 		bb.LoX, bb.LoY, bb.HiX, bb.HiY = loX, loY, hiX, hiY
 		switch p.preFilterRelationship {
@@ -765,7 +765,7 @@ func (p *PreFilterer) PreFilter(
 			}
 		}
 		return rv, nil
-	case types.Geography:
+	case types.GeographyFamily:
 		bb := s2.Rect{
 			Lat: r1.Interval{Lo: loY, Hi: hiY},
 			Lng: s1.Interval{Lo: loX, Hi: hiX},
