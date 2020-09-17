@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -237,6 +238,78 @@ func TestIntersects(t *testing.T) {
 		_, err := Intersects(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
 		requireMismatchingSRIDError(t, err)
 	})
+}
+
+func TestOrderingEquals(t *testing.T) {
+	testCases := []struct {
+		a        string
+		b        string
+		expected bool
+	}{
+		{"POINT EMPTY", "POINT EMPTY", true},
+		{"POINT (1 1)", "POINT (1 1)", true},
+		{"POINT (1 1)", "POINT (2 2)", false},
+		{"MULTIPOINT EMPTY", "MULTIPOINT EMPTY", true},
+		{"MULTIPOINT (1 1, EMPTY, 2 2)", "MULTIPOINT (1 1, EMPTY, 2 2)", true},
+		{"MULTIPOINT (1 1, 2 2)", "MULTIPOINT (2 2, 1 1)", false},
+		{"MULTIPOINT (1 1, EMPTY, 2 2)", "MULTIPOINT (1 1, 2 2)", false},
+		{"LINESTRING EMPTY", "LINESTRING EMPTY", true},
+		{"LINESTRING (1 1, 2 2)", "LINESTRING (1 1, 2 2)", true},
+		{"LINESTRING (1 1, 2 2)", "LINESTRING (2 2, 1 1)", false},
+		{"LINESTRING (1 1, 2 2)", "LINESTRING (1 1, 2 2, 3 3)", false},
+		{"MULTILINESTRING EMPTY", "MULTILINESTRING EMPTY", true},
+		{
+			"MULTILINESTRING ((1 1, 2 2), EMPTY, (3 3, 4 4))",
+			"MULTILINESTRING ((1 1, 2 2), EMPTY, (3 3, 4 4))",
+			true,
+		},
+		{
+			"MULTILINESTRING ((1 1, 2 2), EMPTY, (3 3, 4 4))",
+			"MULTILINESTRING ((1 1, 2 2), (3 3, 4 4))",
+			false,
+		},
+		{"POLYGON EMPTY", "POLYGON EMPTY", true},
+		{"POLYGON ((1 2, 3 4, 5 6, 1 2))", "POLYGON ((1 2, 3 4, 5 6, 1 2))", true},
+		{"POLYGON ((1 2, 3 4, 5 6, 1 2))", "POLYGON ((1 2, 5 6, 3 4, 1 2))", false},
+		{"MULTIPOLYGON EMPTY", "MULTIPOLYGON EMPTY", true},
+		{
+			"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), EMPTY, ((9 8, 7 6, 5 4, 9 8)))",
+			"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), EMPTY, ((9 8, 7 6, 5 4, 9 8)))",
+			true,
+		},
+		{
+			"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), EMPTY, ((9 8, 7 6, 5 4, 9 8)))",
+			"MULTIPOLYGON (((1 2, 3 4, 5 6, 1 2)), ((9 8, 7 6, 5 4, 9 8)))",
+			false,
+		},
+		{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION EMPTY", true},
+		{
+			"GEOMETRYCOLLECTION (POINT (1 1), LINESTRING (1 1, 2 2))",
+			"GEOMETRYCOLLECTION (POINT (1 1), LINESTRING (1 1, 2 2))",
+			true,
+		},
+		{
+			"GEOMETRYCOLLECTION (POINT (1 1), LINESTRING (1 1, 2 2))",
+			"GEOMETRYCOLLECTION (LINESTRING (1 1, 2 2), POINT (1 1))",
+			false,
+		},
+		{"POINT EMPTY", "LINESTRING EMPTY", false},
+		{"POINT (1 1)", "MULTIPOINT (1 1)", false},
+		{"SRID=4000;POINT (1 1)", "SRID=4326;POINT (1 1)", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v, %v", tc.a, tc.b), func(t *testing.T) {
+			a, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.a), geopb.DefaultGeometrySRID, false)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometryFromEWKT(geopb.EWKT(tc.b), geopb.DefaultGeometrySRID, false)
+			require.NoError(t, err)
+
+			eq, err := OrderingEquals(a, b)
+			require.NoError(t, err)
+			require.Equal(t, eq, tc.expected)
+		})
+	}
 }
 
 func TestOverlaps(t *testing.T) {
