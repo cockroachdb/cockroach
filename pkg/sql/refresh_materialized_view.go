@@ -61,7 +61,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 
 	// Inform the user that CONCURRENTLY is not needed.
 	if n.n.Concurrently {
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			pgnotice.Newf("CONCURRENTLY is not required as views are refreshed concurrently"),
 		)

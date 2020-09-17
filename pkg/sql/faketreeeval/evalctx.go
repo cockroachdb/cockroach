@@ -191,8 +191,8 @@ type DummyClientNoticeSender struct{}
 
 var _ tree.ClientNoticeSender = &DummyClientNoticeSender{}
 
-// SendClientNotice is part of the tree.ClientNoticeSender interface.
-func (c *DummyClientNoticeSender) SendClientNotice(context.Context, error) {}
+// BufferClientNotice is part of the tree.ClientNoticeSender interface.
+func (c *DummyClientNoticeSender) BufferClientNotice(context.Context, error) {}
 
 // DummyTenantOperator implements the tree.TenantOperator interface.
 type DummyTenantOperator struct{}

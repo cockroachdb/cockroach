@@ -692,9 +692,9 @@ type RestrictedCommandResult interface {
 	// This gets flushed only when the CommandResult is closed.
 	AppendParamStatusUpdate(string, string)
 
-	// AppendNotice appends a notice to the result.
+	// BufferNotice appends a notice to the result.
 	// This gets flushed only when the CommandResult is closed.
-	AppendNotice(noticeErr error)
+	BufferNotice(noticeErr error)
 
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
@@ -888,8 +888,8 @@ func (r *bufferedCommandResult) AppendParamStatusUpdate(key string, val string) 
 	panic("unimplemented")
 }
 
-// AppendNotice is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) AppendNotice(noticeErr error) {
+// BufferNotice is part of the RestrictedCommandResult interface.
+func (r *bufferedCommandResult) BufferNotice(noticeErr error) {
 	panic("unimplemented")
 }
 

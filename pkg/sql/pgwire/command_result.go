@@ -49,9 +49,12 @@ type commandResult struct {
 	conv sessiondata.DataConversionConfig
 	// pos identifies the position of the command within the connection.
 	pos sql.CmdPos
-	// flushBeforeClose contains a list of functions to flush
-	// before a command is closed.
-	flushBeforeCloseFuncs []func(ctx context.Context) error
+
+	// buffer contains items that are sent before the connection is closed.
+	buffer struct {
+		notices            []error
+		paramStatusUpdates []paramStatusUpdate
+	}
 
 	err error
 	// errExpected, if set, enforces that an error had been set when Close is
@@ -89,6 +92,15 @@ type commandResult struct {
 	released bool
 }
 
+// paramStatusUpdate is a status update to send to the client when a parameter is
+// updated.
+type paramStatusUpdate struct {
+	// param is the parameter name.
+	param string
+	// val is the new value of the given parameter.
+	val string
+}
+
 var _ sql.CommandResult = &commandResult{}
 
 // Close is part of the CommandResult interface.
@@ -105,12 +117,22 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 		return
 	}
 
-	for _, f := range r.flushBeforeCloseFuncs {
-		if err := f(ctx); err != nil {
-			panic(errors.AssertionFailedf("unexpected err when closing: %s", err))
+	for _, notice := range r.buffer.notices {
+		if err := r.conn.bufferNotice(ctx, notice); err != nil {
+			panic(errors.AssertionFailedf("unexpected err when sending notice: %s", err))
 		}
 	}
-	r.flushBeforeCloseFuncs = nil
+
+	for _, paramStatusUpdate := range r.buffer.paramStatusUpdates {
+		if err := r.conn.bufferParamStatus(
+			paramStatusUpdate.param,
+			paramStatusUpdate.val,
+		); err != nil {
+			panic(
+				errors.AssertionFailedf("unexpected err when sending parameter status update: %s", err),
+			)
+		}
+	}
 
 	// Send a completion message, specific to the type of result.
 	switch r.typ {
@@ -196,20 +218,15 @@ func (r *commandResult) DisableBuffering() {
 
 // AppendParamStatusUpdate is part of the CommandResult interface.
 func (r *commandResult) AppendParamStatusUpdate(param string, val string) {
-	r.flushBeforeCloseFuncs = append(
-		r.flushBeforeCloseFuncs,
-		func(ctx context.Context) error { return r.conn.bufferParamStatus(param, val) },
+	r.buffer.paramStatusUpdates = append(
+		r.buffer.paramStatusUpdates,
+		paramStatusUpdate{param: param, val: val},
 	)
 }
 
-// AppendNotice is part of the CommandResult interface.
-func (r *commandResult) AppendNotice(noticeErr error) {
-	r.flushBeforeCloseFuncs = append(
-		r.flushBeforeCloseFuncs,
-		func(ctx context.Context) error {
-			return r.conn.bufferNotice(ctx, noticeErr)
-		},
-	)
+// BufferNotice is part of the CommandResult interface.
+func (r *commandResult) BufferNotice(noticeErr error) {
+	r.buffer.notices = append(r.buffer.notices, noticeErr)
 }
 
 // SetColumns is part of the CommandResult interface.
