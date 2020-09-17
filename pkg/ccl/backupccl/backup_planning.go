@@ -14,6 +14,7 @@ import (
 	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -756,6 +757,11 @@ func backupPlanHook(
 				if err := checkForNewTables(ctx, p.ExecCfg().DB, targetDescs, tablesInPrev, dbsInPrev, priorIDs, startTime, endTime); err != nil {
 					return err
 				}
+				// Let's check that we're not widening the scope of this backup to an
+				// entire database, even if no tables were created in the meantime.
+				if err := checkForNewCompleteDatabases(targetDescs, completeDBs, dbsInPrev); err != nil {
+					return err
+				}
 			}
 
 			var err error
@@ -1123,6 +1129,28 @@ func getEncryptedDataKeyByKMSMasterKeyID(
 	}
 
 	return encryptedDataKeyByKMSMasterKeyID, kmsInfo, nil
+}
+
+// checkForNewDatabases returns an error if any new complete databases were
+// introduced.
+func checkForNewCompleteDatabases(
+	targetDescs []catalog.Descriptor, curDBs []descpb.ID, prevDBs map[descpb.ID]struct{},
+) error {
+	for _, dbID := range curDBs {
+		if _, inPrevious := prevDBs[dbID]; !inPrevious {
+			// Search for the name for a nicer error message.
+			violatingDatabase := strconv.Itoa(int(dbID))
+			for _, desc := range targetDescs {
+				if desc.GetID() == dbID {
+					violatingDatabase = desc.GetName()
+					break
+				}
+			}
+			return errors.Errorf("previous backup does not contain the complete database %q",
+				violatingDatabase)
+		}
+	}
+	return nil
 }
 
 // checkForNewTables returns an error if any new tables were introduced with the
