@@ -1390,12 +1390,6 @@ func PartialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 	for _, stmt := range stmts {
 		switch ast := stmt.(type) {
 		case *tree.CreateIndex:
-			// TODO(mgartner): Create partial inverted indexes when they are
-			// fully supported.
-			if ast.Inverted {
-				continue
-			}
-
 			tableInfo, ok := tables[ast.Table.ObjectName]
 			if !ok {
 				continue
@@ -1424,9 +1418,7 @@ func PartialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 					}
 				}
 
-				// TODO(mgartner): Create partial inverted indexes when they are
-				// fully supported.
-				if idx == nil || idx.Inverted {
+				if idx == nil {
 					continue
 				}
 
