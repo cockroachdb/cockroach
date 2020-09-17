@@ -315,7 +315,7 @@ func (p *planner) AlterPrimaryKey(
 
 	// Send a notice to users about the async cleanup jobs.
 	// TODO(knz): Mention the job ID in the client notice.
-	p.SendClientNotice(
+	p.BufferClientNotice(
 		ctx,
 		pgnotice.Newf(
 			"primary key changes are finalized asynchronously; "+

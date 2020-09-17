@@ -113,7 +113,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		// process of deprecating qualified rename targets, so issue a notice.
 		// TODO (rohany): Convert this to take in an unqualified name after 20.2
 		//  is released (#51445).
-		params.p.noticeSender.AppendNotice(
+		params.p.noticeSender.BufferNotice(
 			errors.WithHintf(
 				pgnotice.Newf("renaming tables with a qualification is deprecated"),
 				"use ALTER TABLE %s RENAME TO %s instead",

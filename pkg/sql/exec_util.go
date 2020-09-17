@@ -1983,7 +1983,7 @@ type spanWithIndex struct {
 // paramStatusUpdater is a subset of RestrictedCommandResult which allows sending
 // status updates.
 type paramStatusUpdater interface {
-	AppendParamStatusUpdate(string, string)
+	BufferParamStatusUpdate(string, string)
 }
 
 // noopParamStatusUpdater implements paramStatusUpdater by performing a no-op.
@@ -1991,7 +1991,7 @@ type noopParamStatusUpdater struct{}
 
 var _ paramStatusUpdater = (*noopParamStatusUpdater)(nil)
 
-func (noopParamStatusUpdater) AppendParamStatusUpdate(string, string) {}
+func (noopParamStatusUpdater) BufferParamStatusUpdate(string, string) {}
 
 // sessionDataMutator is the interface used by sessionVars to change the session
 // state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
@@ -2030,7 +2030,7 @@ func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string)
 func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.data.ApplicationName = appName
 	m.notifyOnDataChangeListeners("application_name", appName)
-	m.paramStatusUpdater.AppendParamStatusUpdate("application_name", appName)
+	m.paramStatusUpdater.BufferParamStatusUpdate("application_name", appName)
 }
 
 func (m *sessionDataMutator) SetBytesEncodeFormat(val lex.BytesEncodeFormat) {
@@ -2150,7 +2150,7 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.DataConversion.Location = loc
-	m.paramStatusUpdater.AppendParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
+	m.paramStatusUpdater.BufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {

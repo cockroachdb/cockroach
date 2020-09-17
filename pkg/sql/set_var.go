@@ -102,7 +102,7 @@ func (n *setVarNode) startExec(params runParams) error {
 
 	if _, ok := DummyVars[n.name]; ok {
 		telemetry.Inc(sqltelemetry.DummySessionVarValueCounter(n.name))
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			pgnotice.NewWithSeverityf("WARNING", "setting session var %q is a no-op", n.name),
 		)
