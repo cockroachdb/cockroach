@@ -41,6 +41,13 @@ SELECT table_catalog AS database_name,
        grantee,
        privilege_type
 FROM "".information_schema.table_privileges`
+	const typePrivQuery = `
+SELECT type_catalog AS database_name,
+       type_schema AS schema_name,
+       type_name,
+       grantee,
+       privilege_type
+FROM "".information_schema.type_privileges`
 
 	var source bytes.Buffer
 	var cond bytes.Buffer
@@ -94,13 +101,54 @@ FROM "".information_schema.table_privileges`
 		fmt.Fprint(&source, dbOrSchemaPrivQuery)
 		orderBy = "1,2,3,4"
 		if len(params) == 0 {
-			// There are no rows, but we can't simply return emptyNode{} because
-			// the result columns must still be defined.
-			cond.WriteString(`WHERE false`)
+			cond.WriteString(fmt.Sprintf(`WHERE %s`, dbNameClause))
 		} else {
 			fmt.Fprintf(
 				&cond,
 				`WHERE %s AND schema_name IN (%s)`,
+				dbNameClause,
+				strings.Join(params, ","),
+			)
+		}
+	} else if n.Targets != nil && len(n.Targets.Types) > 0 {
+		for _, typName := range n.Targets.Types {
+			t, err := d.catalog.ResolveType(d.ctx, typName)
+			if err != nil {
+				return nil, err
+			}
+			if t.UserDefined() {
+				params = append(
+					params,
+					fmt.Sprintf(
+						"(%s, %s)",
+						lex.EscapeSQLString(t.TypeMeta.Name.Schema),
+						lex.EscapeSQLString(t.TypeMeta.Name.Name),
+					),
+				)
+			} else {
+				params = append(
+					params,
+					fmt.Sprintf(
+						"('pg_catalog', %s)",
+						lex.EscapeSQLString(t.TypeMeta.Name.Name),
+					),
+				)
+			}
+		}
+
+		dbNameClause := "true"
+		// If the current database is set, restrict the command to it.
+		if currDB := d.evalCtx.SessionData.Database; currDB != "" {
+			dbNameClause = fmt.Sprintf("database_name = %s", lex.EscapeSQLString(currDB))
+		}
+		fmt.Fprint(&source, typePrivQuery)
+		orderBy = "1,2,3,4,5"
+		if len(params) == 0 {
+			cond.WriteString(fmt.Sprintf(`WHERE %s`, dbNameClause))
+		} else {
+			fmt.Fprintf(
+				&cond,
+				`WHERE %s AND (schema_name, type_name) IN (%s)`,
 				dbNameClause,
 				strings.Join(params, ","),
 			)
