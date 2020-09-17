@@ -331,7 +331,6 @@ system.public.descriptor  CREATE TABLE public.descriptor (
                           FAMILY fam_2_descriptor (descriptor)
 )
 
-
 query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
 ----

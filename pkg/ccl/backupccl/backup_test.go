@@ -2757,6 +2757,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 	// Generate some testdata and back it up.
 	{
+		origDB.Exec(t, "SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE")
 		origDB.Exec(t, createStore)
 		origDB.Exec(t, createStoreStats)
 
