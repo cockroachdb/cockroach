@@ -600,7 +600,7 @@ norm expect=NormalizeJSONFieldAccess
 SELECT * FROM a WHERE j->'a' = '"b"'::JSON
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5!null arr:6
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
@@ -609,13 +609,13 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── j:5 @> '{"a": "b"}' [outer=(5), immutable]
+      └── j:5 @> '{"a": "b"}' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 norm expect=NormalizeJSONFieldAccess
 SELECT * FROM a WHERE j->'a'->'x' = '"b"'::JSON
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5!null arr:6
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
@@ -624,7 +624,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── j:5 @> '{"a": {"x": "b"}}' [outer=(5), immutable]
+      └── j:5 @> '{"a": {"x": "b"}}' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 # The transformation is not valid in this case.
 norm expect-not=NormalizeJSONFieldAccess
@@ -680,7 +680,7 @@ norm expect=NormalizeJSONContains
 SELECT * FROM a WHERE j->'a' @> '{"x": "b"}'::JSON
 ----
 select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── columns: k:1!null i:2 f:3 s:4 j:5!null arr:6
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
@@ -689,7 +689,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── j:5 @> '{"a": {"x": "b"}}' [outer=(5), immutable]
+      └── j:5 @> '{"a": {"x": "b"}}' [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 # --------------------------------------------------
 # SimplifyCaseWhenConstValue
