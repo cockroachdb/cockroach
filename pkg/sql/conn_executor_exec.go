@@ -665,6 +665,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 			return ev, payload, nil
 		}
+		log.VEventf(ctx, 2, "push detected for non-refreshable txn but auto-retry not possible")
 	}
 	// No event was generated.
 	return nil, nil, nil
