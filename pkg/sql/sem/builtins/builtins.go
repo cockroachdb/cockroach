@@ -92,11 +92,12 @@ const (
 	categoryEnum           = "Enum"
 	categoryFullTextSearch = "Full Text Search"
 	categoryGenerator      = "Set-returning"
-	categorySpatial        = "Spatial"
+	categoryTrigram        = "Trigrams"
 	categoryIDGeneration   = "ID generation"
 	categoryJSON           = "JSONB"
 	categoryMultiTenancy   = "Multi-tenancy"
 	categorySequences      = "Sequence"
+	categorySpatial        = "Spatial"
 	categoryString         = "String and byte"
 	categorySystemInfo     = "System info"
 )
@@ -2880,6 +2881,14 @@ may increase either contention or retry errors, or both.`,
 	"tsvector_to_array":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
 	"tsvector_update_trigger":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
 	"tsvector_update_trigger_column": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
+
+	// Trigram functions.
+	"similarity":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
+	"show_trgm":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
+	"word_similarity":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
+	"strict_word_similarity": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
+	"show_limit":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
+	"set_limit":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
 
 	// JSON functions.
 	// The behavior of both the JSON and JSONB data types in CockroachDB is
