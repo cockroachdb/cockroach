@@ -129,6 +129,14 @@ var allowCrossDatabaseFKs = settings.RegisterPublicBoolSetting(
 	false,
 )
 
+const allowCrossDatabaseViewsSetting = "sql.cross_db_views.enabled"
+
+var allowCrossDatabaseViews = settings.RegisterPublicBoolSetting(
+	allowCrossDatabaseViewsSetting,
+	"if true, creating views that refer to other databases is allowed",
+	false,
+)
+
 // traceTxnThreshold can be used to log SQL transactions that take
 // longer than duration to complete. For example, traceTxnThreshold=1s
 // will log the trace for any transaction that takes 1s or longer. To
@@ -824,6 +832,11 @@ type ExecutorTestingKnobs struct {
 	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
 	// a given table id.
 	RunAfterSCJobsCacheLookup func(*jobs.Job)
+
+	// TestingDescriptorValidation dictates if stronger descriptor validation
+	// should be performed (typically turned on during tests only to guard against
+	// wild descriptors which are corrupted due to bugs).
+	TestingDescriptorValidation bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -1983,7 +1996,7 @@ type spanWithIndex struct {
 // paramStatusUpdater is a subset of RestrictedCommandResult which allows sending
 // status updates.
 type paramStatusUpdater interface {
-	AppendParamStatusUpdate(string, string)
+	BufferParamStatusUpdate(string, string)
 }
 
 // noopParamStatusUpdater implements paramStatusUpdater by performing a no-op.
@@ -1991,7 +2004,7 @@ type noopParamStatusUpdater struct{}
 
 var _ paramStatusUpdater = (*noopParamStatusUpdater)(nil)
 
-func (noopParamStatusUpdater) AppendParamStatusUpdate(string, string) {}
+func (noopParamStatusUpdater) BufferParamStatusUpdate(string, string) {}
 
 // sessionDataMutator is the interface used by sessionVars to change the session
 // state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
@@ -2030,7 +2043,7 @@ func (m *sessionDataMutator) notifyOnDataChangeListeners(key string, val string)
 func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.data.ApplicationName = appName
 	m.notifyOnDataChangeListeners("application_name", appName)
-	m.paramStatusUpdater.AppendParamStatusUpdate("application_name", appName)
+	m.paramStatusUpdater.BufferParamStatusUpdate("application_name", appName)
 }
 
 func (m *sessionDataMutator) SetBytesEncodeFormat(val lex.BytesEncodeFormat) {
@@ -2150,7 +2163,7 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 	m.data.DataConversion.Location = loc
-	m.paramStatusUpdater.AppendParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
+	m.paramStatusUpdater.BufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {

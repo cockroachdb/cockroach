@@ -59,7 +59,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return mutDesc, mutDesc.ValidateTable()
+	return mutDesc, mutDesc.ValidateTable(ctx)
 }
 
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {

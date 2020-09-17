@@ -212,7 +212,7 @@ type planner struct {
 	optPlanningCtx optPlanningCtx
 
 	// noticeSender allows the sending of notices.
-	// Do not use this object directly; use the SendClientNotice() method
+	// Do not use this object directly; use the BufferClientNotice() method
 	// instead.
 	noticeSender noticeSender
 

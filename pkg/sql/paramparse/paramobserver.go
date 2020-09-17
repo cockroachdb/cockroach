@@ -81,7 +81,7 @@ func applyFillFactorStorageParam(evalCtx *tree.EvalContext, key string, datum tr
 		return errors.Newf("%q must be between 0 and 100", key)
 	}
 	if evalCtx != nil {
-		evalCtx.ClientNoticeSender.SendClientNotice(
+		evalCtx.ClientNoticeSender.BufferClientNotice(
 			evalCtx.Context,
 			pgnotice.Newf("storage parameter %q is ignored", key),
 		)
@@ -116,7 +116,7 @@ func (a *TableStorageParamObserver) Apply(
 			boolVal = bool(*s)
 		}
 		if !boolVal && evalCtx != nil {
-			evalCtx.ClientNoticeSender.SendClientNotice(
+			evalCtx.ClientNoticeSender.BufferClientNotice(
 				evalCtx.Context,
 				pgnotice.Newf(`storage parameter "%s = %s" is ignored`, key, datum.String()),
 			)

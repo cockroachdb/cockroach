@@ -562,29 +562,26 @@ SELECT * FROM h@a_b_foo_idx WHERE b = 'foo'
 
 # Backfill a partial index with a user defined type when a new table is created
 # in the same transaction.
-# TODO(mgartner): Uncomment this test. This test is fails sporadically with
-# "cannot publish new versions for descriptors ... old versions still in use".
-# This appears unrelated to partial indexes. See issue #52539.
-#
-# statement ok
-# BEGIN
-#
-# statement ok
-# CREATE TABLE i (a INT, b enum)
-#
-# statement ok
-# INSERT INTO i VALUES (1, 'foo'), (2, 'bar')
-#
-# statement ok
-# CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
-#
-# statement ok
-# COMMIT
-#
-# query IT rowsort
-# SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
-# ----
-# 1  foo
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE i (a INT, b enum)
+
+statement ok
+INSERT INTO i VALUES (1, 'foo'), (2, 'bar')
+
+statement ok
+CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
+
+statement ok
+COMMIT
+
+query IT rowsort
+SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
+----
+1  foo
 
 # Add a primary key to a table with a partial index.
 

@@ -786,7 +786,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		}
 
 		// Allocate IDs now, so new IDs are available to subsequent commands
-		if err := n.tableDesc.AllocateIDs(); err != nil {
+		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
 			return err
 		}
 	}
@@ -863,14 +863,17 @@ func (n *alterTableNode) Close(context.Context)        {}
 // addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given table descriptor, but sets up
 // the index with ExtraColumnIDs from the given index, rather than the table's primary key.
 func addIndexMutationWithSpecificPrimaryKey(
-	table *tabledesc.Mutable, toAdd *descpb.IndexDescriptor, primary *descpb.IndexDescriptor,
+	ctx context.Context,
+	table *tabledesc.Mutable,
+	toAdd *descpb.IndexDescriptor,
+	primary *descpb.IndexDescriptor,
 ) error {
 	// Reset the ID so that a call to AllocateIDs will set up the index.
 	toAdd.ID = 0
 	if err := table.AddIndexMutation(toAdd, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := table.AllocateIDs(); err != nil {
+	if err := table.AllocateIDs(ctx); err != nil {
 		return err
 	}
 	// Use the columns in the given primary index to construct this indexes ExtraColumnIDs list.
