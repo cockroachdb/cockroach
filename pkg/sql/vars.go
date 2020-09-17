@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -846,7 +845,7 @@ var varGen = map[string]sessionVar{
 			return evalCtx.SessionData.SearchPath.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return catconstants.DefaultSearchPath.String()
+			return sessiondata.DefaultSearchPath.String()
 		},
 	},
 
