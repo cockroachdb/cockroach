@@ -36,7 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/gorhill/cronexpr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,7 +55,7 @@ type testHelper struct {
 	env              *jobstest.JobSchedulerTestEnv
 	cfg              *scheduledjobs.JobExecutionConfig
 	sqlDB            *sqlutils.SQLRunner
-	executeSchedules execSchedulesFn
+	executeSchedules func() error
 }
 
 // newTestHelper creates and initializes appropriate state for a test,
@@ -69,7 +71,12 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	knobs := &jobs.TestingKnobs{
 		JobSchedulerEnv: th.env,
 		TakeOverJobsScheduling: func(fn execSchedulesFn) {
-			th.executeSchedules = fn
+			th.executeSchedules = func() error {
+				defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+				return th.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+					return fn(ctx, allSchedules, txn)
+				})
+			}
 		},
 
 		CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
@@ -100,13 +107,12 @@ func (h *testHelper) clearSchedules(t *testing.T) {
 }
 
 func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID int64) {
-	// Force newly created job to be adopted and verify it succeeds.
-	h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-
 	query := "SELECT id FROM " + h.env.SystemJobsTableName() +
 		" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
 
 	testutils.SucceedsSoon(t, func() error {
+		// Force newly created job to be adopted and verify it succeeds.
+		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 		var unused int64
 		return h.sqlDB.DB.QueryRowContext(context.Background(),
 			query, jobs.StatusSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&unused)
@@ -541,10 +547,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 
 			// Force the schedule to execute.
 			th.env.SetTime(full.NextRun().Add(time.Second))
-			require.NoError(t,
-				th.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-					return th.executeSchedules(ctx, allSchedules, txn)
-				}))
+			require.NoError(t, th.executeSchedules())
 
 			// Wait for the backup complete.
 			th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
@@ -623,4 +626,191 @@ func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
 
 	res = th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
 	require.False(t, res.Next())
+}
+
+// Normally, we issue backups with AOST set to be the scheduled nextRun.
+// But if the schedule time is way in the past, the backup will fail.
+// This test verifies that scheduled backups will start working
+// (eventually), even after the cluster has been down for a long period.
+func TestScheduleBackupRecoversFromClusterDown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.sqlDB.Exec(t, `
+CREATE DATABASE db; 
+USE db; 
+CREATE TABLE t(a int);
+INSERT INTO t values (1), (10), (100);
+`)
+
+	loadSchedule := func(t *testing.T, id int64) *jobs.ScheduledJob {
+		loaded, err := jobs.LoadScheduledJob(
+			context.Background(), th.env, id, th.cfg.InternalExecutor, nil)
+		require.NoError(t, err)
+		return loaded
+	}
+
+	advanceNextRun := func(t *testing.T, id int64, delta time.Duration) {
+		// Adjust next run by the specified delta (which maybe negative).
+		s := loadSchedule(t, id)
+		s.SetNextRun(th.env.Now().Add(delta))
+		require.NoError(t, s.Update(context.Background(), th.cfg.InternalExecutor, nil))
+	}
+
+	// We'll be manipulating schedule time via th.env, but we can't fool actual backup
+	// when it comes to AsOf time.  So, override AsOf backup clause to be the current time.
+	useRealTimeAOST := func() func() {
+		knobs := th.cfg.TestingKnobs.(*jobs.TestingKnobs)
+		knobs.OverrideAsOfClause = func(clause *tree.AsOfClause) {
+			expr, err := tree.MakeDTimestampTZ(th.cfg.DB.Clock().PhysicalTime(), time.Microsecond)
+			require.NoError(t, err)
+			clause.Expr = expr
+		}
+		return func() {
+			knobs.OverrideAsOfClause = nil
+		}
+	}
+
+	// Create backup schedules for this test.
+	// Returns schedule IDs for full and incremental schedules, plus a cleanup function.
+	createSchedules := func(t *testing.T, name string) (int64, int64, func()) {
+		schedules, err := th.createBackupSchedule(t,
+			"CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '*/5 * * * *'",
+			"nodelocal://0/backup/"+name)
+		require.NoError(t, err)
+
+		// We expect full & incremental schedule to be created.
+		require.Equal(t, 2, len(schedules))
+
+		// Order schedules so that the full schedule is the first one
+		fullID, incID := schedules[0].ScheduleID(), schedules[1].ScheduleID()
+		if schedules[0].IsPaused() {
+			fullID, incID = incID, fullID
+		}
+
+		// For the initial backup, we need to ensure that AOST is the current time.
+		defer useRealTimeAOST()()
+
+		// Force full backup to execute (this unpauses incremental).
+		advanceNextRun(t, fullID, -1*time.Minute)
+		require.NoError(t, th.executeSchedules())
+		th.waitForSuccessfulScheduledJob(t, fullID)
+
+		// Do the same for the incremental.
+		advanceNextRun(t, incID, -1*time.Minute)
+		require.NoError(t, th.executeSchedules())
+		th.waitForSuccessfulScheduledJob(t, incID)
+
+		return schedules[0].ScheduleID(),
+			schedules[1].ScheduleID(),
+			func() {
+				th.sqlDB.Exec(t, "DROP SCHEDULE $1", schedules[0].ScheduleID())
+				th.sqlDB.Exec(t, "DROP SCHEDULE $1", schedules[1].ScheduleID())
+			}
+	}
+
+	markOldAndSetSchedulesPolicy := func(
+		t *testing.T,
+		fullID, incID int64,
+		onError jobspb.ScheduleDetails_ErrorHandlingBehavior,
+	) {
+		for _, id := range []int64{fullID, incID} {
+			// Pretend we were down for a year.
+			s := loadSchedule(t, id)
+			s.SetNextRun(s.NextRun().Add(-365 * 24 * time.Hour))
+			// Set onError policy to the specified value.
+			s.SetScheduleDetails(jobspb.ScheduleDetails{
+				OnError: onError,
+			})
+			require.NoError(t, s.Update(context.Background(), th.cfg.InternalExecutor, nil))
+		}
+	}
+
+	t.Run("pause", func(t *testing.T) {
+		fullID, incID, cleanup := createSchedules(t, "pause")
+		defer cleanup()
+
+		markOldAndSetSchedulesPolicy(t, fullID, incID, jobspb.ScheduleDetails_PAUSE_SCHED)
+
+		require.NoError(t, th.executeSchedules())
+
+		// AOST way in the past causes backup planning to fail.  We don't need
+		// to wait for any jobs, and the schedules should now be paused.
+		for _, id := range []int64{fullID, incID} {
+			require.True(t, loadSchedule(t, id).IsPaused())
+		}
+	})
+
+	metrics := func() *jobs.ExecutorMetrics {
+		ex, _, err := jobs.GetScheduledJobExecutor(tree.ScheduledBackupExecutor.InternalName())
+		require.NoError(t, err)
+		require.NotNil(t, ex.Metrics())
+		return ex.Metrics().(*jobs.ExecutorMetrics)
+	}()
+
+	t.Run("retry", func(t *testing.T) {
+		fullID, incID, cleanup := createSchedules(t, "retry")
+		defer cleanup()
+
+		markOldAndSetSchedulesPolicy(t, fullID, incID, jobspb.ScheduleDetails_RETRY_SOON)
+
+		require.NoError(t, th.executeSchedules())
+
+		// AOST way in the past causes backup planning to fail.  We don't need
+		// to wait for any jobs, and the schedule nextRun should be advanced
+		// a bit in the future.
+		for _, id := range []int64{fullID, incID} {
+			require.True(t, loadSchedule(t, id).NextRun().Sub(th.env.Now()) > 0)
+		}
+
+		// We expect that, eventually, both backups would succeed.
+		defer useRealTimeAOST()()
+		th.env.AdvanceTime(time.Hour)
+		initialSucceeded := metrics.NumSucceeded.Count()
+
+		require.NoError(t, th.executeSchedules())
+
+		testutils.SucceedsSoon(t, func() error {
+			delta := metrics.NumSucceeded.Count() - initialSucceeded
+			if delta == 2 {
+				return nil
+			}
+			return errors.Newf("expected 2 backup to succeed, got %d", delta)
+		})
+	})
+
+	t.Run("reschedule", func(t *testing.T) {
+		fullID, incID, cleanup := createSchedules(t, "reschedule")
+		defer cleanup()
+
+		markOldAndSetSchedulesPolicy(t, fullID, incID, jobspb.ScheduleDetails_RETRY_SCHED)
+
+		require.NoError(t, th.executeSchedules())
+
+		// AOST way in the past causes backup planning to fail.  We don't need
+		// to wait for any jobs, and the schedule nextRun should be advanced
+		// to the next scheduled recurrence.
+		for _, id := range []int64{fullID, incID} {
+			s := loadSchedule(t, id)
+			require.EqualValues(t,
+				cronexpr.MustParse(s.ScheduleExpr()).Next(th.env.Now()).Round(time.Microsecond),
+				s.NextRun())
+		}
+
+		// We expect that, eventually, both backups would succeed.
+		defer useRealTimeAOST()()
+		th.env.AdvanceTime(25 * time.Hour) // Go to next day to guarantee daily triggers.
+		initialSucceeded := metrics.NumSucceeded.Count()
+
+		require.NoError(t, th.executeSchedules())
+
+		testutils.SucceedsSoon(t, func() error {
+			delta := metrics.NumSucceeded.Count() - initialSucceeded
+			if delta == 2 {
+				return nil
+			}
+			return errors.Newf("expected 2 backup to succeed, got %d", delta)
+		})
+	})
 }

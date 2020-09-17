@@ -566,6 +566,10 @@ func backupPlanHook(
 			return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 		}
 
+		if backupStmt.Coverage() == tree.AllDescriptors && len(targetDescs) == 0 {
+			return errors.New("no descriptors available to backup at selected time")
+		}
+
 		var tables []catalog.TableDescriptor
 		statsFiles := make(map[descpb.ID]string)
 		// N.B.: These privilege checks currently do nothing since we require the
