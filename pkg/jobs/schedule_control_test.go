@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
@@ -30,9 +31,6 @@ func TestScheduleControl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
-
-	// Inject our test environment into schedule control execution via testing knobs.
-	th.cfg.TestingKnobs.(*TestingKnobs).JobSchedulerEnv = th.env
 
 	t.Run("non-existent", func(t *testing.T) {
 		for _, command := range []string{
@@ -123,8 +121,7 @@ func TestScheduleControl(t *testing.T) {
 
 func TestJobsControlForSchedules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables,
-		true /* accelerateIntervals */)
+	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables)
 	defer cleanup()
 
 	registry := th.server.JobRegistry().(*Registry)
@@ -227,9 +224,11 @@ func TestJobsControlForSchedules(t *testing.T) {
 func TestFilterJobsControlForSchedules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer ResetConstructors()()
-	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables,
-		false /* accelerateIntervals */)
+	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables)
 	defer cleanup()
+
+	// Prevent registry from changing job state while running this test.
+	defer TestingSetAdoptAndCancelIntervals(24*time.Hour, 24*time.Hour)()
 
 	registry := th.server.JobRegistry().(*Registry)
 	blockResume := make(chan struct{})
