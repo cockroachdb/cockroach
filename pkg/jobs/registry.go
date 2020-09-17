@@ -1068,6 +1068,11 @@ func (r *Registry) stepThroughStateMachine(
 				"job %d: resuming with non-nil error", *job.ID())
 		}
 		resumeCtx := logtags.AddTag(ctx, "job", *job.ID())
+		if payload.StartedMicros == 0 {
+			if err := job.started(ctx); err != nil {
+				return err
+			}
+		}
 		err := resumer.Resume(resumeCtx, phs, resultsCh)
 		if err == nil {
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusSucceeded, nil)
