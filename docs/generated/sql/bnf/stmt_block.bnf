@@ -14,6 +14,7 @@ stmt ::=
 	| prepare_stmt
 	| revoke_stmt
 	| savepoint_stmt
+	| reassign_owned_stmt
 	| release_stmt
 	| refresh_stmt
 	| nonpreparable_set_stmt
@@ -88,6 +89,9 @@ revoke_stmt ::=
 
 savepoint_stmt ::=
 	'SAVEPOINT' name
+
+reassign_owned_stmt ::=
+	'REASSIGN' 'OWNED' 'BY' role_spec_list 'TO' role_spec
 
 release_stmt ::=
 	'RELEASE' savepoint_name
@@ -298,6 +302,14 @@ schema_name_list ::=
 prep_type_clause ::=
 	'(' type_list ')'
 	| 
+
+role_spec_list ::=
+	( role_spec ) ( ( ',' role_spec ) )*
+
+role_spec ::=
+	non_reserved_word_or_sconst
+	| 'CURRENT_USER'
+	| 'SESSION_USER'
 
 savepoint_name ::=
 	'SAVEPOINT' name
@@ -947,6 +959,7 @@ unreserved_keyword ::=
 	| 'RANGE'
 	| 'RANGES'
 	| 'READ'
+	| 'REASSIGN'
 	| 'RECURRING'
 	| 'RECURSIVE'
 	| 'REF'
@@ -1134,6 +1147,10 @@ schema_name ::=
 
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
+
+non_reserved_word_or_sconst ::=
+	non_reserved_word
+	| 'SCONST'
 
 transaction_mode_list ::=
 	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
@@ -1349,10 +1366,6 @@ drop_type_stmt ::=
 explain_option_name ::=
 	non_reserved_word
 
-non_reserved_word_or_sconst ::=
-	non_reserved_word
-	| 'SCONST'
-
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
 
@@ -1504,6 +1517,12 @@ typename ::=
 	simple_typename opt_array_bounds
 	| simple_typename 'ARRAY'
 
+non_reserved_word ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
+
 transaction_mode ::=
 	transaction_user_priority
 	| transaction_read_mode
@@ -1607,11 +1626,6 @@ alter_zone_partition_stmt ::=
 	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
-
-role_spec ::=
-	non_reserved_word_or_sconst
-	| 'CURRENT_USER'
-	| 'SESSION_USER'
 
 opt_add_val_placement ::=
 	'BEFORE' 'SCONST'
@@ -1798,12 +1812,6 @@ table_index_name_list ::=
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
-
-non_reserved_word ::=
-	'identifier'
-	| unreserved_keyword
-	| col_name_keyword
-	| type_func_name_keyword
 
 kv_option ::=
 	name '=' string_or_placeholder

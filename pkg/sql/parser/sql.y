@@ -644,7 +644,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 
 %token <str> QUERIES QUERY
 
-%token <str> RANGE RANGES READ REAL RECURSIVE RECURRING REF REFERENCES REFRESH
+%token <str> RANGE RANGES READ REAL REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
@@ -818,6 +818,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.Statement> import_stmt
 %type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt
 %type <*tree.Select>   for_schedules_clause
+%type <tree.Statement> reassign_owned_stmt
 %type <tree.Statement> release_stmt
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt
@@ -1097,6 +1098,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <str> non_reserved_word
 %type <str> non_reserved_word_or_sconst
 %type <str> role_spec
+%type <[]string> role_spec_list
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
@@ -1246,6 +1248,7 @@ stmt:
 | prepare_stmt      // EXTEND WITH HELP: PREPARE
 | revoke_stmt       // EXTEND WITH HELP: REVOKE
 | savepoint_stmt    // EXTEND WITH HELP: SAVEPOINT
+| reassign_owned_stmt // EXTEND WITH HELP: REASSIGN OWNED BY
 | release_stmt      // EXTEND WITH HELP: RELEASE
 | refresh_stmt      // EXTEND WITH HELP: REFRESH
 | nonpreparable_set_stmt // help texts in sub-rule
@@ -2074,6 +2077,15 @@ opt_add_val_placement:
   {
     $$.val = (*tree.AlterTypeAddValuePlacement)(nil)
   }
+
+role_spec_list:
+	role_spec {
+		$$.val = []string{$1}
+	}
+| role_spec_list ',' role_spec
+	{
+		$$.val = append($1.strs(), $3)
+	}
 
 role_spec:
   non_reserved_word_or_sconst
@@ -7518,6 +7530,20 @@ multiple_set_clause:
     $$.val = &tree.UpdateExpr{Tuple: true, Names: $2.nameList(), Expr: $5.expr()}
   }
 
+// %Help: REASSIGN OWNED BY - change ownership of all objects
+// %Category: Priv
+// %Text: REASSIGN OWNED BY {<name> | CURRENT_USER | SESSION_USER}[,...]
+// TO {<name> | CURRENT_USER | SESSION_USER}
+reassign_owned_stmt:
+	REASSIGN OWNED BY role_spec_list TO role_spec
+{
+	$$.val = &tree.ReassignOwnedBy{
+      OldRoles: $4.strs(),
+      NewRole: $6,
+	}
+}
+| REASSIGN OWNED BY error // SHOW HELP: REASSIGN OWNED BY
+
 // A complete SELECT statement looks like this.
 //
 // The rule returns either a single select_stmt node or a tree of them,
@@ -11616,6 +11642,7 @@ unreserved_keyword:
 | RANGE
 | RANGES
 | READ
+| REASSIGN
 | RECURRING
 | RECURSIVE
 | REF
