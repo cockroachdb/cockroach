@@ -76,6 +76,7 @@ func registerTests(r *testRegistry) {
 	registerRoachmart(r)
 	registerScaleData(r)
 	registerSchemaChangeBulkIngest(r)
+	registerSchemaChangeDatabaseVersionUpgrade(r)
 	registerSchemaChangeDuringKV(r)
 	registerSchemaChangeIndexTPCC100(r)
 	registerSchemaChangeIndexTPCC1000(r)
