@@ -967,8 +967,7 @@ func populateTableConstraints(
 				if err != nil {
 					return err
 				}
-				f.WriteString(" WHERE ")
-				f.WriteString(pred)
+				f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
 			}
 			condef = tree.NewDString(f.CloseAndGetString())
 

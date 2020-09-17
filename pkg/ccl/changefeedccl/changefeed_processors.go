@@ -585,6 +585,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	cf.metrics.mu.Lock()
 	cf.metricsID = cf.metrics.mu.id
 	cf.metrics.mu.id++
+	cf.metrics.Running.Inc(1)
 	cf.metrics.mu.Unlock()
 	// TODO(dan): It's very important that we de-register from the metric because
 	// if we orphan an entry in there, our monitoring will lie (say the changefeed
@@ -622,6 +623,9 @@ func (cf *changeFrontier) closeMetrics() {
 	// Delete this feed from the MaxBehindNanos metric so it's no longer
 	// considered by the gauge.
 	cf.metrics.mu.Lock()
+	if cf.metricsID > 0 {
+		cf.metrics.Running.Dec(1)
+	}
 	delete(cf.metrics.mu.resolved, cf.metricsID)
 	cf.metricsID = -1
 	cf.metrics.mu.Unlock()
