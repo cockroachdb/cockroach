@@ -576,8 +576,6 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	toClose []colexec.Closer,
 	factory coldata.ColumnFactory,
 ) (execinfra.OpNode, error) {
-	// TODO(yuzefovich): we should collect some statistics on the outbox (e.g.
-	// number of bytes sent).
 	outbox, err := s.remoteComponentCreator.newOutbox(
 		colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
 		op, outputTyps, metadataSourcesQueue, toClose,
@@ -689,7 +687,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				// information (e.g. output stall time).
 				var err error
 				localOp, err = s.wrapWithVectorizedStatsCollector(
-					op, nil /* ioReadingOp */, nil, /* inputs */
+					op, nil /* ioReader */, nil, /* inputs */
 					int32(stream.StreamID), execinfrapb.StreamIDTagKey, mons,
 				)
 				if err != nil {
@@ -762,7 +760,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			op := colexecbase.Operator(inbox)
 			if s.recordingStats {
 				op, err = s.wrapWithVectorizedStatsCollector(
-					inbox, nil /* ioReadingOp */, nil /* inputs */, int32(inputStream.StreamID),
+					inbox, inbox, nil /* inputs */, int32(inputStream.StreamID),
 					execinfrapb.StreamIDTagKey, nil, /* monitors */
 				)
 				if err != nil {
@@ -820,7 +818,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// this stats collector to display stats.
 			var err error
 			op, err = s.wrapWithVectorizedStatsCollector(
-				op, nil /* ioReadingOp */, statsInputsAsOps, -1, /* id */
+				op, nil /* ioReader */, statsInputsAsOps, -1, /* id */
 				"" /* idTagKey */, nil, /* monitors */
 			)
 			if err != nil {
