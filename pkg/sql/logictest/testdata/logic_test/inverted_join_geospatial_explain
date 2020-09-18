@@ -68,9 +68,9 @@ ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.g
 ·                                       distribution           local                                                                                 ·                                         ·
 ·                                       vectorized             true                                                                                  ·                                         ·
 project                                 ·                      ·                                                                                     (lk, rk1)                                 +lk,+rk1
- │                                      estimated row count    333333 (missing stats)                                                                ·                                         ·
+ │                                      estimated row count    326700 (missing stats)                                                                ·                                         ·
  └── project                            ·                      ·                                                                                     (lk, geom1, rk1, geom)                    +lk,+rk1
-      │                                 estimated row count    333333 (missing stats)                                                                ·                                         ·
+      │                                 estimated row count    326700 (missing stats)                                                                ·                                         ·
       └── lookup join (inner)           ·                      ·                                                                                     (lk, geom1, rk1, rk2, geom)               +lk,+rk1
            │                            table                  rtable@primary                                                                        ·                                         ·
            │                            equality               (rk1, rk2) = (rk1,rk2)                                                                ·                                         ·
@@ -97,13 +97,13 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.g
 ·                                       distribution           local                                                                                  ·                                         ·
 ·                                       vectorized             true                                                                                   ·                                         ·
 sort                                    ·                      ·                                                                                      (lk, rk1)                                 +lk,+rk1
- │                                      estimated row count    10000 (missing stats)                                                                  ·                                         ·
+ │                                      estimated row count    9801 (missing stats)                                                                   ·                                         ·
  │                                      order                  +lk,+rk1                                                                               ·                                         ·
  │                                      already ordered        +lk                                                                                    ·                                         ·
  └── project                            ·                      ·                                                                                      (lk, rk1)                                 +lk
-      │                                 estimated row count    10000 (missing stats)                                                                  ·                                         ·
+      │                                 estimated row count    9801 (missing stats)                                                                   ·                                         ·
       └── project                       ·                      ·                                                                                      (lk, geom1, rk1, geom)                    +lk
-           │                            estimated row count    10000 (missing stats)                                                                  ·                                         ·
+           │                            estimated row count    9801 (missing stats)                                                                   ·                                         ·
            └── lookup join (inner)      ·                      ·                                                                                      (lk, geom1, rk1, rk2, geom)               +lk
                 │                       table                  rtable@primary                                                                         ·                                         ·
                 │                       equality               (rk1, rk2) = (rk1,rk2)                                                                 ·                                         ·
@@ -128,9 +128,9 @@ AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0
 ·                                  distribution           local                                                                                                                                                                                                                       ·                                                ·
 ·                                  vectorized             true                                                                                                                                                                                                                        ·                                                ·
 project                            ·                      ·                                                                                                                                                                                                                           (lk, rk1)                                        ·
- │                                 estimated row count    3333 (missing stats)                                                                                                                                                                                                        ·                                                ·
+ │                                 estimated row count    3267 (missing stats)                                                                                                                                                                                                        ·                                                ·
  └── project                       ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, geom)                    ·
-      │                            estimated row count    3333 (missing stats)                                                                                                                                                                                                        ·                                                ·
+      │                            estimated row count    3267 (missing stats)                                                                                                                                                                                                        ·                                                ·
       └── lookup join (inner)      ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, rk2, geom)               ·
            │                       table                  rtable@primary                                                                                                                                                                                                              ·                                                ·
            │                       equality               (rk1, rk2) = (rk1,rk2)                                                                                                                                                                                                      ·                                                ·
@@ -162,7 +162,7 @@ project                                      ·                      ·         
       │                                      order key              lk                                       ·                                         ·
       └── project                            ·                      ·                                        (lk, geom2)                               +lk
            └── project                       ·                      ·                                        (lk, geom2, geom)                         +lk
-                │                            estimated row count    10000 (missing stats)                    ·                                         ·
+                │                            estimated row count    9801 (missing stats)                     ·                                         ·
                 └── lookup join (inner)      ·                      ·                                        (lk, geom2, rk1, rk2, geom)               +lk
                      │                       table                  rtable@primary                           ·                                         ·
                      │                       equality               (rk1, rk2) = (rk1,rk2)                   ·                                         ·
@@ -191,11 +191,11 @@ root                                                 ·                      · 
  │    └── project                                    ·                      ·                                        (lk, geom1, rk1, geom)                    ·
  │         │                                         estimated row count    10000 (missing stats)                    ·                                         ·
  │         └── hash join (right outer)               ·                      ·                                        (rk1, geom, lk, geom1, lk, geom1)         ·
- │              │                                    estimated row count    10000 (missing stats)                    ·                                         ·
+ │              │                                    estimated row count    9900 (missing stats)                     ·                                         ·
  │              │                                    equality               (lk) = (lk)                              ·                                         ·
  │              │                                    right cols are key     ·                                        ·                                         ·
  │              ├── project                          ·                      ·                                        (rk1, geom, lk, geom1)                    ·
- │              │    │                               estimated row count    10000 (missing stats)                    ·                                         ·
+ │              │    │                               estimated row count    9900 (missing stats)                     ·                                         ·
  │              │    └── lookup join (inner)         ·                      ·                                        (rk1, rk2, lk, geom1, geom)               ·
  │              │         │                          table                  rtable@primary                           ·                                         ·
  │              │         │                          equality               (rk1, rk2) = (rk1,rk2)                   ·                                         ·
@@ -252,11 +252,11 @@ root                                                           ·               
  │              └── project                                    ·                      ·                                        (lk, geom1, geom)                         ·
  │                   │                                         estimated row count    3333 (missing stats)                     ·                                         ·
  │                   └── hash join (right outer)               ·                      ·                                        (geom, lk, geom1, lk, geom1)              ·
- │                        │                                    estimated row count    3333 (missing stats)                     ·                                         ·
+ │                        │                                    estimated row count    3300 (missing stats)                     ·                                         ·
  │                        │                                    equality               (lk) = (lk)                              ·                                         ·
  │                        │                                    right cols are key     ·                                        ·                                         ·
  │                        ├── project                          ·                      ·                                        (geom, lk, geom1)                         ·
- │                        │    │                               estimated row count    3333 (missing stats)                     ·                                         ·
+ │                        │    │                               estimated row count    3300 (missing stats)                     ·                                         ·
  │                        │    └── lookup join (inner)         ·                      ·                                        (rk1, rk2, lk, geom1, geom)               ·
  │                        │         │                          table                  rtable@primary                           ·                                         ·
  │                        │         │                          equality               (rk1, rk2) = (rk1,rk2)                   ·                                         ·
@@ -326,11 +326,11 @@ root                                                      ·                    
  │              └── project                               ·                      ·                                            (lk, geom2, rk1, geom, rk2)               ·
  │                   │                                    estimated row count    10000 (missing stats)                        ·                                         ·
  │                   └── hash join (right outer)          ·                      ·                                            (rk1, rk2, lk, geom2, geom, lk, geom2)    ·
- │                        │                               estimated row count    10000 (missing stats)                        ·                                         ·
+ │                        │                               estimated row count    9900 (missing stats)                         ·                                         ·
  │                        │                               equality               (lk) = (lk)                                  ·                                         ·
  │                        │                               right cols are key     ·                                            ·                                         ·
  │                        ├── lookup join (inner)         ·                      ·                                            (rk1, rk2, lk, geom2, geom)               ·
- │                        │    │                          estimated row count    10000 (missing stats)                        ·                                         ·
+ │                        │    │                          estimated row count    9900 (missing stats)                         ·                                         ·
  │                        │    │                          table                  rtable@primary                               ·                                         ·
  │                        │    │                          equality               (rk1, rk2) = (rk1,rk2)                       ·                                         ·
  │                        │    │                          equality cols are key  ·                                            ·                                         ·
@@ -380,11 +380,11 @@ root                                                                ·          
  │              └── project                                         ·                      ·                                            (lk, geom1, rk1, geom)                    ·
  │                   │                                              estimated row count    1111 (missing stats)                         ·                                         ·
  │                   └── hash join (right outer)                    ·                      ·                                            (rk1, geom, lk, geom1, lk, geom1)         ·
- │                        │                                         estimated row count    1111 (missing stats)                         ·                                         ·
+ │                        │                                         estimated row count    1100 (missing stats)                         ·                                         ·
  │                        │                                         equality               (lk) = (lk)                                  ·                                         ·
  │                        │                                         right cols are key     ·                                            ·                                         ·
  │                        ├── project                               ·                      ·                                            (rk1, geom, lk, geom1)                    ·
- │                        │    │                                    estimated row count    1111 (missing stats)                         ·                                         ·
+ │                        │    │                                    estimated row count    1100 (missing stats)                         ·                                         ·
  │                        │    └── lookup join (inner)              ·                      ·                                            (rk1, rk2, lk, geom1, geom)               ·
  │                        │         │                               table                  rtable@primary                               ·                                         ·
  │                        │         │                               equality               (rk1, rk2) = (rk1,rk2)                       ·                                         ·

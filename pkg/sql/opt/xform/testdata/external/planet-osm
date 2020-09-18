@@ -1725,37 +1725,37 @@ ORDER BY
     p.way, v.prio;
 ----
 sort
- ├── columns: way:69 int_tc_type:99!null
+ ├── columns: way:69!null int_tc_type:99!null
  ├── immutable
  ├── stats: [rows=2632.05556, distinct(69)=2632.05556, null(69)=0]
  ├── key: (69)
  ├── fd: (69)-->(99)
  ├── ordering: +69
  └── distinct-on
-      ├── columns: p.way:69 l.highway:99!null
-      ├── grouping columns: p.way:69
+      ├── columns: p.way:69!null l.highway:99!null
+      ├── grouping columns: p.way:69!null
       ├── internal-ordering: +146 opt(29,69)
       ├── immutable
       ├── stats: [rows=2632.05556, distinct(69)=2632.05556, null(69)=0]
       ├── key: (69)
       ├── fd: (69)-->(99)
       ├── sort
-      │    ├── columns: p.highway:29!null p.way:69 l.highway:99!null l.way:141 column1:145!null column2:146!null
+      │    ├── columns: p.highway:29!null p.way:69!null l.highway:99!null l.way:141!null column1:145!null column2:146!null
       │    ├── immutable
       │    ├── stats: [rows=386640.471, distinct(69)=2632.05556, null(69)=0, distinct(99)=5, null(99)=0, distinct(145)=5, null(145)=0]
       │    ├── fd: ()-->(29), (99)==(145), (145)==(99)
       │    ├── ordering: +146 opt(29,69) [actual: +146]
       │    └── inner-join (hash)
-      │         ├── columns: p.highway:29!null p.way:69 l.highway:99!null l.way:141 column1:145!null column2:146!null
+      │         ├── columns: p.highway:29!null p.way:69!null l.highway:99!null l.way:141!null column1:145!null column2:146!null
       │         ├── immutable
       │         ├── stats: [rows=386640.471, distinct(69)=2632.05556, null(69)=0, distinct(99)=5, null(99)=0, distinct(145)=5, null(145)=0]
       │         ├── fd: ()-->(29), (99)==(145), (145)==(99)
       │         ├── inner-join (lookup planet_osm_line)
-      │         │    ├── columns: p.highway:29!null p.way:69 l.highway:99 l.way:141
+      │         │    ├── columns: p.highway:29!null p.way:69!null l.highway:99 l.way:141!null
       │         │    ├── key columns: [142] = [142]
       │         │    ├── lookup columns are key
       │         │    ├── immutable
-      │         │    ├── stats: [rows=3926737.36, distinct(29)=1, null(29)=0, distinct(69)=2632.05556, null(69)=0, distinct(99)=31, null(99)=1529566.44]
+      │         │    ├── stats: [rows=3926737.36, distinct(29)=1, null(29)=0, distinct(69)=2632.05556, null(69)=0, distinct(99)=31, null(99)=1529566.44, distinct(141)=146376, null(141)=0]
       │         │    ├── fd: ()-->(29)
       │         │    ├── inner-join (inverted-lookup planet_osm_line@planet_osm_line_way_idx)
       │         │    │    ├── columns: p.highway:29!null p.way:69 l.rowid:142!null
@@ -1774,7 +1774,7 @@ sort
       │         │    │    │         └── p.highway:29 = 'turning_circle' [outer=(29), constraints=(/29: [/'turning_circle' - /'turning_circle']; tight), fd=()-->(29)]
       │         │    │    └── filters (true)
       │         │    └── filters
-      │         │         └── st_dwithin(p.way:69, l.way:141, 100.0) [outer=(69,141), immutable]
+      │         │         └── st_dwithin(p.way:69, l.way:141, 100.0) [outer=(69,141), immutable, constraints=(/69: (/NULL - ]; /141: (/NULL - ])]
       │         ├── values
       │         │    ├── columns: column1:145!null column2:146!null
       │         │    ├── cardinality: [5 - 5]
