@@ -117,7 +117,7 @@ func (p *planner) CheckPrivilegeForUser(
 	}
 
 	hasPriv, err := p.checkRolePredicate(ctx, user, func(role string) bool {
-		return IsOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
+		return p.IsOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
 	})
 	if err != nil {
 		return err
@@ -156,7 +156,7 @@ func getOwnerOfDesc(desc catalog.Descriptor) string {
 }
 
 // IsOwner returns if the role has ownership on the descriptor.
-func IsOwner(desc catalog.Descriptor, role string) bool {
+func (p *planner) IsOwner(desc catalog.Descriptor, role string) bool {
 	return role == getOwnerOfDesc(desc)
 }
 
@@ -168,7 +168,7 @@ func (p *planner) HasOwnership(ctx context.Context, descriptor catalog.Descripto
 	user := p.SessionData().User
 
 	return p.checkRolePredicate(ctx, user, func(role string) bool {
-		return IsOwner(descriptor, role)
+		return p.IsOwner(descriptor, role)
 	})
 }
 
