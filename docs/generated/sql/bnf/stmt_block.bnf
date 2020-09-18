@@ -1897,6 +1897,7 @@ extra_var_value ::=
 targets_roles ::=
 	'ROLE' name_list
 	| 'SCHEMA' name_list
+	| 'TYPE' type_name_list
 	| targets
 
 partition ::=

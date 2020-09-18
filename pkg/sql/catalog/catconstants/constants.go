@@ -95,6 +95,7 @@ const (
 	InformationSchemaTableConstraintTableID
 	InformationSchemaTablePrivilegesID
 	InformationSchemaTablesTableID
+	InformationSchemaTypePrivilegesID
 	InformationSchemaViewsTableID
 	InformationSchemaUserPrivilegesID
 	PgCatalogID
