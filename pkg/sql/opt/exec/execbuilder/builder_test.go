@@ -27,5 +27,11 @@ import (
 func TestExecBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
-	logictest.RunLogicTest(t, "testdata/[^.]*")
+	logictest.RunLogicTest(t, logictest.TestServerArgs{
+		// Several test files in execbuilder verify that mutations behave as
+		// expected; however, if we add the randomization of the mutations max
+		// batch size, then the output becomes non-deterministic, so we disable
+		// that randomization.
+		DisableMutationsMaxBatchSizeRandomization: true,
+	}, "testdata/[^.]*")
 }

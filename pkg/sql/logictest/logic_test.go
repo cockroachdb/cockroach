@@ -29,7 +29,7 @@ import (
 // See the comments in logic.go for more details.
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	RunLogicTest(t, "testdata/logic_test/[^.]*")
+	RunLogicTest(t, TestServerArgs{}, "testdata/logic_test/[^.]*")
 }
 
 // TestSqlLiteLogic runs the subset of SqlLite logic tests that do not require
@@ -119,5 +119,5 @@ func runSQLLiteLogicTest(t *testing.T, globs ...string) {
 		prefixedGlobs[i] = logicTestPath + glob
 	}
 
-	RunLogicTest(t, prefixedGlobs...)
+	RunLogicTest(t, TestServerArgs{}, prefixedGlobs...)
 }
