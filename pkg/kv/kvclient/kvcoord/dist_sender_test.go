@@ -258,10 +258,21 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	testCases := []struct {
-		args        roachpb.Request
-		tiers       []roachpb.Tier
-		expReplica  []roachpb.NodeID
-		leaseHolder int32 // 0 for not caching a lease holder.
+		args roachpb.Request
+		// tiers, if set, will be used as the locality of the node sending the
+		// request. Replicas in the same locality with it will be tried first if a
+		// leaseholder is not known. Note that the localities for the nodes in the
+		// descriptor have been fixed above.
+		tiers []roachpb.Tier
+		// expReplica is a list of node ids expected to correspond to replicas
+		// passed to the transport factory. Positions filled with 0 are not checked
+		// against the actual replica passed it, but the array length is still
+		// checked.
+		expReplica []roachpb.NodeID
+		// If set, leaseholder will represent the index of the replica cached as the
+		// leaseholder on the sending node. 0 for the cache not having a
+		// leaseholder.
+		leaseholder int32
 		// Naming is somewhat off, as eventually consistent reads usually
 		// do not have to go to the lease holder when a node has a read lease.
 		// Would really want CONSENSUS here, but that is not implemented.
@@ -317,7 +328,7 @@ func TestSendRPCOrder(t *testing.T) {
 			// Compare only the first resulting address as we have a lease holder
 			// and that means we're only trying to send there.
 			expReplica:  []roachpb.NodeID{2, 0, 0, 0, 0},
-			leaseHolder: 2,
+			leaseholder: 2,
 		},
 		// Inconsistent Get without matching attributes but lease holder (node 3). Should just
 		// go random as the lease holder does not matter.
@@ -325,7 +336,7 @@ func TestSendRPCOrder(t *testing.T) {
 			args:        &roachpb.GetRequest{},
 			tiers:       []roachpb.Tier{},
 			expReplica:  []roachpb.NodeID{1, 2, 3, 4, 5},
-			leaseHolder: 2,
+			leaseholder: 2,
 		},
 	}
 
@@ -358,6 +369,7 @@ func TestSendRPCOrder(t *testing.T) {
 	) (Transport, error) {
 		reps := make([]roachpb.ReplicaDescriptor, len(replicas))
 		copy(reps, replicas)
+		// Check that the transport is created with the expected replicas.
 		if err := verifyCall(opts, reps); err != nil {
 			return nil, err
 		}
@@ -403,8 +415,8 @@ func TestSendRPCOrder(t *testing.T) {
 
 			ds.rangeCache.Clear()
 			var lease roachpb.Lease
-			if tc.leaseHolder != 0 {
-				lease.Replica = descriptor.InternalReplicas[tc.leaseHolder-1]
+			if tc.leaseholder != 0 {
+				lease.Replica = descriptor.InternalReplicas[tc.leaseholder-1]
 			}
 			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 				Desc:  descriptor,
