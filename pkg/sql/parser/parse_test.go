@@ -2940,6 +2940,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`, ``},
 		{`ALTER TABLE a ADD CONSTRAINT foo EXCLUDE USING gist (bar WITH =)`, 46657, `add constraint exclude using`, ``},
 
+		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
 		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
@@ -2959,6 +2960,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TEXT SEARCH a`, 7821, `create text`, ``},
 		{`CREATE TRIGGER a`, 28296, `create`, ``},
 
+		{`DROP ACCESS METHOD a`, 0, `drop access method`, ``},
 		{`DROP AGGREGATE a`, 0, `drop aggregate`, ``},
 		{`DROP CAST a`, 0, `drop cast`, ``},
 		{`DROP COLLATION a`, 0, `drop collation`, ``},
