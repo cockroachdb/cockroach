@@ -18,6 +18,10 @@ import (
 )
 
 // GRPCTransportFactory is the default TransportFactory, using GRPC.
+//
+// Notice that a different implementation is used during race builds: we wrap
+// this to hold on to and read all obtained requests in a tight loop, exposing
+// data races; see transport_race.go.
 func GRPCTransportFactory(
 	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
 ) (Transport, error) {
