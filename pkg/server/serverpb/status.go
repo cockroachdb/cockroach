@@ -32,8 +32,8 @@ func MakeOptionalStatusServer(s StatusServer) OptionalStatusServer {
 
 // OptionalErr returns the wrapped StatusServer, if it is available. If it is
 // not, an error referring to the optionally supplied issues is returned.
-func (s *OptionalStatusServer) OptionalErr(issueNos ...int) (StatusServer, error) {
-	v, err := s.w.OptionalErr(issueNos...)
+func (s *OptionalStatusServer) OptionalErr(issue int) (StatusServer, error) {
+	v, err := s.w.OptionalErr(issue)
 	if err != nil {
 		return nil, err
 	}

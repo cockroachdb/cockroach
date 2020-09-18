@@ -1754,7 +1754,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 
 	expirationTime, err := parseExpirationTime(ef.planner.EvalContext(), expiration)
@@ -1775,7 +1775,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 
 	return &unsplitNode{
@@ -1788,7 +1788,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 
 	return &unsplitAllNode{
@@ -1802,7 +1802,7 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 	index cat.Index, input exec.Node, relocateLease bool,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
 	}
 
 	return &relocateNode{
