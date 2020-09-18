@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -346,6 +347,7 @@ func doCreateBackupSchedules(
 	if err := full.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
 		return err
 	}
+	collectScheduledBackupTelemetry(incRecurrence, firstRun, fullRecurrencePicked, details)
 	return emitSchedule(full, fullBackupStmt, resultsCh)
 }
 
@@ -565,6 +567,40 @@ var scheduledBackupHeader = colinfo.ResultColumns{
 	{Name: "backup_stmt", Typ: types.String},
 }
 
+func collectScheduledBackupTelemetry(
+	incRecurrence *scheduleRecurrence,
+	firstRun *time.Time,
+	fullRecurrencePicked bool,
+	details jobspb.ScheduleDetails,
+) {
+	telemetry.Count("scheduled-backup.create.success")
+	if incRecurrence != nil {
+		telemetry.Count("scheduled-backup.incremental")
+	}
+	if firstRun != nil {
+		telemetry.Count("scheduled-backup.first-run-picked")
+	}
+	if fullRecurrencePicked {
+		telemetry.Count("scheduled-backup.full-recurrence-picked")
+	}
+	switch details.Wait {
+	case jobspb.ScheduleDetails_WAIT:
+		telemetry.Count("scheduled-backup.wait-policy.wait")
+	case jobspb.ScheduleDetails_NO_WAIT:
+		telemetry.Count("scheduled-backup.wait-policy.no-wait")
+	case jobspb.ScheduleDetails_SKIP:
+		telemetry.Count("scheduled-backup.wait-policy.skip")
+	}
+	switch details.OnError {
+	case jobspb.ScheduleDetails_RETRY_SCHED:
+		telemetry.Count("scheduled-backup.error-policy.retry-schedule")
+	case jobspb.ScheduleDetails_RETRY_SOON:
+		telemetry.Count("scheduled-backup.error-policy.retry-soon")
+	case jobspb.ScheduleDetails_PAUSE_SCHED:
+		telemetry.Count("scheduled-backup.error-policy.pause-schedule")
+	}
+}
+
 func createBackupScheduleHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
@@ -578,7 +614,13 @@ func createBackupScheduleHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		return doCreateBackupSchedules(ctx, p, eval, resultsCh)
+		err := doCreateBackupSchedules(ctx, p, eval, resultsCh)
+		if err != nil {
+			telemetry.Count("scheduled-backup.create.failed")
+			return err
+		}
+
+		return nil
 	}
 	return fn, scheduledBackupHeader, nil, false, nil
 }
