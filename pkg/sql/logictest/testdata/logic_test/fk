@@ -3224,3 +3224,63 @@ SELECT * FROM fk_ref LEFT JOIN xyz ON a = x
 statement ok
 DROP TABLE fk_ref;
 DROP TABLE xyz;
+
+
+# This tests behavior of foreign key cascades in the presence of covering
+# indexes which contain additional columns in their suffix. This is a regression
+# test for #54208.
+
+subtest secondary_index_overlaps_with_fk_prefix
+
+statement ok
+CREATE TABLE fk_54208_referenced (
+    j INT PRIMARY KEY
+)
+
+statement ok
+CREATE TABLE fk_54208_origin_default (
+    i INT PRIMARY KEY,
+    j INT,
+    k INT NOT NULL DEFAULT -1,
+    INDEX (j, k),
+    INDEX (j)
+)
+
+statement ok
+CREATE TABLE fk_54208_origin_null (
+    i INT PRIMARY KEY,
+    j INT,
+    k INT NOT NULL,
+    INDEX (j, k),
+    INDEX (j)
+)
+
+statement ok
+ALTER TABLE fk_54208_origin_default
+    ADD CONSTRAINT fk_54208_default FOREIGN KEY (j) REFERENCES fk_54208_referenced(j) ON DELETE SET DEFAULT;
+
+statement ok
+ALTER TABLE fk_54208_origin_null
+    ADD CONSTRAINT fk_54208_null FOREIGN KEY (j) REFERENCES fk_54208_referenced(j) ON DELETE SET NULL;
+
+statement ok
+INSERT INTO fk_54208_referenced VALUES (1);
+
+statement ok
+INSERT INTO fk_54208_origin_default VALUES (1, 1, 1);
+
+statement ok
+INSERT INTO fk_54208_origin_null VALUES (1, 1, 1);
+
+statement ok
+DELETE FROM fk_54208_referenced WHERE j = 1;
+
+query III
+SELECT * FROM fk_54208_origin_default;
+----
+1 NULL 1
+
+query III
+SELECT * FROM fk_54208_origin_null;
+----
+1 NULL 1
