@@ -1,3 +1,13 @@
+# Note that this filed was moved from the regular logic tests as a part of
+# introducing the randomization of the max batch size of mutations. That
+# randomization needs to be disabled for these queries because they become
+# non-deterministic. However, there is no easy to do so just for a single file,
+# so the file was moved into execbuilder tests which disable that
+# randomization.
+# The file didn't explicitly specify the configs to run with, and it wasn't
+# changed, but if later it becomes a concern, it should be ok to restrict the
+# number of configs here.
+
 # Disable automatic stats
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
