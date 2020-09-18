@@ -297,12 +297,35 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 
 func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner string) error {
 	typeDesc := n.desc
-	privs := typeDesc.GetPrivileges()
-
+	// TODO(angelaw): Remove once Solon's added hasownership to checkcanaltertonewowner
 	hasOwnership, err := p.HasOwnership(ctx, typeDesc)
 	if err != nil {
 		return err
 	}
+
+	if err := p.checkCanAlterTypeAndSetNewOwner(ctx, typeDesc, newOwner, hasOwnership); err != nil {
+		return err
+	}
+
+	if err := p.writeTypeSchemaChange(
+		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
+	); err != nil {
+		return err
+	}
+
+	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeDesc.ArrayTypeID)
+	return p.writeTypeSchemaChange(
+		ctx, arrayDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
+	)
+}
+
+// Helper method for privilege checking and setting new owner
+// Called in ALTER TYPE and REASSIGN OWNED BY
+func (p *planner) checkCanAlterTypeAndSetNewOwner(
+	ctx context.Context, typeDesc *typedesc.Mutable, newOwner string, hasOwnership bool,
+) error {
+
+	privs := typeDesc.GetPrivileges()
 
 	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, privs, newOwner, hasOwnership); err != nil {
 		return err
@@ -320,23 +343,14 @@ func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner
 
 	privs.SetOwner(newOwner)
 
-	if err := p.writeTypeSchemaChange(
-		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
-	); err != nil {
-		return err
-	}
-
 	// Also have to change the owner of the implicit array type.
-	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, n.desc.ArrayTypeID)
+	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
-
 	arrayDesc.Privileges.SetOwner(newOwner)
 
-	return p.writeTypeSchemaChange(
-		ctx, arrayDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
-	)
+	return nil
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }

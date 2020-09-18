@@ -1196,23 +1196,34 @@ func (p *planner) alterTableOwner(
 	ctx context.Context, n *alterTableNode, newOwner string,
 ) (bool, error) {
 	desc := n.tableDesc
+
+	if err := p.checkCanAlterTableAndSetNewOwner(ctx, desc, newOwner, n.hasOwnership); err != nil {
+		return false, err
+	}
+
 	privs := desc.GetPrivileges()
-
-	if err := p.checkCanAlterToNewOwner(ctx, desc, privs, newOwner, n.hasOwnership); err != nil {
-		return false, err
-	}
-
-	// Ensure the new owner has CREATE privilege on the table's schema.
-	if err := p.canCreateOnSchema(ctx, desc.GetParentSchemaID(), newOwner); err != nil {
-		return false, err
-	}
-
 	// If the owner we want to set to is the current owner, do a no-op.
 	if newOwner == privs.Owner {
 		return false, nil
 	}
 
+	return true, nil
+}
+
+// Helper method for privilege checking and setting new owner
+// Called in ALTER TABLE and REASSIGN OWNED BY
+func (p *planner) checkCanAlterTableAndSetNewOwner(
+	ctx context.Context, desc *tabledesc.Mutable, newOwner string, hasOwnership bool,
+) error {
+	privs := desc.GetPrivileges()
+	if err := p.checkCanAlterToNewOwner(ctx, desc, privs, newOwner, hasOwnership); err != nil {
+		return err
+	}
+	// Ensure the new owner has CREATE privilege on the table's schema.
+	if err := p.canCreateOnSchema(ctx, desc.GetParentSchemaID(), newOwner); err != nil {
+		return err
+	}
 	privs.SetOwner(newOwner)
 
-	return true, nil
+	return nil
 }
