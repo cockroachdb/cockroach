@@ -219,10 +219,9 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 }
 
 // splitHealthy splits the provided client slice into healthy clients and
-// unhealthy clients, based on their connection state. Healthy clients will
-// be rearranged first in the slice, and unhealthy clients will be rearranged
-// last. Within these two groups, the rearrangement will be stable. The function
-// will then return the number of healthy clients.
+// unhealthy clients, based on their connection state. Healthy clients will be
+// rearranged first in the slice, and unhealthy clients will be rearranged last.
+// Within these two groups, the rearrangement will be stable.
 func splitHealthy(replicas []roachpb.ReplicaDescriptor, health map[roachpb.ReplicaDescriptor]bool) {
 	sort.Stable(byHealth{replicas: replicas, health: health})
 }
