@@ -1420,7 +1420,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 //
 // See https://github.com/cockroachdb/cockroach/issues/1644.
 func runSetupSplitSnapshotRace(
-	t *testing.T, testFn func(*multiTestContext, roachpb.Key, roachpb.Key),
+	ctx context.Context,
+	t *testing.T,
+	testFn func(mtc *multiTestContext, leftKey roachpb.Key, rightKey roachpb.Key),
 ) {
 	sc := kvserver.TestStoreConfig(nil)
 	// We'll control replication by hand.
@@ -1445,17 +1447,17 @@ func runSetupSplitSnapshotRace(
 	// First, do a couple of writes; we'll use these to determine when
 	// the dust has settled.
 	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	incArgs = incrementArgs(rightKey, 2)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Split the system range from the rest of the keyspace.
 	splitArgs := adminSplitArgs(keys.SystemMax)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.stores[0].TestSender(), splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1469,7 +1471,7 @@ func runSetupSplitSnapshotRace(
 	// safe (or allowed) for a leaseholder to remove itself from a cluster
 	// without first giving up its lease.
 	mtc.replicateRange(leftRangeID, 1, 2, 3)
-	mtc.transferLease(context.Background(), leftRangeID, 0, 1)
+	mtc.transferLease(ctx, leftRangeID, 0, 1)
 	mtc.unreplicateRange(leftRangeID, 0)
 
 	mtc.waitForValues(leftKey, []int64{0, 1, 1, 1, 0, 0})
@@ -1477,11 +1479,11 @@ func runSetupSplitSnapshotRace(
 
 	// Stop node 3 so it doesn't hear about the split.
 	mtc.stopStore(3)
-	mtc.advanceClock(context.Background())
+	mtc.advanceClock(ctx)
 
 	// Split the data range.
 	splitArgs = adminSplitArgs(roachpb.Key("m"))
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1499,7 +1501,7 @@ func runSetupSplitSnapshotRace(
 	// Relocate the right range onto nodes 3-5.
 	mtc.replicateRange(rightRangeID, 4, 5)
 	mtc.unreplicateRange(rightRangeID, 2)
-	mtc.transferLease(context.Background(), rightRangeID, 1, 4)
+	mtc.transferLease(ctx, rightRangeID, 1, 4)
 	mtc.unreplicateRange(rightRangeID, 1)
 
 	// Perform another increment after all the replication changes. This
@@ -1514,7 +1516,7 @@ func runSetupSplitSnapshotRace(
 	// failure and render the range unable to achieve quorum after
 	// restart (in the SnapshotWins branch).
 	incArgs = incrementArgs(rightKey, 3)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1522,7 +1524,7 @@ func runSetupSplitSnapshotRace(
 	mtc.waitForValues(rightKey, []int64{0, 0, 0, 2, 5, 5})
 
 	// Scan the meta ranges to resolve all intents
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0],
+	if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0],
 		&roachpb.ScanRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key:    keys.MetaMin,
@@ -1549,7 +1551,8 @@ func runSetupSplitSnapshotRace(
 func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
+	ctx := context.Background()
+	runSetupSplitSnapshotRace(ctx, t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
 		// Bring the left range up first so that the split happens before it sees a snapshot.
 		for i := 1; i <= 3; i++ {
 			mtc.restartStore(i)
@@ -1557,7 +1560,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 
 		// Perform a write on the left range and wait for it to propagate.
 		incArgs := incrementArgs(leftKey, 10)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
@@ -1568,7 +1571,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 
 		// Write to the right range.
 		incArgs = incrementArgs(rightKey, 20)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(rightKey, []int64{0, 0, 0, 25, 25, 25})
@@ -1582,7 +1585,8 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
+	ctx := context.Background()
+	runSetupSplitSnapshotRace(ctx, t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
 		// Bring the right range up first.
 		for i := 3; i <= 5; i++ {
 			mtc.restartStore(i)
@@ -1590,7 +1594,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 
 		// Perform a write on the right range.
 		incArgs := incrementArgs(rightKey, 20)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -1614,13 +1618,13 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 		// it helps wake up dormant ranges that would otherwise have to wait
 		// for retry timeouts.
 		incArgs = incrementArgs(leftKey, 10)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
 
 		incArgs = incrementArgs(rightKey, 200)
-		if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
