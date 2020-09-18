@@ -123,25 +123,24 @@ case "${cmd}" in
       echo "usage: $0 mount [HOST-PATH WORKER-PATH]" >&2
       exit 1
     fi
-    read -p "Warning: sync will overwrite files on the GCE worker with your local copy. Continue? (Y/n) "
+    read -p "Warning: sync will overwrite files on the GCE worker with your local copy. Continue? (y/n) "
     if [[ "$REPLY" && "$REPLY" != [Yy] ]]; then
       exit 1
     fi
     tmpfile=$(mktemp)
     trap 'rm -f ${tmpfile}' EXIT
     gcloud compute config-ssh --ssh-config-file "$tmpfile" > /dev/null
-    unison "$host" "ssh://${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}/$worker" \
-      -sshargs "-F ${tmpfile}" -auto -prefer "$host" -repeat watch \
+    # XXX: Ignoring roughly the stuff in gitignore. Should we also ignore submodules?
+    # `pip3 install unison-gitignore`; wraps around unison, but just ignores
+    # everything ignored in git.
+    # XXX: Pin unison -version to 2.51.2 (ocaml 4.07.0) locally somehow, cause
+    # that's a configuration I know works when remotely, on ubuntu 18.04, the
+    # version used is 2.51.2 (ocaml 4.05.0).
+    unison-gitignore "$host" "ssh://${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}/$worker" \
+      -sshargs "-F ${tmpfile}" -auto -force "$host" -repeat watch \
       -ignore 'Path .git' \
-      -ignore 'Path bin*' \
-      -ignore 'Path build/builder_home' \
-      -ignore 'Path pkg/sql/parser/gen' \
-      -ignore 'Path pkg/ui/node_modules' \
-      -ignore 'Path pkg/ui/.cache-loader' \
-      -ignore 'Path cockroach-data' \
       -ignore 'Name *.d' \
       -ignore 'Name *.o' \
-      -ignore 'Name zcgo_flags*.go'
     ;;
     *)
     echo "$0: unknown command: ${cmd}, use one of create, start, stop, delete, ssh, or sync"

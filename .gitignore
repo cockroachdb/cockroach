@@ -28,6 +28,7 @@ work-Fuzz*
 
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk
+*.unison.*
 
 # Generated files containing include paths.
 zcgo_flags*.go
