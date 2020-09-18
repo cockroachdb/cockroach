@@ -2595,6 +2595,7 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"box":           21286,
 	"cidr":          18846,
 	"circle":        21286,
+	"jsonpath":      22513,
 	"line":          21286,
 	"lseg":          21286,
 	"macaddr":       -1,
