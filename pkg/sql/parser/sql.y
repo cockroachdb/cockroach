@@ -571,7 +571,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACTION ADD ADMIN AFTER AGGREGATE
+%token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
 
@@ -625,7 +625,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> LIST LOCAL LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MODIFYCLUSTERSETTING MONTH
+%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
@@ -2930,7 +2930,8 @@ create_stmt:
 | CREATE error         // SHOW HELP: CREATE
 
 create_unsupported:
-  CREATE AGGREGATE error { return unimplemented(sqllex, "create aggregate") }
+  CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
+| CREATE AGGREGATE error { return unimplemented(sqllex, "create aggregate") }
 | CREATE CAST error { return unimplemented(sqllex, "create cast") }
 | CREATE CONSTRAINT TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create constraint") }
 | CREATE CONVERSION error { return unimplemented(sqllex, "create conversion") }
@@ -2963,7 +2964,8 @@ opt_procedural:
 | /* EMPTY */ {}
 
 drop_unsupported:
-  DROP AGGREGATE error { return unimplemented(sqllex, "drop aggregate") }
+  DROP ACCESS METHOD error { return unimplemented(sqllex, "drop access method") }
+| DROP AGGREGATE error { return unimplemented(sqllex, "drop aggregate") }
 | DROP CAST error { return unimplemented(sqllex, "drop cast") }
 | DROP COLLATION error { return unimplemented(sqllex, "drop collation") }
 | DROP CONVERSION error { return unimplemented(sqllex, "drop conversion") }
@@ -4252,6 +4254,11 @@ reindex_stmt:
   {
     /* SKIP DOC */
     return purposelyUnimplemented(sqllex, "reindex index", "CockroachDB does not require reindexing.")
+  }
+| REINDEX SCHEMA error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex schema", "CockroachDB does not require reindexing.")
   }
 | REINDEX DATABASE error
   {
@@ -11425,6 +11432,7 @@ unrestricted_name:
 unreserved_keyword:
   ABORT
 | ACTION
+| ACCESS
 | ADD
 | ADMIN
 | AFTER
@@ -11568,6 +11576,7 @@ unreserved_keyword:
 | MATERIALIZED
 | MAXVALUE
 | MERGE
+| METHOD
 | MINUTE
 | MINVALUE
 | MODIFYCLUSTERSETTING
