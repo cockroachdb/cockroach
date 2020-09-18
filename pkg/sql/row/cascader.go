@@ -774,12 +774,12 @@ func (c *cascader) updateRows(
 	switch action {
 	case sqlbase.ForeignKeyReference_SET_NULL:
 		referencingIndexValuesByColIDs = make(map[sqlbase.ColumnID]tree.Datum)
-		for _, columnID := range referencingIndex.ColumnIDs {
+		for _, columnID := range fk.OriginColumnIDs {
 			referencingIndexValuesByColIDs[columnID] = tree.DNull
 		}
 	case sqlbase.ForeignKeyReference_SET_DEFAULT:
 		referencingIndexValuesByColIDs = make(map[sqlbase.ColumnID]tree.Datum)
-		for _, columnID := range referencingIndex.ColumnIDs {
+		for _, columnID := range fk.OriginColumnIDs {
 			column, err := referencingTable.FindColumnByID(columnID)
 			if err != nil {
 				return nil, nil, nil, 0, err
