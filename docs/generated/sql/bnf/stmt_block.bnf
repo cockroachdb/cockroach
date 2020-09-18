@@ -50,7 +50,7 @@ analyze_stmt ::=
 	| 'ANALYSE' analyze_target
 
 copy_from_stmt ::=
-	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options
+	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options opt_where_clause
 
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
@@ -246,6 +246,10 @@ opt_with_copy_options ::=
 	opt_with copy_options_list
 	| 
 
+opt_where_clause ::=
+	where_clause
+	| 
+
 database_name ::=
 	name
 
@@ -431,10 +435,6 @@ table_expr_opt_alias_idx ::=
 	table_name_opt_idx
 	| table_name_opt_idx table_alias_name
 	| table_name_opt_idx 'AS' table_alias_name
-
-opt_where_clause ::=
-	where_clause
-	| 
 
 opt_sort_clause ::=
 	sort_clause
@@ -724,6 +724,9 @@ opt_with ::=
 
 copy_options_list ::=
 	( copy_options ) ( ( copy_options ) )*
+
+where_clause ::=
+	'WHERE' a_expr
 
 prefixed_column_path ::=
 	db_object_name_component '.' unrestricted_name
@@ -1319,9 +1322,6 @@ with_clause ::=
 
 table_name_opt_idx ::=
 	opt_only table_name opt_index_flags opt_descendant
-
-where_clause ::=
-	'WHERE' a_expr
 
 sort_clause ::=
 	'ORDER' 'BY' sortby_list
