@@ -104,6 +104,10 @@ case "${cmd}" in
     ip)
     gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
     ;;
+    run)
+      # XXX: I'm not sure why I'm having to specify the path to `go`.
+      gcloud compute ssh "${NAME}" --ssh-flag="-A" -- "export PATH=/snap/bin:\$PATH; cd ~/go/src/github.com/cockroachdb/cockroach; $@"
+    ;;
     sync)
     if ! hash unison 2>/dev/null; then
       echo 'unison not found (on macOS, run `brew install unison`)' >&2
