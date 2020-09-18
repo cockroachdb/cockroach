@@ -30,6 +30,9 @@
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
+statement ok
+SET enable_interleaved_joins = true
+
 #################
 # Create tables #
 #################

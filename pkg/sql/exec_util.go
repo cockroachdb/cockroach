@@ -257,7 +257,7 @@ var insertFastPathClusterMode = settings.RegisterBoolSetting(
 var planInterleavedJoins = settings.RegisterBoolSetting(
 	"sql.distsql.interleaved_joins.enabled",
 	"if set we plan interleaved table joins instead of merge joins when possible",
-	true,
+	false,
 )
 var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_alter_column_type.enabled",

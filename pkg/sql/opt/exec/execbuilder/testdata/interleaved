@@ -1,5 +1,8 @@
 # LogicTest: local
 
+statement ok
+SET enable_interleaved_joins = true
+
 # ------------------------------------------------------------------------------
 # Test index selection for deeply interleaved tables.
 # These tests are in their own file because table IDs appear in EXPLAIN output.

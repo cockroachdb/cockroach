@@ -7,6 +7,12 @@
 # when possible. This is true even with interleaved scans, which complicate the
 # logic of mapping a WriteIntentError back to the corresponding table.
 
+# Note that we're changing the cluster setting instead of a session variable
+# to enable the interleaved joins because we're switching the users below with
+# each switch starting a new session.
+statement ok
+SET CLUSTER SETTING sql.distsql.interleaved_joins.enabled = true
+
 statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
 
