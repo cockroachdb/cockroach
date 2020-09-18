@@ -50,7 +50,7 @@ analyze_stmt ::=
 	| 'ANALYSE' analyze_target
 
 copy_from_stmt ::=
-	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options
+	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options opt_where_clause
 
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
@@ -247,6 +247,10 @@ opt_with_copy_options ::=
 	opt_with copy_options_list
 	| 
 
+opt_where_clause ::=
+	where_clause
+	| 
+
 database_name ::=
 	name
 
@@ -436,10 +440,6 @@ table_expr_opt_alias_idx ::=
 	table_name_opt_idx
 	| table_name_opt_idx table_alias_name
 	| table_name_opt_idx 'AS' table_alias_name
-
-opt_where_clause ::=
-	where_clause
-	| 
 
 opt_sort_clause ::=
 	sort_clause
@@ -730,6 +730,9 @@ opt_with ::=
 copy_options_list ::=
 	( copy_options ) ( ( copy_options ) )*
 
+where_clause ::=
+	'WHERE' a_expr
+
 prefixed_column_path ::=
 	db_object_name_component '.' unrestricted_name
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
@@ -1009,6 +1012,7 @@ unreserved_keyword ::=
 	| 'SESSION'
 	| 'SESSIONS'
 	| 'SET'
+	| 'SETS'
 	| 'SHARE'
 	| 'SHOW'
 	| 'SIMPLE'
@@ -1254,8 +1258,8 @@ create_database_stmt ::=
 	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
 
 create_index_stmt ::=
-	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
-	| 'CREATE' opt_unique 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	| 'CREATE' opt_unique 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
 
@@ -1324,9 +1328,6 @@ with_clause ::=
 
 table_name_opt_idx ::=
 	opt_only table_name opt_index_flags opt_descendant
-
-where_clause ::=
-	'WHERE' a_expr
 
 sort_clause ::=
 	'ORDER' 'BY' sortby_list
@@ -1717,7 +1718,7 @@ opt_unique ::=
 opt_index_name ::=
 	opt_name
 
-opt_using_gin_btree ::=
+opt_index_access_method ::=
 	'USING' name
 	| 
 
@@ -2138,7 +2139,9 @@ opt_name ::=
 	| 
 
 index_elem ::=
-	a_expr opt_asc_desc opt_nulls_order
+	func_expr_windowless index_elem_options
+	| '(' a_expr ')' index_elem_options
+	| name index_elem_options
 
 storing ::=
 	'COVERING'
@@ -2217,7 +2220,7 @@ from_clause ::=
 	| 
 
 group_clause ::=
-	'GROUP' 'BY' expr_list
+	'GROUP' 'BY' group_by_list
 	| 
 
 having_clause ::=
@@ -2433,15 +2436,12 @@ tuple1_ambiguous_values ::=
 	| a_expr ','
 	| a_expr ',' expr_list
 
-opt_asc_desc ::=
-	'ASC'
-	| 'DESC'
-	| 
+func_expr_windowless ::=
+	func_application
+	| func_expr_common_subexpr
 
-opt_nulls_order ::=
-	'NULLS' 'FIRST'
-	| 'NULLS' 'LAST'
-	| 
+index_elem_options ::=
+	opt_class opt_asc_desc opt_nulls_order
 
 list_partitions ::=
 	( list_partition ) ( ( ',' list_partition ) )*
@@ -2463,6 +2463,16 @@ index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
 
+opt_asc_desc ::=
+	'ASC'
+	| 'DESC'
+	| 
+
+opt_nulls_order ::=
+	'NULLS' 'FIRST'
+	| 'NULLS' 'LAST'
+	| 
+
 col_qualification ::=
 	'CONSTRAINT' constraint_name col_qualification_elem
 	| col_qualification_elem
@@ -2483,6 +2493,9 @@ reference_actions ::=
 	| reference_on_update reference_on_delete
 	| reference_on_delete reference_on_update
 	| 
+
+group_by_list ::=
+	( group_by_item ) ( ( ',' group_by_item ) )*
 
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
@@ -2515,10 +2528,6 @@ join_type ::=
 join_qual ::=
 	'USING' '(' name_list ')'
 	| 'ON' a_expr
-
-func_expr_windowless ::=
-	func_application
-	| func_expr_common_subexpr
 
 rowsfrom_list ::=
 	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
@@ -2696,6 +2705,10 @@ opt_slice_bound ::=
 when_clause ::=
 	'WHEN' a_expr 'THEN' a_expr
 
+opt_class ::=
+	name
+	| 
+
 list_partition ::=
 	partition 'VALUES' 'IN' '(' expr_list ')' opt_partition_by
 
@@ -2728,6 +2741,9 @@ reference_on_update ::=
 
 reference_on_delete ::=
 	'ON' 'DELETE' reference_action
+
+group_by_item ::=
+	a_expr
 
 window_definition ::=
 	window_name 'AS' window_specification
