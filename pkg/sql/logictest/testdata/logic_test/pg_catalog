@@ -2560,8 +2560,8 @@ WHERE tablename = 'partial_index_table'
 ----
 indexname                   indexdef
 primary                     CREATE UNIQUE INDEX "primary" ON test.public.partial_index_table USING btree (rowid ASC)
-partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE a > 0
-partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE b IN ('foo'::public.testenum, 'bar'::public.testenum)
+partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE (a > 0)
+partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
 
 query TT colnames
 SELECT conname, condef
@@ -2571,8 +2571,8 @@ WHERE t.relname = 'partial_index_table'
 ORDER BY conname
 ----
 conname                     condef
-partial_index_table_a_key   UNIQUE (a ASC) WHERE a > 0
-partial_index_table_a_key1  UNIQUE (a ASC) WHERE b IN ('foo'::public.testenum, 'bar'::public.testenum)
+partial_index_table_a_key   UNIQUE (a ASC) WHERE (a > 0)
+partial_index_table_a_key1  UNIQUE (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
 
 subtest regression_46799
 statement ok
