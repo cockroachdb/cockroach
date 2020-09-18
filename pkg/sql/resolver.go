@@ -637,6 +637,7 @@ type internalLookupCtx struct {
 	dbIDs       []descpb.ID
 	dbDescs     map[descpb.ID]*dbdesc.Immutable
 	schemaDescs map[descpb.ID]*schemadesc.Immutable
+	schemaIDs   []descpb.ID
 	tbDescs     map[descpb.ID]*tabledesc.Immutable
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]*typedesc.Immutable
@@ -724,7 +725,7 @@ func newInternalLookupCtx(
 	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
 	tbDescs := make(map[descpb.ID]*tabledesc.Immutable)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
-	var tbIDs, typIDs, dbIDs []descpb.ID
+	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
 	// Record descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
@@ -732,6 +733,7 @@ func newInternalLookupCtx(
 			dbNames[desc.GetID()] = desc.GetName()
 			dbDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.GetID() {
+				// Only make the database visible for iteration if the prefix was included.
 				dbIDs = append(dbIDs, desc.GetID())
 			}
 		case *tabledesc.Immutable:
@@ -748,6 +750,10 @@ func newInternalLookupCtx(
 			}
 		case *schemadesc.Immutable:
 			schemaDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
+				// Only make the schema visible for iteration if the prefix was included.
+				schemaIDs = append(schemaIDs, desc.GetID())
+			}
 		}
 	}
 
@@ -755,6 +761,7 @@ func newInternalLookupCtx(
 		dbNames:     dbNames,
 		dbDescs:     dbDescs,
 		schemaDescs: schemaDescs,
+		schemaIDs:   schemaIDs,
 		tbDescs:     tbDescs,
 		typDescs:    typDescs,
 		tbIDs:       tbIDs,
