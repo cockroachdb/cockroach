@@ -236,6 +236,7 @@ func assignSequenceOptions(
 	setDefaults bool,
 	params *runParams,
 	sequenceID descpb.ID,
+	sequenceParentID descpb.ID,
 ) error {
 	// All other defaults are dependent on the value of increment,
 	// i.e. whether the sequence is ascending or descending.
@@ -324,6 +325,13 @@ func assignSequenceOptions(
 				)
 				if err != nil {
 					return err
+				}
+				if tableDesc.ParentID != sequenceParentID &&
+					!allowCrossDatabaseSeqOwner.Get(&params.p.execCfg.Settings.SV) {
+					return pgerror.Newf(pgcode.FeatureNotSupported,
+						"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
+						allowCrossDatabaseSeqOwnerSetting,
+					)
 				}
 				// We only want to trigger schema changes if the owner is not what we
 				// want it to be.

@@ -794,6 +794,18 @@ CREATE VIEW db1.public.v2 AS SELECT a+b FROM db1.public.ab
 statement error the view cannot refer to other databases
 CREATE VIEW db2.v AS SELECT a+b FROM db1.public.ab
 
+statement ok
+CREATE VIEW db2.replace AS SELECT 1
+
+statement error the view cannot refer to other databases
+CREATE OR REPLACE VIEW db2.replace AS SELECT a+b FROM db1.public.ab
+
+statement ok
+CREATE SEQUENCE db2.seq
+
+statement error the view cannot refer to other databases
+CREATE VIEW v2 AS SELECT last_value FROM db2.seq
+
 # Verify that cross-schema views are allowed.
 statement ok
 CREATE SCHEMA sc2

@@ -1216,6 +1216,53 @@ SELECT * FROM inv@i WHERE j @> '{"num": 4}' AND s = 'bar'
 statement error index "i" is a partial inverted index and cannot be used for this query
 SELECT * FROM inv@i WHERE j @> '{"num": 2}' AND s = 'baz'
 
+# Backfill a partial inverted index.
+
+statement ok
+CREATE TABLE inv_b (k INT PRIMARY KEY, j JSON, s STRING)
+
+statement ok
+INSERT INTO inv_b VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+statement ok
+CREATE INVERTED INDEX i ON inv_b (j) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM inv_b@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
+
+# Backfill a partial inverted index when a new table is created in the same
+# transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE inv_c (k INT PRIMARY KEY, j JSON, s STRING)
+
+statement ok
+INSERT INTO inv_c VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+statement ok
+CREATE INVERTED INDEX i ON inv_c (j) WHERE s IN ('foo', 'bar')
+
+statement ok
+COMMIT
+
+query ITT
+SELECT * FROM inv_c@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
+
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.
 subtest regression_52318

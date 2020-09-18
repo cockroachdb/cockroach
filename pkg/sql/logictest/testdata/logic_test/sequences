@@ -4,6 +4,9 @@
 # (at the top because it requires a session in which `lastval` has never been called)
 
 statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
+
+statement ok
 SET DATABASE = test
 
 statement ok
@@ -1229,3 +1232,41 @@ ALTER TABLE t_50711 DROP COLUMN a
 
 statement ok
 ALTER TABLE t_50711 DROP COLUMN b
+
+# Verify that we don't allow OWNED BY to refer to other databases (depending on
+# the cluster setting).
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = FALSE
+
+statement ok
+CREATE DATABASE db1
+
+statement ok
+CREATE DATABASE db2
+
+statement ok
+CREATE TABLE db1.t (a INT)
+
+statement ok
+CREATE SEQUENCE db1.seq OWNED BY db1.t.a
+
+statement error OWNED BY cannot refer to other databases
+CREATE SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+CREATE TABLE db2.t (a INT)
+
+statement ok
+CREATE SEQUENCE db2.seq OWNED BY db2.t.a
+
+statement error OWNED BY cannot refer to other databases
+ALTER SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
+
+statement ok
+ALTER SEQUENCE db2.seq OWNED BY db1.t.a
+
+statement ok
+CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a

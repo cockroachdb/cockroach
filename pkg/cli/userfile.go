@@ -20,6 +20,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -79,7 +80,13 @@ func runUserFileDelete(cmd *cobra.Command, args []string) error {
 	defer conn.Close()
 
 	glob := args[0]
-	return deleteUserFile(context.Background(), conn, glob)
+
+	if err := deleteUserFile(context.Background(), conn, glob); err != nil {
+		return err
+	}
+
+	telemetry.Count("userfile.command.delete")
+	return nil
 }
 
 func runUserFileList(cmd *cobra.Command, args []string) error {
@@ -94,7 +101,12 @@ func runUserFileList(cmd *cobra.Command, args []string) error {
 		glob = args[0]
 	}
 
-	return listUserFile(context.Background(), conn, glob)
+	if err := listUserFile(context.Background(), conn, glob); err != nil {
+		return err
+	}
+
+	telemetry.Count("userfile.command.list")
+	return nil
 }
 
 func runUserFileUpload(cmd *cobra.Command, args []string) error {
@@ -117,7 +129,12 @@ func runUserFileUpload(cmd *cobra.Command, args []string) error {
 	}
 	defer reader.Close()
 
-	return uploadUserFile(context.Background(), conn, reader, source, destination)
+	if err := uploadUserFile(context.Background(), conn, reader, source, destination); err != nil {
+		return err
+	}
+
+	telemetry.Count("userfile.command.upload")
+	return nil
 }
 
 func openUserFile(source string) (io.ReadCloser, error) {

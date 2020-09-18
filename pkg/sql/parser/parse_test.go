@@ -351,6 +351,9 @@ func TestParse(t *testing.T) {
 		{`CREATE SEQUENCE a OWNED BY b`},
 		{`CREATE SEQUENCE a OWNED BY NONE`},
 
+		{`CREATE EXTENSION bob`},
+		{`CREATE EXTENSION IF NOT EXISTS bob`},
+
 		{`CREATE STATISTICS a ON col1 FROM t`},
 		{`EXPLAIN CREATE STATISTICS a ON col1 FROM t`},
 		{`CREATE STATISTICS a FROM t`},
@@ -2952,7 +2955,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
 		{`CREATE CONVERSION a`, 0, `create conversion`, ``},
 		{`CREATE DEFAULT CONVERSION a`, 0, `create def conv`, ``},
-		{`CREATE EXTENSION a`, 0, `create extension a`, ``},
 		{`CREATE FOREIGN DATA WRAPPER a`, 0, `create fdw`, ``},
 		{`CREATE FOREIGN TABLE a`, 0, `create foreign table`, ``},
 		{`CREATE FUNCTION a`, 17511, `create`, ``},

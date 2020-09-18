@@ -1199,12 +1199,6 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 		i, idx := i, idx
 		countReady[i] = make(chan struct{})
 
-		// Skip partial indexes for now.
-		// TODO(mgartner): Validate partial inverted index entry counts.
-		if idx.IsPartial() {
-			continue
-		}
-
 		grp.GoCtx(func(ctx context.Context) error {
 			// Inverted indexes currently can't be interleaved, so a KV scan can be
 			// used to get the index length.
@@ -1272,6 +1266,11 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %q)), 0) FROM [%d AS t]`,
 						tableDesc.ID, idx.ID, col, tableDesc.ID,
 					)
+				}
+				// If the index is a partial index the predicate must be added
+				// as a filter to the query.
+				if idx.IsPartial() {
+					stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.Predicate)
 				}
 				row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
 					sessiondata.InternalExecutorOverride{}, stmt)
