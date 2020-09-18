@@ -538,7 +538,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_index_stmt",
-		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_using_gin_btree", "opt_hash_sharded", "opt_concurrently"},
+		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_index_access_method", "opt_hash_sharded", "opt_concurrently"},
 		replace: map[string]string{
 			"'ON' a_expr":     "'ON' column_name",
 			"'=' a_expr":      "'=' n_buckets",
@@ -560,7 +560,7 @@ var specs = []stmtSpec{
 			"'=' a_expr":                           "'=' n_buckets",
 			" opt_index_name":                      "",
 			" opt_partition_by":                    "",
-			" opt_using_gin_btree":                 "",
+			" opt_index_access_method":             "",
 			"'ON' table_name '(' index_params ')'": "'...'",
 			"storing '(' name_list ')'":            "'STORING' '(' stored_columns ')'",
 			"table_name '(' name_list":             "parent_table '(' interleave_prefix",

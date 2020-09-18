@@ -177,7 +177,7 @@ delete kj
  ├── columns: <none>
  ├── fetch columns: k:5 j:6
  └── select
-      ├── columns: k:5!null j:6 crdb_internal_mvcc_timestamp:7
+      ├── columns: k:5!null j:6!null crdb_internal_mvcc_timestamp:7
       ├── scan kj
       │    └── columns: k:5!null j:6 crdb_internal_mvcc_timestamp:7
       └── filters

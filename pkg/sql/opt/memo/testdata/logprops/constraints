@@ -1366,3 +1366,57 @@ select
                 └── eq [type=bool]
                      ├── variable: x:1 [type=int]
                      └── const: 3 [type=int]
+
+# Tests for the containment operator.
+
+exec-ddl
+CREATE TABLE f
+(
+    k INT PRIMARY KEY,
+    j JSON,
+    a INT[]
+)
+----
+
+# Containment implies the column is not null.
+opt
+SELECT 1 FROM f WHERE j @> '{"x": "y"}'
+----
+project
+ ├── columns: "?column?":5(int!null)
+ ├── immutable
+ ├── fd: ()-->(5)
+ ├── prune: (5)
+ ├── select
+ │    ├── columns: j:2(jsonb!null)
+ │    ├── immutable
+ │    ├── scan f
+ │    │    ├── columns: j:2(jsonb)
+ │    │    └── prune: (2)
+ │    └── filters
+ │         └── contains [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+ │              ├── variable: j:2 [type=jsonb]
+ │              └── const: '{"x": "y"}' [type=jsonb]
+ └── projections
+      └── const: 1 [as="?column?":5, type=int]
+
+opt
+SELECT 1 FROM f WHERE a @> ARRAY[1]
+----
+project
+ ├── columns: "?column?":5(int!null)
+ ├── immutable
+ ├── fd: ()-->(5)
+ ├── prune: (5)
+ ├── select
+ │    ├── columns: a:3(int[]!null)
+ │    ├── immutable
+ │    ├── scan f
+ │    │    ├── columns: a:3(int[])
+ │    │    └── prune: (3)
+ │    └── filters
+ │         └── contains [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+ │              ├── variable: a:3 [type=int[]]
+ │              └── const: ARRAY[1] [type=int[]]
+ └── projections
+      └── const: 1 [as="?column?":5, type=int]

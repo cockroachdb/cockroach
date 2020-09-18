@@ -1048,6 +1048,7 @@ func TestParse(t *testing.T) {
 
 		{`SELECT 1 FROM t GROUP BY a`},
 		{`SELECT 1 FROM t GROUP BY a, b`},
+		{`SELECT 1 FROM t GROUP BY ()`},
 		{`SELECT sum(x ORDER BY y) FROM t`},
 		{`SELECT sum(x ORDER BY y, z) FROM t`},
 
@@ -2950,6 +2951,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`ALTER TABLE a ADD CONSTRAINT foo EXCLUDE USING gist (bar WITH =)`, 46657, `add constraint exclude using`, ``},
 
 		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
+
+		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
+
 		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
@@ -3058,9 +3062,12 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`, ``},
 		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`, ``},
 
-		{`CREATE INDEX a ON b(c + d)`, 9682, ``, ``},
-		{`CREATE INDEX a ON b(c[d])`, 9682, ``, ``},
+		{`CREATE INDEX a ON b((c + d))`, 9682, ``, ``},
+		{`CREATE INDEX a ON b((c[d]))`, 9682, ``, ``},
 		{`CREATE INDEX a ON b(foo(c))`, 9682, ``, ``},
+		{`CREATE INDEX a ON b(c gin_trgm_ops)`, 41285, `index using gin_trgm_ops`, ``},
+		{`CREATE INDEX a ON b(c gist_trgm_ops)`, 41285, `index using gist_trgm_ops`, ``},
+		{`CREATE INDEX a ON b(c bobby)`, 47420, ``, ``},
 		{`CREATE INDEX a ON b(a NULLS LAST)`, 6224, ``, ``},
 		{`CREATE INDEX a ON b(a ASC NULLS LAST)`, 6224, ``, ``},
 		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``},
@@ -3077,6 +3084,11 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT a(VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`, ``},
+
+		{`SELECT 1 FROM t GROUP BY ROLLUP (b)`, 46280, `rollup`, ``},
+		{`SELECT 1 FROM t GROUP BY a, ROLLUP (b)`, 46280, `rollup`, ``},
+		{`SELECT 1 FROM t GROUP BY CUBE (b)`, 46280, `cube`, ``},
+		{`SELECT 1 FROM t GROUP BY GROUPING SETS (b)`, 46280, `grouping sets`, ``},
 
 		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``},
 		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``},

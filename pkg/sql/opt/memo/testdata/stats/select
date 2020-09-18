@@ -841,7 +841,7 @@ opt
 SELECT * FROM tjson WHERE b @> '{"a":"b"}'
 ----
 index-join tjson
- ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── columns: a:1(int!null) b:2(jsonb!null) c:3(jsonb)
  ├── immutable
  ├── stats: [rows=555.555556]
  ├── key: (1)
@@ -858,7 +858,7 @@ opt
 SELECT * FROM tjson WHERE b @> '{"a":"b", "c":"d"}'
 ----
 inner-join (lookup tjson)
- ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── columns: a:1(int!null) b:2(jsonb!null) c:3(jsonb)
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
@@ -873,7 +873,7 @@ inner-join (lookup tjson)
  │    ├── stats: [rows=61.7283951, distinct(1)=61.7283951, null(1)=0]
  │    └── filters (true)
  └── filters
-      └── b:2 @> '{"a": "b", "c": "d"}' [type=bool, outer=(2), immutable]
+      └── b:2 @> '{"a": "b", "c": "d"}' [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 # Should generate a select on the table with a JSON filter, since c does not
 # have an inverted index.
@@ -881,18 +881,18 @@ opt
 SELECT * FROM tjson WHERE c @> '{"a":"b"}'
 ----
 select
- ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb!null)
  ├── immutable
  ├── stats: [rows=555.555556]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── scan tjson
  │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(3)=2500, null(3)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters
-      └── c:3 @> '{"a": "b"}' [type=bool, outer=(3), immutable]
+      └── c:3 @> '{"a": "b"}' [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Should have a lower row count than the above case, due to a containment query
 # on 2 json paths.
@@ -900,18 +900,18 @@ opt
 SELECT * FROM tjson WHERE c @> '{"a":"b", "c":"d"}'
 ----
 select
- ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb!null)
  ├── immutable
  ├── stats: [rows=61.7283951]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── scan tjson
  │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(3)=2500, null(3)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters
-      └── c:3 @> '{"a": "b", "c": "d"}' [type=bool, outer=(3), immutable]
+      └── c:3 @> '{"a": "b", "c": "d"}' [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Bump up null counts.
 exec-ddl

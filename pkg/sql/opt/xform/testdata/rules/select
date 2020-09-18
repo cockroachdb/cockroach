@@ -1220,7 +1220,7 @@ memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k) (project G4 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G4 G3 k)
- │         └── cost: 118.43
+ │         └── cost: 118.42
  ├── G2: (select G5 G6) (index-join G4 b,cols=(1,4))
  │    └── []
  │         ├── best: (index-join G4 b,cols=(1,4))
@@ -1249,7 +1249,7 @@ project
  ├── immutable
  ├── key: (1)
  └── inner-join (lookup b)
-      ├── columns: k:1!null j:4
+      ├── columns: k:1!null j:4!null
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── immutable
@@ -1262,7 +1262,7 @@ project
       │    ├── right fixed columns: [4] = ['{"c": "d"}']
       │    └── filters (true)
       └── filters
-           └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable]
+           └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Query requiring an index join with no remaining filter.
 opt
@@ -1274,7 +1274,7 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── index-join b
-      ├── columns: k:1!null u:2 j:4
+      ├── columns: k:1!null u:2 j:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,4)
@@ -1287,7 +1287,7 @@ opt
 SELECT j, k FROM b WHERE j @> '{"a": "b"}'
 ----
 index-join b
- ├── columns: j:4 k:1!null
+ ├── columns: j:4!null k:1!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(4)
@@ -1300,7 +1300,7 @@ opt
 SELECT * FROM b WHERE j @> '{"a": "b"}'
 ----
 index-join b
- ├── columns: k:1!null u:2 v:3 j:4
+ ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
@@ -1315,7 +1315,7 @@ opt
 SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
 inner-join (lookup b)
- ├── columns: j:4 k:1!null
+ ├── columns: j:4!null k:1!null
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
@@ -1328,13 +1328,13 @@ inner-join (lookup b)
  │    ├── right fixed columns: [4] = ['{"c": "d"}']
  │    └── filters (true)
  └── filters
-      └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable]
+      └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
 inner-join (lookup b)
- ├── columns: k:1!null u:2 v:3 j:4
+ ├── columns: k:1!null u:2 v:3 j:4!null
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
@@ -1347,13 +1347,13 @@ inner-join (lookup b)
  │    ├── right fixed columns: [4] = ['{"a": {"d": "e"}}']
  │    └── filters (true)
  └── filters
-      └── j:4 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [outer=(4), immutable]
+      └── j:4 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT * FROM b WHERE j @> '{}'
 ----
 select
- ├── columns: k:1!null u:2 v:3 j:4
+ ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
@@ -1362,13 +1362,13 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j:4 @> '{}' [outer=(4), immutable]
+      └── j:4 @> '{}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT * FROM b WHERE j @> '[]'
 ----
 select
- ├── columns: k:1!null u:2 v:3 j:4
+ ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
@@ -1377,13 +1377,13 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j:4 @> '[]' [outer=(4), immutable]
+      └── j:4 @> '[]' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT * FROM b WHERE j @> '2'
 ----
 index-join b
- ├── columns: k:1!null u:2 v:3 j:4
+ ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
@@ -1398,7 +1398,7 @@ opt
 SELECT * FROM b WHERE j @> '[{}]'
 ----
 select
- ├── columns: k:1!null u:2 v:3 j:4
+ ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
@@ -1407,13 +1407,13 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j:4 @> '[{}]' [outer=(4), immutable]
+      └── j:4 @> '[{}]' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT * FROM b WHERE j @> '{"a": {}}'
 ----
 select
- ├── columns: k:1!null u:2 v:3 j:4
+ ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
@@ -1422,13 +1422,13 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j:4 @> '{"a": {}}' [outer=(4), immutable]
+      └── j:4 @> '{"a": {}}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT * FROM b WHERE j @> '{"a": []}'
 ----
 select
- ├── columns: k:1!null u:2 v:3 j:4
+ ├── columns: k:1!null u:2 v:3 j:4!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
@@ -1437,7 +1437,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
-      └── j:4 @> '{"a": []}' [outer=(4), immutable]
+      └── j:4 @> '{"a": []}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # GenerateInvertedIndexScans propagates row-level locking information.
 opt
@@ -1475,7 +1475,7 @@ project
  ├── immutable
  ├── key: (1)
  └── inner-join (lookup c)
-      ├── columns: k:1!null a:2
+      ├── columns: k:1!null a:2!null
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── immutable
@@ -1488,7 +1488,7 @@ project
       │    ├── right fixed columns: [2] = [ARRAY[3]]
       │    └── filters (true)
       └── filters
-           └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable]
+           └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 opt
 SELECT k FROM c WHERE a @> ARRAY[]::INT[]
@@ -1498,7 +1498,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null a:2
+      ├── columns: k:1!null a:2!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2)
@@ -1507,7 +1507,7 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── filters
-           └── a:2 @> ARRAY[] [outer=(2), immutable]
+           └── a:2 @> ARRAY[] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 opt
 SELECT k FROM c WHERE a IS NULL
@@ -1535,7 +1535,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geog:4
+      ├── columns: k:1!null geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -1564,7 +1564,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
-           └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable]
+           └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Same test as above, but with commuted arguments.
 opt
@@ -1575,7 +1575,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geog:4
+      ├── columns: k:1!null geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -1604,7 +1604,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
-           └── st_intersects(geog:4, '0101000020E61000009279E40F069E45C0BEE36FD63B1D5240') [outer=(4), immutable]
+           └── st_intersects(geog:4, '0101000020E61000009279E40F069E45C0BEE36FD63B1D5240') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT k FROM g WHERE ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
@@ -1614,7 +1614,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3
+      ├── columns: k:1!null geom:3!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -1643,7 +1643,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
-           └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3) [outer=(3), immutable]
+           └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Same test as above, but with commuted arguments.
 opt
@@ -1654,7 +1654,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3
+      ├── columns: k:1!null geom:3!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -1677,7 +1677,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
-           └── st_coveredby(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000') [outer=(3), immutable]
+           └── st_coveredby(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000') [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 opt
 SELECT k FROM g WHERE ST_DWithin('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
@@ -1687,7 +1687,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3
+      ├── columns: k:1!null geom:3!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -1710,7 +1710,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
-           └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
+           └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 opt
 SELECT k FROM g WHERE ST_DFullyWithin('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
@@ -1720,7 +1720,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3
+      ├── columns: k:1!null geom:3!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -1743,7 +1743,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
-           └── st_dfullywithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
+           └── st_dfullywithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 opt
 SELECT k FROM g WHERE ST_DWithin('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog, 2000)
@@ -1753,7 +1753,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geog:4
+      ├── columns: k:1!null geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -1796,7 +1796,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
-           └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0) [outer=(4), immutable]
+           └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT k FROM g WHERE ST_DWithin('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog, 2000, false)
@@ -1806,7 +1806,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geog:4
+      ├── columns: k:1!null geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -1849,7 +1849,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
-           └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false) [outer=(4), immutable]
+           └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Test for ST_DWithinExclusive
 opt
@@ -1860,7 +1860,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3
+      ├── columns: k:1!null geom:3!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -1883,7 +1883,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
-           └── st_dwithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
+           └── st_dwithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Commuted version of previous test.
 opt
@@ -1894,7 +1894,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3
+      ├── columns: k:1!null geom:3!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -1917,7 +1917,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
-           └── st_dwithinexclusive(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', 2.0) [outer=(3), immutable]
+           └── st_dwithinexclusive(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 opt
 SELECT k FROM g WHERE ST_DFullyWithinExclusive('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
@@ -1927,7 +1927,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3
+      ├── columns: k:1!null geom:3!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -1950,7 +1950,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
-           └── st_dfullywithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
+           └── st_dfullywithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Multiple geospatial functions.
 # NB: the union spans for the following query are a subset of the spans. This is a
@@ -1965,7 +1965,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geog:4
+      ├── columns: k:1!null geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -1993,8 +1993,8 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
-           ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable]
-           └── st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable]
+           ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+           └── st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT k FROM g
@@ -2006,7 +2006,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geog:4
+      ├── columns: k:1!null geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -2031,7 +2031,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
-           └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable]
+           └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 opt
 SELECT k FROM g
@@ -2044,7 +2044,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geog:4
+      ├── columns: k:1!null geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -2098,7 +2098,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
-           └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_coveredby('0102000020E61000000200000075029A081B9A5DC0F085C954C1F840406DC5FEB27B720440454772F90F814840', geog:4) AND st_coveredby('0101000020E610000058569A94821E46C07BC7DFAC773A4E40', geog:4)) [outer=(4), immutable]
+           └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_coveredby('0102000020E61000000200000075029A081B9A5DC0F085C954C1F840406DC5FEB27B720440454772F90F814840', geog:4) AND st_coveredby('0101000020E610000058569A94821E46C07BC7DFAC773A4E40', geog:4)) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Multiple geospatial functions on different indexes.
 opt
@@ -2111,7 +2111,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3 geog:4
+      ├── columns: k:1!null geom:3!null geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3,4)
@@ -2134,8 +2134,8 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(6)
       └── filters
-           ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable]
-           └── st_overlaps('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3) [outer=(3), immutable]
+           ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+           └── st_overlaps('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Cannot use either index in this case.
 opt
@@ -2170,7 +2170,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null geom:3 geog:4
+      ├── columns: k:1!null geom:3 geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(3,4)
@@ -2195,7 +2195,7 @@ project
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
-           └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_intersects('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) AND st_crosses('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3)) [outer=(3,4), immutable]
+           └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_intersects('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) AND st_crosses('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3)) [outer=(3,4), immutable, constraints=(/4: (/NULL - ])]
 
 # Filters on other columns.
 opt
@@ -2208,7 +2208,7 @@ project
  ├── immutable
  ├── key: (1)
  └── select
-      ├── columns: k:1!null v:2!null geog:4
+      ├── columns: k:1!null v:2!null geog:4!null
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(4)
@@ -2243,7 +2243,7 @@ project
       │              └── filters
       │                   └── k:1 > 100 [outer=(1), constraints=(/1: [/101 - ]; tight)]
       └── filters
-           ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable]
+           ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
            └── v:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
 
 # Bounding box operations.
@@ -2431,7 +2431,7 @@ opt
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'foo'
 ----
 index-join pi
- ├── columns: k:1!null s:2!null j:3
+ ├── columns: k:1!null s:2!null j:3!null
  ├── immutable
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
@@ -2454,7 +2454,7 @@ opt
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND j @> '{"group": 1}' AND s = 'foo'
 ----
 select
- ├── columns: k:1!null s:2!null j:3
+ ├── columns: k:1!null s:2!null j:3!null
  ├── immutable
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
@@ -2467,7 +2467,7 @@ select
  │         ├── constraint: /3/1: [/'{"a": "b"}' - /'{"a": "b"}']
  │         └── key: (1)
  └── filters
-      ├── j:3 @> '{"group": 1}' [outer=(3), immutable]
+      ├── j:3 @> '{"group": 1}' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
       └── s:2 = 'foo' [outer=(2), constraints=(/2: [/'foo' - /'foo']; tight), fd=()-->(2)]
 
 exec-ddl
@@ -2845,7 +2845,7 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(1,4)
       │    └── index-join b
-      │         ├── columns: k:7!null j:10
+      │         ├── columns: k:7!null j:10!null
       │         ├── immutable
       │         ├── key: (7)
       │         ├── fd: (7)-->(10)
@@ -2883,7 +2883,7 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(1,2)
       │    └── index-join c
-      │         ├── columns: k:6!null a:7
+      │         ├── columns: k:6!null a:7!null
       │         ├── immutable
       │         ├── key: (6)
       │         ├── fd: (6)-->(7)
@@ -3877,7 +3877,7 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(2)
       │    └── index-join b
-      │         ├── columns: k:7!null u:8 j:10
+      │         ├── columns: k:7!null u:8 j:10!null
       │         ├── immutable
       │         ├── key: (7)
       │         ├── fd: (7)-->(8,10)
@@ -3919,7 +3919,7 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(3)
       │    └── index-join c
-      │         ├── columns: k:6!null a:7 u:8
+      │         ├── columns: k:6!null a:7!null u:8
       │         ├── immutable
       │         ├── key: (6)
       │         ├── fd: (6)-->(7,8)

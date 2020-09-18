@@ -63,7 +63,7 @@ project
  ├── key: ()
  ├── fd: ()-->(1)
  └── limit
-      ├── columns: i:1(int) g:2(geometry)
+      ├── columns: i:1(int) g:2(geometry!null)
       ├── internal-ordering: +1
       ├── cardinality: [0 - 1]
       ├── immutable
@@ -71,20 +71,20 @@ project
       ├── key: ()
       ├── fd: ()-->(1,2)
       ├── sort
-      │    ├── columns: i:1(int) g:2(geometry)
+      │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=666.666667]
+      │    ├── stats: [rows=666.666667, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    └── select
-      │         ├── columns: i:1(int) g:2(geometry)
+      │         ├── columns: i:1(int) g:2(geometry!null)
       │         ├── immutable
-      │         ├── stats: [rows=666.666667]
+      │         ├── stats: [rows=666.666667, distinct(2)=7, null(2)=0]
       │         ├── scan t
       │         │    ├── columns: i:1(int) g:2(geometry)
-      │         │    └── stats: [rows=2000]
+      │         │    └── stats: [rows=2000, distinct(2)=7, null(2)=0]
       │         └── filters
-      │              └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable]
+      │              └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── 1 [type=int]
 
 memo
@@ -149,7 +149,7 @@ project
  ├── key: ()
  ├── fd: ()-->(1)
  └── limit
-      ├── columns: i:1(int) g:2(geometry)
+      ├── columns: i:1(int) g:2(geometry!null)
       ├── internal-ordering: +1
       ├── cardinality: [0 - 1]
       ├── immutable
@@ -157,9 +157,9 @@ project
       ├── key: ()
       ├── fd: ()-->(1,2)
       ├── select
-      │    ├── columns: i:1(int) g:2(geometry)
+      │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=666.666667]
+      │    ├── stats: [rows=666.666667, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
@@ -188,7 +188,7 @@ project
       │    │                   ├── key: (3)
       │    │                   └── fd: (3)-->(5)
       │    └── filters
-      │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable]
+      │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── 1 [type=int]
 
 memo
@@ -321,9 +321,6 @@ memo (optimized, ~4KB, required=[presentation: i:1,g:2])
  └── G10: (const '010200000002000000000000000000594000000000000059400000000000C062400000000000C06240')
 
 # Repeat above tests to ensure null counts are correct.
-# TODO(mjibson): Teach logical_props_builder that st_intersects is
-# a null-rejecting filter. Since we don't have that logic yet these
-# non-zero null counts are correct.
 opt colstat=1 colstat=2
 SELECT i FROM t WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
 ----
@@ -331,32 +328,32 @@ project
  ├── columns: i:1(int)
  ├── cardinality: [0 - 1]
  ├── immutable
- ├── stats: [rows=1, distinct(1)=0.99984994, null(1)=0.025, distinct(2)=0.932505476, null(2)=0.05]
+ ├── stats: [rows=1, distinct(1)=0.999851422, null(1)=0.025, distinct(2)=0.932539762, null(2)=0]
  ├── key: ()
  ├── fd: ()-->(1)
  └── limit
-      ├── columns: i:1(int) g:2(geometry)
+      ├── columns: i:1(int) g:2(geometry!null)
       ├── internal-ordering: +1
       ├── cardinality: [0 - 1]
       ├── immutable
-      ├── stats: [rows=1, distinct(1)=0.99984994, null(1)=0.025, distinct(2)=0.932505476, null(2)=0.05]
+      ├── stats: [rows=1, distinct(1)=0.999851422, null(1)=0.025, distinct(2)=0.932539762, null(2)=0]
       ├── key: ()
       ├── fd: ()-->(1,2)
       ├── sort
-      │    ├── columns: i:1(int) g:2(geometry)
+      │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=666.666667, distinct(1)=555.555556, null(1)=16.6666667, distinct(2)=7, null(2)=33.3333333]
+      │    ├── stats: [rows=633.333333, distinct(1)=533.055556, null(1)=15.8333333, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    └── select
-      │         ├── columns: i:1(int) g:2(geometry)
+      │         ├── columns: i:1(int) g:2(geometry!null)
       │         ├── immutable
-      │         ├── stats: [rows=666.666667, distinct(1)=555.555556, null(1)=16.6666667, distinct(2)=7, null(2)=33.3333333]
+      │         ├── stats: [rows=633.333333, distinct(1)=533.055556, null(1)=15.8333333, distinct(2)=7, null(2)=0]
       │         ├── scan t
       │         │    ├── columns: i:1(int) g:2(geometry)
       │         │    └── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
       │         └── filters
-      │              └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable]
+      │              └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── 1 [type=int]
 
 
@@ -367,21 +364,21 @@ project
  ├── columns: i:1(int)
  ├── cardinality: [0 - 1]
  ├── immutable
- ├── stats: [rows=1, distinct(1)=0.99984994, null(1)=0.025, distinct(2)=0.932505476, null(2)=0.05]
+ ├── stats: [rows=1, distinct(1)=0.999851422, null(1)=0.025, distinct(2)=0.932539762, null(2)=0]
  ├── key: ()
  ├── fd: ()-->(1)
  └── limit
-      ├── columns: i:1(int) g:2(geometry)
+      ├── columns: i:1(int) g:2(geometry!null)
       ├── internal-ordering: +1
       ├── cardinality: [0 - 1]
       ├── immutable
-      ├── stats: [rows=1, distinct(1)=0.99984994, null(1)=0.025, distinct(2)=0.932505476, null(2)=0.05]
+      ├── stats: [rows=1, distinct(1)=0.999851422, null(1)=0.025, distinct(2)=0.932539762, null(2)=0]
       ├── key: ()
       ├── fd: ()-->(1,2)
       ├── select
-      │    ├── columns: i:1(int) g:2(geometry)
+      │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=666.666667, distinct(1)=555.555556, null(1)=16.6666667, distinct(2)=7, null(2)=33.3333333]
+      │    ├── stats: [rows=633.333333, distinct(1)=533.055556, null(1)=15.8333333, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
@@ -410,7 +407,7 @@ project
       │    │                   ├── key: (3)
       │    │                   └── fd: (3)-->(5)
       │    └── filters
-      │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable]
+      │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── 1 [type=int]
 
 # Set a high null count.
@@ -462,9 +459,9 @@ opt colstat=1 colstat=2
 SELECT * FROM t WHERE st_intersects('LINESTRING(.5 .5, .7 .7)', g)
 ----
 select
- ├── columns: i:1(int) g:2(geometry)
+ ├── columns: i:1(int) g:2(geometry!null)
  ├── immutable
- ├── stats: [rows=333.333333, distinct(1)=98.265847, null(1)=300, distinct(2)=4, null(2)=300]
+ ├── stats: [rows=33.3333333, distinct(1)=28.7528606, null(1)=30, distinct(2)=4, null(2)=0]
  ├── index-join t
  │    ├── columns: i:1(int) g:2(geometry)
  │    ├── stats: [rows=100]
@@ -493,7 +490,7 @@ select
  │              ├── key: (3)
  │              └── fd: (3)-->(5)
  └── filters
-      └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable]
+      └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 # Force a scan of the inverted index so we can see the filtered histogram.
 opt
@@ -502,11 +499,11 @@ SELECT i FROM t@secondary WHERE st_intersects('LINESTRING(.5 .5, .7 .7)', g)
 project
  ├── columns: i:1(int)
  ├── immutable
- ├── stats: [rows=333.333333]
+ ├── stats: [rows=33.3333333]
  └── select
-      ├── columns: i:1(int) g:2(geometry)
+      ├── columns: i:1(int) g:2(geometry!null)
       ├── immutable
-      ├── stats: [rows=333.333333]
+      ├── stats: [rows=33.3333333, distinct(2)=4, null(2)=0]
       ├── index-join t
       │    ├── columns: i:1(int) g:2(geometry)
       │    ├── stats: [rows=100]
@@ -536,4 +533,4 @@ project
       │              ├── key: (3)
       │              └── fd: (3)-->(5)
       └── filters
-           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable]
+           └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]

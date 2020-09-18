@@ -19,14 +19,14 @@ SELECT ltable.k, rtable.k FROM ltable JOIN rtable ON ST_Intersects(ltable.geom, 
 project
  ├── columns: k:1(int!null) k:4(int!null)
  ├── immutable
- ├── stats: [rows=10000]
+ ├── stats: [rows=9801]
  ├── key: (1,4)
  └── inner-join (lookup rtable)
-      ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:4(int!null) rtable.geom:5(geometry)
+      ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry!null) rtable.k:4(int!null) rtable.geom:5(geometry!null)
       ├── key columns: [4] = [4]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=10000]
+      ├── stats: [rows=9801]
       ├── key: (1,4)
       ├── fd: (1)-->(2), (4)-->(5)
       ├── inner-join (inverted-lookup rtable@geom_index)
@@ -38,12 +38,12 @@ project
       │    ├── fd: (1)-->(2)
       │    ├── scan ltable
       │    │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry)
-      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    └── filters (true)
       └── filters
-           └── st_intersects(ltable.geom:2, rtable.geom:5) [type=bool, outer=(2,5), immutable]
+           └── st_intersects(ltable.geom:2, rtable.geom:5) [type=bool, outer=(2,5), immutable, constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
 
 opt
 SELECT ltable.k, rtable.k FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom)
@@ -51,14 +51,14 @@ SELECT ltable.k, rtable.k FROM ltable JOIN rtable@geom_index ON ST_Intersects(lt
 project
  ├── columns: k:1(int!null) k:4(int!null)
  ├── immutable
- ├── stats: [rows=10000]
+ ├── stats: [rows=9801]
  ├── key: (1,4)
  └── inner-join (lookup rtable)
-      ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:4(int!null) rtable.geom:5(geometry)
+      ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry!null) rtable.k:4(int!null) rtable.geom:5(geometry!null)
       ├── key columns: [4] = [4]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=10000]
+      ├── stats: [rows=9801]
       ├── key: (1,4)
       ├── fd: (1)-->(2), (4)-->(5)
       ├── inner-join (inverted-lookup rtable@geom_index)
@@ -70,9 +70,9 @@ project
       │    ├── fd: (1)-->(2)
       │    ├── scan ltable
       │    │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry)
-      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    └── filters (true)
       └── filters
-           └── st_intersects(ltable.geom:2, rtable.geom:5) [type=bool, outer=(2,5), immutable]
+           └── st_intersects(ltable.geom:2, rtable.geom:5) [type=bool, outer=(2,5), immutable, constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
