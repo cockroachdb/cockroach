@@ -868,7 +868,7 @@ EXPLAIN (TYPES) SELECT * FROM dec2 WHERE isnan(d)
 ·          distribution         local                        ·            ·
 ·          vectorized           true                         ·            ·
 filter     ·                    ·                            (d decimal)  ·
- │         estimated row count  333 (missing stats)          ·            ·
+ │         estimated row count  330 (missing stats)          ·            ·
  │         filter               (isnan((d)[decimal]))[bool]  ·            ·
  └── scan  ·                    ·                            (d decimal)  ·
 ·          estimated row count  1000 (missing stats)         ·            ·
@@ -913,7 +913,7 @@ EXPLAIN (TYPES) SELECT * FROM flt WHERE isnan(f)
 ·          distribution         local                      ·          ·
 ·          vectorized           true                       ·          ·
 filter     ·                    ·                          (f float)  ·
- │         estimated row count  333 (missing stats)        ·          ·
+ │         estimated row count  330 (missing stats)        ·          ·
  │         filter               (isnan((f)[float]))[bool]  ·          ·
  └── scan  ·                    ·                          (f float)  ·
 ·          estimated row count  1000 (missing stats)       ·          ·
