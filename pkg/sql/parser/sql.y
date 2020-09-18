@@ -651,7 +651,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
-%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
+%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
@@ -988,6 +988,8 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <*tree.UpdateExpr> set_clause multiple_set_clause
 %type <tree.ArraySubscripts> array_subscripts
 %type <tree.GroupBy> group_clause
+%type <tree.Exprs> group_by_list
+%type <tree.Expr> group_by_item
 %type <*tree.Limit> select_limit opt_select_limit
 %type <tree.TableNames> relation_expr_list
 %type <tree.ReturningClause> returning_clause
@@ -8154,7 +8156,7 @@ first_or_next:
 // Each item in the group_clause list is either an expression tree or a
 // GroupingSet node of some type.
 group_clause:
-  GROUP BY expr_list
+  GROUP BY group_by_list
   {
     $$.val = tree.GroupBy($3.exprs())
   }
@@ -8162,6 +8164,19 @@ group_clause:
   {
     $$.val = tree.GroupBy(nil)
   }
+
+group_by_list:
+  group_by_item { $$.val = tree.Exprs{$1.expr()} }
+| group_by_list ',' group_by_item { $$.val = append($1.exprs(), $3.expr()) }
+
+// Note the '(' is required as CUBE and ROLLUP rely on setting precedence
+// of CUBE and ROLLUP below that of '(', so that they shift in these rules
+// rather than reducing the conflicting unreserved_keyword rule.
+group_by_item:
+  a_expr { $$.val = $1.expr() }
+| ROLLUP '(' error { return unimplementedWithIssueDetail(sqllex, 46280, "rollup") }
+| CUBE '(' error { return unimplementedWithIssueDetail(sqllex, 46280, "cube") }
+| GROUPING SETS error { return unimplementedWithIssueDetail(sqllex, 46280, "grouping sets") }
 
 having_clause:
   HAVING a_expr
@@ -11694,6 +11709,7 @@ unreserved_keyword:
 | SESSION
 | SESSIONS
 | SET
+| SETS
 | SHARE
 | SHOW
 | SIMPLE
