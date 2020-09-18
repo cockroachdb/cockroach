@@ -776,11 +776,13 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 	referenced := md.TableMeta(c.ReferencedTable)
 
 	var msg, details bytes.Buffer
+	var constraintName string
 	if c.FKOutbound {
 		// Generate an error of the form:
 		//   ERROR:  insert on table "child" violates foreign key constraint "foo"
 		//   DETAIL: Key (child_p)=(2) is not present in table "parent".
 		fk := origin.Table.OutboundForeignKey(c.FKOrdinal)
+		constraintName = fk.Name()
 		fmt.Fprintf(&msg, "%s on table ", c.OpName)
 		lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.ObjectName))
 		msg.WriteString(" violates foreign key constraint ")
@@ -822,6 +824,7 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 		//           "child_child_p_fkey" on table "child"
 		//   DETAIL: Key (p)=(1) is still referenced from table "child".
 		fk := referenced.Table.InboundForeignKey(c.FKOrdinal)
+		constraintName = fk.Name()
 		fmt.Fprintf(&msg, "%s on table ", c.OpName)
 		lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.ObjectName))
 		msg.WriteString(" violates foreign key constraint ")
@@ -850,7 +853,10 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 	}
 
 	return errors.WithDetail(
-		pgerror.Newf(pgcode.ForeignKeyViolation, "%s", msg.String()),
+		pgerror.WithConstraintName(
+			pgerror.Newf(pgcode.ForeignKeyViolation, "%s", msg.String()),
+			constraintName,
+		),
 		details.String(),
 	)
 }

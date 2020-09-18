@@ -60,14 +60,15 @@ type ServerErrFieldType byte
 
 // http://www.postgresql.org/docs/current/static/protocol-error-fields.html
 const (
-	ServerErrFieldSeverity    ServerErrFieldType = 'S'
-	ServerErrFieldSQLState    ServerErrFieldType = 'C'
-	ServerErrFieldMsgPrimary  ServerErrFieldType = 'M'
-	ServerErrFileldDetail     ServerErrFieldType = 'D'
-	ServerErrFileldHint       ServerErrFieldType = 'H'
-	ServerErrFieldSrcFile     ServerErrFieldType = 'F'
-	ServerErrFieldSrcLine     ServerErrFieldType = 'L'
-	ServerErrFieldSrcFunction ServerErrFieldType = 'R'
+	ServerErrFieldSeverity       ServerErrFieldType = 'S'
+	ServerErrFieldSQLState       ServerErrFieldType = 'C'
+	ServerErrFieldMsgPrimary     ServerErrFieldType = 'M'
+	ServerErrFieldDetail         ServerErrFieldType = 'D'
+	ServerErrFieldHint           ServerErrFieldType = 'H'
+	ServerErrFieldSrcFile        ServerErrFieldType = 'F'
+	ServerErrFieldSrcLine        ServerErrFieldType = 'L'
+	ServerErrFieldSrcFunction    ServerErrFieldType = 'R'
+	ServerErrFieldConstraintName ServerErrFieldType = 'n'
 )
 
 // PrepareType represents a subtype for prepare messages.
