@@ -32,12 +32,15 @@ case "${cmd}" in
            --network "default" \
            --maintenance-policy "MIGRATE" \
            --image-project "ubuntu-os-cloud" \
-           --image-family "ubuntu-1804-lts" \
+           --image-family "ubuntu-2004-lts" \
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
            --scopes "cloud-platform"
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
+
+    sudo rm ~/.ssh/config
+    sudo gcloud compute config-ssh
 
     # Retry while vm and sshd start up.
     retry gcloud compute ssh "${NAME}" --command=true

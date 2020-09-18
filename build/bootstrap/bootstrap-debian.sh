@@ -24,9 +24,12 @@ sudo apt-get install -y --no-install-recommends \
   gcc \
   g++ \
   git \
-  nodejs \
   yarn \
   bison
+
+# Install nodejs on 20.04.
+curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -
+sudo apt-get install -y nodejs
 
 sudo adduser "${USER}" docker
 
