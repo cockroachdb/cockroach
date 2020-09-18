@@ -85,33 +85,49 @@ func (p *planner) alterSchemaOwner(
 	db *dbdesc.Mutable,
 	scDesc *schemadesc.Mutable,
 	newOwner string,
-	jobDesc string,
+	jobDescription string,
 ) error {
-	privs := scDesc.GetPrivileges()
-
+	// TODO(angelaw): Remove once Solon's added hasOwnership to checkCanAlterToNewOwner.
 	hasOwnership, err := p.HasOwnership(ctx, scDesc)
 	if err != nil {
 		return err
 	}
 
-	if err := p.checkCanAlterToNewOwner(ctx, scDesc, privs, newOwner, hasOwnership); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, scDesc, scDesc.GetPrivileges(), newOwner, hasOwnership); err != nil {
 		return err
 	}
+
+	if err := p.checkCanAlterSchemaAndSetNewOwner(ctx, scDesc, newOwner, hasOwnership); err != nil {
+		return err
+	}
+
+	return p.writeSchemaDescChange(ctx, scDesc, jobDescription)
+}
+
+// checkCanAlterSchemaAndSetNewOwner handles privilege checking and setting new owner.
+// Called in ALTER SCHEMA and REASSIGN OWNED BY.
+// TODO(angelaw): can be potentially re-merged with previous method after changes to authorization.go.
+func (p *planner) checkCanAlterSchemaAndSetNewOwner(
+	ctx context.Context, scDesc *schemadesc.Mutable, newOwner string, hasOwnership bool,
+) error {
+	privs := scDesc.GetPrivileges()
 
 	// The new owner must also have CREATE privilege on the schema's database.
-	if err := p.CheckPrivilegeForUser(ctx, db, privilege.CREATE, newOwner); err != nil {
+	parentDBDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, scDesc.GetParentID(), p.txn)
+	if err != nil {
 		return err
 	}
-
+	if err := p.CheckPrivilegeForUser(ctx, parentDBDesc, privilege.CREATE, newOwner); err != nil {
+		return err
+	}
 	// If the owner we want to set to is the current owner, do a no-op.
 	if newOwner == privs.Owner {
 		return nil
 	}
-
 	// Update the owner of the schema.
 	privs.SetOwner(newOwner)
 
-	return p.writeSchemaDescChange(ctx, scDesc, jobDesc)
+	return nil
 }
 
 func (p *planner) renameSchema(

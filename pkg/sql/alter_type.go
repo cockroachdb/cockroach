@@ -297,9 +297,14 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 
 func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner string) error {
 	typeDesc := n.desc
+	// TODO(angelaw): Remove once Solon's added hasOwnership to checkCanAlterToNewOwner
+	hasOwnership, err := p.HasOwnership(ctx, typeDesc)
+	if err != nil {
+		return err
+	}
 	privs := typeDesc.GetPrivileges()
 
-	hasOwnership, err := p.HasOwnership(ctx, typeDesc)
+	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
@@ -307,6 +312,33 @@ func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner
 	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, privs, newOwner, hasOwnership); err != nil {
 		return err
 	}
+
+	if err := p.checkCanAlterTypeAndSetNewOwner(ctx, typeDesc, arrayDesc, newOwner, hasOwnership); err != nil {
+		return err
+	}
+
+	if err := p.writeTypeSchemaChange(
+		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
+	); err != nil {
+		return err
+	}
+
+	return p.writeTypeSchemaChange(
+		ctx, arrayDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
+	)
+}
+
+// checkCanAlterTypeAndSetNewOwner handles privilege checking and setting new owner.
+// Called in ALTER TYPE and REASSIGN OWNED BY.
+// TODO(angelaw): can be potentially re-merged with previous method after changes to authorization.go.
+func (p *planner) checkCanAlterTypeAndSetNewOwner(
+	ctx context.Context,
+	typeDesc *typedesc.Mutable,
+	arrayTypeDesc *typedesc.Mutable,
+	newOwner string,
+	hasOwnership bool,
+) error {
+	privs := typeDesc.GetPrivileges()
 
 	// Ensure the new owner has CREATE privilege on the type's schema.
 	if err := p.canCreateOnSchema(ctx, typeDesc.GetParentSchemaID(), newOwner); err != nil {
@@ -320,23 +352,10 @@ func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner
 
 	privs.SetOwner(newOwner)
 
-	if err := p.writeTypeSchemaChange(
-		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
-	); err != nil {
-		return err
-	}
-
 	// Also have to change the owner of the implicit array type.
-	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, n.desc.ArrayTypeID)
-	if err != nil {
-		return err
-	}
+	arrayTypeDesc.Privileges.SetOwner(newOwner)
 
-	arrayDesc.Privileges.SetOwner(newOwner)
-
-	return p.writeTypeSchemaChange(
-		ctx, arrayDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
-	)
+	return nil
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }

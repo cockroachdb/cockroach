@@ -185,6 +185,7 @@ var _ planNode = &limitNode{}
 var _ planNode = &max1RowNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &projectSetNode{}
+var _ planNode = &reassignOwnedByNode{}
 var _ planNode = &refreshMaterializedViewNode{}
 var _ planNode = &recursiveCTENode{}
 var _ planNode = &relocateNode{}
