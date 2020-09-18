@@ -672,6 +672,7 @@ func (c *cascader) updateRows(
 	match sqlbase.ForeignKeyReference_Match,
 	values cascadeQueueElement,
 	action sqlbase.ForeignKeyReference_Action,
+	fk *sqlbase.ForeignKeyConstraint,
 	traceKV bool,
 ) (*rowcontainer.RowContainer, *rowcontainer.RowContainer, map[sqlbase.ColumnID]int, int, error) {
 	// Create the span to search for index values.
@@ -717,12 +718,12 @@ func (c *cascader) updateRows(
 	switch action {
 	case sqlbase.ForeignKeyReference_SET_NULL:
 		referencingIndexValuesByColIDs = make(map[sqlbase.ColumnID]tree.Datum)
-		for _, columnID := range referencingIndex.ColumnIDs {
+		for _, columnID := range fk.OriginColumnIDs {
 			referencingIndexValuesByColIDs[columnID] = tree.DNull
 		}
 	case sqlbase.ForeignKeyReference_SET_DEFAULT:
 		referencingIndexValuesByColIDs = make(map[sqlbase.ColumnID]tree.Datum)
-		for _, columnID := range referencingIndex.ColumnIDs {
+		for _, columnID := range fk.OriginColumnIDs {
 			column, err := referencingTable.FindColumnByID(columnID)
 			if err != nil {
 				return nil, nil, nil, 0, err
@@ -1099,6 +1100,7 @@ func (c *cascader) cascadeAll(
 						sqlbase.ForeignKeyReference_SIMPLE,
 						elem,
 						foundFK.OnDelete,
+						foundFK,
 						traceKV,
 					)
 					if err != nil {
@@ -1130,6 +1132,7 @@ func (c *cascader) cascadeAll(
 						sqlbase.ForeignKeyReference_SIMPLE,
 						elem,
 						foundFK.OnUpdate,
+						foundFK,
 						traceKV,
 					)
 					if err != nil {
