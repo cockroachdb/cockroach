@@ -237,7 +237,6 @@ func TestSendRPCOrder(t *testing.T) {
 		5: {roachpb.Tier{Key: "country", Value: "us"}, roachpb.Tier{Key: "region", Value: "east"}, roachpb.Tier{Key: "city", Value: "mia"}},
 	}
 
-	// Gets filled below to identify the replica by its address.
 	makeVerifier := func(expNodes []roachpb.NodeID) func(SendOptions, []roachpb.ReplicaDescriptor) error {
 		return func(o SendOptions, replicas []roachpb.ReplicaDescriptor) error {
 			var actualAddrs []roachpb.NodeID
