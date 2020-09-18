@@ -63,12 +63,6 @@ type deleteRun struct {
 	rowIdxToRetIdx []int
 }
 
-// maxDeleteBatchSize is the max number of entries in the KV batch for
-// the delete operation (including secondary index updates, FK
-// cascading updates, etc), before the current KV batch is executed
-// and a new batch is started.
-const maxDeleteBatchSize = 10000
-
 func (d *deleteNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
@@ -124,7 +118,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if d.run.td.currentBatchSize >= maxDeleteBatchSize {
+		if d.run.td.currentBatchSize >= d.run.td.maxBatchSize {
 			break
 		}
 	}

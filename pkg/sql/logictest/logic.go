@@ -1088,6 +1088,11 @@ type logicTest struct {
 	// set to 1 with 25% probability, {2, 3} with 25% probability or default batch
 	// size with 50% probability.
 	randomizedVectorizedBatchSize int
+	// randomizedMutationsMaxBatchSize stores the randomized max batch size for
+	// the mutation operations. The max batch size will randomly be set to 1
+	// with 25% probability, a random value in [2, 100] range with 25%
+	// probability, or default max batch size with 50% probability.
+	randomizedMutationsMaxBatchSize int
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1406,8 +1411,13 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		}
 
 		if _, err := conn.Exec(
-			fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size to %d",
-				t.randomizedVectorizedBatchSize),
+			"SET CLUSTER SETTING sql.testing.vectorize.batch_size = $1", t.randomizedVectorizedBatchSize,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.testing.mutations.max_batch_size = $1", t.randomizedMutationsMaxBatchSize,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -2695,6 +2705,11 @@ type TestServerArgs struct {
 	// actually in-memory). If it is unset, then the default limit of 100MB
 	// will be used.
 	tempStorageDiskLimit int64
+	// DisableMutationsMaxBatchSizeRandomization determines whether the test
+	// runner should randomize the max batch size for mutation operations. This
+	// should only be set to 'true' when the tests expect to return different
+	// output when the KV batches of writes have different boundaries.
+	DisableMutationsMaxBatchSizeRandomization bool
 }
 
 // RunLogicTest is the main entry point for the logic test. The globs parameter
@@ -2799,17 +2814,16 @@ func RunLogicTestWithDefaultConfig(
 
 	// Determining whether or not to randomize vectorized batch size.
 	rng, _ := randutil.NewPseudoRand()
-	randVal := rng.Float64()
-	randomizedVectorizedBatchSize := coldata.BatchSize()
-	if randVal < 0.25 {
-		randomizedVectorizedBatchSize = 1
-	} else if randVal < 0.375 {
-		randomizedVectorizedBatchSize = 2
-	} else if randVal < 0.5 {
-		randomizedVectorizedBatchSize = 3
-	}
+	randomizedVectorizedBatchSize := randomValue(rng, []int{1, 2, 3}, []float64{0.25, 0.125, 0.125}, coldata.BatchSize())
 	if randomizedVectorizedBatchSize != coldata.BatchSize() {
-		t.Log(fmt.Sprintf("randomize batchSize to %d", randomizedVectorizedBatchSize))
+		t.Log(fmt.Sprintf("randomize coldata.BatchSize to %d", randomizedVectorizedBatchSize))
+	}
+	randomizedMutationsMaxBatchSize := mutations.MaxBatchSize()
+	if !serverArgs.DisableMutationsMaxBatchSizeRandomization {
+		randomizedMutationsMaxBatchSize = randomValue(rng, []int{1, 2 + rng.Intn(99)}, []float64{0.25, 0.25}, mutations.MaxBatchSize())
+		if randomizedMutationsMaxBatchSize != mutations.MaxBatchSize() {
+			t.Log(fmt.Sprintf("randomize mutations.MaxBatchSize to %d", randomizedMutationsMaxBatchSize))
+		}
 	}
 
 	// The tests below are likely to run concurrently; `log` is shared
@@ -2865,11 +2879,12 @@ func RunLogicTestWithDefaultConfig(
 					}
 					rng, _ := randutil.NewPseudoRand()
 					lt := logicTest{
-						rootT:                         t,
-						verbose:                       verbose,
-						perErrorSummary:               make(map[string][]string),
-						rng:                           rng,
-						randomizedVectorizedBatchSize: randomizedVectorizedBatchSize,
+						rootT:                           t,
+						verbose:                         verbose,
+						perErrorSummary:                 make(map[string][]string),
+						rng:                             rng,
+						randomizedVectorizedBatchSize:   randomizedVectorizedBatchSize,
+						randomizedMutationsMaxBatchSize: randomizedMutationsMaxBatchSize,
 					}
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
@@ -3167,4 +3182,30 @@ func (t *logicTest) printCompletion(path string, config testClusterConfig) {
 	}
 	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.name,
 		t.progress, t.failures, unsupportedMsg)
+}
+
+// randomValue randomly chooses one element from values according to
+// probabilities (the sum of which must not exceed 1.0). If the sum of
+// probabilities is less than 1.0, then defaultValue will be chosen in 1.0-sum
+// proportion of cases.
+func randomValue(rng *rand.Rand, values []int, probabilities []float64, defaultValue int) int {
+	if len(values) != len(probabilities) {
+		panic(errors.AssertionFailedf("mismatched number of values %d and probabilities %d", len(values), len(probabilities)))
+	}
+	probabilitiesSum := 0.0
+	for _, p := range probabilities {
+		probabilitiesSum += p
+	}
+	if probabilitiesSum > 1.0 {
+		panic(errors.AssertionFailedf("sum of probabilities %v is larger than 1.0", probabilities))
+	}
+	randVal := rng.Float64()
+	probabilitiesSum = 0
+	for i, p := range probabilities {
+		if randVal < probabilitiesSum+p {
+			return values[i]
+		}
+		probabilitiesSum += p
+	}
+	return defaultValue
 }
