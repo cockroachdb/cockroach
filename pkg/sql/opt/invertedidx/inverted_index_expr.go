@@ -31,3 +31,17 @@ func NewDatumsToInvertedExpr(
 
 	return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, &desc.GeoConfig)
 }
+
+// NewBoundPreFilterer returns a PreFilterer for the given expr where the type
+// of the bound param is specified by typ. Unlike the use of PreFilterer in an
+// inverted join, where each left value is bound, this function is for the
+// invertedFilterer where the param to be bound is already specified as a
+// constant in the expr. The callee will bind this parameter and return the
+// opaque pre-filtering state for that binding (the interface{}) in the return
+// values).
+func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, interface{}, error) {
+	if !typ.Equivalent(types.Geometry) && !typ.Equivalent(types.Geography) {
+		return nil, nil, fmt.Errorf("pre-filtering not supported for type %s", typ)
+	}
+	return newGeoBoundPreFilterer(typ, expr)
+}

@@ -1216,6 +1216,8 @@ select
  │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │         │         ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x16\x00\x00\x00\x00\x00\x00\x00")
+ │         ├── pre-filterer expression
+ │         │    └── st_intersects('010100000000000000000008400000000000000840', geom:8)
  │         ├── key: (1)
  │         └── scan index_tab@geomidx
  │              ├── columns: id:1!null geom_inverted_key:10!null

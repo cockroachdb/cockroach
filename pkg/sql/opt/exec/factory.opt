@@ -24,6 +24,8 @@ define Filter {
 define InvertedFilter {
     Input exec.Node
     InvFilter *invertedexpr.SpanExpression
+    PreFiltererExpr tree.TypedExpr
+    PreFiltererType *types.T
     InvColumn exec.NodeColumnOrdinal
 }
 

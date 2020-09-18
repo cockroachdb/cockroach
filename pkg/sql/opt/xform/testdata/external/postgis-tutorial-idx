@@ -40,6 +40,8 @@ project
       │              ├── inverted expression: /6
       │              │    ├── tight: false
       │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │              ├── pre-filterer expression
+      │              │    └── st_intersects('0101000020266900000000000026CF21410000008016315141', geom:4)
       │              ├── key: (1)
       │              └── scan nyc_neighborhoods@nyc_neighborhoods_geom_idx
       │                   ├── columns: gid:1!null geom_inverted_key:6!null
@@ -83,6 +85,8 @@ project
       │              ├── inverted expression: /8
       │              │    ├── tight: false
       │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │              ├── pre-filterer expression
+      │              │    └── st_dwithin('0101000020266900000000000026CF21410000008016315141', geom:6, 10.0)
       │              ├── key: (1)
       │              └── scan nyc_streets@nyc_streets_geom_idx
       │                   ├── columns: gid:1!null geom_inverted_key:8!null
@@ -128,6 +132,8 @@ project
       │              ├── inverted expression: /6
       │              │    ├── tight: false
       │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │              ├── pre-filterer expression
+      │              │    └── st_intersects('01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', geom:4)
       │              ├── key: (1)
       │              └── scan nyc_neighborhoods@nyc_neighborhoods_geom_idx
       │                   ├── columns: gid:1!null geom_inverted_key:6!null
@@ -174,6 +180,8 @@ project
       │              ├── inverted expression: /8
       │              │    ├── tight: false
       │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+      │              ├── pre-filterer expression
+      │              │    └── st_dwithin('01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', geom:6, 0.1)
       │              ├── key: (1)
       │              └── scan nyc_streets@nyc_streets_geom_idx
       │                   ├── columns: gid:1!null geom_inverted_key:8!null
@@ -216,6 +224,8 @@ scalar-group-by
  │    │         ├── inverted expression: /12
  │    │         │    ├── tight: false
  │    │         │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │    │         ├── pre-filterer expression
+ │    │         │    └── st_dwithin('01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', geom:10, 50.0)
  │    │         ├── key: (1)
  │    │         └── scan nyc_census_blocks@nyc_census_blocks_geom_idx
  │    │              ├── columns: gid:1!null geom_inverted_key:12!null

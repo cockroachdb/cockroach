@@ -179,6 +179,9 @@ define InvertedFilterPrivate {
     # further by applying set operations on the primary key columns.
     InvertedExpression SpanExpression
 
+    # PreFiltererState represents the optional pre-filtering state.
+    PreFiltererState PreFiltererState
+
     # The InvertedColumn is the id of the inverted column in the input. It is
     # used during execution to map rows from the input to their corresponding
     # spans in the SpanExpression.
