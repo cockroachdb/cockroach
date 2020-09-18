@@ -1253,13 +1253,18 @@ func writeErrFields(
 	msgBuilder.writeTerminatedString(pgErr.Code)
 
 	if pgErr.Detail != "" {
-		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFileldDetail)
+		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldDetail)
 		msgBuilder.writeTerminatedString(pgErr.Detail)
 	}
 
 	if pgErr.Hint != "" {
-		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFileldHint)
+		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldHint)
 		msgBuilder.writeTerminatedString(pgErr.Hint)
+	}
+
+	if pgErr.ConstraintName != "" {
+		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldConstraintName)
+		msgBuilder.writeTerminatedString(pgErr.ConstraintName)
 	}
 
 	if pgErr.Source != nil {

@@ -134,8 +134,9 @@ func (p *PGTest) Until(
 			// ErrorResponse doesn't encode/decode correctly, so
 			// manually append it here.
 			msgs = append(msgs, &pgproto3.ErrorResponse{
-				Code:    errmsg.Code,
-				Message: message,
+				Code:           errmsg.Code,
+				Message:        message,
+				ConstraintName: errmsg.ConstraintName,
 			})
 			typs = typs[1:]
 			continue
