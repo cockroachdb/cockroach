@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/testutils/rpcutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,8 +42,9 @@ func TestClosest(t *testing.T) {
 	g, _ := makeGossip(t, stopper)
 	nd, _ := g.GetNodeDescriptor(1)
 	of := NewOracleFactory(ClosestChoice, Config{
-		NodeDescs: g,
-		NodeDesc:  *nd,
+		NodeDescs:     g,
+		NodeDesc:      *nd,
+		HealthChecker: rpcutils.AllGoodHealthChecker{},
 	})
 	of.(*closestOracle).latencyFunc = func(s string) (time.Duration, bool) {
 		if strings.HasSuffix(s, "2") {

@@ -169,7 +169,7 @@ func (dsp *DistSQLPlanner) SetNodeInfo(desc roachpb.NodeDescriptor) {
 	dsp.gatewayNodeID = desc.NodeID
 	if dsp.spanResolver == nil {
 		sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.nodeDescs, desc,
-			dsp.rpcCtx, ReplicaOraclePolicy)
+			dsp.rpcCtx, dsp.nodeDialer.HealthCheckerForClass(rpc.DefaultClass), ReplicaOraclePolicy)
 		dsp.SetSpanResolver(sr)
 	}
 }

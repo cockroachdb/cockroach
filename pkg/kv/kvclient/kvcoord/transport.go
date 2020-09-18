@@ -14,12 +14,14 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -31,6 +33,10 @@ import (
 type SendOptions struct {
 	class   rpc.ConnectionClass
 	metrics *DistSenderMetrics
+	// If set, the transport will try the replicas in the order in which they're
+	// present in the descriptor, without looking at latency or health. A
+	// leaseholder will still be tried first, if specified.
+	orderOpt ReorderReplicasOpt
 }
 
 // TransportFactory encapsulates all interaction with the RPC
@@ -41,7 +47,14 @@ type SendOptions struct {
 // The caller is responsible for ordering the replicas in the slice according to
 // the order in which the should be tried.
 type TransportFactory func(
-	SendOptions, *nodedialer.Dialer, []roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	opts SendOptions,
+	curNode *roachpb.NodeDescriptor,
+	nodeDescStore NodeDescStore,
+	nodeDialer *nodedialer.Dialer,
+	latencyFn LatencyFunc,
+	desc *roachpb.RangeDescriptor,
+	leaseholder roachpb.ReplicaID,
 ) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
@@ -73,6 +86,10 @@ type Transport interface {
 	// - the replica that NextReplica() would return is skipped.
 	SkipReplica()
 
+	// Replicas returns all the replicas that this transport was configured with.
+	// The replicas will be ordered as the transport will try them.
+	Replicas() []roachpb.ReplicaDescriptor
+
 	// MoveToFront locates the specified replica and moves it to the
 	// front of the ordering of replicas to try. If the replica has
 	// already been tried, it will be retried. If the specified replica
@@ -80,24 +97,41 @@ type Transport interface {
 	MoveToFront(roachpb.ReplicaDescriptor)
 }
 
+// A LatencyFunc returns the latency from this node to a remote
+// address and a bool indicating whether the latency is valid.
+type LatencyFunc func(string) (time.Duration, bool)
+
 // grpcTransportFactoryImpl is the default TransportFactory, using GRPC.
 // Do not use this directly - use grpcTransportFactory instead.
 //
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, rs []roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	opts SendOptions,
+	curNode *roachpb.NodeDescriptor,
+	nodeDescStore NodeDescStore,
+	nodeDialer *nodedialer.Dialer,
+	latencyFn LatencyFunc,
+	desc *roachpb.RangeDescriptor,
+	leaseholder roachpb.ReplicaID,
 ) (Transport, error) {
-	health := make(map[roachpb.ReplicaDescriptor]bool)
-	replicas := make([]roachpb.ReplicaDescriptor, len(rs))
-	for i, r := range rs {
-		replicas[i] = r
-		health[r] = nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
+	// Sanity check: if we've been given a leaseholder, it should be coherent with
+	// the descriptor.
+	var lh roachpb.ReplicaDescriptor
+	if leaseholder != 0 {
+		var ok bool
+		if lh, ok = desc.GetReplicaDescriptorByID(leaseholder); !ok {
+			log.Fatalf(ctx, "leaseholder not in descriptor; leaseholder: %s, desc: %s", leaseholder, desc)
+		}
 	}
 
-	// Put known-healthy clients first, while otherwise respecting the existing
-	// ordering of the replicas.
-	splitHealthy(replicas, health)
+	replicas, err := OrderReplicas(
+		ctx, opts.orderOpt, curNode, nodeDescStore, nodeDialer.HealthCheckerForClass(opts.class),
+		latencyFn, desc, lh)
+	if err != nil {
+		return nil, err
+	}
 
 	return &grpcTransport{
 		opts:       opts,
@@ -105,6 +139,185 @@ func grpcTransportFactoryImpl(
 		class:      opts.class,
 		replicas:   replicas,
 	}, nil
+}
+
+type ReorderReplicasOpt bool
+
+const (
+	OrderByLatency     ReorderReplicasOpt = false
+	DontOrderByLatency ReorderReplicasOpt = true
+)
+
+// OrderReplicas orders a slice of replicas in the order in which they should be
+// attempted for performing a request on the respective range.
+//
+// Non-voters are filtered out, with the exception of the leaseholder (if
+// specified). Replicas whose node descriptor is not available in nodeDescStore
+// are filtered out. Depending on orderOpt, the remaining replicas are ordered
+// by expected latency. The leaseholder is then moved to the front. The
+// connection health is then considered, according to healthChecker, and
+// non-healthy replicas are de-prioritized.
+//
+// curNode, if not nil, is used to prioritize the local replica if it exists.
+//
+// leaseholder can be empty if it's not known or if the request
+// doesn't need to be routed to the leaseholder.
+func OrderReplicas(
+	ctx context.Context,
+	orderOpt ReorderReplicasOpt,
+	curNode *roachpb.NodeDescriptor,
+	nodeDescStore NodeDescStore,
+	healthChecker nodedialer.HealthChecker,
+	latencyFn LatencyFunc,
+	desc *roachpb.RangeDescriptor,
+	leaseholder roachpb.ReplicaDescriptor,
+) ([]roachpb.ReplicaDescriptor, error) {
+	// Learner replicas won't serve reads/writes, so we'll send only to the
+	// `Voters` replicas. This is just an optimization to save a network hop,
+	// everything would still work if we had `All` here.
+	replicas := desc.Replicas().Voters()
+	// The slice returned above might share memory with the descriptor, which we
+	// don't want to modify, so we'll make a copy.
+	replicasCpy := make([]roachpb.ReplicaDescriptor, len(replicas))
+	copy(replicasCpy, replicas)
+	replicas = replicasCpy
+	// If we know a leaseholder, though, let's make sure we include it.
+	if leaseholder != (roachpb.ReplicaDescriptor{}) && len(replicas) < len(desc.Replicas().All()) {
+		found := false
+		for _, v := range replicas {
+			if v == leaseholder {
+				found = true
+				break
+			}
+		}
+		if !found {
+			log.Eventf(ctx, "the descriptor has the leaseholder as a learner; including it anyway")
+			replicas = append(replicas, leaseholder)
+		}
+	}
+
+	// Filter out nodes with descriptors not present in the nodeDescStore.
+	rs := make(replicaSlice, 0, len(replicas))
+	for _, r := range replicas {
+		nd, err := nodeDescStore.GetNodeDescriptor(r.NodeID)
+		if err != nil {
+			if log.V(1) {
+				log.Infof(ctx, "node %d is not gossiped: %v", r.NodeID, err)
+			}
+			continue
+		}
+		rs = append(rs, replicaInfo{
+			ReplicaDescriptor: r,
+			nodeDesc:          nd,
+		})
+	}
+	if len(rs) == 0 {
+		return nil, newSendError(
+			fmt.Sprintf("no replica node addresses available via gossip for r%d", desc.RangeID))
+	}
+
+	// Rearrange the replicas so that they're ordered in expectation of
+	// request latency. Leaseholder considerations come below.
+	if orderOpt == OrderByLatency {
+		sortByLatency(rs, curNode, latencyFn)
+	}
+
+	// If we were given a leaseholder, move it to the front.
+	if leaseholder != (roachpb.ReplicaDescriptor{}) {
+		rs.moveToFront(ctx, leaseholder.ReplicaID)
+	}
+
+	// Put known-healthy clients first, while otherwise respecting the existing
+	// ordering of the replicas.
+	health := make(map[roachpb.ReplicaDescriptor]bool)
+	for _, r := range replicas {
+		health[r] = healthChecker.ConnHealth(r.NodeID) == nil
+	}
+	for i := range rs {
+		replicas[i] = rs[i].ReplicaDescriptor
+	}
+	splitHealthy(replicas, health)
+	return replicas, nil
+}
+
+// A replicaSlice is a slice of ReplicaInfo.
+type replicaSlice []replicaInfo
+
+// replicaSlice implements shuffle.Interface.
+var _ shuffle.Interface = replicaSlice{}
+
+// Len returns the total number of replicas in the slice.
+func (rs replicaSlice) Len() int { return len(rs) }
+
+// Swap swaps the replicas with indexes i and j.
+func (rs replicaSlice) Swap(i, j int) { rs[i], rs[j] = rs[j], rs[i] }
+
+// MoveToFront moves the given replica to the front of the slice
+// keeping the order of the remaining elements stable.
+// The function will panic when invoked with an invalid index.
+func (rs replicaSlice) moveToFront(ctx context.Context, r roachpb.ReplicaID) {
+	var i int
+	for i = 0; i < len(rs); i++ {
+		if rs[i].ReplicaID == r {
+			break
+		}
+	}
+	if i == len(rs) {
+		log.Fatalf(ctx, "replica %s not found in list %s", r, rs)
+	}
+
+	front := rs[i]
+	// Move the first i elements one index to the right
+	copy(rs[1:], rs[:i])
+	rs[0] = front
+}
+
+// replicaInfo extends the Replica structure with the associated node
+// descriptor.
+type replicaInfo struct {
+	roachpb.ReplicaDescriptor
+	nodeDesc *roachpb.NodeDescriptor
+}
+
+func sortByLatency(rs replicaSlice, curNode *roachpb.NodeDescriptor, latencyFn LatencyFunc) {
+	// If we don't know which node we're on, send the RPCs randomly.
+	if curNode == nil {
+		shuffle.Shuffle(rs)
+		return
+	}
+	// Sort replicas by latency and then attribute affinity.
+	sort.Slice(rs, func(i, j int) bool {
+		// If there is a replica in local node, it sorts first.
+		if rs[i].NodeID == curNode.NodeID {
+			return true
+		}
+		if latencyFn != nil {
+			latencyI, okI := latencyFn(rs[i].nodeDesc.Address.String())
+			latencyJ, okJ := latencyFn(rs[j].nodeDesc.Address.String())
+			if okI && okJ {
+				return latencyI < latencyJ
+			}
+		}
+		attrMatchI := localityMatch(curNode.Locality.Tiers, rs[i].nodeDesc.Locality.Tiers)
+		attrMatchJ := localityMatch(curNode.Locality.Tiers, rs[j].nodeDesc.Locality.Tiers)
+		// Longer locality matches sort first (the assumption is that
+		// they'll have better latencies).
+		return attrMatchI > attrMatchJ
+	})
+}
+
+// localityMatch returns the number of consecutive locality tiers
+// which match between a and b.
+func localityMatch(a, b []roachpb.Tier) int {
+	if len(a) == 0 {
+		return 0
+	}
+	for i := range a {
+		if i >= len(b) || a[i] != b[i] {
+			return i
+		}
+	}
+	return len(a)
 }
 
 type grpcTransport struct {
@@ -218,6 +431,10 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 	}
 }
 
+func (gt *grpcTransport) Replicas() []roachpb.ReplicaDescriptor {
+	return gt.replicas
+}
+
 // splitHealthy splits the provided client slice into healthy clients and
 // unhealthy clients, based on their connection state. Healthy clients will be
 // rearranged first in the slice, and unhealthy clients will be rearranged last.
@@ -253,10 +470,21 @@ func (h byHealth) Less(i, j int) bool {
 // without a full RPC stack.
 func SenderTransportFactory(tracer opentracing.Tracer, sender kv.Sender) TransportFactory {
 	return func(
-		_ SendOptions, _ *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
+		ctx context.Context,
+		opts SendOptions,
+		curNode *roachpb.NodeDescriptor,
+		nodeDescStore NodeDescStore,
+		nodeDialer *nodedialer.Dialer,
+		latencyFn LatencyFunc,
+		desc *roachpb.RangeDescriptor,
+		leaseholder roachpb.ReplicaID,
 	) (Transport, error) {
-		// Always send to the first replica.
-		replica := replicas[0]
+		voters := desc.Replicas().Voters()
+		if len(voters) == 0 {
+			return nil, errors.Errorf("no voters in desc: %s", desc)
+		}
+		// Always send to the first voter replica.
+		replica := desc.Replicas().Voters()[0]
 		return &senderTransport{tracer, sender, replica, false}, nil
 	}
 }
@@ -332,4 +560,8 @@ func (s *senderTransport) SkipReplica() {
 }
 
 func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
+}
+
+func (s *senderTransport) Replicas() []roachpb.ReplicaDescriptor {
+	return []roachpb.ReplicaDescriptor{s.replica}
 }

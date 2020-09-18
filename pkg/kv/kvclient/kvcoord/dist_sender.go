@@ -1769,39 +1769,29 @@ func (ds *DistSender) sendToReplicas(
 ) (*roachpb.BatchResponse, error) {
 	desc := routing.Desc()
 	ba.RangeID = desc.RangeID
-	leaseholder := routing.Leaseholder()
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder)
-	if err != nil {
-		return nil, err
-	}
-
-	// Rearrange the replicas so that they're ordered in expectation of
-	// request latency. Leaseholder considerations come below.
-	if !ds.dontReorderReplicas {
-		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.latencyFunc)
-	}
-
-	// Try the leaseholder first, if the request wants it.
+	// Figure out if the request needs to be routed to the leaseholder.
+	var lh roachpb.ReplicaID
 	{
+		leaseholder := routing.Leaseholder()
 		canFollowerRead := (ds.clusterID != nil) && CanSendToFollower(ds.clusterID.Get(), ds.st, ba)
 		sendToLeaseholder := (leaseholder != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
 		if sendToLeaseholder {
-			idx := replicas.Find(leaseholder.ReplicaID)
-			if idx != -1 {
-				replicas.MoveToFront(idx)
-			} else {
-				// The leaseholder node's info must have been missing from gossip when
-				// we created replicas.
-				log.Eventf(ctx, "leaseholder %s missing from replicas", leaseholder)
-			}
+			lh = leaseholder.ReplicaID
 		}
 	}
 
-	opts := SendOptions{
-		class:   rpc.ConnectionClassForKey(desc.RSpan().Key),
-		metrics: &ds.metrics,
+	orderOpt := OrderByLatency
+	if ds.dontReorderReplicas {
+		orderOpt = DontOrderByLatency
 	}
-	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas.Descriptors())
+	opts := SendOptions{
+		class:    rpc.ConnectionClassForKey(desc.RSpan().Key),
+		metrics:  &ds.metrics,
+		orderOpt: orderOpt,
+	}
+	transport, err := ds.transportFactory(
+		ctx, opts, ds.getNodeDescriptor(), ds.nodeDescs, ds.nodeDialer, ds.latencyFunc,
+		desc, lh)
 	if err != nil {
 		return nil, err
 	}

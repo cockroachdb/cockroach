@@ -84,9 +84,16 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		params.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
 			TransportFactory: func(
-				opts kvcoord.SendOptions, nodeDialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
+				ctx context.Context,
+				opts kvcoord.SendOptions,
+				curNode *roachpb.NodeDescriptor,
+				nodeDescStore kvcoord.NodeDescStore,
+				nodeDialer *nodedialer.Dialer,
+				latencyFn kvcoord.LatencyFunc,
+				desc *roachpb.RangeDescriptor,
+				leaseholder roachpb.ReplicaID,
 			) (kvcoord.Transport, error) {
-				transport, err := kvcoord.GRPCTransportFactory(opts, nodeDialer, replicas)
+				transport, err := kvcoord.GRPCTransportFactory(ctx, opts, curNode, nodeDescStore, nodeDialer, latencyFn, desc, leaseholder)
 				return &interceptingTransport{
 					Transport: transport,
 					sendNext: func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {

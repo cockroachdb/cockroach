@@ -228,23 +228,19 @@ func (ds *DistSender) singleRangeFeed(
 	if ds.rpcContext != nil {
 		latencyFn = ds.rpcContext.RemoteClocks.Latency
 	}
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, nil /* leaseholder */)
-	if err != nil {
-		return args.Timestamp, err
-	}
-	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
 	// The RangeFeed is not used for system critical traffic so use a DefaultClass
 	// connection regardless of the range.
 	opts := SendOptions{class: rpc.DefaultClass}
-	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas.Descriptors())
+	transport, err := ds.transportFactory(
+		ctx, opts, ds.getNodeDescriptor(), ds.nodeDescs, ds.nodeDialer, latencyFn,
+		desc, 0 /* leaseholder */)
 	if err != nil {
 		return args.Timestamp, err
 	}
 
 	for {
 		if transport.IsExhausted() {
-			return args.Timestamp, newSendError(
-				fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
+			return args.Timestamp, newSendError(fmt.Sprintf("sending to all replicas failed"))
 		}
 
 		args.Replica = transport.NextReplica()

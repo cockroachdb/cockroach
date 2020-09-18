@@ -553,8 +553,25 @@ type multiTestContextKVTransport struct {
 }
 
 func (m *multiTestContext) kvTransportFactory(
-	_ kvcoord.SendOptions, _ *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context,
+	opts kvcoord.SendOptions,
+	curNode *roachpb.NodeDescriptor,
+	nodeDescs kvcoord.NodeDescStore,
+	dialer *nodedialer.Dialer,
+	latencyFn kvcoord.LatencyFunc,
+	desc *roachpb.RangeDescriptor,
+	leaseholder roachpb.ReplicaID,
 ) (kvcoord.Transport, error) {
+	// Build a dummy grpcTransport in order to have it sort the replicas. We're
+	// not actually going to use the transport, but we're going to use the
+	// replicas in the same order as it would have.
+	tr, err := kvcoord.GRPCTransportFactory(
+		ctx, opts, curNode, nodeDescs, dialer, latencyFn, desc, leaseholder)
+	if err != nil {
+		return nil, err
+	}
+	replicas := tr.Replicas()
+
 	t := &multiTestContextKVTransport{
 		mtc:      m,
 		replicas: replicas,
@@ -699,6 +716,10 @@ func (t *multiTestContextKVTransport) MoveToFront(replica roachpb.ReplicaDescrip
 			return
 		}
 	}
+}
+
+func (t *multiTestContextKVTransport) Replicas() []roachpb.ReplicaDescriptor {
+	return t.replicas
 }
 
 func (t *multiTestContextKVTransport) setPending(repID roachpb.ReplicaID, pending bool) {
