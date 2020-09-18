@@ -17,7 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -458,6 +460,26 @@ func testInternalExecutorAppNameInitialization(
 	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppNameInStats {
 		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppNameInStats, appName)
 	}
+}
+
+func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	rootTxn := kvDB.NewTxn(ctx, "root-txn")
+
+	ltis := rootTxn.GetLeafTxnInputState(ctx)
+	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), &ltis)
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	_, err := ie.QueryEx(
+		ctx, "leaf-query", leafTxn, sessiondata.InternalExecutorOverride{User: security.RootUser}, "SELECT 1",
+	)
+	require.NoError(t, err)
 }
 
 // TODO(andrei): Test that descriptor leases are released by the
