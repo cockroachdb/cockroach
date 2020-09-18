@@ -784,10 +784,10 @@ func (r *Registry) maybeCancelJobsDeprecated(
 		// https://github.com/cockroachdb/cockroach/issues/47892
 		return
 	}
-	liveness, err := nl.Self()
-	if err != nil {
+	liveness, ok := nl.Self()
+	if !ok {
 		if nodeLivenessLogLimiter.ShouldLog() {
-			log.Warningf(ctx, "unable to get node liveness: %s", err)
+			log.Warning(ctx, "unable to get node liveness")
 		}
 		// Conservatively assume our lease has expired. Abort all jobs.
 		r.deprecatedCancelAll(ctx)
