@@ -339,31 +339,46 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 	geomOrd, geogOrd := 1, 2
 
 	testCases := []struct {
-		filters  string
-		indexOrd int
-		ok       bool
+		filters             string
+		indexOrd            int
+		ok                  bool
+		preFilterExpr       string
+		preFilterCol        opt.ColumnID
+		preFilterTypeFamily types.Family
 	}{
 		{
-			filters:  "st_intersects('LINESTRING ( 0 0, 0 2 )'::geometry, geom)",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "st_intersects('LINESTRING ( 0 0, 0 2 )'::geometry, geom)",
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_intersects('LINESTRING ( 0 0, 0 2 )'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
 			// Still works with arguments commuted.
-			filters:  "st_intersects(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "st_intersects(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)",
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_intersects('LINESTRING ( 0 0, 0 2 )'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
-			filters:  "st_covers('SRID=4326;POINT(-40.23456 70.4567772)'::geography, geog)",
-			indexOrd: geogOrd,
-			ok:       true,
+			filters:             "st_covers('SRID=4326;POINT(-40.23456 70.4567772)'::geography, geog)",
+			indexOrd:            geogOrd,
+			ok:                  true,
+			preFilterExpr:       "st_covers('SRID=4326;POINT(-40.23456 70.4567772)'::geography, geog)",
+			preFilterCol:        2,
+			preFilterTypeFamily: types.GeographyFamily,
 		},
 		{
 			// Still works with arguments commuted.
-			filters:  "st_covers(geog, 'SRID=4326;POINT(-40.23456 70.4567772)'::geography)",
-			indexOrd: geogOrd,
-			ok:       true,
+			filters:             "st_covers(geog, 'SRID=4326;POINT(-40.23456 70.4567772)'::geography)",
+			indexOrd:            geogOrd,
+			ok:                  true,
+			preFilterExpr:       "st_coveredby('SRID=4326;POINT(-40.23456 70.4567772)'::geography, geog)",
+			preFilterCol:        2,
+			preFilterTypeFamily: types.GeographyFamily,
 		},
 		{
 			// Wrong index ordinal.
@@ -389,57 +404,87 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 			// We can constrain either index when the functions are AND-ed.
 			filters: "st_equals('LINESTRING ( 0 0, 0 2 )'::geometry, geom) AND " +
 				"st_coveredby(geog, 'SRID=4326;POINT(-40.23456 70.4567772)'::geography)",
-			indexOrd: geomOrd,
-			ok:       true,
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_equals('LINESTRING ( 0 0, 0 2 )'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
 			// We can constrain either index when the functions are AND-ed.
 			filters: "st_equals('LINESTRING ( 0 0, 0 2 )'::geometry, geom) AND " +
 				"st_coveredby(geog, 'SRID=4326;POINT(-40.23456 70.4567772)'::geography)",
-			indexOrd: geogOrd,
-			ok:       true,
+			indexOrd:            geogOrd,
+			ok:                  true,
+			preFilterExpr:       "st_covers('SRID=4326;POINT(-40.23456 70.4567772)'::geography, geog)",
+			preFilterCol:        2,
+			preFilterTypeFamily: types.GeographyFamily,
 		},
 
 		// Bounding box operators.
 		{
-			filters:  "'BOX(1 2, 3 4)'::box2d ~ geom",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "'BOX(1 2, 3 4)'::box2d ~ geom",
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_covers('POLYGON (( 1 2, 1 4, 3 4, 3 2, 1 2))'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
-			filters:  "geom ~ 'BOX(1 2, 3 4)'::box2d",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "geom ~ 'BOX(1 2, 3 4)'::box2d",
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_coveredby('POLYGON (( 1 2, 1 4, 3 4, 3 2, 1 2))'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
-			filters:  "'LINESTRING ( 0 0, 0 2 )'::geometry ~ geom",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "'LINESTRING ( 0 0, 0 2 )'::geometry ~ geom",
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_covers('LINESTRING ( 0 0, 0 2 )'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
-			filters:  "geom ~ 'LINESTRING ( 0 0, 0 2 )'::geometry",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "geom ~ 'LINESTRING ( 0 0, 0 2 )'::geometry",
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_coveredby('LINESTRING ( 0 0, 0 2 )'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
-			filters:  "'BOX(1 2, 3 4)'::box2d && geom",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "'BOX(1 2, 3 4)'::box2d && geom",
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_intersects('POLYGON (( 1 2, 1 4, 3 4, 3 2, 1 2))'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
-			filters:  "geom && 'BOX(1 2, 3 4)'::box2d",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "geom && 'BOX(1 2, 3 4)'::box2d",
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_intersects('POLYGON (( 1 2, 1 4, 3 4, 3 2, 1 2))'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
-			filters:  "'LINESTRING ( 0 0, 0 2 )'::geometry && geom",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "'LINESTRING ( 0 0, 0 2 )'::geometry && geom",
+			indexOrd:            geomOrd,
+			ok:                  true,
+			preFilterExpr:       "st_intersects('LINESTRING ( 0 0, 0 2 )'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
 		},
 		{
-			filters:  "geom && 'LINESTRING ( 0 0, 0 2 )'::geometry",
-			indexOrd: geomOrd,
-			ok:       true,
+			filters:             "geom && 'LINESTRING ( 0 0, 0 2 )'::geometry",
+			indexOrd:            geomOrd,
+			preFilterExpr:       "st_intersects('LINESTRING ( 0 0, 0 2 )'::geometry, geom)",
+			preFilterCol:        1,
+			preFilterTypeFamily: types.GeometryFamily,
+			ok:                  true,
 		},
 		{
 			// Wrong index ordinal.
@@ -459,11 +504,23 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 		// We're not testing that the correct SpanExpression is returned here;
 		// that is tested elsewhere. This is just testing that we are constraining
 		// the index when we expect to.
-		_, ok := invertedidx.TryConstrainGeoIndex(
+		_, pfState, ok := invertedidx.TryConstrainGeoIndex(
 			evalCtx.Context, &f, filters, tab, md.Table(tab).Index(tc.indexOrd),
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
+		}
+		if ok {
+			if len(tc.preFilterExpr) == 0 {
+				require.Nil(t, pfState)
+			} else {
+				require.NotNil(t, pfState)
+				pfExpr, err := buildScalar(tc.preFilterExpr, &semaCtx, evalCtx, &f)
+				require.NoError(t, err)
+				require.Equal(t, pfExpr.String(), pfState.Expr.String())
+				require.Equal(t, tc.preFilterCol, pfState.Col)
+				require.Equal(t, tc.preFilterTypeFamily, pfState.Typ.Family())
+			}
 		}
 	}
 }
