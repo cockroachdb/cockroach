@@ -1,0 +1,13 @@
+statement ok
+CREATE TYPE new_typ AS ENUM ()
+
+statement ok
+GRANT testuser TO root
+
+statement ok
+ALTER TYPE new_typ OWNER TO testuser
+
+user testuser
+
+statement ok
+DROP TYPE new_typ
