@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -400,7 +401,8 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	const smallerKvBatchSize = 10
 	defer row.TestingSetKVBatchSize(smallerKvBatchSize)()
 	const smallerInsertBatchSize = 5
-	defer sql.TestingSetInsertBatchSize(smallerInsertBatchSize)()
+	mutations.SetMaxBatchSizeForTests(smallerInsertBatchSize)
+	defer mutations.ResetMaxBatchSizeForTests()
 	numRows := smallerKvBatchSize + smallerInsertBatchSize + 10
 
 	params, _ := tests.CreateTestServerParams()
