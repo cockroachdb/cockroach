@@ -1045,6 +1045,7 @@ func TestParse(t *testing.T) {
 
 		{`SELECT 1 FROM t GROUP BY a`},
 		{`SELECT 1 FROM t GROUP BY a, b`},
+		{`SELECT 1 FROM t GROUP BY ()`},
 		{`SELECT sum(x ORDER BY y) FROM t`},
 		{`SELECT sum(x ORDER BY y, z) FROM t`},
 
@@ -3067,6 +3068,11 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT a(VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`, ``},
+
+		{`SELECT 1 FROM t GROUP BY ROLLUP (b)`, 46280, `rollup`, ``},
+		{`SELECT 1 FROM t GROUP BY a, ROLLUP (b)`, 46280, `rollup`, ``},
+		{`SELECT 1 FROM t GROUP BY CUBE (b)`, 46280, `cube`, ``},
+		{`SELECT 1 FROM t GROUP BY GROUPING SETS (b)`, 46280, `grouping sets`, ``},
 
 		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``},
 		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``},
