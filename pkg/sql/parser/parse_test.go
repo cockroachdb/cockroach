@@ -2941,6 +2941,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`, ``},
 		{`ALTER TABLE a ADD CONSTRAINT foo EXCLUDE USING gist (bar WITH =)`, 46657, `add constraint exclude using`, ``},
 
+		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
+
 		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
