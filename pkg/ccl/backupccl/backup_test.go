@@ -5763,6 +5763,31 @@ func getFirstStoreReplica(
 	return store, repl
 }
 
+// TestProtectedTimestampsFailDueToLimits ensures that when creating a protected
+// timestamp record fails, we return the correct error.
+func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	tc := testcluster.StartTestCluster(t, 1, params)
+	defer tc.Stopper().Stop(ctx)
+	db := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+	runner.Exec(t, "CREATE TABLE bar (k INT PRIMARY KEY, v BYTES)")
+	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.max_spans = 1")
+
+	// Creating the protected timestamp record should fail because there are too
+	// many spans. Ensure that we get the appropriate error.
+	_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://0/foo'`)
+	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+2 > 1 spans")
+}
+
 // Ensure that backing up and restoring tenants succeeds.
 func TestBackupRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
