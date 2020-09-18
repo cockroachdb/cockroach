@@ -996,6 +996,7 @@ unreserved_keyword ::=
 	| 'SESSION'
 	| 'SESSIONS'
 	| 'SET'
+	| 'SETS'
 	| 'SHARE'
 	| 'SHOW'
 	| 'SIMPLE'
@@ -2210,7 +2211,7 @@ from_clause ::=
 	| 
 
 group_clause ::=
-	'GROUP' 'BY' expr_list
+	'GROUP' 'BY' group_by_list
 	| 
 
 having_clause ::=
@@ -2484,6 +2485,9 @@ reference_actions ::=
 	| reference_on_delete reference_on_update
 	| 
 
+group_by_list ::=
+	( group_by_item ) ( ( ',' group_by_item ) )*
+
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
 
@@ -2728,6 +2732,9 @@ reference_on_update ::=
 
 reference_on_delete ::=
 	'ON' 'DELETE' reference_action
+
+group_by_item ::=
+	a_expr
 
 window_definition ::=
 	window_name 'AS' window_specification
