@@ -120,6 +120,11 @@ type Catalog interface {
 	// ResolveTypeByOID is used to look up a user defined type by ID.
 	ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error)
 
+	// ResolveType is used to resolve an unresolved object name.
+	ResolveType(
+		ctx context.Context, name *tree.UnresolvedObjectName,
+	) (*types.T, error)
+
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
 	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
