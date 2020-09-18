@@ -77,6 +77,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 		meta = []byte{}
 	}
 	s := makeSettings(p.settings)
+	log.Infof(ctx, "settings %v", s)
 	rows, err := p.ex.QueryEx(ctx, "protectedts-protect", txn,
 		sessiondata.InternalExecutorOverride{User: security.NodeUser},
 		protectQuery,
