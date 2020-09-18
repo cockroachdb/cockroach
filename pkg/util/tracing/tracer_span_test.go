@@ -12,8 +12,11 @@ package tracing
 
 import (
 	"regexp"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/stretchr/testify/require"
@@ -24,8 +27,14 @@ func TestRecordingString(t *testing.T) {
 	tr2 := NewTracer()
 
 	root := tr.StartSpan("root", Recordable)
+	rootSp := root.(*span)
 	StartRecording(root, SnowballRecording)
 	root.LogFields(otlog.String(LogMessageField, "root 1"))
+	// Hackily fix the timing on the first log message, so that we can check it later.
+	rootSp.mu.recordedLogs[0].Timestamp = rootSp.startTime.Add(time.Millisecond)
+	// Sleep a bit so that everything that comes afterwards has higher timestamps
+	// than the one we just assigned. Otherwise the sorting will be screwed up.
+	time.Sleep(10 * time.Millisecond)
 
 	carrier := make(opentracing.HTTPHeadersCarrier)
 	err := tr.Inject(root.Context(), opentracing.HTTPHeaders, carrier)
@@ -90,4 +99,41 @@ event:root 4
 event:root 5
 `
 	require.Equal(t, exp, stripped)
+
+	// Check the timing info on the first two lines.
+	lines := strings.Split(rec.String(), "\n")
+	l, err := parseLine(lines[0])
+	require.NoError(t, err)
+	require.Equal(t, traceLine{
+		timeSinceTraceStart: "0.000ms",
+		timeSincePrev:       "0.000ms",
+		text:                "=== operation:root sb:1",
+	}, l)
+	l, err = parseLine(lines[1])
+	require.Equal(t, traceLine{
+		timeSinceTraceStart: "1.000ms",
+		timeSincePrev:       "1.000ms",
+		text:                "event:root 1",
+	}, l)
+	require.NoError(t, err)
+}
+
+type traceLine struct {
+	timeSinceTraceStart, timeSincePrev string
+	text                               string
+}
+
+func parseLine(s string) (traceLine, error) {
+	// Parse lines like:
+	//      0.007ms      0.007ms    event:root 1
+	re := regexp.MustCompile(`\s*(.*s)\s*(.*s)\s{4}(.*)`)
+	match := re.FindStringSubmatch(s)
+	if match == nil {
+		return traceLine{}, errors.Newf("line doesn't match: %s", s)
+	}
+	return traceLine{
+		timeSinceTraceStart: match[1],
+		timeSincePrev:       match[2],
+		text:                match[3],
+	}, nil
 }
