@@ -131,6 +131,7 @@ create_stmt ::=
 	| create_ddl_stmt
 	| create_stats_stmt
 	| create_schedule_for_backup_stmt
+	| create_extension_stmt
 
 delete_stmt ::=
 	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -422,6 +423,10 @@ create_stats_stmt ::=
 
 create_schedule_for_backup_stmt ::=
 	'CREATE' 'SCHEDULE' opt_description 'FOR' 'BACKUP' opt_backup_targets 'INTO' string_or_placeholder_opt_list opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
+
+create_extension_stmt ::=
+	'CREATE' 'EXTENSION' 'IF' 'NOT' 'EXISTS' name
+	| 'CREATE' 'EXTENSION' name
 
 opt_with_clause ::=
 	with_clause

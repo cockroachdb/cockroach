@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -789,6 +790,22 @@ func importPlanHook(
 		}
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
+
+		// Record telemetry for userfile being used as the import target.
+		for _, file := range files {
+			uri, err := url.Parse(file)
+			// This should never be true as we have parsed these file names in an
+			// earlier step of import.
+			if err != nil {
+				log.Warningf(ctx, "failed to collect file specific import telemetry for %s", uri)
+				continue
+			}
+
+			if uri.Scheme == "userfile" {
+				telemetry.Count("import.storage.userfile")
+				break
+			}
+		}
 
 		// Here we create the job and protected timestamp records in a side
 		// transaction and then kick off the job. This is awful. Rather we should be
