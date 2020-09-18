@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,36 +28,51 @@ type alterDatabaseOwnerNode struct {
 func (p *planner) AlterDatabaseOwner(
 	ctx context.Context, n *tree.AlterDatabaseOwner,
 ) (planNode, error) {
-	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, n.Name.String(), true)
+	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, n.Name.String(), true /* required */)
 	if err != nil {
 		return nil, err
 	}
-	privs := dbDesc.GetPrivileges()
 
-	newOwner := string(n.Owner)
-	if err := p.checkCanAlterToNewOwner(ctx, dbDesc, newOwner); err != nil {
-		return nil, err
-	}
-
-	// To alter the owner, the user also has to have CREATEDB privilege.
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEDB); err != nil {
-		return nil, err
-	}
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner {
-		return nil, nil
-	}
 	return &alterDatabaseOwnerNode{n: n, desc: dbDesc}, nil
 }
 
 func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
-	n.desc.GetPrivileges().SetOwner(string(n.n.Owner))
+	privs := n.desc.GetPrivileges()
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	newOwner := string(n.n.Owner)
+	if newOwner == privs.Owner {
+		return nil
+	}
+	if err := params.p.checkCanAlterDatabaseAndSetNewOwner(params.ctx, n.desc, newOwner); err != nil {
+		return err
+	}
+
 	return params.p.writeNonDropDatabaseChange(
 		params.ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
+}
+
+// checkCanAlterDatabaseAndSetNewOwner handles privilege checking and setting new owner.
+// Called in ALTER DATABASE and REASSIGN OWNED BY.
+func (p *planner) checkCanAlterDatabaseAndSetNewOwner(
+	ctx context.Context, desc catalog.MutableDescriptor, newOwner string,
+) error {
+	if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
+		return err
+	}
+
+	// To alter the owner, the user also has to have CREATEDB privilege.
+	if err := p.CheckRoleOption(ctx, roleoption.CREATEDB); err != nil {
+		return err
+	}
+
+	privs := desc.GetPrivileges()
+	privs.SetOwner(newOwner)
+
+	return nil
 }
 
 func (n *alterDatabaseOwnerNode) Next(runParams) (bool, error) { return false, nil }

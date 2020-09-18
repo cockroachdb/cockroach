@@ -82,39 +82,52 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			params.ctx, n.db, n.desc, string(t.NewName), tree.AsStringWithFQNames(n.n, params.Ann()))
 	case *tree.AlterSchemaOwner:
 		return params.p.alterSchemaOwner(
-			params.ctx, n.db, n.desc, string(t.Owner), tree.AsStringWithFQNames(n.n, params.Ann()))
+			params.ctx, n.desc, string(t.Owner), tree.AsStringWithFQNames(n.n, params.Ann()))
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)
 	}
 }
 
 func (p *planner) alterSchemaOwner(
-	ctx context.Context,
-	db *dbdesc.Mutable,
-	scDesc *schemadesc.Mutable,
-	newOwner string,
-	jobDesc string,
+	ctx context.Context, scDesc *schemadesc.Mutable, newOwner string, jobDescription string,
 ) error {
 	privs := scDesc.GetPrivileges()
-
-	if err := p.checkCanAlterToNewOwner(ctx, scDesc, newOwner); err != nil {
-		return err
-	}
-
-	// The user must also have CREATE privilege on the schema's database.
-	if err := p.CheckPrivilege(ctx, db, privilege.CREATE); err != nil {
-		return err
-	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
 	if newOwner == privs.Owner {
 		return nil
 	}
 
+	if err := p.checkCanAlterSchemaAndSetNewOwner(ctx, scDesc, newOwner); err != nil {
+		return err
+	}
+
+	return p.writeSchemaDescChange(ctx, scDesc, jobDescription)
+}
+
+// checkCanAlterSchemaAndSetNewOwner handles privilege checking and setting new owner.
+// Called in ALTER SCHEMA and REASSIGN OWNED BY.
+func (p *planner) checkCanAlterSchemaAndSetNewOwner(
+	ctx context.Context, scDesc *schemadesc.Mutable, newOwner string,
+) error {
+	if err := p.checkCanAlterToNewOwner(ctx, scDesc, newOwner); err != nil {
+		return err
+	}
+
+	// The user must also have CREATE privilege on the schema's database.
+	parentDBDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, scDesc.GetParentID(), p.txn)
+	if err != nil {
+		return err
+	}
+	if err := p.CheckPrivilege(ctx, parentDBDesc, privilege.CREATE); err != nil {
+		return err
+	}
+
 	// Update the owner of the schema.
+	privs := scDesc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
-	return p.writeSchemaDescChange(ctx, scDesc, jobDesc)
+	return nil
 }
 
 func (p *planner) renameSchema(
