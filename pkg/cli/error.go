@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -357,6 +358,11 @@ func MaybeDecorateGRPCError(
 			// library now has infrastructure to do so, see:
 			// https://github.com/cockroachdb/errors/pull/14
 			return server.ErrClusterInitialized
+		}
+
+		// Are we trying to recommission/decommision a node that does not exist?
+		if strings.Contains(err.Error(), kvserver.ErrMissingLivenessRecord.Error()) {
+			return fmt.Errorf("node does not exist")
 		}
 
 		// Nothing we can special case, just return what we have.

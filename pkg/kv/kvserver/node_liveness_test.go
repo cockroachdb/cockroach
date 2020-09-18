@@ -612,7 +612,15 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	liveness, _ := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+	var liveness kvserver.LivenessRecord
+	testutils.SucceedsSoon(t, func() error {
+		livenessRec, err := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+		if err != nil {
+			return err
+		}
+		liveness = livenessRec
+		return nil
+	})
 
 	testutils.SucceedsSoon(t, func() error {
 		if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
@@ -668,7 +676,15 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	liveness, _ := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+	var liveness kvserver.LivenessRecord
+	testutils.SucceedsSoon(t, func() error {
+		livenessRec, err := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+		if err != nil {
+			return err
+		}
+		liveness = livenessRec
+		return nil
+	})
 	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
 		t.Fatal(err)
 	}
@@ -1077,8 +1093,12 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 
 	// Verify success on failed update of a liveness record that already has the
 	// given decommissioning setting.
+	oldLivenessRec, err := callerNodeLiveness.GetLiveness(nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := callerNodeLiveness.SetDecommissioningInternal(
-		ctx, nodeID, kvserver.LivenessRecord{}, kvserverpb.MembershipStatus_ACTIVE,
+		ctx, oldLivenessRec, kvserverpb.MembershipStatus_ACTIVE,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1135,7 +1155,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	// When the node simply never existed, expect an error.
 	if _, err := mtc.nodeLivenesses[0].SetMembershipStatus(
 		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING,
-	); !errors.Is(err, kvserver.ErrNoLivenessRecord) {
+	); !errors.Is(err, kvserver.ErrMissingLivenessRecord) {
 		t.Fatal(err)
 	}
 
