@@ -4241,6 +4241,11 @@ reindex_stmt:
     /* SKIP DOC */
     return purposelyUnimplemented(sqllex, "reindex index", "CockroachDB does not require reindexing.")
   }
+| REINDEX SCHEMA error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex schema", "CockroachDB does not require reindexing.")
+  }
 | REINDEX DATABASE error
   {
     /* SKIP DOC */
