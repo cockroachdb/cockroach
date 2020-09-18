@@ -1,3 +1,7 @@
+# Disable the randomization of the max batch size for mutations.
+statement ok
+RESET CLUSTER SETTING sql.testing.mutations.max_batch_size
+
 # Disable automatic stats
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false

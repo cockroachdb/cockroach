@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -62,12 +63,6 @@ type deleteRun struct {
 	// index of the resultRowBuffer where the i-th column is to be returned.
 	rowIdxToRetIdx []int
 }
-
-// maxDeleteBatchSize is the max number of entries in the KV batch for
-// the delete operation (including secondary index updates, FK
-// cascading updates, etc), before the current KV batch is executed
-// and a new batch is started.
-const maxDeleteBatchSize = 10000
 
 func (d *deleteNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
@@ -124,7 +119,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if d.run.td.currentBatchSize >= maxDeleteBatchSize {
+		if d.run.td.currentBatchSize >= mutations.MaxBatchSize() {
 			break
 		}
 	}
