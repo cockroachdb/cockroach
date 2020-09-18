@@ -2716,9 +2716,13 @@ opt_with_options:
 // We currently support only the #2 format.
 // See the comment for CopyStmt in https://github.com/postgres/postgres/blob/master/src/backend/parser/gram.y.
 copy_from_stmt:
-  COPY table_name opt_column_list FROM STDIN opt_with_copy_options
+  COPY table_name opt_column_list FROM STDIN opt_with_copy_options opt_where_clause
   {
+    /* FORCE DOC */
     name := $2.unresolvedObjectName().ToTableName()
+    if $7.expr() != nil {
+      return unimplementedWithIssue(sqllex, 54580)
+    }
     $$.val = &tree.CopyFrom{
        Table: name,
        Columns: $3.nameList(),
