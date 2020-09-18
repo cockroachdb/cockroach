@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -591,4 +592,52 @@ func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestTransientTxnErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	h.sqlDB.Exec(t, "CREATE TABLE defaultdb.foo(a int primary key, b timestamp not null)")
+
+	// Setup 10 schedules updating defaultdb.foo timestamp.
+	for i := 0; i < 10; i++ {
+		schedule := NewScheduledJob(h.env)
+		schedule.SetScheduleLabel(fmt.Sprintf("test schedule: %d", i))
+		schedule.SetOwner("test")
+		require.NoError(t, schedule.SetSchedule("*/1 * * * *"))
+		any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{
+			Statement: fmt.Sprintf("UPSERT INTO defaultdb.foo (a, b) VALUES (%d, now())", i),
+		})
+		require.NoError(t, err)
+		schedule.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
+		require.NoError(t, schedule.Create(
+			ctx, h.cfg.InternalExecutor, nil))
+	}
+
+	// Setup numConcurrent workers, each executing maxExec executeSchedule calls.
+	const maxExec = 100
+	const numConcurrent = 3
+	require.NoError(t,
+		ctxgroup.GroupWorkers(context.Background(), numConcurrent, func(ctx context.Context, _ int) error {
+			ticker := time.NewTicker(time.Millisecond)
+			numExecs := 0
+			for range ticker.C {
+				h.env.AdvanceTime(time.Minute)
+				// Transaction retry errors should never bubble up.
+				require.NoError(t,
+					h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+						return h.execSchedules(ctx, allSchedules, txn)
+					}))
+				numExecs++
+				if numExecs == maxExec {
+					return nil
+				}
+			}
+			return nil
+		}))
 }

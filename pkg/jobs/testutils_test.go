@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -33,11 +32,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type execSchedulesFn func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error
 type testHelper struct {
-	env    *jobstest.JobSchedulerTestEnv
-	server serverutils.TestServerInterface
-	cfg    *scheduledjobs.JobExecutionConfig
-	sqlDB  *sqlutils.SQLRunner
+	env           *jobstest.JobSchedulerTestEnv
+	server        serverutils.TestServerInterface
+	execSchedules execSchedulesFn
+	cfg           *scheduledjobs.JobExecutionConfig
+	sqlDB         *sqlutils.SQLRunner
 }
 
 // newTestHelper creates and initializes appropriate state for a test,
@@ -51,20 +52,20 @@ type testHelper struct {
 // The testHelper will accelerate the adoption and cancellation loops inside of
 // the registry.
 func newTestHelper(t *testing.T) (*testHelper, func()) {
-	return newTestHelperForTables(t, jobstest.UseTestTables,
-		true /* accelerateIntervals */)
+	return newTestHelperForTables(t, jobstest.UseTestTables)
 }
 
 func newTestHelperForTables(
-	t *testing.T, envTableType jobstest.EnvTablesType, accelerateIntervals bool,
+	t *testing.T, envTableType jobstest.EnvTablesType,
 ) (*testHelper, func()) {
-	var cleanupIntervals func()
-	if accelerateIntervals {
-		cleanupIntervals = TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)
-	}
+	var execSchedules execSchedulesFn
 
+	// Setup test scheduled jobs table.
+	env := jobstest.NewJobSchedulerTestEnv(envTableType, timeutil.Now())
 	knobs := &TestingKnobs{
-		TakeOverJobsScheduling: func(_ func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
+		JobSchedulerEnv: env,
+		TakeOverJobsScheduling: func(daemon func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
+			execSchedules = daemon
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
@@ -72,9 +73,6 @@ func newTestHelperForTables(
 	})
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	// Setup test scheduled jobs table.
-	env := jobstest.NewJobSchedulerTestEnv(envTableType, timeutil.Now())
 
 	if envTableType == jobstest.UseTestTables {
 		sqlDB.Exec(t, jobstest.GetScheduledJobsTableSchema(env))
@@ -91,12 +89,9 @@ func newTestHelperForTables(
 				DB:               kvDB,
 				TestingKnobs:     knobs,
 			},
-			sqlDB: sqlDB,
+			sqlDB:         sqlDB,
+			execSchedules: execSchedules,
 		}, func() {
-			if cleanupIntervals != nil {
-				cleanupIntervals()
-			}
-
 			if envTableType == jobstest.UseTestTables {
 				sqlDB.Exec(t, "DROP TABLE "+env.SystemJobsTableName())
 				sqlDB.Exec(t, "DROP TABLE "+env.ScheduledJobsTableName())
