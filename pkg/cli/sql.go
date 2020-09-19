@@ -371,6 +371,14 @@ var options = map[string]struct {
 		reset:                     func(_ *cliState) error { sqlCtx.enableServerExecutionTimings = false; return nil },
 		display:                   func(_ *cliState) string { return strconv.FormatBool(sqlCtx.enableServerExecutionTimings) },
 	},
+	`verbose_times`: {
+		description:               "display execution times with more precision (requires show_times to be set)",
+		isBoolean:                 true,
+		validDuringMultilineEntry: true,
+		set:                       func(_ *cliState, _ string) error { sqlCtx.verboseTimings = true; return nil },
+		reset:                     func(_ *cliState) error { sqlCtx.verboseTimings = false; return nil },
+		display:                   func(_ *cliState) string { return strconv.FormatBool(sqlCtx.verboseTimings) },
+	},
 	`smart_prompt`: {
 		description:               "deprecated",
 		isBoolean:                 true,
