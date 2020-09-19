@@ -140,6 +140,10 @@ type invertedJoiner struct {
 	// A row with one element, corresponding to an encoded inverted column
 	// value. Used to construct the span of the index for that value.
 	invertedColRow rowenc.EncDatumRow
+
+	outputContinuationCol bool
+	trueEncDatum          rowenc.EncDatum
+	falseEncDatum         rowenc.EncDatum
 }
 
 var _ execinfra.Processor = &invertedJoiner{}
@@ -298,6 +302,11 @@ func newInvertedJoiner(
 		ij.diskMonitor,
 	)
 
+	if spec.OutputContinuationForLeftJoin {
+		ij.outputContinuationCol = true
+		ij.trueEncDatum = rowenc.DatumToEncDatum(types.Bool, tree.DBoolTrue)
+		ij.falseEncDatum = rowenc.DatumToEncDatum(types.Bool, tree.DBoolFalse)
+	}
 	return ij, nil
 }
 
@@ -532,7 +541,11 @@ func (ij *invertedJoiner) emitRow() (
 		if !seenMatch {
 			switch ij.joinType {
 			case descpb.LeftOuterJoin:
-				return ijEmittingRows, ij.renderUnmatchedRow(ij.inputRows[inputRowIdx]), nil
+				ij.renderUnmatchedRow(ij.inputRows[inputRowIdx])
+				if ij.outputContinuationCol {
+					ij.combinedRow = append(ij.combinedRow, ij.falseEncDatum)
+				}
+				return ijEmittingRows, ij.combinedRow, nil
 			case descpb.LeftAntiJoin:
 				return ijEmittingRows, ij.inputRows[inputRowIdx], nil
 			}
@@ -564,9 +577,18 @@ func (ij *invertedJoiner) emitRow() (
 		return nil
 	}
 	if renderedRow != nil {
+		firstRowForInputIdx := ij.emitCursor.seenMatch
 		ij.emitCursor.seenMatch = true
 		switch ij.joinType {
 		case descpb.InnerJoin, descpb.LeftOuterJoin:
+			if ij.outputContinuationCol {
+				if firstRowForInputIdx {
+					ij.combinedRow = append(ij.combinedRow, ij.falseEncDatum)
+				} else {
+					ij.combinedRow = append(ij.combinedRow, ij.trueEncDatum)
+				}
+				renderedRow = ij.combinedRow
+			}
 			return ijEmittingRows, renderedRow, nil
 		case descpb.LeftSemiJoin:
 			// Skip the rest of the joined rows.
@@ -588,7 +610,8 @@ func (ij *invertedJoiner) emitRow() (
 }
 
 // render constructs a row with columns from both sides. The ON condition is
-// evaluated; if it fails, returns nil.
+// evaluated; if it fails, returns nil. When it returns a non-nil row, it is
+// identical to ij.combinedRow.
 func (ij *invertedJoiner) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
 	ij.combinedRow = append(ij.combinedRow[:0], lrow...)
 	ij.combinedRow = append(ij.combinedRow, rrow...)
@@ -602,13 +625,12 @@ func (ij *invertedJoiner) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatum
 }
 
 // renderUnmatchedRow creates a result row given an unmatched row.
-func (ij *invertedJoiner) renderUnmatchedRow(row rowenc.EncDatumRow) rowenc.EncDatumRow {
+func (ij *invertedJoiner) renderUnmatchedRow(row rowenc.EncDatumRow) {
 	ij.combinedRow = append(ij.combinedRow[:0], row...)
 	ij.combinedRow = ij.combinedRow[:cap(ij.combinedRow)]
 	for i := len(row); i < len(ij.combinedRow); i++ {
 		ij.combinedRow[i].Datum = tree.DNull
 	}
-	return ij.combinedRow
 }
 
 func (ij *invertedJoiner) transformToKeyRow(row rowenc.EncDatumRow) {

@@ -160,6 +160,8 @@ type joinReaderNoOrderingStrategy struct {
 		matchingInputRowIndices       []int
 		lookedUpRow                   rowenc.EncDatumRow
 	}
+
+	groupingState *inputBatchGroupingState
 }
 
 // getLookupRowsBatchSizeHint returns the batch size for the join reader no
@@ -196,7 +198,8 @@ func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 		// overwriting the caller's slice.
 		s.scratchMatchingInputRowIndices = s.scratchMatchingInputRowIndices[:0]
 		for _, inputRowIdx := range matchingInputRowIndices {
-			if !s.matched[inputRowIdx] {
+			if (s.groupingState == nil && !s.matched[inputRowIdx]) ||
+				!s.groupingState.getMatched(inputRowIdx) {
 				s.scratchMatchingInputRowIndices = append(s.scratchMatchingInputRowIndices, inputRowIdx)
 			}
 		}
@@ -226,7 +229,7 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 		if len(s.matched) != 0 {
 			s.emitState.unmatchedInputRowIndices = s.emitState.unmatchedInputRowIndices[:0]
 			for inputRowIdx, m := range s.matched {
-				if !m {
+				if (s.groupingState == nil && !m) || s.groupingState.isUnmatched(inputRowIdx) {
 					s.emitState.unmatchedInputRowIndices = append(s.emitState.unmatchedInputRowIndices, inputRowIdx)
 				}
 			}
@@ -240,6 +243,10 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 		}
 		inputRow := s.inputRows[s.emitState.unmatchedInputRowIndices[s.emitState.unmatchedInputRowIndicesCursor]]
 		s.emitState.unmatchedInputRowIndicesCursor++
+		// When s.groupingState != nil, for either a left outer join or left anti
+		// join, this will emit a row that includes a possibly non-nil value in
+		// the lookup columns, which will differ for different rows in a group.
+		// These will need to be projected away.
 		if !s.joinType.ShouldIncludeRightColsInOutput() {
 			return inputRow, jrEmittingRows, nil
 		}
@@ -250,6 +257,9 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 		inputRowIdx := s.emitState.matchingInputRowIndices[s.emitState.matchingInputRowIndicesCursor]
 		s.emitState.matchingInputRowIndicesCursor++
 		inputRow := s.inputRows[inputRowIdx]
+		if s.groupingState != nil && s.joinType == descpb.LeftSemiJoin && s.groupingState.getMatched(inputRowIdx) {
+			continue
+		}
 
 		// Render the output row, this also evaluates the ON condition.
 		outputRow, err := s.render(inputRow, s.emitState.lookedUpRow)
@@ -262,11 +272,18 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 		}
 
 		s.matched[inputRowIdx] = true
+		if s.groupingState != nil {
+			s.groupingState.setMatched(inputRowIdx)
+		}
 		if !s.joinType.ShouldIncludeRightColsInOutput() {
 			if s.joinType == descpb.LeftAntiJoin {
 				// Skip emitting row.
 				continue
 			}
+			// When s.groupingState != nil, for a left semi join, this will emit a
+			// row that includes a possibly non-nil value in the lookup columns,
+			// which will differ for different rows in a group. These will need to
+			// be projected away.
 			return inputRow, jrEmittingRows, nil
 		}
 		return outputRow, jrEmittingRows, nil
@@ -385,6 +402,8 @@ type joinReaderOrderingStrategy struct {
 		// match means that there's no need to output an outer or anti join row.
 		seenMatch bool
 	}
+
+	groupingState *inputBatchGroupingState
 }
 
 func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
@@ -441,7 +460,8 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 		// for this input row yet. Additionally, since we don't have to render
 		// anything to output a Semi or Anti join match, we can evaluate our
 		// on condition now and only buffer if we pass it.
-		if len(s.inputRowIdxToLookedUpRowIndices[inputRowIdx]) == 0 {
+		if (s.groupingState == nil && len(s.inputRowIdxToLookedUpRowIndices[inputRowIdx]) == 0) ||
+			!s.groupingState.getMatched(inputRowIdx) {
 			renderedRow, err := s.render(s.inputRows[inputRowIdx], row)
 			if err != nil {
 				return jrStateUnknown, err
@@ -449,6 +469,9 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 			if renderedRow == nil {
 				// We failed our on-condition - don't buffer anything.
 				continue
+			}
+			if s.groupingState != nil {
+				s.groupingState.setMatched(inputRowIdx)
 			}
 			s.inputRowIdxToLookedUpRowIndices[inputRowIdx] = partialJoinSentinel
 		}
@@ -485,11 +508,16 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	if s.emitCursor.outputRowIdx >= len(lookedUpRows) {
 		// We have no more rows for the current input row. Emit an outer or anti
 		// row if we didn't see a match, and bump to the next input row.
+		inputRowIdx := s.emitCursor.inputRowIdx
 		s.emitCursor.inputRowIdx++
 		s.emitCursor.outputRowIdx = 0
 		seenMatch := s.emitCursor.seenMatch
 		s.emitCursor.seenMatch = false
-		if !seenMatch {
+		// When s.groupingState != nil, for either a left outer join or left anti
+		// join, this will emit a row that includes a possibly non-nil value in
+		// the lookup columns, which will differ for different rows in a group.
+		// These will need to be projected away.
+		if (s.groupingState == nil && !seenMatch) || s.groupingState.isUnmatched(inputRowIdx) {
 			switch s.joinType {
 			case descpb.LeftOuterJoin:
 				// An outer-join non-match means we emit the input row with NULLs for
@@ -509,11 +537,13 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	s.emitCursor.outputRowIdx++
 	switch s.joinType {
 	case descpb.LeftSemiJoin:
-		// A semi-join match means we emit our input row.
+		// A semi-join match means we emit our input row. This is the case where
+		// we used the partialJoinSentinel.
 		s.emitCursor.seenMatch = true
 		return inputRow, jrEmittingRows, nil
 	case descpb.LeftAntiJoin:
-		// An anti-join match means we emit nothing.
+		// An anti-join match means we emit nothing. This is the case where
+		// we used the partialJoinSentinel.
 		s.emitCursor.seenMatch = true
 		return nil, jrEmittingRows, nil
 	}
@@ -528,6 +558,9 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	}
 	if outputRow != nil {
 		s.emitCursor.seenMatch = true
+		if s.groupingState != nil {
+			s.groupingState.setMatched(s.emitCursor.inputRowIdx)
+		}
 	}
 	return outputRow, jrEmittingRows, nil
 }
