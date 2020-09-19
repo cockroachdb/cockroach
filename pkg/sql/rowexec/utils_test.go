@@ -182,5 +182,7 @@ func (r *rowDisposer) NumRowsDisposed() int {
 }
 
 func (r *rowDisposer) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
-	return r.bufferedMeta
+	meta := r.bufferedMeta
+	r.bufferedMeta = r.bufferedMeta[:0]
+	return meta
 }
