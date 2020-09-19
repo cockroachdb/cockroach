@@ -194,6 +194,55 @@ message IndexSkipTableReaderSpec {
 //
 // If performing an index join (where a = c and b = d) (lookup columns is []):
 //        Internal columns: | c | d | e |
+//
+// There is a special case when a "join reader" is used as the second join in
+// a pair of joins to accomplish a LEFT_OUTER, LEFT_SEMI or LEFT_ANTI join.
+// The first join in this pair of joins is unable to precisely evaluate the
+// join condition and produces false positives. This is typical when the first
+// join is an inverted join (see InvertedJoinerSpec), but can also be the case
+// when the first join is being evaluated over an index that does not have all
+// the columns needed to evaluate the join condition. The first join outputs
+// rows in sorted order of the original left columns. The input stream columns
+// for the second join are a combination of the original left columns and the
+// lookup columns. The first join additionally adds a continuation column that
+// demarcates a group of successive rows that correspond to an original left
+// row. The first row in a group contains false (since it is not a
+// continuation of the group) and successive rows contain true.
+//
+// The mapping from the original join to the pair of joins is:
+// LEFT_OUTER => LEFT_OUTER, LEFT_OUTER
+// LEFT_SEMI  => INNER, LEFT_SEMI (better than doing INNER, INNER, SORT, DISTINCT)
+// LEFT_ANTI  => LEFT_OUTER, LEFT_ANTI.
+// where the first join always preserves order.
+//
+// More specifically, consider a lookup join example where the input stream
+// columns are: | a | b | c | d | cont |.
+// The lookup column is | d |. And the table columns are | e | f | with
+// d = e.
+// This join reader can see input of the form
+// a1, b1, c1, d1,   false
+// a1, b1, c1, d2,   true
+// a1, b2, c1, null, false // when the first join is LEFT_OUTER
+// a2, b1, c1, d3,   false
+// a2, b1, c1, d4,   true
+//
+// Say both the results for (a1, b1, c1) are false positives, and the first
+// of the (a2, b1, c1) result is a false positive.
+// The output for LEFT_OUTER:
+// a1, b1, c1, d1,   false, null, null
+// a1, b2, c1, null, false, null, null
+// a2, b1, c1, d4,   true,  d4,   f1
+// The d, cont columns are not part of the original left row, so will be
+// projected away after the join.
+//
+// The output for LEFT_ANTI:
+// a1, b1, c1, d1,   false
+// a1, b2, c1, null, false
+// Again, the d, cont columns will be projected away after the join.
+//
+// The output for LEFT_SEMI:
+// a2, b1, c1, d4, true
+// Again, the d, cont columns will be projected away after the join.
 message JoinReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
@@ -263,6 +312,10 @@ message JoinReaderSpec {
   // result of the secondary index joined against the primary index is
   // expected to contain the materialized system columns.
   optional bool has_system_columns = 13 [(gogoproto.nullable) = false];
+
+  // LeftJoinWithPairedJoiner is used when a left {outer,anti,semi} join is
+  // being achieved by pairing two joins. See the comment above.
+  optional bool left_join_with_paired_joiner = 14 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
@@ -484,6 +537,18 @@ message HashJoinerSpec {
 // that was indexed). For LEFT_SEMI and LEFT_ANTI, the "internal columns" are
 // the columns of the left input.
 //
+// In many cases, the inverted join will contain false positives wrt the
+// original join condition. This is handled by pairing it with a lookup join.
+// This pairing works naturally when the user query specified INNER, by
+// running an INNER inverted join followed by INNER lookup join. For a user
+// query with LEFT_OUTER/LEFT_ANTI, the inverted join is run as a LEFT_OUTER
+// with a special mode that outputs an additional bool column that represents
+// whether this row is a continuation of a group, where a group is defined as
+// rows corresponding to the same original left row. This is paired with a
+// lookup join that also knows about the semantics of this bool column. For a
+// user query with LEFT_SEMI, the inverted join is run as an INNER join with
+// the same special mode. See the JoinReaderSpec for an example.
+//
 // Example:
 // Input stream columns: | a | b |
 // Table columns: | c | d | e |
@@ -498,6 +563,9 @@ message HashJoinerSpec {
 // Internal columns for INNER and LEFT_OUTER: | a | b | c | d | e |
 // where d, e are not populated.
 // Internal columns for LEFT_SEMI and LEFT_ANTI: | a | b |
+//
+// For INNER/LEFT_OUTER with OutputGroupContinuationForLeftRow = true, the
+// internal columns include an additional bool column as the last column.
 message InvertedJoinerSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
@@ -545,6 +613,11 @@ message InvertedJoinerSpec {
   // Indicates that the inverted joiner should maintain the ordering of the
   // input stream.
   optional bool maintain_ordering = 7 [(gogoproto.nullable) = false];
+
+  // Indicates that the join should output a continuation column that
+  // indicates whether a row is a continuation of a group corresponding to a
+  // left row.
+  optional bool output_group_continuation_for_left_row = 8 [(gogoproto.nullable) = false];
 }
 
 // InvertedFiltererSpec is the specification of a processor that does filtering
