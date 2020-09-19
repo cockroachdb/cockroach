@@ -926,66 +926,79 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) (err err
 			return err
 		}
 
-		if sqlCtx.showTimes {
-			clientSideQueryTime := queryCompleteTime.Sub(startTime)
-			// We don't print timings for multi-statement queries as we don't have an
-			// accurate way to measure them currently. See #48180.
-			if isMultiStatementQuery {
-				// No need to print if no one's watching.
-				if sqlCtx.isInteractive {
-					fmt.Fprintf(stderr, "Note: timings for multiple statements on a single line are not supported. See %s.\n",
-						unimplemented.MakeURL(48180))
-				}
-			} else {
-				// Print a newline early. This provides a discreet visual
-				// feedback that execution finished, and that the next line of
-				// output will be execution time(s).
-				fmt.Fprintln(w)
+		maybeShowTimes(conn, w, isMultiStatementQuery, queryCompleteTime.Sub(startTime))
 
-				if sqlCtx.verboseTimings {
-					fmt.Fprintf(w, "Time: %s", clientSideQueryTime)
-				} else {
-					// Simplified displays: human users typically can't
-					// distinguish sub-millisecond latencies.
-					fmt.Fprintf(w, "Time: %.3fs", clientSideQueryTime.Seconds())
-				}
-				if sqlCtx.enableServerExecutionTimings {
-					// If discrete server/network timings are available, also print them.
-					execLatency, serviceLatency, err := conn.getLastQueryStatistics()
-					if err != nil {
-						fmt.Fprintf(stderr, "\nwarning: %v", err)
-					} else {
-						networkLatency := clientSideQueryTime - serviceLatency
-						if sqlCtx.verboseTimings {
-							fmt.Fprintf(w, " total (exec %s / net %s / other %s)",
-								execLatency, networkLatency, serviceLatency-execLatency)
-						} else {
-							// Simplified display: just show percentages.
-							totalSeconds := clientSideQueryTime.Seconds()
-							fmt.Fprintf(w, " total (exec %.1f%% / net %.1f%% / other %.1f%%)",
-								execLatency.Seconds()*100/totalSeconds,
-								networkLatency.Seconds()*100/totalSeconds,
-								(serviceLatency-execLatency).Seconds()*100/totalSeconds)
-						}
-					}
-				}
-				fmt.Fprintln(w)
-			}
-			renderDelay := timeutil.Now().Sub(queryCompleteTime)
-			if renderDelay >= 1*time.Second && sqlCtx.isInteractive {
-				fmt.Fprintf(stderr,
-					"Note: an additional delay of %s was spent formatting the results.\n"+
-						"You can use \\set display_format to change the formatting.\n",
-					renderDelay)
-			}
-			fmt.Fprintln(w)
+		// If there was noticeable overhead, let the user know.
+		renderDelay := timeutil.Now().Sub(queryCompleteTime)
+		if renderDelay >= 1*time.Second && sqlCtx.isInteractive {
+			fmt.Fprintf(stderr,
+				"\nNote: an additional delay of %s was spent formatting the results.\n"+
+					"You can use \\set display_format to change the formatting.\n",
+				renderDelay)
 		}
+		fmt.Fprintln(w)
 
 		if more, err := rows.NextResultSet(); err != nil {
 			return err
 		} else if !more {
 			return nil
 		}
+	}
+}
+
+// maybeShowTimes displays the execution time if show_times has been set.
+func maybeShowTimes(
+	conn *sqlConn, w io.Writer, isMultiStatementQuery bool, clientSideQueryTime time.Duration,
+) {
+	if !sqlCtx.showTimes {
+		return
+	}
+	// We don't print timings for multi-statement queries as we don't have an
+	// accurate way to measure them currently. See #48180.
+	if isMultiStatementQuery {
+		// No need to print if no one's watching.
+		if sqlCtx.isInteractive {
+			fmt.Fprintf(stderr, "\nNote: timings for multiple statements on a single line are not supported. See %s.\n",
+				unimplemented.MakeURL(48180))
+		}
+		return
+	}
+
+	// Print a newline early. This provides a discreet visual
+	// feedback that execution finished, and that the next line of
+	// output will be execution time(s).
+	fmt.Fprintln(w)
+
+	if sqlCtx.verboseTimings {
+		fmt.Fprintf(w, "Time: %s", clientSideQueryTime)
+	} else {
+		// Simplified displays: human users typically can't
+		// distinguish sub-millisecond latencies.
+		fmt.Fprintf(w, "Time: %.3fs", clientSideQueryTime.Seconds())
+	}
+
+	if !sqlCtx.enableServerExecutionTimings {
+		return
+	}
+
+	// If discrete server/network timings are available, also print them.
+	execLatency, serviceLatency, err := conn.getLastQueryStatistics()
+	if err != nil {
+		fmt.Fprintf(stderr, "\nwarning: %v", err)
+		return
+	}
+
+	networkLatency := clientSideQueryTime - serviceLatency
+	if sqlCtx.verboseTimings {
+		fmt.Fprintf(w, " total (exec %s / net %s / other %s)",
+			execLatency, networkLatency, serviceLatency-execLatency)
+	} else {
+		// Simplified display: just show percentages.
+		totalSeconds := clientSideQueryTime.Seconds()
+		fmt.Fprintf(w, " total (exec %.1f%% / net %.1f%% / other %.1f%%)",
+			execLatency.Seconds()*100/totalSeconds,
+			networkLatency.Seconds()*100/totalSeconds,
+			(serviceLatency-execLatency).Seconds()*100/totalSeconds)
 	}
 }
 
