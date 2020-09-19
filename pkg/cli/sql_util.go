@@ -942,7 +942,13 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) (err err
 				// output will be execution time(s).
 				fmt.Fprintln(w)
 
-				fmt.Fprintf(w, "Time: %s", clientSideQueryTime)
+				if sqlCtx.verboseTimings {
+					fmt.Fprintf(w, "Time: %s", clientSideQueryTime)
+				} else {
+					// Simplified displays: human users typically can't
+					// distinguish sub-millisecond latencies.
+					fmt.Fprintf(w, "Time: %.3fs", clientSideQueryTime.Seconds())
+				}
 				if sqlCtx.enableServerExecutionTimings {
 					// If discrete server/network timings are available, also print them.
 					execLatency, serviceLatency, err := conn.getLastQueryStatistics()
@@ -950,8 +956,17 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) (err err
 						fmt.Fprintf(stderr, "\nwarning: %v", err)
 					} else {
 						networkLatency := clientSideQueryTime - serviceLatency
-						fmt.Fprintf(w, " total (exec %s / net %s / other %s)",
-							execLatency, networkLatency, serviceLatency-execLatency)
+						if sqlCtx.verboseTimings {
+							fmt.Fprintf(w, " total (exec %s / net %s / other %s)",
+								execLatency, networkLatency, serviceLatency-execLatency)
+						} else {
+							// Simplified display: just show percentages.
+							totalSeconds := clientSideQueryTime.Seconds()
+							fmt.Fprintf(w, " total (exec %.1f%% / net %.1f%% / other %.1f%%)",
+								execLatency.Seconds()*100/totalSeconds,
+								networkLatency.Seconds()*100/totalSeconds,
+								(serviceLatency-execLatency).Seconds()*100/totalSeconds)
+						}
 					}
 				}
 				fmt.Fprintln(w)
