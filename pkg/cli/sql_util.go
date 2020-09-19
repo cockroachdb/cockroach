@@ -933,21 +933,28 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) (err err
 			if isMultiStatementQuery {
 				// No need to print if no one's watching.
 				if sqlCtx.isInteractive {
-					fmt.Fprintf(stderr, "Note: timings for multiple statements on a single line are not supported. See %s.\n", unimplemented.MakeURL(48180))
+					fmt.Fprintf(stderr, "Note: timings for multiple statements on a single line are not supported. See %s.\n",
+						unimplemented.MakeURL(48180))
 				}
-			} else if sqlCtx.enableServerExecutionTimings {
-				execLatency, serviceLatency, err := conn.getLastQueryStatistics()
-				if err != nil {
-					return err
-				}
-				networkLatency := clientSideQueryTime - serviceLatency
-
-				fmt.Fprintf(w, "\nServer Execution Time: %s\n", execLatency)
-				fmt.Fprintf(w, "Network Latency: %s\n", networkLatency)
 			} else {
-				// If the server doesn't support `SHOW LAST QUERY STATISTICS` statement,
-				// we revert to the pre-20.2 time formatting in the CLI.
-				fmt.Fprintf(w, "\nTime: %s\n", clientSideQueryTime)
+				// Print a newline early. This provides a discreet visual
+				// feedback that execution finished, and that the next line of
+				// output will be execution time(s).
+				fmt.Fprintln(w)
+
+				fmt.Fprintf(w, "Time: %s", clientSideQueryTime)
+				if sqlCtx.enableServerExecutionTimings {
+					// If discrete server/network timings are available, also print them.
+					execLatency, serviceLatency, err := conn.getLastQueryStatistics()
+					if err != nil {
+						fmt.Fprintf(stderr, "\nwarning: %v", err)
+					} else {
+						networkLatency := clientSideQueryTime - serviceLatency
+						fmt.Fprintf(w, " total (exec %s / net %s / other %s)",
+							execLatency, networkLatency, serviceLatency-execLatency)
+					}
+				}
+				fmt.Fprintln(w)
 			}
 			renderDelay := timeutil.Now().Sub(queryCompleteTime)
 			if renderDelay >= 1*time.Second && sqlCtx.isInteractive {
