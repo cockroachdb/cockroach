@@ -342,9 +342,16 @@ type framableAggregateWindowFunc struct {
 func newFramableAggregateWindow(
 	agg tree.AggregateFunc, aggConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
 ) tree.WindowFunc {
+	// jsonObjectAggregate is a special aggregate function because its
+	// implementation assumes that once Result is called, the returned
+	// object is immutable and calls to Add will result in a panic. To go
+	// around this limitation, we make sure that the function is reset for
+	// each row regardless of the window frame.
+	_, shouldReset := agg.(*jsonObjectAggregate)
 	return &framableAggregateWindowFunc{
 		agg:            &aggregateWindowFunc{agg: agg, peerRes: tree.DNull},
 		aggConstructor: aggConstructor,
+		shouldReset:    shouldReset,
 	}
 }
 
