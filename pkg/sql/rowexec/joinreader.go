@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -46,6 +47,8 @@ const (
 	jrPerformingLookup
 	// jrEmittingRows means we are emitting the results of the index lookup.
 	jrEmittingRows
+	// jrReadyToDrain means we are done but have not yet started draining.
+	jrReadyToDrain
 )
 
 // joinReaderType represents the type of join being used.
@@ -101,6 +104,30 @@ type joinReader struct {
 
 	// State variables for each batch of input rows.
 	scratchInputRows rowenc.EncDatumRows
+
+	// Fields used when this is the second join in a pair of joins that are
+	// together implementing left {outer,semi,anti} joins where the first join
+	// produces false positives because it cannot evaluate the whole expression
+	// (or evaluate it accurately, as is sometimes the case with inverted
+	// indexes). The first join is running a left outer or inner join, and each
+	// group of rows seen by the second join correspond to one left row.
+	//
+	// TODO(sumeer): add support for joinReader to also be the first
+	// join in this pair, say when the index can evaluate most of the
+	// join condition (the part with low selectivity), but not all.
+	// Currently only the invertedJoiner can serve as the first join
+	// in the pair.
+
+	// The current batch of input rows belong to groups which are
+	// tracked in groupingState. The last row from the last batch
+	// is in lastInputRowFromLastBatch -- it is tracked because we
+	// don't know if it was the last row in a group until we get
+	// to the next batch.
+	groupingState                   *inputBatchGroupingState
+	groupingStateReset              bool
+	lastInputRowFromLastBatch       rowenc.EncDatumRow
+	lastGroupFromLastBatchMatched   bool
+	lastGroupFromLastBatchContinued bool
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -144,6 +171,9 @@ func newJoinReader(
 		input:            input,
 		inputTypes:       input.OutputTypes(),
 		lookupCols:       lookupCols,
+	}
+	if spec.LeftJoinWithPairedJoiner {
+		jr.groupingState = &inputBatchGroupingState{}
 	}
 
 	var err error
@@ -300,6 +330,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			joinerBase:           &jr.joinerBase,
 			defaultSpanGenerator: spanGenerator,
 			isPartialJoin:        jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
+			groupingState:        jr.groupingState,
 		}
 		return
 	}
@@ -332,6 +363,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		defaultSpanGenerator: spanGenerator,
 		isPartialJoin:        jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
 		lookedUpRows:         drc,
+		groupingState:        jr.groupingState,
 	}
 }
 
@@ -400,11 +432,15 @@ func (jr *joinReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 		var meta *execinfrapb.ProducerMetadata
 		switch jr.runningState {
 		case jrReadingInput:
-			jr.runningState, meta = jr.readInput()
+			jr.runningState, row, meta = jr.readInput()
 		case jrPerformingLookup:
 			jr.runningState, meta = jr.performLookup()
 		case jrEmittingRows:
 			jr.runningState, row, meta = jr.emitRow()
+		case jrReadyToDrain:
+			jr.MoveToDraining(nil)
+			meta = jr.DrainHelper()
+			jr.runningState = jrStateUnknown
 		default:
 			log.Fatalf(jr.Ctx, "unsupported state: %d", jr.runningState)
 		}
@@ -422,42 +458,104 @@ func (jr *joinReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 }
 
 // readInput reads the next batch of input rows and starts an index scan.
-func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadata) {
+// It can sometimes emit a single row on behalf of the previous batch.
+func (jr *joinReader) readInput() (
+	joinReaderState,
+	rowenc.EncDatumRow,
+	*execinfrapb.ProducerMetadata,
+) {
+	if jr.groupingState != nil {
+		if !jr.groupingStateReset {
+			jr.lastGroupFromLastBatchMatched = jr.groupingState.lastGroupMatched()
+			jr.groupingState.reset()
+			jr.lastGroupFromLastBatchContinued = false
+			jr.groupingStateReset = true
+		}
+		// Else, returning meta interrupted reading the input batch, so already
+		// did the if-block work for this batch.
+	}
 	// Read the next batch of input rows.
 	for jr.curBatchSizeBytes < jr.batchSizeBytes {
 		row, meta := jr.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
 				jr.MoveToDraining(nil /* err */)
-				return jrStateUnknown, meta
+				return jrStateUnknown, nil, meta
 			}
-			return jrReadingInput, meta
+			return jrReadingInput, nil, meta
 		}
 		if row == nil {
 			break
 		}
 		jr.curBatchSizeBytes += int64(row.Size())
+		if jr.groupingState != nil {
+			continuationEncDatum := row[len(row)-1]
+			if err := continuationEncDatum.EnsureDecoded(types.Bool, &jr.alloc); err != nil {
+				jr.MoveToDraining(err)
+				return jrStateUnknown, nil, jr.DrainHelper()
+			}
+			continuationVal := bool(*continuationEncDatum.Datum.(*tree.DBool))
+			jr.groupingState.addContinuationValForRow(continuationVal)
+			if len(jr.scratchInputRows) == 0 && continuationVal {
+				// First row in batch is a continuation of last group
+				jr.lastGroupFromLastBatchContinued = true
+			}
+			row = row[:len(row)-1]
+		}
 		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(row))
+	}
+	var outRow rowenc.EncDatumRow
+	// Finished reading the input batch.
+	if jr.groupingState != nil {
+		jr.groupingStateReset = false
+		if jr.lastInputRowFromLastBatch != nil && !jr.lastGroupFromLastBatchContinued {
+			// Group ended in previous batch.
+			if !jr.lastGroupFromLastBatchMatched {
+				// Handle the cases where we need to emit the left row when there is no
+				// match.
+				switch jr.joinType {
+				case descpb.LeftOuterJoin:
+					outRow = jr.renderUnmatchedRow(jr.lastInputRowFromLastBatch, leftSide)
+				case descpb.LeftAntiJoin:
+					outRow = jr.lastInputRowFromLastBatch
+				}
+				jr.lastInputRowFromLastBatch = nil
+			}
+			// Else the last group matched, so already emitted 1+ row for left outer
+			// join, 1 row for semi join.
+		}
+		// Last group continued, or this is the first ever batch. Either way,
+		// we don't need to do anything special for the last batch.
 	}
 
 	if len(jr.scratchInputRows) == 0 {
 		log.VEventf(jr.Ctx, 1, "no more input rows")
+		if outRow != nil {
+			return jrReadyToDrain, outRow, nil
+		}
 		// We're done.
 		jr.MoveToDraining(nil)
-		return jrStateUnknown, jr.DrainHelper()
+		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 	log.VEventf(jr.Ctx, 1, "read %d input rows", len(jr.scratchInputRows))
+
+	if jr.groupingState != nil && len(jr.scratchInputRows) > 0 {
+		jr.lastInputRowFromLastBatch = jr.scratchInputRows[len(jr.scratchInputRows)-1]
+		if jr.lastGroupFromLastBatchMatched && jr.lastGroupFromLastBatchContinued {
+			jr.groupingState.setFirstGroupMatched()
+		}
+	}
 
 	spans, err := jr.strategy.processLookupRows(jr.scratchInputRows)
 	if err != nil {
 		jr.MoveToDraining(err)
-		return jrStateUnknown, jr.DrainHelper()
+		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 	jr.scratchInputRows = jr.scratchInputRows[:0]
 	jr.curBatchSizeBytes = 0
 	if len(spans) == 0 {
 		// All of the input rows were filtered out. Skip the index lookup.
-		return jrEmittingRows, nil
+		return jrEmittingRows, outRow, nil
 	}
 
 	// Sort the spans for the following cases:
@@ -480,10 +578,10 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
 		jr.FlowCtx.TraceKV); err != nil {
 		jr.MoveToDraining(err)
-		return jrStateUnknown, jr.DrainHelper()
+		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 
-	return jrPerformingLookup, nil
+	return jrPerformingLookup, outRow, nil
 }
 
 // performLookup reads the next batch of index rows.
@@ -666,4 +764,63 @@ func (jr *joinReader) Child(nth int, verbose bool) execinfra.OpNode {
 		panic("input to joinReader is not an execinfra.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
+}
+
+// inputBatchGroupingState encapsulates the state needed for all the
+// groups in an input batch.
+// Ideally, we would unify this with the per-row match tracking logic,
+// but that is handled differently in joinReaderOrderingStrategy and
+// joinReaderNoOrderingStrategy. TOOD(sumeer): look more carefully
+// at what can be done.
+type inputBatchGroupingState struct {
+	// Row num in batch to the group num.
+	batchRowToGroupNum []int
+	// For each group num, whether it matched.
+	groupMatched []bool
+	// For each group num, the first row num in the group.
+	groupToFirstRow []int
+}
+
+func (ib *inputBatchGroupingState) reset() {
+	ib.batchRowToGroupNum = ib.batchRowToGroupNum[:0]
+	ib.groupMatched = ib.groupMatched[:0]
+	ib.groupToFirstRow = ib.groupToFirstRow[:0]
+}
+
+func (ib *inputBatchGroupingState) addContinuationValForRow(cont bool) {
+	if len(ib.groupMatched) == 0 || !cont {
+		// First row in input batch or the start of a new group.
+		ib.groupMatched = append(ib.groupMatched, false)
+		ib.groupToFirstRow = append(ib.groupToFirstRow, len(ib.batchRowToGroupNum))
+	}
+	ib.batchRowToGroupNum = append(ib.batchRowToGroupNum, len(ib.groupMatched)-1)
+}
+
+func (ib *inputBatchGroupingState) setFirstGroupMatched() {
+	ib.groupMatched[0] = true
+}
+
+func (ib *inputBatchGroupingState) setMatched(rowIndex int) {
+	ib.groupMatched[ib.batchRowToGroupNum[rowIndex]] = true
+}
+
+func (ib *inputBatchGroupingState) getMatched(rowIndex int) bool {
+	return ib.groupMatched[ib.batchRowToGroupNum[rowIndex]]
+}
+
+func (ib *inputBatchGroupingState) lastGroupMatched() bool {
+	if len(ib.groupMatched) == 0 {
+		return false
+	}
+	return ib.groupMatched[len(ib.groupMatched)-1]
+}
+
+func (ib *inputBatchGroupingState) isUnmatched(rowIndex int) bool {
+	// Return true for the first row index in a group that is complete and group is not matched.
+	lastGroup := len(ib.groupMatched) - 1
+	groupNum := ib.batchRowToGroupNum[rowIndex]
+	if lastGroup == groupNum {
+		return false
+	}
+	return ib.groupMatched[groupNum] && ib.groupToFirstRow[groupNum] == rowIndex
 }
