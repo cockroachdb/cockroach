@@ -39,7 +39,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 37
+const Version execinfrapb.DistSQLVersion = 38
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
@@ -50,6 +50,10 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 37
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 38 (MinAcceptedVersion: 38)
+  - A paired joiner approach for inverted joins was added, for left
+    outer/semi/anti joins involving the invertedJoiner and joinReader.
 
 - Version: 37 (MinAcceptedVersion: 37)
   - An InterleavedReaderJoiner processor was removed, and the old processor

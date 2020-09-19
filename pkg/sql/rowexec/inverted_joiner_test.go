@@ -233,8 +233,15 @@ func TestInvertedJoiner(t *testing.T) {
 		datumsToExpr invertedexpr.DatumsToInvertedExpr
 		joinType     descpb.JoinType
 		inputTypes   []*types.T
-		outputTypes  []*types.T
-		expected     string
+		// The output types for the case without continuation. The test adds the
+		// bool type for the case with continuation.
+		outputTypes []*types.T
+		// The output columns for the case without continuation. The test adds
+		// the bool column index for the case with continuation.
+		outputColumns []uint32
+		// Without and with continuation output.
+		expected                 string
+		expectedWithContinuation string
 	}
 	// The current test cases don't use the full diversity of possibilities,
 	// so can share initialization of some fields.
@@ -247,9 +254,6 @@ func TestInvertedJoiner(t *testing.T) {
 		{
 			description: "array intersection",
 			indexIdx:    biIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0, 1},
-			},
 			// As discussed in the arrayIntersectionExpr comment, 5 will match rows 5 and 50.
 			// Input 20 will match any rows that have array elements {2, 0}, which is rows
 			// 2 and 20. Input 42 will match any rows that have array elements {4, 2} which
@@ -257,17 +261,16 @@ func TestInvertedJoiner(t *testing.T) {
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
-			datumsToExpr: arrayIntersectionExpr{t: t},
-			joinType:     descpb.InnerJoin,
-			outputTypes:  rowenc.TwoIntCols,
-			expected:     "[[5 5] [5 50] [20 2] [20 20] [42 24] [42 42]]",
+			datumsToExpr:             arrayIntersectionExpr{t: t},
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.TwoIntCols,
+			outputColumns:            []uint32{0, 1},
+			expected:                 "[[5 5] [5 50] [20 2] [20 20] [42 24] [42 42]]",
+			expectedWithContinuation: "[[5 5 false] [5 50 true] [20 2 false] [20 20 true] [42 24 false] [42 42 true]]",
 		},
 		{
 			description: "array intersection with pre-filter",
 			indexIdx:    biIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0, 1},
-			},
 			// Similar to above, but with a pre-filter that prevents a left row 5
 			// from matching right rows with inverted key 0. Note that a right row 0
 			// is also used for the left row 20, due to 20 % 10 = 0, but that won't
@@ -278,9 +281,11 @@ func TestInvertedJoiner(t *testing.T) {
 			datumsToExpr: arrayIntersectionExpr{
 				t: t, toExclude: &struct{ left, right int64 }{left: 5, right: 0},
 			},
-			joinType:    descpb.InnerJoin,
-			outputTypes: rowenc.TwoIntCols,
-			expected:    "[[20 2] [20 20] [42 24] [42 42]]",
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.TwoIntCols,
+			outputColumns:            []uint32{0, 1},
+			expected:                 "[[20 2] [20 20] [42 24] [42 42]]",
+			expectedWithContinuation: "[[20 2 false] [20 20 true] [42 24 false] [42 42 true]]",
 		},
 		{
 			// This case is similar to the "array intersection" case, and uses the
@@ -290,17 +295,16 @@ func TestInvertedJoiner(t *testing.T) {
 			// LeftOuterJoin, LeftSemiJoin and LeftAntiJoin cases below.
 			description: "array intersection and onExpr",
 			indexIdx:    biIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0, 1},
-			},
-			onExpr: "@2 > 20",
+			onExpr:      "@2 > 20",
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
-			datumsToExpr: arrayIntersectionExpr{t: t},
-			joinType:     descpb.InnerJoin,
-			outputTypes:  rowenc.TwoIntCols,
-			expected:     "[[5 50] [42 24] [42 42]]",
+			datumsToExpr:             arrayIntersectionExpr{t: t},
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.TwoIntCols,
+			outputColumns:            []uint32{0, 1},
+			expected:                 "[[5 50] [42 24] [42 42]]",
+			expectedWithContinuation: "[[5 50 false] [42 24 false] [42 42 true]]",
 		},
 		{
 			// Same as previous except that the join is a LeftOuterJoin. So the
@@ -308,52 +312,47 @@ func TestInvertedJoiner(t *testing.T) {
 			// NULL for the right side.
 			description: "array intersection and onExpr and LeftOuterJoin",
 			indexIdx:    biIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0, 1},
-			},
-			onExpr: "@2 > 20",
+			onExpr:      "@2 > 20",
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
-			datumsToExpr: arrayIntersectionExpr{t: t},
-			joinType:     descpb.LeftOuterJoin,
-			outputTypes:  rowenc.TwoIntCols,
+			datumsToExpr:  arrayIntersectionExpr{t: t},
+			joinType:      descpb.LeftOuterJoin,
+			outputTypes:   rowenc.TwoIntCols,
+			outputColumns: []uint32{0, 1},
 			// Similar to previous, but the left side input failing the onExpr is emitted.
-			expected: "[[5 50] [20 NULL] [42 24] [42 42]]",
+			expected:                 "[[5 50] [20 NULL] [42 24] [42 42]]",
+			expectedWithContinuation: "[[5 50 false] [20 NULL false] [42 24 false] [42 42 true]]",
 		},
 		{
 			// Same as previous, except a LeftSemiJoin. So input 20 is absent from
 			// the output.
 			description: "array intersection and onExpr and LeftSemiJoin",
 			indexIdx:    biIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0},
-			},
-			onExpr: "@2 > 20",
+			onExpr:      "@2 > 20",
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
-			datumsToExpr: arrayIntersectionExpr{t: t},
-			joinType:     descpb.LeftSemiJoin,
-			outputTypes:  rowenc.OneIntCol,
-			expected:     "[[5] [42]]",
+			datumsToExpr:  arrayIntersectionExpr{t: t},
+			joinType:      descpb.LeftSemiJoin,
+			outputTypes:   rowenc.OneIntCol,
+			outputColumns: []uint32{0},
+			expected:      "[[5] [42]]",
 		},
 		{
 			// Same as previous, except a LeftAntiJoin. So only row 20 from the
 			// input, which does not match, is output.
 			description: "array intersection and onExpr and LeftAntiJoin",
 			indexIdx:    biIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0},
-			},
-			onExpr: "@2 > 20",
+			onExpr:      "@2 > 20",
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
-			datumsToExpr: arrayIntersectionExpr{t: t},
-			joinType:     descpb.LeftAntiJoin,
-			outputTypes:  rowenc.OneIntCol,
-			expected:     "[[20]]",
+			datumsToExpr:  arrayIntersectionExpr{t: t},
+			joinType:      descpb.LeftAntiJoin,
+			outputTypes:   rowenc.OneIntCol,
+			outputColumns: []uint32{0},
+			expected:      "[[20]]",
 		},
 		{
 			// JSON intersection. The left side and right side rows have the same
@@ -361,19 +360,18 @@ func TestInvertedJoiner(t *testing.T) {
 			// no row 101 in the right so 101 is not output.
 			description: "json intersection",
 			indexIdx:    ciIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0, 1},
-			},
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))},
 				{tree.NewDInt(tree.DInt(42))},
 				{tree.NewDInt(tree.DInt(101))},
 				{tree.NewDInt(tree.DInt(20))},
 			},
-			datumsToExpr: jsonIntersectionExpr{},
-			joinType:     descpb.InnerJoin,
-			outputTypes:  rowenc.TwoIntCols,
-			expected:     "[[5 5] [42 42] [20 20]]",
+			datumsToExpr:             jsonIntersectionExpr{},
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.TwoIntCols,
+			outputColumns:            []uint32{0, 1},
+			expected:                 "[[5 5] [42 42] [20 20]]",
+			expectedWithContinuation: "[[5 5 false] [42 42 false] [20 20 false]]",
 		},
 		{
 			// JSON union. See the comment in jsonUnionExpr that describes what
@@ -382,18 +380,16 @@ func TestInvertedJoiner(t *testing.T) {
 			// d % 10 == 101 % 10.
 			description: "json union",
 			indexIdx:    ciIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0, 1},
-			},
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))},
 				{tree.NewDInt(tree.DInt(42))},
 				{tree.NewDInt(tree.DInt(101))},
 				{tree.NewDInt(tree.DInt(20))},
 			},
-			datumsToExpr: jsonUnionExpr{},
-			joinType:     descpb.InnerJoin,
-			outputTypes:  rowenc.TwoIntCols,
+			datumsToExpr:  jsonUnionExpr{},
+			joinType:      descpb.InnerJoin,
+			outputTypes:   rowenc.TwoIntCols,
+			outputColumns: []uint32{0, 1},
 			// The ordering looks odd because of how the JSON values were ordered in the
 			// inverted index. The spans we are reading for the first batch of two inputs
 			// 5, 42 are (c1, 0), (c1, 4), (c2, 2), (c2, 5). (c1, 0) causes
@@ -409,42 +405,50 @@ func TestInvertedJoiner(t *testing.T) {
 				"[42 72] [42 82] [42 92] [101 21] [101 1] [101 11] [101 31] [101 41] [101 51] [101 61] " +
 				"[101 71] [101 81] [101 91] [20 20] [20 21] [20 22] [20 23] [20 24] [20 25] [20 26] " +
 				"[20 27] [20 28] [20 29] [20 10] [20 30] [20 40] [20 50] [20 60] [20 70] [20 80] [20 90]]",
+			expectedWithContinuation: "[[5 1 false] [5 2 true] [5 3 true] [5 4 true] [5 5 true] [5 6 true] [5 7 true] " +
+				"[5 8 true] [5 9 true] [5 45 true] [5 15 true] [5 25 true] [5 35 true] [5 55 true] " +
+				"[5 65 true] [5 75 true] [5 85 true] [5 95 true] " +
+				"[42 2 false] [42 40 true] [42 41 true] [42 42 true] [42 43 true] [42 44 true] " +
+				"[42 45 true] [42 46 true] [42 47 true] [42 48 true] [42 49 true] [42 12 true] " +
+				"[42 22 true] [42 32 true] [42 52 true] [42 62 true] [42 72 true] [42 82 true] " +
+				"[42 92 true] " +
+				"[101 21 false] [101 1 true] [101 11 true] [101 31 true] [101 41 true] [101 51 true] " +
+				"[101 61 true] [101 71 true] [101 81 true] [101 91 true] " +
+				"[20 20 false] [20 21 true] [20 22 true] [20 23 true] [20 24 true] [20 25 true] " +
+				"[20 26 true] [20 27 true] [20 28 true] [20 29 true] [20 10 true] [20 30 true] " +
+				"[20 40 true] [20 50 true] [20 60 true] [20 70 true] [20 80 true] [20 90 true]]",
 		},
 		{
 			// JSON union with LeftSemiJoin. Everything on the left side is output.
 			description: "json union and LeftSemiJoin",
 			indexIdx:    ciIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0},
-			},
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))},
 				{tree.NewDInt(tree.DInt(42))},
 				{tree.NewDInt(tree.DInt(101))},
 				{tree.NewDInt(tree.DInt(20))},
 			},
-			datumsToExpr: jsonUnionExpr{},
-			joinType:     descpb.LeftSemiJoin,
-			outputTypes:  rowenc.OneIntCol,
-			expected:     "[[5] [42] [101] [20]]",
+			datumsToExpr:  jsonUnionExpr{},
+			joinType:      descpb.LeftSemiJoin,
+			outputTypes:   rowenc.OneIntCol,
+			outputColumns: []uint32{0},
+			expected:      "[[5] [42] [101] [20]]",
 		},
 		{
 			// JSON union with LeftAntiJoin. There is no output.
 			description: "json union with LeftAntiJoin",
 			indexIdx:    ciIndex,
-			post: execinfrapb.PostProcessSpec{
-				OutputColumns: []uint32{0},
-			},
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))},
 				{tree.NewDInt(tree.DInt(42))},
 				{tree.NewDInt(tree.DInt(101))},
 				{tree.NewDInt(tree.DInt(20))},
 			},
-			datumsToExpr: jsonUnionExpr{},
-			joinType:     descpb.LeftAntiJoin,
-			outputTypes:  rowenc.OneIntCol,
-			expected:     "[]",
+			datumsToExpr:  jsonUnionExpr{},
+			joinType:      descpb.LeftAntiJoin,
+			outputTypes:   rowenc.OneIntCol,
+			outputColumns: []uint32{0},
+			expected:      "[]",
 		},
 	}
 	for i, c := range testCases {
@@ -471,50 +475,75 @@ func TestInvertedJoiner(t *testing.T) {
 		Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
 	}
 	for _, c := range testCases {
-		encRows := make(rowenc.EncDatumRows, len(c.input))
-		for rowIdx, row := range c.input {
-			encRow := make(rowenc.EncDatumRow, len(row))
-			for i, d := range row {
-				encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+		for _, outputGroupContinuation := range []bool{false, true} {
+			if outputGroupContinuation && len(c.expectedWithContinuation) == 0 {
+				continue
 			}
-			encRows[rowIdx] = encRow
-		}
-		in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
-		out := &distsqlutils.RowBuffer{}
-		ij, err := newInvertedJoiner(
-			&flowCtx,
-			0, /* processorID */
-			&execinfrapb.InvertedJoinerSpec{
-				Table:    *td.TableDesc(),
-				IndexIdx: c.indexIdx,
-				// The invertedJoiner does not look at InvertedExpr since that information
-				// is encapsulated in the DatumsToInvertedExpr parameter.
-				InvertedExpr: execinfrapb.Expression{},
-				OnExpr:       execinfrapb.Expression{Expr: c.onExpr},
-				Type:         c.joinType,
-			},
-			c.datumsToExpr,
-			in,
-			&c.post,
-			out,
-		)
-		require.NoError(t, err)
-		// Small batch size to exercise multiple batches.
-		ij.(*invertedJoiner).SetBatchSize(2)
-		ij.Run(ctx)
-		require.True(t, in.Done)
-		require.True(t, out.ProducerClosed())
+			t.Run(fmt.Sprintf("%s/cont=%t", c.description, outputGroupContinuation), func(t *testing.T) {
+				encRows := make(rowenc.EncDatumRows, len(c.input))
+				for rowIdx, row := range c.input {
+					encRow := make(rowenc.EncDatumRow, len(row))
+					for i, d := range row {
+						encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+					}
+					encRows[rowIdx] = encRow
+				}
+				in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
+				out := &distsqlutils.RowBuffer{}
 
-		var result rowenc.EncDatumRows
-		for {
-			row := out.NextNoMeta(t)
-			if row == nil {
-				break
-			}
-			result = append(result, row)
-		}
+				post := c.post
+				if outputGroupContinuation {
+					// The continuation column is only used for INNER/LEFT_OUTER joins,
+					// where the left side contributes column 0, and the right side
+					// contributes columns 1, 2, 3 (corresponding to a, b, c in the
+					// table), so the continuation column is always column 4.
+					post.OutputColumns = append(c.outputColumns, 4)
+				} else {
+					post.OutputColumns = c.outputColumns
+				}
+				ij, err := newInvertedJoiner(
+					&flowCtx,
+					0, /* processorID */
+					&execinfrapb.InvertedJoinerSpec{
+						Table:    *td.TableDesc(),
+						IndexIdx: c.indexIdx,
+						// The invertedJoiner does not look at InvertedExpr since that information
+						// is encapsulated in the DatumsToInvertedExpr parameter.
+						InvertedExpr:                      execinfrapb.Expression{},
+						OnExpr:                            execinfrapb.Expression{Expr: c.onExpr},
+						Type:                              c.joinType,
+						OutputGroupContinuationForLeftRow: outputGroupContinuation,
+					},
+					c.datumsToExpr,
+					in,
+					&post,
+					out,
+				)
+				require.NoError(t, err)
+				// Small batch size to exercise multiple batches.
+				ij.(*invertedJoiner).SetBatchSize(2)
+				ij.Run(ctx)
+				require.True(t, in.Done)
+				require.True(t, out.ProducerClosed())
 
-		require.Equal(t, c.expected, result.String(c.outputTypes), c.description)
+				var result rowenc.EncDatumRows
+				for {
+					row := out.NextNoMeta(t)
+					if row == nil {
+						break
+					}
+					result = append(result, row)
+				}
+
+				expected := c.expected
+				outputTypes := c.outputTypes
+				if outputGroupContinuation {
+					expected = c.expectedWithContinuation
+					outputTypes = append(outputTypes, types.Bool)
+				}
+				require.Equal(t, expected, result.String(outputTypes), c.description)
+			})
+		}
 	}
 }
 
