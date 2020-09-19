@@ -80,6 +80,10 @@ type windower struct {
 	orderOfWindowFnsProcessing []int
 	windowFns                  []*windowFunc
 	builtins                   []tree.WindowFunc
+	// resetBuiltin indicates whether a corresponding builtin needs to be reset
+	// for each row regardless of the window frame (not resetting is an
+	// optimization).
+	resetBuiltin []bool
 
 	populated           bool
 	partitionIdx        int
@@ -115,6 +119,7 @@ func newWindower(
 	windowFns := spec.WindowFns
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
 	w.builtins = make([]tree.WindowFunc, 0, len(windowFns))
+	w.resetBuiltin = make([]bool, 0, len(windowFns))
 	// windower passes through all of its input columns and appends an output
 	// column for each of window functions it is computing.
 	w.outputTypes = make([]*types.T, len(w.inputTypes)+len(windowFns))
@@ -132,6 +137,16 @@ func newWindower(
 		w.outputTypes[windowFn.OutputColIdx] = outputType
 
 		w.builtins = append(w.builtins, windowConstructor(evalCtx))
+		// json{b}_object_agg is a special aggregate function because its
+		// implementation assumes that once Result is called, the returned
+		// object is immutable and calls to Add will result in a panic. To go
+		// around this limitation, we make sure that the builtin is reset for
+		// each row.
+		// TODO(yuzefovich): consider relaxing/removing that assumption.
+		isJsonObjectAgg := windowFn.Func.AggregateFunc != nil &&
+			(*windowFn.Func.AggregateFunc == execinfrapb.AggregatorSpec_JSON_OBJECT_AGG ||
+				*windowFn.Func.AggregateFunc == execinfrapb.AggregatorSpec_JSONB_OBJECT_AGG)
+		w.resetBuiltin = append(w.resetBuiltin, isJsonObjectAgg)
 		wf := &windowFunc{
 			ordering:     windowFn.Ordering,
 			argsIdxs:     windowFn.ArgsIdxs,
@@ -449,6 +464,10 @@ func (w *windower) processPartition(
 	for _, windowFnIdx := range w.orderOfWindowFnsProcessing {
 		windowFn := w.windowFns[windowFnIdx]
 
+		// TODO(yuzefovich): creating a new WindowFrameRun object for each
+		// partition and populating it below for a custom window frame is
+		// suboptimal. Consider extracting this logic into the constructor of
+		// the windower and reusing the same objects between partitions.
 		frameRun := &tree.WindowFrameRun{
 			ArgsIdxs:     windowFn.argsIdxs,
 			FilterColIdx: windowFn.filterColIdx,
@@ -558,12 +577,16 @@ func (w *windower) processPartition(
 		frameRun.Rows = partition
 		frameRun.RowIdx = 0
 
+		resetBuiltin := w.resetBuiltin[windowFnIdx]
 		if !frameRun.Frame.IsDefaultFrame() {
 			// We have a custom frame not equivalent to default one, so if we have
 			// an aggregate function, we want to reset it for each row. Not resetting
 			// is an optimization since we're not computing the result over the whole
 			// frame but only as a result of the current row and previous results of
 			// aggregation.
+			resetBuiltin = true
+		}
+		if resetBuiltin {
 			builtins.ShouldReset(builtin)
 		}
 
