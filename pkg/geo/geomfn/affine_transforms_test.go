@@ -420,3 +420,111 @@ func TestRotate(t *testing.T) {
 		})
 	}
 }
+
+func TestRotateWithPointOrigin(t *testing.T) {
+	tests := []struct {
+		desc            string
+		inputGeom       geom.T
+		inputRotRadians float64
+		inputPointGeom  geom.T
+		wantGeom        geom.T
+		wantErrStr      string
+	}{
+		{
+			desc:            "rotate a 2D point where angle is 2Pi, the input geom is 10 10 and point geom is 5 5",
+			inputGeom:       geom.NewPointFlat(geom.XY, []float64{10, 10}),
+			inputRotRadians: 2 * math.Pi,
+			inputPointGeom:  geom.NewPointFlat(geom.XY, []float64{5, 5}),
+			wantGeom:        geom.NewPointFlat(geom.XY, []float64{10, 10}),
+		},
+		{
+			desc:            "rotate a 2D point where angle is Pi, the input geom is 10 9 and the point geom is 7 5",
+			inputGeom:       geom.NewPointFlat(geom.XY, []float64{10, 9}),
+			inputRotRadians: math.Pi,
+			inputPointGeom:  geom.NewPointFlat(geom.XY, []float64{7, 5}),
+			wantGeom:        geom.NewPointFlat(geom.XY, []float64{4, 1}),
+		},
+		{
+			desc:            "rotate a 2D point where angle is Pi, the input geom is 10.11 10.55 and the point geom is 5 5",
+			inputGeom:       geom.NewPointFlat(geom.XY, []float64{10.11, 10.55}),
+			inputRotRadians: math.Pi,
+			inputPointGeom:  geom.NewPointFlat(geom.XY, []float64{5, 5}),
+			wantGeom:        geom.NewPointFlat(geom.XY, []float64{-0.11, -0.55}),
+		},
+		{
+			desc:            "rotate a 2D line string where angle is Pi, the input geom is 1 5, 5 1 and the point geom is 5 5",
+			inputGeom:       geom.NewLineStringFlat(geom.XY, []float64{1, 5, 5, 1}),
+			inputRotRadians: math.Pi,
+			inputPointGeom:  geom.NewPointFlat(geom.XY, []float64{5, 5}),
+			wantGeom:        geom.NewLineStringFlat(geom.XY, []float64{9, 5, 5, 9}),
+		},
+		{
+			desc:            "rotate a 2D line string where angle is Pi/4, the input geom is 1 5, 5 1 and the point geom is 5 5",
+			inputGeom:       geom.NewLineStringFlat(geom.XY, []float64{1, 5, 5, 1}),
+			inputRotRadians: math.Pi / 4,
+			inputPointGeom:  geom.NewPointFlat(geom.XY, []float64{5, 5}),
+			wantGeom:        geom.NewLineStringFlat(geom.XY, []float64{2.17157287525381, 2.17157287525381, 7.82842712474619, 2.17157287525381}),
+		},
+		{
+			desc:            "rotate a 2D line string where angle is 2Pi, the input geom is 1 5, 5 1 and the point geom is 4 8",
+			inputGeom:       geom.NewLineStringFlat(geom.XY, []float64{1, 5, 5, 1}),
+			inputRotRadians: 2 * math.Pi,
+			inputPointGeom:  geom.NewPointFlat(geom.XY, []float64{4, 8}),
+			wantGeom:        geom.NewLineStringFlat(geom.XY, []float64{1, 5, 5, 1}),
+		},
+		{
+			desc:            "rotate multiple 2D points",
+			inputGeom:       geom.NewMultiPointFlat(geom.XY, []float64{10, 10, 20, 20}),
+			inputRotRadians: math.Pi / 2,
+			inputPointGeom:  geom.NewPointFlat(geom.XY, []float64{10.55, 8.88}),
+			wantGeom:        geom.NewMultiPointFlat(geom.XY, []float64{9.43, 8.33, -0.57, 18.33}),
+		},
+		{
+			desc:            "rotate polygon strings",
+			inputGeom:       geom.NewPolygonFlat(geom.XY, []float64{0, 0, 4, 0, 4, 4, 0, 4, 0, 0, 1, 1, 2, 1, 2, 2, 1, 2, 1, 1}, []int{10, 20}),
+			inputRotRadians: math.Pi,
+			inputPointGeom:  geom.NewPointFlat(geom.XY, []float64{9, 9}),
+			wantGeom:        geom.NewPolygonFlat(geom.XY, []float64{18, 18, 14, 18, 14, 14, 18, 14, 18, 18, 17, 17, 16, 17, 16, 16, 17, 16, 17, 17}, []int{10, 20}),
+		},
+		{
+			desc:            "rotate a 2D point where angle is Pi, the input geom is 10 9 and the line string geom is 7 5, 5 5",
+			inputGeom:       geom.NewPointFlat(geom.XY, []float64{10, 9}),
+			inputRotRadians: math.Pi,
+			inputPointGeom:  geom.NewLineStringFlat(geom.XY, []float64{7, 5, 5, 5}),
+			wantGeom:        geom.NewPointFlat(geom.XY, []float64{10, 9}),
+			wantErrStr:      "origin is not a POINT",
+		},
+		{
+			desc:            "rotate a 2D point where point origin is empty",
+			inputGeom:       geom.NewPointFlat(geom.XY, []float64{10, 9}),
+			inputRotRadians: math.Pi,
+			inputPointGeom:  geom.NewPointEmpty(geom.XY),
+			wantGeom:        geom.NewPointFlat(geom.XY, []float64{10, 9}),
+			wantErrStr:      "origin is an empty point",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			geometry, err := geo.MakeGeometryFromGeomT(tt.inputGeom)
+			require.NoError(t, err)
+
+			pointGeometry, err := geo.MakeGeometryFromGeomT(tt.inputPointGeom)
+			require.NoError(t, err)
+
+			got, err := RotateWithPointOrigin(geometry, tt.inputRotRadians, pointGeometry)
+			if tt.wantErrStr != "" {
+				require.EqualError(t, err, tt.wantErrStr)
+			} else {
+				require.NoError(t, err)
+			}
+			// Compare FlatCoords and assert they are within epsilon.
+			// This is because they exact matches may encounter rounding issues.
+			actualGeomT, err := got.AsGeomT()
+			require.NoError(t, err)
+			require.Equal(t, tt.wantGeom.SRID(), actualGeomT.SRID())
+			require.Equal(t, tt.wantGeom.Layout(), actualGeomT.Layout())
+			require.IsType(t, tt.wantGeom, actualGeomT)
+			require.InEpsilonSlice(t, tt.wantGeom.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
+		})
+	}
+}
