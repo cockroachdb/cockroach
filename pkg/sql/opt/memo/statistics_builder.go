@@ -656,8 +656,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// the constraint selectivity and the partial index predicate (if it exists)
 	// to the underlying table stats.
 	if scan.InvertedConstraint != nil {
-		// TODO(mjibson): support partial index predicates for inverted constraints.
-		sb.invertedConstrainScan(scan, relProps)
+		sb.invertedConstrainScan(scan, pred, relProps)
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -789,7 +788,9 @@ func (sb *statisticsBuilder) constrainScan(
 
 // invertedConstrainScan is called from buildScan to calculate the stats for
 // the scan based on the given inverted constraint.
-func (sb *statisticsBuilder) invertedConstrainScan(scan *ScanExpr, relProps *props.Relational) {
+func (sb *statisticsBuilder) invertedConstrainScan(
+	scan *ScanExpr, pred FiltersExpr, relProps *props.Relational,
+) {
 	s := &relProps.Stats
 
 	// Calculate distinct counts and histograms for constrained columns
@@ -831,14 +832,41 @@ func (sb *statisticsBuilder) invertedConstrainScan(scan *ScanExpr, relProps *pro
 		numUnappliedConjuncts += 2
 	}
 
-	// Inverted indexes don't contain NULLs, so we do not need to have
-	// updateNullCountsFromNotNullCols or selectivityFromNullsRemoved here.
+	// Set null counts to 0 for non-nullable columns
+	// ---------------------------------------------
+	// Inverted indexes don't contain NULLs, so there is no need to try to
+	// determine not-null columns from the constraint. However, the partial
+	// index predicate may guarantee that non-indexed columns are not-null.
+	notNullCols := relProps.NotNullCols.Copy()
+	if pred != nil {
+		// Add any not-null columns from the predicate constraints.
+		for i := range pred {
+			if c := pred[i].ScalarProps().Constraints; c != nil {
+				cols := c.ExtractNotNullCols(sb.evalCtx)
+				const distinctCount = math.MaxFloat64
+				sb.ensureColStat(cols, distinctCount, scan, s)
+				notNullCols.UnionWith(cols)
+			}
+		}
+	}
+	sb.updateNullCountsFromNotNullCols(notNullCols, s)
+
+	// Calculate distinct counts and histograms for the partial index predicate
+	// ------------------------------------------------------------------------
+	if pred != nil {
+		predUnappliedConjucts, predConstrainedCols, predHistCols := sb.applyFilter(pred, scan, relProps)
+		numUnappliedConjuncts += predUnappliedConjucts
+		constrainedCols.UnionWith(predConstrainedCols)
+		constrainedCols = sb.tryReduceCols(constrainedCols, s, &scan.Relational().FuncDeps)
+		histCols.UnionWith(predHistCols)
+	}
 
 	// Calculate row count and selectivity
 	// -----------------------------------
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
 	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
@@ -2995,6 +3023,12 @@ func (sb *statisticsBuilder) applyFilter(
 			histCols.UnionWith(histColsLocal)
 			if !scalarProps.TightConstraints {
 				numUnappliedConjuncts++
+				// Mimic invertedConstrainScan in the case of no histogram
+				// information that assumes a geo function is a single closed
+				// span that corresponds to two "conjuncts".
+				if isGeoIndexScanCond(conjunct.Condition) {
+					numUnappliedConjuncts++
+				}
 			}
 		} else {
 			numUnappliedConjuncts++
@@ -3937,6 +3971,19 @@ func isGeoIndexJoinCond(cond opt.ScalarExpr) bool {
 	if fn, ok := cond.(*FunctionExpr); ok {
 		if _, ok := geoindex.RelationshipMap[fn.Name]; ok && len(fn.Args) >= 2 {
 			return fn.Args[0].Op() == opt.VariableOp && fn.Args[1].Op() == opt.VariableOp
+		}
+	}
+	return false
+}
+
+// isGeoIndexScanCond returns true if the given condition is an
+// index-accelerated geospatial function with one variable argument.
+func isGeoIndexScanCond(cond opt.ScalarExpr) bool {
+	if fn, ok := cond.(*FunctionExpr); ok {
+		if _, ok := geoindex.RelationshipMap[fn.Name]; ok && len(fn.Args) >= 2 {
+			firstIsVar := fn.Args[0].Op() == opt.VariableOp
+			secondIsVar := fn.Args[1].Op() == opt.VariableOp
+			return (firstIsVar && !secondIsVar) || (!firstIsVar && secondIsVar)
 		}
 	}
 	return false
