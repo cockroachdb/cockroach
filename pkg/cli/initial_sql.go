@@ -13,12 +13,14 @@ package cli
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // runInitialSQL concerns itself with running "initial SQL" code when
@@ -31,9 +33,17 @@ import (
 func runInitialSQL(
 	ctx context.Context, s *server.Server, startSingleNode bool, adminUser string,
 ) (adminPassword string, err error) {
-	newCluster := s.InitialStart() && s.NodeID() == server.FirstNodeID
-	if !newCluster {
-		// The initial SQL code only runs the first time the cluster is initialized.
+	if s.NodeID() != server.FirstNodeID {
+		return "", waitUntilInitialSQLDone(ctx, s)
+	}
+
+	// We're on the first done. Has the initial SQL already run?
+	isDone, err := isInitialSQLDone(ctx, s)
+	if err != nil {
+		return "", err
+	}
+	if isDone {
+		log.Infof(ctx, "initial SQL has already run")
 		return "", nil
 	}
 
@@ -56,7 +66,72 @@ func runInitialSQL(
 		}
 	}
 
+	// We completed the SQL initialization. Tell all the other nodes we're done.
+	log.Infof(ctx, "initial SQL completed execution")
+	if err := markInitialSQLDone(ctx, s); err != nil {
+		return "", err
+	}
+
 	return adminPassword, nil
+}
+
+// markInitialSQLDone marks the initial SQL as having been executed.
+// This unlocks the client acceptor in every node in the cluster.
+func markInitialSQLDone(ctx context.Context, s *server.Server) error {
+	return s.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		_, err := ie.Exec(ctx, "mark-sql-init", nil,
+			`INSERT INTO system.eventlog(timestamp, "eventType", "targetID", "reportingID")
+          VALUES (now(), $1, 0, $2)`,
+			sql.EventLogInitialSQLExecuted, int32(s.NodeID()))
+		return err
+	})
+}
+
+// isInitialSQLDone returns true iff the initial SQL has been executed
+// already.
+func isInitialSQLDone(ctx context.Context, s *server.Server) (bool, error) {
+	isDone := false
+	err := s.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		vals, err := ie.QueryRow(ctx, "wait-for-sql-init", nil,
+			"SELECT count(*)=1 FROM system.eventlog WHERE \"eventType\" = $1",
+			sql.EventLogInitialSQLExecuted)
+		if err != nil {
+			return err
+		}
+		isDone = bool(*vals[0].(*tree.DBool))
+		return nil
+	})
+	return isDone, err
+}
+
+// waitUntilInitialSQLDone makes the node wait until the initial SQL has
+// been executed. This waits until a row with a particular event ID
+// appears in system.eventlog.
+func waitUntilInitialSQLDone(ctx context.Context, s *server.Server) error {
+	timer := timeutil.NewTimer()
+	defer timer.Stop()
+	for {
+		log.Infof(ctx, "waiting for initial SQL to complete execution")
+		isDone, err := isInitialSQLDone(ctx, s)
+		if err != nil {
+			return err
+		}
+		if isDone {
+			log.Infof(ctx, "initial SQL has completed")
+			break
+		}
+
+		// Wait a little bit before the next iteration, or let the context
+		// cancel the wait.
+		timer.Reset(time.Second)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			timer.Read = true
+		}
+	}
+	return nil
 }
 
 // createAdminUser creates an admin user with the given name.

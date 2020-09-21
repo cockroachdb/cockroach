@@ -593,6 +593,7 @@ If problems persist, please see %s.`
 			// TODO(knz): If/when we want auto-creation of an initial admin user,
 			// this can be achieved here.
 			if _, err := runInitialSQL(ctx, s, startSingleNode, "" /* adminUser */); err != nil {
+				log.Infof(ctx, "initial SQL failed: %v", err)
 				return err
 			}
 
