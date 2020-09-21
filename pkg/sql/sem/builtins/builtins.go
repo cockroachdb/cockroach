@@ -260,6 +260,24 @@ var builtins = map[string]builtinDefinition{
 		),
 	),
 
+	"unaccent": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		stringOverload1(
+			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
+				separatedStrings := strings.Split(s, "")
+				for i, ss := range separatedStrings {
+					v, ok := unaccentDictionary[ss]
+					if ok {
+						separatedStrings[i] = v
+					}
+				}
+				return tree.NewDString(strings.Join(separatedStrings, "")), nil
+			},
+			types.String,
+			"Removes accents (diacritic signs) from the text provided in `val`.",
+			tree.VolatilityImmutable,
+		),
+	),
+
 	"upper": makeBuiltin(tree.FunctionProperties{Category: categoryString},
 		stringOverload1(
 			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {

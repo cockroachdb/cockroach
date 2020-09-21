@@ -102,6 +102,26 @@ SELECT upper('roacH7')
 upper
 ROACH7
 
+query T
+SELECT unaccent('no_special_CHARACTERS1!')
+----
+no_special_CHARACTERS1!
+
+query T
+SELECT unaccent('Żółć')
+----
+Zolc
+
+query T
+SELECT unaccent('⃞h̀ＥＬＬＯ`̀́⃞')
+----
+hELLO`
+
+query T
+SELECT unaccent('some­thing')
+----
+some-thing
+
 statement error unknown signature: upper\(decimal\)
 SELECT upper(2.2)
 
