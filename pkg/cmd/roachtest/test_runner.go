@@ -370,6 +370,7 @@ func (r *testRunner) runWorker(
 		wStatus.SetCluster(nil)
 
 		if c == nil {
+			l.PrintfCtx(ctx, "Worker exiting; no cluster to destroy.")
 			return
 		}
 		doDestroy := ctx.Err() == nil
