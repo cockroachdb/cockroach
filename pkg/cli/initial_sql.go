@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -17,7 +17,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// runInitialSQL concerns itself with running "initial SQL" code when
+// a cluster is started for the first time.
+//
+// The "startSingleNode" argument is true for `start-single-node`
+// and `cockroach demo` with 2 nodes or less.
+func runInitialSQL(ctx context.Context, s *server.Server, startSingleNode bool) error {
+	if startSingleNode && s.InitialStart() {
+		// For start-single-node, set the default replication factor to
+		// 1 so as to avoid warning message and unnecessary rebalance
+		// churn.
+		if err := cliDisableReplication(ctx, s); err != nil {
+			log.Errorf(ctx, "could not disable replication: %v", err)
+			return err
+		}
+		log.Infof(ctx, "Replication was disabled for this cluster.\n"+
+			"When/if adding nodes in the future, update zone configurations to increase the replication factor.")
+	}
+
+	return nil
+}
 
 // cliDisableReplication changes the replication factor on
 // all defined zones to become 1. This is used by start-single-node
