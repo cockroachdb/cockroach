@@ -399,7 +399,7 @@ func (r *testRunner) runWorker(
 			if _, ok := c.spec.ReusePolicy.(reusePolicyNone); ok {
 				wStatus.SetStatus("destroying cluster")
 				// We use a context that can't be canceled for the Destroy().
-				c.Destroy(ctx, closeLogger, l)
+				c.Destroy(context.Background(), closeLogger, l)
 				c = nil
 			}
 		}
@@ -494,7 +494,7 @@ func (r *testRunner) runWorker(
 				// On any test failure or error, we destroy the cluster. We could be
 				// more selective, but this sounds safer.
 				l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
-				c.Destroy(ctx, closeLogger, l)
+				c.Destroy(context.Background(), closeLogger, l)
 				c = nil
 			}
 
