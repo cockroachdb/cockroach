@@ -1,0 +1,47 @@
+# LogicTest: local
+
+statement ok
+CREATE SCHEMA schema_a
+
+statement ok
+CREATE USER user1
+
+statement ok
+CREATE TYPE public.enum_a AS ENUM ('hello', 'goodbye');
+GRANT USAGE ON TYPE public.enum_a TO user1
+
+statement ok
+CREATE TYPE schema_a.enum_b AS ENUM ('hi', 'bye');
+GRANT ALL ON TYPE schema_a.enum_b TO user1
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE schema_a.enum_b, enum_a, int
+----
+database_name  schema_name  type_name  grantee  privilege_type
+test           pg_catalog   int        admin    ALL
+test           pg_catalog   int        public   USAGE
+test           pg_catalog   int        root     ALL
+test           public       enum_a     admin    ALL
+test           public       enum_a     public   USAGE
+test           public       enum_a     root     ALL
+test           public       enum_a     user1    USAGE
+test           schema_a     enum_b     admin    ALL
+test           schema_a     enum_b     root     ALL
+test           schema_a     enum_b     user1    ALL
+
+query TTTTT colnames
+SHOW GRANTS ON TYPE schema_a.enum_b, enum_a, int FOR user1
+----
+database_name  schema_name  type_name  grantee  privilege_type
+test           public       enum_a     user1    USAGE
+test           schema_a     enum_b     user1    ALL
+
+query TTTTT colnames
+SHOW GRANTS FOR user1
+----
+database_name  schema_name  relation_name  grantee  privilege_type
+test           public       enum_a         user1    USAGE
+test           schema_a     enum_b         user1    ALL
+
+statement error type "non_existent" does not exist
+SHOW GRANTS ON TYPE non_existent
