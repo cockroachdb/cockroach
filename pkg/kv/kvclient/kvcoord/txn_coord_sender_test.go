@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2297,4 +2299,74 @@ func TestUpdateRoootWithLeafFinalStateInAbortedTxn(t *testing.T) {
 	if leafInputState2.Txn.Status != roachpb.PENDING {
 		t.Fatalf("expected PENDING txn, got: %s", leafInputState2.Txn.Status)
 	}
+}
+
+// Test that evaluating a request within a txn with the STAGING status works
+// fine. It's unusual for the server to receive a request in the STAGING status
+// (other than a single EndTxn which transitions from STAGING->COMMITTED),
+// because the committer interceptor reverts the status from STAGING->PENDING if
+// the batch moving to STAGING has been split and some part of it failed.
+// However, it can still happen that the server receives a request with the
+// STAGING record when the DistSender splits a batch and doesn't send all the
+// sub-batches in parallel; in that case it's possible that a sub-batch with the
+// EndTxn succeeds, and then the DistSender will send the remaining sub-batches
+// with a STAGING status.
+func TestPutsInStagingTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	var putInStagingSeen bool
+	var storeKnobs kvserver.StoreTestingKnobs
+	storeKnobs.TestingRequestFilter = func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		put, ok := ba.GetArg(roachpb.Put)
+		if !ok || !put.(*roachpb.PutRequest).Key.Equal(keyB) {
+			return nil
+		}
+		txn := ba.Txn
+		if txn == nil {
+			return nil
+		}
+		if txn.Status == roachpb.STAGING {
+			putInStagingSeen = true
+		}
+		return nil
+	}
+
+	// Disable the DistSender concurrency so that sub-batches split by the
+	// DistSender are send serially and the transaction is updated from one to
+	// another. See below.
+	settings := cluster.MakeTestingClusterSettings()
+	senderConcurrencyLimit.Override(&settings.SV, 0)
+
+	s, _, db := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Settings: settings,
+			Knobs:    base.TestingKnobs{Store: &storeKnobs},
+		})
+	defer s.Stopper().Stop(ctx)
+
+	require.NoError(t, db.AdminSplit(ctx, keyB /* spanKey */, keyB /* splitKey */, hlc.MaxTimestamp /* expirationTimestamp */))
+
+	txn := db.NewTxn(ctx, "test")
+
+	// Cause a write too old condition for the upcoming txn writes, to spicy up
+	// the test.
+	require.NoError(t, db.Put(ctx, keyB, "b"))
+
+	// Send a batch that will be split into two sub-batches: [Put(a)+EndTxn,
+	// Put(b)] (the EndTxn is grouped with the first write). These sub-batches are
+	// sent serially since we've inhibited the DistSender's concurrency. The first
+	// one will transition the txn to STAGING, and the DistSender will use that
+	// updated txn when sending the 2nd sub-batch.
+	b := txn.NewBatch()
+	b.Put(keyA, "a")
+	b.Put(keyB, "b")
+	require.NoError(t, txn.CommitInBatch(ctx, b))
+	// Verify that the test isn't fooling itself by checking that we've indeed
+	// seen a batch with the STAGING status.
+	require.True(t, putInStagingSeen)
 }
