@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,6 +93,9 @@ func TestInternalExecutor(t *testing.T) {
 			sessiondata.InternalExecutorOverride{User: security.RootUser},
 			"select case nextval('test.seq') when 2 then crdb_internal.force_retry('1h') else 99 end",
 		)
+		if cnt == 1 {
+			require.Regexp(t, "crdb_internal.force_retry", err)
+		}
 		if err != nil {
 			return err
 		}
@@ -460,6 +464,46 @@ func testInternalExecutorAppNameInitialization(
 	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppNameInStats {
 		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppNameInStats, appName)
 	}
+}
+
+// Test that, when executing inside a higher-level txn, the internal executor
+// does not attempt to auto-retry statements when it detects the transaction to
+// be pushed. The executor cannot auto-retry by itself, so let's make sure that
+// it also doesn't eagerly generate retriable errors when it detects pushed
+// transactions.
+func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, _, db := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// Setup a pushed txn.
+	txn := db.NewTxn(ctx, "test")
+	keyA := roachpb.Key("a")
+	_, err := db.Get(ctx, keyA)
+	require.NoError(t, err)
+	require.NoError(t, txn.Put(ctx, keyA, "x"))
+	require.NotEqual(t, txn.ReadTimestamp(), txn.ProvisionalCommitTimestamp(), "expect txn wts to be pushed")
+
+	// Fix the txn's timestamp, such that
+	// txn.IsSerializablePushAndRefreshNotPossible() and the connExecutor is
+	// tempted to generate a retriable error eagerly.
+	txn.CommitTimestamp()
+	require.True(t, txn.IsSerializablePushAndRefreshNotPossible())
+
+	execCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+	defer cancel()
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	_, err = ie.Exec(execCtx, "test", txn, "select 42")
+	require.NoError(t, err)
+	require.NoError(t, testutils.MatchInOrder(collect().String(),
+		"push detected for non-refreshable txn but auto-retry not possible"))
+	require.NotEqual(t, txn.ReadTimestamp(), txn.ProvisionalCommitTimestamp(), "expect txn wts to be pushed")
+
+	require.NoError(t, txn.Rollback(ctx))
 }
 
 func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
