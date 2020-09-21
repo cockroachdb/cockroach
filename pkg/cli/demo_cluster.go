@@ -273,12 +273,8 @@ func (c *transientCluster) start(
 		}
 	}
 
-	if demoCtx.nodes < 3 {
-		// Set up the default zone configuration. We are using an in-memory store
-		// so we really want to disable replication.
-		if err := cliDisableReplication(ctx, c.s.Server); err != nil {
-			return err
-		}
+	if err := runInitialSQL(ctx, c.s.Server, demoCtx.nodes < 3); err != nil {
+		return err
 	}
 
 	// Prepare the URL for use by the SQL shell.
