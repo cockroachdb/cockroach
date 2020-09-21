@@ -4035,6 +4035,12 @@ The matrix transformation will be applied as follows for each coordinate:
 					return nil, errors.Newf("a Point must be used as the scaling factor")
 				}
 
+				factors := pointFactor.FlatCoords()
+				if len(factors) < 2 {
+					return nil,
+						errors.Newf("Point with insufficient coordinates %d used as scaling factor",
+							len(factors))
+				}
 				ret, err := geomfn.Scale(g.Geometry, pointFactor.FlatCoords())
 				if err != nil {
 					return nil, err
