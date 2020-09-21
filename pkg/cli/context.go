@@ -229,6 +229,9 @@ var sqlCtx = struct {
 
 	// Determines whether to display server execution timings in the CLI.
 	enableServerExecutionTimings bool
+
+	// Determine whether to show raw durations.
+	verboseTimings bool
 }{cliContext: &cliCtx}
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
@@ -243,6 +246,7 @@ func setSQLContextDefaults() {
 	sqlCtx.debugMode = false
 	sqlCtx.echo = false
 	sqlCtx.enableServerExecutionTimings = false
+	sqlCtx.verboseTimings = false
 }
 
 // zipCtx captures the command-line parameters of the `zip` command.
