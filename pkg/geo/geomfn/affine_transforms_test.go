@@ -225,6 +225,13 @@ func TestScaleRelativeToOrigin(t *testing.T) {
 			origin:   geom.NewPointFlat(geom.XY, []float64{1, 1}),
 			expected: geom.NewPointEmpty(geom.XY),
 		},
+		{
+			desc:     "scale using an empty point as factor",
+			input:    geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			factor:   geom.NewPointEmpty(geom.XY),
+			origin:   geom.NewPointFlat(geom.XY, []float64{1, 1}),
+			expected: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 1, 1}),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -324,6 +331,13 @@ func TestCollectionScaleRelativeToOrigin(t *testing.T) {
 			factor:      geom.NewPointFlat(geom.XY, []float64{2, 2}),
 			origin:      geom.NewLineStringFlat(geom.XY, []float64{1, 1, 1, 1}),
 			expectedErr: "the false origin must be a Point",
+		},
+		{
+			desc:        "scale using an empty point as origin",
+			input:       geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			factor:      geom.NewPointFlat(geom.XY, []float64{2, 2}),
+			origin:      geom.NewPointEmpty(geom.XY),
+			expectedErr: "the origin must have at least 2 coordinates",
 		},
 	}
 
