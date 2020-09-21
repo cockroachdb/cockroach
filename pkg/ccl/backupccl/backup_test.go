@@ -5762,6 +5762,82 @@ func getFirstStoreReplica(
 	return store, repl
 }
 
+// TestRestoreJobErrorPropagates ensures that errors from creating the job
+// record propagate correctly.
+func TestRestoreErrorPropagates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	jobsTableKey := keys.SystemSQLCodec.TablePrefix(keys.JobsTableID)
+	var shouldFail, failures int64
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			// Intercept Put and ConditionalPut requests to the jobs table
+			// and, if shouldFail is positive, increment failures and return an
+			// injected error.
+			if !ba.IsWrite() {
+				return nil
+			}
+			for _, ru := range ba.Requests {
+				r := ru.GetInner()
+				switch r.(type) {
+				case *roachpb.ConditionalPutRequest, *roachpb.PutRequest:
+					key := r.Header().Key
+					if bytes.HasPrefix(key, jobsTableKey) && atomic.LoadInt64(&shouldFail) > 0 {
+						return roachpb.NewError(errors.Errorf("boom %d", atomic.AddInt64(&failures, 1)))
+					}
+				}
+			}
+			return nil
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
+	db := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	runner.Exec(t, "CREATE TABLE foo ()")
+	runner.Exec(t, "CREATE DATABASE into_db")
+	url := `nodelocal://0/foo`
+	runner.Exec(t, `BACKUP TABLE foo to '`+url+`'`)
+	atomic.StoreInt64(&shouldFail, 1)
+	_, err := db.Exec(`RESTORE TABLE foo FROM '` + url + `' WITH into_db = 'into_db'`)
+	// Expect to see the first job write failure.
+	require.Regexp(t, "boom 1", err)
+}
+
+// TestProtectedTimestampsFailDueToLimits ensures that when creating a protected
+// timestamp record fails, we return the correct error.
+func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	tc := testcluster.StartTestCluster(t, 1, params)
+	defer tc.Stopper().Stop(ctx)
+	db := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+	runner.Exec(t, "CREATE TABLE bar (k INT PRIMARY KEY, v BYTES)")
+	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.max_spans = 1")
+
+	// Creating the protected timestamp record should fail because there are too
+	// many spans. Ensure that we get the appropriate error.
+	_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://0/foo'`)
+	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+2 > 1 spans")
+}
+
 // Ensure that backing up and restoring tenants succeeds.
 func TestBackupRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
