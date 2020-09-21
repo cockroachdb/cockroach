@@ -11,12 +11,12 @@ package backupccl
 import (
 	"context"
 	"io/ioutil"
+	"net/url"
 	"path"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -31,7 +31,7 @@ import (
 // chain.
 func fetchPreviousBackups(
 	ctx context.Context,
-	p sql.PlanHookState,
+	user string,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	prevBackupURIs []string,
 	encryptionParams backupEncryptionParams,
@@ -41,12 +41,12 @@ func fetchPreviousBackups(
 	}
 
 	baseBackup := prevBackupURIs[0]
-	encryptionOptions, err := getEncryptionFromBase(ctx, p, makeCloudStorage, baseBackup,
+	encryptionOptions, err := getEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
 		encryptionParams)
 	if err != nil {
 		return nil, nil, err
 	}
-	prevBackups, err := getBackupManifests(ctx, p.User(), makeCloudStorage, prevBackupURIs,
+	prevBackups, err := getBackupManifests(ctx, user, makeCloudStorage, prevBackupURIs,
 		encryptionOptions)
 	if err != nil {
 		return nil, nil, err
@@ -64,10 +64,14 @@ func fetchPreviousBackups(
 // explicitly, or due to the auto-append feature), it will resolve the
 // encryption options based on the base backup, as well as find all previous
 // backup manifests in the backup chain.
+//
+// TODO(pbardea): Cleanup list for after stability
+//  - We shouldn't need to pass `to` and (`defaultURI`, `urisByLocalityKV`). We
+//  can determine the latter from the former.
 func resolveDest(
 	ctx context.Context,
-	p sql.PlanHookState,
-	backupStmt *annotatedBackupStatement,
+	user string,
+	nested, appendToLatest bool,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
@@ -90,9 +94,9 @@ func resolveDest(
 	var chosenSuffix string
 	var err error
 
-	if backupStmt.Nested {
-		collectionURI, chosenSuffix, err = resolveBackupCollection(ctx, p, defaultURI, backupStmt,
-			makeCloudStorage, endTime, subdir)
+	if nested {
+		collectionURI, chosenSuffix, err = resolveBackupCollection(ctx, user, defaultURI,
+			appendToLatest, makeCloudStorage, endTime, subdir)
 		if err != nil {
 			return "", "", "", nil, nil, err
 		}
@@ -106,7 +110,7 @@ func resolveDest(
 	if len(incrementalFrom) != 0 {
 		prevBackupURIs = incrementalFrom
 	} else {
-		defaultStore, err := makeCloudStorage(ctx, defaultURI, p.User())
+		defaultStore, err := makeCloudStorage(ctx, defaultURI, user)
 		if err != nil {
 			return "", "", "", nil, nil, err
 		}
@@ -120,7 +124,12 @@ func resolveDest(
 			prevBackupURIs = append(prevBackupURIs, defaultURI)
 			priors, err := findPriorBackupLocations(ctx, defaultStore)
 			for _, prior := range priors {
-				prevBackupURIs = append(prevBackupURIs, defaultURI+"/"+prior)
+				priorURI, err := url.Parse(defaultURI)
+				if err != nil {
+					return "", "", "", nil, nil, errors.Wrapf(err, "parsing default backup location %s", defaultURI)
+				}
+				priorURI.Path = path.Join(priorURI.Path, prior)
+				prevBackupURIs = append(prevBackupURIs, priorURI.String())
 			}
 			if err != nil {
 				return "", "", "", nil, nil, errors.Wrap(err, "finding previous backups")
@@ -186,14 +195,14 @@ func getBackupManifests(
 // base backups.
 func getEncryptionFromBase(
 	ctx context.Context,
-	p sql.PlanHookState,
+	user string,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	baseBackupURI string,
 	encryptionParams backupEncryptionParams,
 ) (*jobspb.BackupEncryptionOptions, error) {
 	var encryptionOptions *jobspb.BackupEncryptionOptions
 	if encryptionParams.encryptMode != noEncryption {
-		exportStore, err := makeCloudStorage(ctx, baseBackupURI, p.User())
+		exportStore, err := makeCloudStorage(ctx, baseBackupURI, user)
 		if err != nil {
 			return nil, err
 		}
@@ -227,17 +236,17 @@ func getEncryptionFromBase(
 // should use for a backup that is pointing to a collection.
 func resolveBackupCollection(
 	ctx context.Context,
-	p sql.PlanHookState,
+	user string,
 	defaultURI string,
-	backupStmt *annotatedBackupStatement,
+	appendToLatest bool,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	endTime hlc.Timestamp,
 	subdir string,
 ) (string, string, error) {
 	var chosenSuffix string
 	collectionURI := defaultURI
-	if backupStmt.AppendToLatest {
-		collection, err := makeCloudStorage(ctx, collectionURI, p.User())
+	if appendToLatest {
+		collection, err := makeCloudStorage(ctx, collectionURI, user)
 		if err != nil {
 			return "", "", err
 		}
