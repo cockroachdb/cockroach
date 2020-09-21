@@ -284,6 +284,11 @@ var (
 	// NamespaceTableMax is the end key of system.namespace.
 	NamespaceTableMax = SystemSQLCodec.TablePrefix(NamespaceTableID + 1)
 	//
+	// RangeEventTableMin is the start key of system.rangelog.
+	RangeEventTableMin = SystemSQLCodec.TablePrefix(RangeEventTableID)
+	// RangeEventTableMax is the end key of system.rangelog.
+	RangeEventTableMax = SystemSQLCodec.TablePrefix(RangeEventTableID + 1)
+	//
 	// UserTableDataMin is the start key of user structured data.
 	UserTableDataMin = SystemSQLCodec.TablePrefix(MinUserDescID)
 

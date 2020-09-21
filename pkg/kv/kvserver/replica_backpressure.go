@@ -81,6 +81,11 @@ var backpressurableSpans = []roachpb.Span{
 	{Key: keys.SystemConfigTableDataMax, EndKey: keys.TableDataMax},
 }
 
+// rangeLogSpan is the key span of the rangelog table where write
+// backpressuring is not permitted. Writes to any keys within this key
+// span will not cause a batch to be backpressured.
+var rangeLogSpan = roachpb.Span{Key: keys.RangeEventTableMin, EndKey: keys.RangeEventTableMax}
+
 // canBackpressureBatch returns whether the provided BatchRequest is eligible
 // for backpressure.
 func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
@@ -95,6 +100,14 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 		req := ru.GetInner()
 		if !roachpb.CanBackpressure(req) {
 			continue
+		}
+
+		// The rangelog table is updated when performing range splits so
+		// splits depend on being able to write into the rangelog, even
+		// splits of the rangelog's own ranges. We should not backpressure
+		// writes to the rangelog range to avoid a cyclical dependency.
+		if rangeLogSpan.Contains(req.Header().Span()) {
+			return false
 		}
 
 		for _, s := range backpressurableSpans {
