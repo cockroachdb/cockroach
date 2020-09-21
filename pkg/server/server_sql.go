@@ -296,6 +296,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
 	bulkMemoryMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
 
+	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
+
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.TempStorageConfig.Spec
@@ -355,8 +357,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		// descriptors that the vectorized execution engine may have open at any
 		// one time. This limit is implemented as a weighted semaphore acquired
 		// before opening files.
-		VecFDSemaphore: semaphore.New(envutil.EnvOrDefaultInt("COCKROACH_VEC_MAX_OPEN_FDS", colexec.VecMaxOpenFDsLimit)),
-		DiskMonitor:    cfg.TempStorageConfig.Mon,
+		VecFDSemaphore:    semaphore.New(envutil.EnvOrDefaultInt("COCKROACH_VEC_MAX_OPEN_FDS", colexec.VecMaxOpenFDsLimit)),
+		DiskMonitor:       cfg.TempStorageConfig.Mon,
+		BackfillerMonitor: backfillMemoryMonitor,
 
 		ParentMemoryMonitor: rootSQLMemoryMonitor,
 		BulkAdder: func(
