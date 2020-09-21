@@ -71,6 +71,9 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = 'true'"); err != nil {
 		t.Fatalf("failed to enable follower reads: %v", err)
 	}
+	if _, err := db.ExecContext(ctx, "SET tracing=on"); err != nil {
+		t.Fatal("failed to turn tracing on")
+	}
 	// Disable load based splitting and range merging because splits and merges
 	// interfere with follower reads. Rhis test's workload regularly triggers load
 	// based splitting in the first phase creating small ranges which later
@@ -112,7 +115,7 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 		}
 		panic("data is empty")
 	}
-	verifySelect := func(ctx context.Context, node, k int, expectError bool, expectedVal int64) func() error {
+	verifySelect := func(ctx context.Context, node, k int, expectedVal int64) func() error {
 		return func() error {
 			nodeDB := conns[node-1]
 			r := nodeDB.QueryRowContext(ctx, "SELECT v FROM test.test AS OF SYSTEM "+
@@ -123,15 +126,9 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 				if ctx.Err() != nil {
 					return nil
 				}
-				if expectError {
-					return nil
-				}
 				return err
 			}
 
-			if expectError {
-				return errors.Errorf("failed to get expected error on node %d", node)
-			}
 			if got != expectedVal {
 				return errors.Errorf("Didn't get expected val on node %d: %v != %v",
 					node, got, expectedVal)
@@ -143,7 +140,7 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 		return func() error {
 			for ctx.Err() == nil {
 				k, v := chooseKV()
-				err := verifySelect(ctx, node, k, false, v)()
+				err := verifySelect(ctx, node, k, v)()
 				if err != nil && ctx.Err() == nil {
 					return err
 				}
@@ -158,16 +155,6 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	}
 	if err := g.Wait(); err != nil {
 		t.Fatalf("failed to insert data: %v", err)
-	}
-	// Verify error on immediate read.
-	g, gCtx = errgroup.WithContext(ctx)
-	for i := 1; i <= c.spec.NodeCount; i++ {
-		// Expect an error performing a historical read at first because the table
-		// won't have been created yet.
-		g.Go(verifySelect(gCtx, i, 0, true, 0))
-	}
-	if err := g.Wait(); err != nil {
-		t.Fatalf("unexpected error performing historical reads: %v", err)
 	}
 	// Wait for follower_timestamp() historical reads to have data.
 	followerReadDuration, err := computeFollowerReadDuration(ctx, db)
@@ -190,7 +177,7 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	g, gCtx = errgroup.WithContext(ctx)
 	k, v := chooseKV()
 	for i := 1; i <= c.spec.NodeCount; i++ {
-		g.Go(verifySelect(gCtx, i, k, false, v))
+		g.Go(verifySelect(gCtx, i, k, v))
 	}
 	if err := g.Wait(); err != nil {
 		t.Fatalf("error verifying node values: %v", err)
