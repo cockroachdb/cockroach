@@ -926,8 +926,9 @@ func (p *Processor) syncEventAndRegistrations() {
 // overlapping the given span to fully process their own internal buffers.
 func (p *Processor) syncEventAndRegistrationSpan(span roachpb.Span) {
 	syncC := make(chan struct{})
+	ev := getPooledEvent(event{syncC: syncC, testRegCatchupSpan: span})
 	select {
-	case p.eventC <- event{syncC: syncC, testRegCatchupSpan: span}:
+	case p.eventC <- ev:
 		select {
 		case <-syncC:
 		// Synchronized.
@@ -935,6 +936,7 @@ func (p *Processor) syncEventAndRegistrationSpan(span roachpb.Span) {
 			// Already stopped. Do nothing.
 		}
 	case <-p.stoppedC:
+		putPooledEvent(ev)
 		// Already stopped. Do nothing.
 	}
 }
