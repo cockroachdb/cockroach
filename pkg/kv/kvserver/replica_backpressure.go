@@ -81,6 +81,13 @@ var backpressurableSpans = []roachpb.Span{
 	{Key: keys.SystemConfigTableDataMax, EndKey: keys.TableDataMax},
 }
 
+// notBackpressurableSpans contains spans of keys where write backpressuring
+// is not permitted. Writes to any keys within these spans will not cause a
+// batch to be backpressured.
+var notBackpressurableSpans = []roachpb.Span{
+	{Key: keys.RangeEventTableMin, EndKey: keys.RangeEventTableMax},
+}
+
 // canBackpressureBatch returns whether the provided BatchRequest is eligible
 // for backpressure.
 func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
@@ -90,11 +97,18 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 	}
 
 	// Only backpressure batches containing a "backpressurable"
-	// method that is within a "backpressurable" key span.
+	// method that is within a "backpressurable" key span and not
+	// within a "notBackpressurable" key span.
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 		if !roachpb.CanBackpressure(req) {
 			continue
+		}
+
+		for _, s := range notBackpressurableSpans {
+			if s.Contains(req.Header().Span()) {
+				return false
+			}
 		}
 
 		for _, s := range backpressurableSpans {
