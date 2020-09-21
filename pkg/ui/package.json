@@ -29,6 +29,7 @@
     "nvd3": "^1.8.5",
     "popper.js": "^1.14.4",
     "raw-loader": "^0.5.1",
+    "rc-calendar": "^9.15.11",
     "rc-form": "^2.4.11",
     "rc-progress": "^2.2.1",
     "react": "^16.12.0",
