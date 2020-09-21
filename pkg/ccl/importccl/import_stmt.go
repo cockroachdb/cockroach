@@ -1044,7 +1044,7 @@ func prepareNewTableDescsForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := backupccl.WriteDescriptors(ctx, txn, descsCol,
+	if err := backupccl.WriteDescriptors(ctx, txn, p.User(), descsCol,
 		nil /* databases */, nil, /* schemas */
 		tableDescs, nil, tree.RequestedDescriptors,
 		p.ExecCfg().Settings, seqValKVs); err != nil {
