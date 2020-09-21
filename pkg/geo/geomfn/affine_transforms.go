@@ -118,6 +118,7 @@ func translate(t geom.T, deltas []float64) (geom.T, error) {
 }
 
 // Scale returns a modified Geometry whose coordinates are multiplied by the factors.
+// REQUIRES: len(factors) >= 2.
 func Scale(g geo.Geometry, factors []float64) (geo.Geometry, error) {
 	var zFactor float64
 	if len(factors) > 2 {
@@ -134,8 +135,8 @@ func Scale(g geo.Geometry, factors []float64) (geo.Geometry, error) {
 	)
 }
 
-// ScaleRelativeToOrigin returns a modified Geometry whose coordinates are multiplied by
-// the factors relative to the origin
+// ScaleRelativeToOrigin returns a modified Geometry whose coordinates are
+// multiplied by the factors relative to the origin.
 func ScaleRelativeToOrigin(
 	g geo.Geometry, factor geo.Geometry, origin geo.Geometry,
 ) (geo.Geometry, error) {
@@ -176,6 +177,13 @@ func ScaleRelativeToOrigin(
 		return geo.Geometry{}, errors.Wrap(err, "number of dimensions for the scaling factor and origin must be equal")
 	}
 
+	// This is inconsistent with PostGIS, which allows a POINT EMPTY, but whose
+	// behavior seems to depend on previous queries in the session, and not
+	// desirable to reproduce.
+	if len(originPointG.FlatCoords()) < 2 {
+		return geo.Geometry{}, errors.Newf("the origin must have at least 2 coordinates")
+	}
+
 	// Offset by the origin, scale, and translate it back to the origin.
 	offsetDeltas := make([]float64, 0, 3)
 	offsetDeltas = append(offsetDeltas, -originPointG.X(), -originPointG.Y())
@@ -187,11 +195,18 @@ func ScaleRelativeToOrigin(
 		return geo.Geometry{}, err
 	}
 
-	xFactor, yFactor := factorPointG.X(), factorPointG.Y()
-	var zFactor float64 = 1
-	if factorPointG.Layout().ZIndex() != -1 {
-		zFactor = factorPointG.Z()
+	var xFactor, yFactor, zFactor float64
+	zFactor = 1
+	if len(factorPointG.FlatCoords()) < 2 {
+		// POINT EMPTY results in factors of 0, similar to PostGIS.
+		xFactor, yFactor = 0, 0
+	} else {
+		xFactor, yFactor = factorPointG.X(), factorPointG.Y()
+		if factorPointG.Layout().ZIndex() != -1 {
+			zFactor = factorPointG.Z()
+		}
 	}
+
 	retT, err = affine(
 		retT,
 		AffineMatrix([][]float64{
