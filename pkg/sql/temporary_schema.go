@@ -93,7 +93,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	sKey := catalogkeys.NewSchemaKey(dbID, tempSchemaName)
 	schemaID, err := catalogkv.GetDescriptorID(ctx, p.txn, p.ExecCfg().Codec, sKey)
 	if err != nil {
-		return 0, err
+		return descpb.InvalidID, err
 	} else if schemaID == descpb.InvalidID {
 		// The temporary schema has not been created yet.
 		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
@@ -104,7 +104,7 @@ func (p *planner) getOrCreateTemporarySchema(
 			return descpb.InvalidID, err
 		}
 		p.sessionDataMutator.SetTemporarySchemaName(sKey.Name())
-		p.sessionDataMutator.SetTemporarySchemaID(uint32(id))
+		p.sessionDataMutator.SaveTemporarySchemaID(uint32(dbID), uint32(id))
 		return id, nil
 	}
 	return schemaID, nil
