@@ -5,6 +5,8 @@
 // the License. You may obtain a copy of the License at
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+//
+// +build !short
 
 package engineccl
 

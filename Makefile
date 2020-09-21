@@ -519,13 +519,15 @@ LIBGEOS     := $(DYN_LIB_DIR)/libgeos.$(DYN_EXT)
 C_LIBS_COMMON = \
 	$(if $(use-stdmalloc),,$(LIBJEMALLOC)) \
 	$(if $(target-is-windows),,$(LIBEDIT)) \
-	$(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB) $(LIBPROJ) $(LIBGEOS)
-C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBROACH)
-C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL)
+	$(LIBPROJ) $(LIBGEOS)
+C_LIBS_SHORT = $(C_LIBS_COMMON)
+C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBROACH) $(LIBROCKSDB) $(LIBPROTOBUF) $(LIBSNAPPY)
+C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL) $(LIBROCKSDB) $(LIBPROTOBUF) $(LIBSNAPPY)
 
 # We only include krb5 on linux, non-musl builds.
 ifeq "$(findstring linux-gnu,$(TARGET_TRIPLE))" "linux-gnu"
 C_LIBS_CCL += $(LIBKRB5)
+C_LIBS_SHORT += $(LIBKRB5)
 KRB_CPPFLAGS := $(KRB5_DIR)/include
 KRB_DIR := $(KRB5_DIR)/lib
 override TAGS += gss
@@ -944,7 +946,7 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/exec/explain/explain_factory.og.go
 
 go-targets-ccl := \
-	$(COCKROACH) $(COCKROACHSHORT) \
+	$(COCKROACH) \
 	bin/workload \
 	go-install \
 	bench benchshort \
@@ -954,7 +956,7 @@ go-targets-ccl := \
 	generate \
 	lint lintshort
 
-go-targets := $(go-targets-ccl) $(COCKROACHOSS)
+go-targets := $(go-targets-ccl) $(COCKROACHOSS) $(COCKROACHSHORT)
 
 .DEFAULT_GOAL := all
 all: build
@@ -972,6 +974,8 @@ $(COCKROACHOSS): BUILDTARGET = ./pkg/cmd/cockroach-oss
 $(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go
 
 $(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
+$(COCKROACHSHORT): TAGS += short
+$(COCKROACHSHORT): $(C_LIBS_SHORT)
 
 $(go-targets-ccl): $(C_LIBS_CCL)
 
@@ -1022,7 +1026,7 @@ $(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) go-install:
 .PHONY: build buildoss buildshort
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
-buildshort: ## Build the CockroachDB binary without the admin UI.
+buildshort: ## Build the CockroachDB binary without the admin UI and RocksDB.
 build: $(COCKROACH)
 buildoss: $(COCKROACHOSS)
 buildshort: $(COCKROACHSHORT)

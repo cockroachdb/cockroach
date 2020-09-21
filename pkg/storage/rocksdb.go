@@ -7,6 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
+//
+// +build !short
 
 package storage
 
@@ -16,7 +18,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -26,11 +27,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,23 +53,6 @@ import (
 // #include <stdlib.h>
 // #include <libroach.h>
 import "C"
-
-var minWALSyncInterval = settings.RegisterDurationSetting(
-	"rocksdb.min_wal_sync_interval",
-	"minimum duration between syncs of the RocksDB WAL",
-	0*time.Millisecond,
-)
-
-var rocksdbConcurrency = envutil.EnvOrDefaultInt(
-	"COCKROACH_ROCKSDB_CONCURRENCY", func() int {
-		// Use up to min(numCPU, 4) threads for background RocksDB compactions per
-		// store.
-		const max = 4
-		if n := runtime.NumCPU(); n <= max {
-			return n
-		}
-		return max
-	}())
 
 // Set to true to perform expensive iterator debug leak checking. In normal
 // operation, we perform inexpensive iterator leak checking but those checks do
@@ -134,18 +116,6 @@ func prettyPrintKey(cKey C.DBKey) *C.char {
 	}
 	return C.CString(mvccKey.String())
 }
-
-const (
-	// RecommendedMaxOpenFiles is the recommended value for RocksDB's
-	// max_open_files option.
-	RecommendedMaxOpenFiles = 10000
-	// MinimumMaxOpenFiles is the minimum value that RocksDB's max_open_files
-	// option can be set to. While this should be set as high as possible, the
-	// minimum total for a single store node must be under 2048 for Windows
-	// compatibility. See:
-	// https://wpdev.uservoice.com/forums/266908-command-prompt-console-bash-on-ubuntu-on-windo/suggestions/17310124-add-ability-to-change-max-number-of-open-files-for
-	MinimumMaxOpenFiles = 1700
-)
 
 // RocksDBCache is a wrapper around C.DBCache
 type RocksDBCache struct {
@@ -2537,10 +2507,6 @@ func goPartialMerge(existing, update []byte) ([]byte, error) {
 	return cStringToGoBytes(result), nil
 }
 
-func emptyKeyError() error {
-	return errors.Errorf("attempted access to empty key")
-}
-
 func dbPut(rdb *C.DBEngine, key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
@@ -3049,35 +3015,6 @@ func lockFile(filename string) (C.DBFileLock, error) {
 // unlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
 func unlockFile(lock C.DBFileLock) error {
 	return statusToError(C.DBUnlockFile(lock))
-}
-
-// MVCCScanDecodeKeyValue decodes a key/value pair returned in an MVCCScan
-// "batch" (this is not the RocksDB batch repr format), returning both the
-// key/value and the suffix of data remaining in the batch.
-func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
-	k, ts, value, orepr, err := enginepb.ScanDecodeKeyValue(repr)
-	return MVCCKey{k, ts}, value, orepr, err
-}
-
-// MVCCScanDecodeKeyValues decodes all key/value pairs returned in one or more
-// MVCCScan "batches" (this is not the RocksDB batch repr format). The provided
-// function is called for each key/value pair.
-func MVCCScanDecodeKeyValues(repr [][]byte, fn func(key MVCCKey, rawBytes []byte) error) error {
-	var k MVCCKey
-	var rawBytes []byte
-	var err error
-	for _, data := range repr {
-		for len(data) > 0 {
-			k, rawBytes, data, err = MVCCScanDecodeKeyValue(data)
-			if err != nil {
-				return err
-			}
-			if err = fn(k, rawBytes); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func notFoundErrOrDefault(err error) error {
