@@ -50,6 +50,7 @@ const initialEntries = [
 describe("<TimeScaleDropdown>", function () {
   let state: TimeScaleDropdownProps;
   let spy: sinon.SinonSpy;
+  let clock: sinon.SinonFakeTimers;
 
   const makeTimeScaleDropdown = (props: TimeScaleDropdownProps) =>
     mount(
@@ -59,6 +60,7 @@ describe("<TimeScaleDropdown>", function () {
     );
 
   beforeEach(function () {
+    clock = sinon.useFakeTimers(new Date(2020, 5, 1, 9, 28, 30));
     const timewindowState = new timewindow.TimeWindowState();
     state = {
       currentScale: timewindowState.scale,
@@ -70,6 +72,10 @@ describe("<TimeScaleDropdown>", function () {
       setTimeRange: timewindow.setTimeRange,
     };
     spy = sinon.spy();
+  });
+
+  afterEach(() => {
+    clock.restore();
   });
 
   it("refreshes nodes when mounted.", () => {
@@ -102,51 +108,53 @@ describe("<TimeScaleDropdown>", function () {
     assert.deepEqual(title, { title: "Past 10 Minutes" });
   });
 
-  it("getTimeRangeTitle must return custom Title", () => {
-    const currentScale = { ...state.currentScale, key: "Custom" };
-    const title = getTimeRangeTitle(state.currentWindow, currentScale);
-    const timeStart = moment.utc(state.currentWindow.start).format(timeFormat);
-    const timeEnd = moment.utc(state.currentWindow.end).format(timeFormat);
-    const wrapper = makeTimeScaleDropdown({ ...state, currentScale });
-    assert.equal(
-      wrapper.find(".trigger .Select-value-label").first().text(),
-      ` ${timeStart} -  ${timeEnd} (UTC)`,
-    );
-    assert.deepEqual(title, {
-      dateStart: "",
-      dateEnd: "",
-      timeStart,
-      timeEnd,
-      title: "Custom",
+  describe("getTimeRangeTitle", () => {
+    it("returns custom Title with Time part only for current day", () => {
+      const currentScale = { ...state.currentScale, key: "Custom" };
+      const title = getTimeRangeTitle(state.currentWindow, currentScale);
+      const timeStart = moment.utc(state.currentWindow.start).format(timeFormat);
+      const timeEnd = moment.utc(state.currentWindow.end).format(timeFormat);
+      const wrapper = makeTimeScaleDropdown({ ...state, currentScale });
+      assert.equal(
+        wrapper.find(".trigger .Select-value-label").first().text(),
+        ` ${timeStart} -  ${timeEnd} (UTC)`,
+      );
+      assert.deepEqual(title, {
+        dateStart: "",
+        dateEnd: "",
+        timeStart,
+        timeEnd,
+        title: "Custom",
+      });
     });
-  });
 
-  it("getTimeRangeTitle must return custom Title", () => {
-    const currentWindow = {
-      start: moment(state.currentWindow.start).subtract(1, "day"),
-      end: moment(state.currentWindow.end).subtract(1, "day"),
-    };
-    const currentScale = { ...state.currentScale, key: "Custom" };
-    const title = getTimeRangeTitle(currentWindow, currentScale);
-    const timeStart = moment.utc(currentWindow.start).format(timeFormat);
-    const timeEnd = moment.utc(currentWindow.end).format(timeFormat);
-    const dateStart = moment.utc(currentWindow.start).format(dateFormat);
-    const dateEnd = moment.utc(currentWindow.end).format(dateFormat);
-    const wrapper = makeTimeScaleDropdown({
-      ...state,
-      currentWindow,
-      currentScale,
-    });
-    assert.equal(
-      wrapper.find(".trigger .Select-value-label").first().text(),
-      `${dateStart} ${timeStart} - ${dateEnd} ${timeEnd} (UTC)`,
-    );
-    assert.deepEqual(title, {
-      dateStart,
-      dateEnd,
-      timeStart,
-      timeEnd,
-      title: "Custom",
+    it("returns custom Title with Date and Time part for the range with past days", () => {
+      const currentWindow = {
+        start: moment(state.currentWindow.start).subtract(1, "day"),
+        end: moment(state.currentWindow.end).subtract(1, "day"),
+      };
+      const currentScale = { ...state.currentScale, key: "Custom" };
+      const title = getTimeRangeTitle(currentWindow, currentScale);
+      const timeStart = moment.utc(currentWindow.start).format(timeFormat);
+      const timeEnd = moment.utc(currentWindow.end).format(timeFormat);
+      const dateStart = moment.utc(currentWindow.start).format(dateFormat);
+      const dateEnd = moment.utc(currentWindow.end).format(dateFormat);
+      const wrapper = makeTimeScaleDropdown({
+        ...state,
+        currentWindow,
+        currentScale,
+      });
+      assert.equal(
+        wrapper.find(".trigger .Select-value-label").first().text(),
+        `${dateStart} ${timeStart} - ${dateEnd} ${timeEnd} (UTC)`,
+      );
+      assert.deepEqual(title, {
+        dateStart,
+        dateEnd,
+        timeStart,
+        timeEnd,
+        title: "Custom",
+      });
     });
   });
 
