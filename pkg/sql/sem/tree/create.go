@@ -1713,3 +1713,18 @@ func (o *CreateStatsOptions) CombineWith(other *CreateStatsOptions) error {
 	}
 	return nil
 }
+
+// CreateExtension represents a CREATE EXTENSION statement.
+type CreateExtension struct {
+	Name        string
+	IfNotExists bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateExtension) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE EXTENSION ")
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
+	ctx.WriteString(node.Name)
+}
