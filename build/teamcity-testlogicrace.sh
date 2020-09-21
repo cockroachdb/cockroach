@@ -8,23 +8,27 @@ maybe_ccache
 
 mkdir -p artifacts
 
-run_json_test build/builder.sh \
+TESTTIMEOUT=1h
+
+run_json_test build/builder.sh env \
   stdbuf -oL -eL \
   make testrace \
   GOTESTFLAGS=-json \
   PKG=./pkg/sql/logictest \
+  TESTTIMEOUT="${TESTTIMEOUT}" \
   TESTFLAGS='-v' \
   ENABLE_ROCKSDB_ASSERTIONS=1
 
 # Run each of the optimizer tests again with randomized alternate query plans.
 
 # Perturb the cost of each expression by up to 90%.
-run_json_test build/builder.sh \
+run_json_test build/builder.sh env \
   stdbuf -oL -eL \
   make testrace \
   GOTESTFLAGS=-json \
   PKG=./pkg/sql/logictest \
   TESTS='^TestLogic/local$$' \
+  TESTTIMEOUT="${TESTTIMEOUT}" \
   TESTFLAGS='-optimizer-cost-perturbation=0.9 -v' \
   ENABLE_ROCKSDB_ASSERTIONS=1
 
@@ -40,12 +44,13 @@ optimizer|orms|sequences_distsql|show_trace|subquery_correlated)"
 # Disable each rule with 50% probability.
 for file in $LOGICTESTS; do
     if [[ ! "$file" =~ (^|[[:space:]])${EXCLUDE}($|[[:space:]]) ]]; then
-        run_json_test build/builder.sh \
+        run_json_test build/builder.sh env \
           stdbuf -oL -eL \
           make testrace \
-    GOTESTFLAGS=-json \
+          GOTESTFLAGS=-json \
           PKG=./pkg/sql/logictest \
           TESTS='^TestLogic/local/'${file}'$$' \
+          TESTTIMEOUT="${TESTTIMEOUT}" \
           TESTFLAGS='-disable-opt-rule-probability=0.5 -v' \
           ENABLE_ROCKSDB_ASSERTIONS=1 \
     fi
