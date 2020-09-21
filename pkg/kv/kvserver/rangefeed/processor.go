@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -117,9 +118,26 @@ type Processor struct {
 	lenResC    chan int
 	filterReqC chan struct{}
 	filterResC chan *Filter
-	eventC     chan event
+	eventC     chan *event
 	stopC      chan *roachpb.Error
 	stoppedC   chan struct{}
+}
+
+var eventSyncPool = sync.Pool{
+	New: func() interface{} {
+		return new(event)
+	},
+}
+
+func getPooledEvent(ev event) *event {
+	e := eventSyncPool.Get().(*event)
+	*e = ev
+	return e
+}
+
+func putPooledEvent(ev *event) {
+	*ev = event{}
+	eventSyncPool.Put(ev)
 }
 
 // event is a union of different event types that the Processor goroutine needs
@@ -153,7 +171,7 @@ func NewProcessor(cfg Config) *Processor {
 		lenResC:    make(chan int),
 		filterReqC: make(chan struct{}),
 		filterResC: make(chan *Filter),
-		eventC:     make(chan event, cfg.EventChanCap),
+		eventC:     make(chan *event, cfg.EventChanCap),
 		stopC:      make(chan *roachpb.Error, 1),
 		stoppedC:   make(chan struct{}),
 	}
@@ -266,6 +284,7 @@ func (p *Processor) run(
 		// Transform and route events.
 		case e := <-p.eventC:
 			p.consumeEvent(ctx, e)
+			putPooledEvent(e)
 
 		// Check whether any unresolved intents need a push.
 		case <-txnPushTickerC:
@@ -462,20 +481,21 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) bool {
 // the method will wait for no longer than that duration before giving up,
 // shutting down the Processor, and returning false. 0 for no timeout.
 func (p *Processor) sendEvent(e event, timeout time.Duration) bool {
+	ev := getPooledEvent(e)
 	if timeout == 0 {
 		select {
-		case p.eventC <- e:
+		case p.eventC <- ev:
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		}
 	} else {
 		select {
-		case p.eventC <- e:
+		case p.eventC <- ev:
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		default:
 			select {
-			case p.eventC <- e:
+			case p.eventC <- ev:
 			case <-p.stoppedC:
 				// Already stopped. Do nothing.
 			case <-time.After(timeout):
@@ -500,8 +520,9 @@ func (p *Processor) setResolvedTSInitialized() {
 // It does so by flushing the event pipeline.
 func (p *Processor) syncEventC() {
 	syncC := make(chan struct{})
+	ev := getPooledEvent(event{syncC: syncC})
 	select {
-	case p.eventC <- event{syncC: syncC}:
+	case p.eventC <- ev:
 		select {
 		case <-syncC:
 		// Synchronized.
@@ -513,7 +534,7 @@ func (p *Processor) syncEventC() {
 	}
 }
 
-func (p *Processor) consumeEvent(ctx context.Context, e event) {
+func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case len(e.ops) > 0:
 		p.consumeLogicalOps(ctx, e.ops)
