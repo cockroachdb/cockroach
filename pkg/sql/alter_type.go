@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -301,17 +303,22 @@ func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner
 	typeDesc := n.desc
 	privs := typeDesc.GetPrivileges()
 
-	hasOwnership, err := p.HasOwnership(ctx, typeDesc)
-	if err != nil {
-		return err
-	}
-
-	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, privs, newOwner, hasOwnership); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
 		return err
 	}
 
 	// Ensure the new owner has CREATE privilege on the type's schema.
-	if err := p.canCreateOnSchema(ctx, typeDesc.GetParentSchemaID(), newOwner); err != nil {
+	if schemaID := typeDesc.GetParentSchemaID(); schemaID == keys.PublicSchemaID {
+		// The public schema is valid to create in if the parent database is.
+		dbDesc, err := p.Descriptors().GetDatabaseVersionByID(
+			ctx, p.Txn(), typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
+		if err != nil {
+			return err
+		}
+		if err := p.CheckPrivilegeForUser(ctx, dbDesc, privilege.CREATE, newOwner); err != nil {
+			return err
+		}
+	} else if err := p.canCreateOnSchema(ctx, schemaID, newOwner); err != nil {
 		return err
 	}
 
@@ -347,15 +354,21 @@ func (n *alterTypeNode) Close(ctx context.Context)           {}
 func (n *alterTypeNode) ReadingOwnWrites()                   {}
 
 func (p *planner) canModifyType(ctx context.Context, desc *typedesc.Mutable) error {
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
+	}
+
 	hasOwnership, err := p.HasOwnership(ctx, desc)
 	if err != nil {
 		return err
 	}
-
 	if !hasOwnership {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"must be owner of type %s", tree.Name(desc.GetName()))
 	}
-
 	return nil
 }

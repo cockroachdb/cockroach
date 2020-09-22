@@ -508,8 +508,8 @@ func (p *planner) canCreateOnSchema(ctx context.Context, schemaID descpb.ID, use
 
 	switch resolvedSchema.Kind {
 	case catalog.SchemaPublic, catalog.SchemaTemporary:
-		// Anyone can CREATE on a public schema, and callers check whether the
-		// temporary schema is valid to create in.
+		// Callers must check whether public or temporary schemas are valid to
+		// create in.
 		return nil
 	case catalog.SchemaVirtual:
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
@@ -546,15 +546,11 @@ func (p *planner) canResolveDescUnderSchema(
 	}
 }
 
-// checkCanAlterToNewOwner checks if the new owner exists, the current user
-// has privileges to alter the owner of the object and the current user is a
-//  member of the new owner role.
+// checkCanAlterToNewOwner checks that the new owner exists and the current user
+// has privileges to alter the owner of the object. If the current user is not
+// a superuser, it also checks that they are a member of the new owner role.
 func (p *planner) checkCanAlterToNewOwner(
-	ctx context.Context,
-	desc catalog.MutableDescriptor,
-	privs *descpb.PrivilegeDescriptor,
-	newOwner string,
-	hasOwnership bool,
+	ctx context.Context, desc catalog.MutableDescriptor, newOwner string,
 ) error {
 	// Make sure the newOwner exists.
 	roleExists, err := p.RoleExists(ctx, newOwner)
@@ -563,6 +559,15 @@ func (p *planner) checkCanAlterToNewOwner(
 	}
 	if !roleExists {
 		return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newOwner)
+	}
+
+	// If the user is a superuser, skip privilege checks.
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
 	}
 
 	var objType string
@@ -579,27 +584,28 @@ func (p *planner) checkCanAlterToNewOwner(
 		return errors.AssertionFailedf("unknown object descriptor type %v", desc)
 	}
 
-	// Make sure the user has ownership on the table
-	// and not just create privilege.
+	hasOwnership, err := p.HasOwnership(ctx, desc)
+	if err != nil {
+		return err
+	}
 	if !hasOwnership {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"must be owner of %s %s", tree.Name(objType), tree.Name(desc.GetName()))
 	}
 
-	// Requirements from PG:
-	// To alter the owner, you must also be a direct or indirect member of the
-	// new owning role, and that role must have CREATE privilege on the
-	// table's schema.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, privs.Owner)
+	// To alter the owner, you must also be a direct or indirect member of the new
+	// owning role.
+	if p.User() == newOwner {
+		return nil
+	}
+	memberOf, err := p.MemberOfWithAdminOption(ctx, p.User())
 	if err != nil {
 		return err
 	}
-	if _, ok := memberOf[newOwner]; !ok {
-		return pgerror.Newf(
-			pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
+	if _, ok := memberOf[newOwner]; ok {
+		return nil
 	}
-
-	return nil
+	return pgerror.Newf(pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
 }
 
 // HasOwnershipOnSchema checks if the current user has ownership on the schema.
