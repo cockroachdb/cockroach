@@ -181,17 +181,11 @@ func (p *planner) prepareDrop(
 
 // canDropTable returns an error if the user cannot drop the table.
 func (p *planner) canDropTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	// Don't check for ownership if the table is a temp table.
-	// ResolveSchema currently doesn't work for temp schemas.
-	// Hack until #53163 is fixed.
-	hasOwnership := false
 	var err error
-	if !tableDesc.Temporary {
-		// If the user owns the schema the table is part of, they can drop the table.
-		hasOwnership, err = p.HasOwnershipOnSchema(ctx, tableDesc.GetParentSchemaID())
-		if err != nil {
-			return err
-		}
+	// If the user owns the schema the table is part of, they can drop the table.
+	hasOwnership, err := p.HasOwnershipOnSchema(ctx, tableDesc.GetParentSchemaID())
+	if err != nil {
+		return err
 	}
 	if !hasOwnership {
 		return p.CheckPrivilege(ctx, tableDesc, privilege.DROP)

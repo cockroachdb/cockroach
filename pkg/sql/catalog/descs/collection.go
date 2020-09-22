@@ -579,20 +579,19 @@ func (tc *Collection) ResolveSchema(
 
 	// If a temp schema is requested, check if it's for the current session, or
 	// else fall back to reading from the store.
-	// TODO (lucy): We need to store the temp schemas for every database that has
-	// one for this session, not just the one for the current database. Until then
-	// we're susceptible to doing store lookups when referencing the temp schema
-	// in other databases. See #53163.
 	if strings.HasPrefix(schemaName, sessiondata.PgTempSchemaName) {
 		if tc.sessionData != nil {
 			if schemaName == sessiondata.PgTempSchemaName ||
 				schemaName == tc.sessionData.SearchPath.GetTemporarySchemaName() {
-				schema := catalog.ResolvedSchema{
-					Kind: catalog.SchemaTemporary,
-					Name: tc.sessionData.SearchPath.GetTemporarySchemaName(),
-					ID:   descpb.ID(tc.sessionData.TemporarySchemaID),
+				schemaID, found := tc.sessionData.GetTemporarySchemaIDForDb(uint32(dbID))
+				if found {
+					schema := catalog.ResolvedSchema{
+						Kind: catalog.SchemaTemporary,
+						Name: tc.sessionData.SearchPath.GetTemporarySchemaName(),
+						ID:   descpb.ID(schemaID),
+					}
+					return true, schema, nil
 				}
-				return true, schema, nil
 			}
 		}
 
@@ -1039,8 +1038,7 @@ func (tc *Collection) resolveSchemaByID(
 
 	// If this collection is attached to a session and the session has created
 	// a temporary schema, then check if the schema ID matches.
-	// This check doesn't work after switching databases. Issue #53163.
-	if tc.sessionData != nil && tc.sessionData.TemporarySchemaID == uint32(schemaID) {
+	if tc.sessionData != nil && tc.sessionData.IsTemporarySchemaID(uint32(schemaID)) {
 		return catalog.ResolvedSchema{
 			Kind: catalog.SchemaTemporary,
 			ID:   schemaID,
