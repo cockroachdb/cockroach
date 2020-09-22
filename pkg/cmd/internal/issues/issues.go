@@ -28,6 +28,8 @@ import (
 )
 
 const (
+	githubOrgEnv           = "GITHUB_ORG"
+	githubRepoEnv          = "GITHUB_REPO"
 	githubAPITokenEnv      = "GITHUB_API_TOKEN"
 	teamcityVCSNumberEnv   = "BUILD_VCS_NUMBER"
 	teamcityBuildIDEnv     = "TC_BUILD_ID"
@@ -44,11 +46,6 @@ const (
 	// 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body
 	// is too long (maximum is 65536 characters)}]
 	githubIssueBodyMaximumLength = 60000
-)
-
-var (
-	githubUser = "cockroachdb" // changeable for testing
-	githubRepo = "cockroach"   // changeable for testing
 )
 
 func enforceMaxLength(s string) string {
@@ -96,7 +93,7 @@ Parameters:
 {{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
 {{else -}}
 {{threeticks}}
-make stressrace TESTS={{.TestName}} PKG=./pkg/{{shortpkg .PackageName}} TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1
+{{.ReproductionCommand}}
 {{threeticks}}
 
 {{end -}}
@@ -134,7 +131,7 @@ var oldFriendsMap = map[string]string{
 	"vivekmenezes": "",
 }
 
-func getAssignee(
+func (p *poster) getAssignee(
 	ctx context.Context,
 	authorEmail string,
 	listCommits func(ctx context.Context, owner string, repo string,
@@ -143,7 +140,7 @@ func getAssignee(
 	if authorEmail == "" {
 		return "", nil
 	}
-	commits, _, err := listCommits(ctx, githubUser, githubRepo, &github.CommitsListOptions{
+	commits, _, err := listCommits(ctx, p.org, p.repo, &github.CommitsListOptions{
 		Author: authorEmail,
 		ListOptions: github.ListOptions{
 			PerPage: 1,
@@ -179,13 +176,13 @@ func getLatestTag() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func getProbableMilestone(
+func (p *poster) getProbableMilestone(
 	ctx context.Context,
 	getLatestTag func() (string, error),
 	listMilestones func(ctx context.Context, owner string, repo string,
 		opt *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error),
 ) *int {
-	tag, err := getLatestTag()
+	tag, err := p.getLatestTag()
 	if err != nil {
 		log.Printf("unable to get latest tag: %s", err)
 		log.Printf("issues will be posted without milestone")
@@ -200,7 +197,7 @@ func getProbableMilestone(
 	}
 	vstring := fmt.Sprintf("%d.%d", v.Major(), v.Minor())
 
-	milestones, _, err := listMilestones(ctx, githubUser, githubRepo, &github.MilestoneListOptions{
+	milestones, _, err := p.listMilestones(ctx, p.org, p.repo, &github.MilestoneListOptions{
 		State: "open",
 	})
 	if err != nil {
@@ -218,6 +215,8 @@ func getProbableMilestone(
 }
 
 type poster struct {
+	org       string
+	repo      string
 	sha       string
 	buildID   string
 	serverURL string
@@ -262,6 +261,10 @@ func newPoster() *poster {
 }
 
 func (p *poster) init() {
+	// Allow overriding the repository in which the issue is filed.
+	p.org = maybeEnv(githubOrgEnv, "cockroachdb")
+	p.repo = maybeEnv(githubRepoEnv, "cockroach")
+
 	var ok bool
 	// TODO(tbg): make these not fatals. It's better to post an incomplete issue than to add
 	// more weird failures to the CI pipeline.
@@ -277,7 +280,15 @@ func (p *poster) init() {
 	if p.branch, ok = os.LookupEnv(teamcityBuildBranchEnv); !ok {
 		p.branch = "unknown"
 	}
-	p.milestone = getProbableMilestone(context.Background(), p.getLatestTag, p.listMilestones)
+	p.milestone = p.getProbableMilestone(context.Background(), p.getLatestTag, p.listMilestones)
+}
+
+func maybeEnv(envKey, defaultValue string) string {
+	v := os.Getenv(envKey)
+	if v == "" {
+		return defaultValue
+	}
+	return v
 }
 
 // TemplateData holds the data available in (PostRequest).(Body|Title)Template,
@@ -328,7 +339,7 @@ func (p *poster) templateData(
 		Assignee: &lazy{work: func() interface{} {
 			// NB: the laziness here isn't motivated by anything in particular,
 			// so rip it out if it ever causes problems.
-			handle, err := getAssignee(ctx, req.AuthorEmail, p.listCommits)
+			handle, err := p.getAssignee(ctx, req.AuthorEmail, p.listCommits)
 			if err != nil {
 				return ""
 			}
@@ -342,7 +353,7 @@ func (p *poster) execTemplate(ctx context.Context, tpl string, data TemplateData
 	tlp, err := template.New("").Funcs(template.FuncMap{
 		"threeticks": func() string { return "```" },
 		"commiturl": func(sha string) string {
-			return fmt.Sprintf("https://github.com/cockroachdb/cockroach/commits/%s", sha)
+			return fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.org, p.repo, p.sha)
 		},
 		"shortpkg": func(fullpkg string) string {
 			return strings.TrimPrefix(fullpkg, CockroachPkgPrefix)
@@ -360,7 +371,7 @@ func (p *poster) execTemplate(ctx context.Context, tpl string, data TemplateData
 }
 
 func (p *poster) post(ctx context.Context, req PostRequest) error {
-	assignee, err := getAssignee(ctx, req.AuthorEmail, p.listCommits)
+	assignee, err := p.getAssignee(ctx, req.AuthorEmail, p.listCommits)
 	if err != nil {
 		req.Message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
 	}
@@ -375,7 +386,7 @@ func (p *poster) post(ctx context.Context, req PostRequest) error {
 	// that would match if it weren't for their branch label.
 	qBase := fmt.Sprintf(
 		`repo:%q user:%q is:issue is:open in:title label:%q sort:created-desc %q`,
-		githubRepo, githubUser, searchLabel, title)
+		p.repo, p.org, searchLabel, title)
 
 	releaseLabel := fmt.Sprintf("branch-%s", p.branch)
 	qExisting := qBase + " label:" + releaseLabel
@@ -420,7 +431,7 @@ func (p *poster) post(ctx context.Context, req PostRequest) error {
 			Assignee:  &assignee,
 			Milestone: p.milestone,
 		}
-		issue, _, err := p.createIssue(ctx, githubUser, githubRepo, &issueRequest)
+		issue, _, err := p.createIssue(ctx, p.org, p.repo, &issueRequest)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create GitHub issue %s",
 				github.Stringify(issueRequest))
@@ -439,7 +450,7 @@ func (p *poster) post(ctx context.Context, req PostRequest) error {
 	} else {
 		comment := github.IssueComment{Body: &body}
 		if _, _, err := p.createComment(
-			ctx, githubUser, githubRepo, *foundIssue, &comment); err != nil {
+			ctx, p.org, p.repo, *foundIssue, &comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",
 				*foundIssue, github.Stringify(comment))
 		}
@@ -530,7 +541,9 @@ type PostRequest struct {
 	// TODO(irfansharif): We should re-think this, and our general approach to
 	// issue assignment, and move away from assigning individual authors.
 	// #51653.
-	AuthorEmail string
+	AuthorEmail,
+	// The instructions to reproduce the failure.
+	ReproductionCommand string
 	// Additional labels that will be added to the issue. They will be created
 	// as necessary (as a side effect of creating an issue with them). An
 	// existing issue may be adopted even if it does not have these labels.
