@@ -102,7 +102,16 @@ func (d *dropCascadeState) resolveCollectedObjects(
 						" dropped or made public before dropping database %s",
 					objName.FQString(), tree.AsString((*tree.Name)(&dbName)))
 			}
-			if err := p.canDropTable(ctx, tbDesc); err != nil {
+			checkOwnership := true
+			// If the object we are trying to drop as part of this DROP DATABASE
+			// CASCADE is temporary and was created by a different session, we can't
+			// resolve it to check for ownership --  this allows us to circumvent that
+			// check and avoid an error.
+			if tbDesc.Temporary &&
+				!p.SessionData().IsTemporarySchemaID(uint32(tbDesc.GetParentSchemaID())) {
+				checkOwnership = false
+			}
+			if err := p.canDropTable(ctx, tbDesc, checkOwnership); err != nil {
 				return err
 			}
 			// Recursively check permissions on all dependent views, since some may

@@ -263,3 +263,25 @@ ALTER TABLE persistent_48233 RENAME TO pg_temp.pers_48233
 query T
 SELECT schema_name FROM information_schema.schemata WHERE crdb_is_user_defined = 'YES'
 ----
+
+subtest test_53163
+statement ok
+CREATE DATABASE second_db
+
+statement ok
+USE second_db
+
+statement ok
+CREATE TEMP TABLE a(a INT)
+
+statement ok
+USE test
+
+statement ok
+CREATE TEMP VIEW a_view AS SELECT a FROM second_db.pg_temp.a
+
+statement ok
+grant testuser to root
+
+statement ok
+ALTER TABLE second_db.pg_temp.a OWNER TO testuser

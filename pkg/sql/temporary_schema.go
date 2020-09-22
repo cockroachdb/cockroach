@@ -93,7 +93,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	sKey := catalogkeys.NewSchemaKey(dbID, tempSchemaName)
 	schemaID, err := catalogkv.GetDescriptorID(ctx, p.txn, p.ExecCfg().Codec, sKey)
 	if err != nil {
-		return 0, err
+		return descpb.InvalidID, err
 	} else if schemaID == descpb.InvalidID {
 		// The temporary schema has not been created yet.
 		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
@@ -104,7 +104,7 @@ func (p *planner) getOrCreateTemporarySchema(
 			return descpb.InvalidID, err
 		}
 		p.sessionDataMutator.SetTemporarySchemaName(sKey.Name())
-		p.sessionDataMutator.SetTemporarySchemaID(uint32(id))
+		p.sessionDataMutator.SetTemporarySchemaIDForDatabase(uint32(dbID), uint32(id))
 		return id, nil
 	}
 	return schemaID, nil
@@ -228,11 +228,10 @@ func cleanupSchemaObjects(
 	}
 	a := catalogkv.UncachedPhysicalAccessor{}
 
-	searchPath := sessiondata.DefaultSearchPathForUser(security.RootUser).WithTemporarySchemaName(schemaName)
-	override := sessiondata.InternalExecutorOverride{
-		SearchPath: &searchPath,
-		User:       security.RootUser,
-	}
+	// We construct the database ID -> temp Schema ID map here so that the
+	// drop statements executed by the internal executor can resolve the temporary
+	// schemaID later.
+	databaseIDToTempSchemaID := make(map[uint32]uint32)
 
 	// TODO(andrei): We might want to accelerate the deletion of this data.
 	var tables descpb.IDs
@@ -262,6 +261,8 @@ func cleanupSchemaObjects(
 		tblDescsByID[desc.ID] = desc
 		tblNamesByID[desc.ID] = tbName
 
+		databaseIDToTempSchemaID[uint32(desc.ParentID)] = uint32(desc.GetParentSchemaID())
+
 		if desc.SequenceOpts != nil {
 			sequences = append(sequences, desc.ID)
 		} else if desc.ViewQuery != "" {
@@ -269,6 +270,13 @@ func cleanupSchemaObjects(
 		} else {
 			tables = append(tables, desc.ID)
 		}
+	}
+
+	searchPath := sessiondata.DefaultSearchPathForUser(security.RootUser).WithTemporarySchemaName(schemaName)
+	override := sessiondata.InternalExecutorOverride{
+		SearchPath:               &searchPath,
+		User:                     security.RootUser,
+		DatabaseIDToTempSchemaID: databaseIDToTempSchemaID,
 	}
 
 	for _, toDelete := range []struct {

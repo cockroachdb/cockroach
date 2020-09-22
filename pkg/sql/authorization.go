@@ -624,10 +624,9 @@ func (p *planner) HasOwnershipOnSchema(ctx context.Context, schemaID descpb.ID) 
 	case catalog.SchemaVirtual:
 		// Cannot drop on virtual schemas.
 	case catalog.SchemaTemporary:
-		// The user only owns the temporary schema that corresponds to the
-		// TemporarySchemaID in the sessionData.
+		// The user owns all the temporary schemas that they created in the session.
 		hasOwnership = p.SessionData() != nil &&
-			p.SessionData().TemporarySchemaID == uint32(resolvedSchema.ID)
+			p.SessionData().IsTemporarySchemaID(uint32(resolvedSchema.ID))
 	case catalog.SchemaUserDefined:
 		hasOwnership, err = p.HasOwnership(ctx, resolvedSchema.Desc)
 		if err != nil {
