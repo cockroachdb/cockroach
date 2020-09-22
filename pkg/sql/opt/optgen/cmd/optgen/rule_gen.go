@@ -21,11 +21,12 @@ import (
 // being matched against. It also contains the type of that expression. See the
 // genMatch comment header for an example.
 type contextDecl struct {
-	code string
-	typ  *typeDef
+	code         string
+	typ          *typeDef
+	untypedAlias string
 }
 
-// ruleGen generates implementation code for normalization and exploration
+// newRuleGen generates implementation code for normalization and exploration
 // rules. The code is very similar for both kinds of rules, but with some
 // important differences. The biggest difference is that exploration rules
 // must try to match every expression in a group, while normalization rules
@@ -86,14 +87,15 @@ type contextDecl struct {
 // children.
 //
 type newRuleGen struct {
-	compiled   *lang.CompiledExpr
-	md         *metadata
-	w          *matchWriter
-	uniquifier uniquifier
-	normalize  bool
-	thisVar    string
-	factoryVar string
-	boundStmts map[lang.Expr]string
+	compiled     *lang.CompiledExpr
+	md           *metadata
+	w            *matchWriter
+	uniquifier   uniquifier
+	normalize    bool
+	thisVar      string
+	factoryVar   string
+	boundStmts   map[lang.Expr]string
+	typedAliases map[string]string
 
 	// innerExploreMatch is the innermost match expression in an explore rule.
 	// Match expressions in an explore rule generate nested "for" loops, and
@@ -112,6 +114,7 @@ func (g *newRuleGen) init(compiled *lang.CompiledExpr, md *metadata, w *matchWri
 func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 	g.uniquifier.init()
 	g.boundStmts = make(map[lang.Expr]string)
+	g.typedAliases = make(map[string]string)
 
 	matchName := rule.Match.SingleName()
 	define := g.compiled.LookupDefine(matchName)
@@ -234,6 +237,11 @@ func (g *newRuleGen) genMatch(match lang.Expr, context *contextDecl, noMatch boo
 			g.w.writeIndent("%s := %s\n", t.Label, context.code)
 		}
 		newContext := &contextDecl{code: string(t.Label), typ: context.typ}
+
+		// Keep track of the untyped alias so that we can "shadow" it with
+		// a typed version later, if possible.
+		newContext.untypedAlias = newContext.code
+
 		g.genMatch(t.Target, newContext, noMatch)
 
 	case *lang.StringExpr:
@@ -494,7 +502,8 @@ func (g *newRuleGen) genMatchNameAndChildren(
 				g.w.writeIndent("_partlyExplored := _partlyExplored && _ord < _state.start\n")
 			}
 
-			context = &contextDecl{code: "_member", typ: g.md.lookupType("RelExpr")}
+			// Pass along the input context's untyped alias.
+			context = &contextDecl{code: "_member", typ: g.md.lookupType("RelExpr"), untypedAlias: context.untypedAlias}
 		}
 	}
 
@@ -570,6 +579,10 @@ func (g *newRuleGen) genConstantMatch(
 			return
 		}
 
+		// "Shadow" the untyped alias with the new typed version because it is
+		// guaranteed to be a specific type within the scope of the if statement
+		// written below.
+		g.typedAliases[context.untypedAlias] = contextName
 		g.w.nestIndent("if %s != nil {\n", newContext.code)
 		context = newContext
 	}
@@ -861,7 +874,13 @@ func (g *newRuleGen) genNestedExpr(e lang.Expr) {
 		g.genCustomFunc(t)
 
 	case *lang.RefExpr:
-		g.w.write(string(t.Label))
+		varName := string(t.Label)
+		if typed, ok := g.typedAliases[varName]; ok {
+			// If there is a typed version of the alias, use it instead of the
+			// untyped version.
+			varName = typed
+		}
+		g.w.write(varName)
 
 	case *lang.StringExpr:
 		// Literal string expressions construct DString datums.
