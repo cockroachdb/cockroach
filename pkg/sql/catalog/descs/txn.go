@@ -51,14 +51,13 @@ func Txn(
 	if descsCol.databaseLeasingUnsupported {
 		descsCol.databaseCache = database.NewCache(leaseMgr.Codec(), &config.SystemConfig{})
 	}
-	defer descsCol.ReleaseAll(ctx)
 	for {
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			defer descsCol.ReleaseAll(ctx)
 			if err := txn.SetSystemConfigTrigger(leaseMgr.Codec().ForSystemTenant()); err != nil {
 				return err
 			}
 			if err := f(ctx, txn, descsCol); err != nil {
-				descsCol.ReleaseAll(ctx)
 				return err
 			}
 			retryErr, err := CheckTwoVersionInvariant(
@@ -68,7 +67,7 @@ func Txn(
 			}
 			return err
 		}); errors.Is(err, errTwoVersionInvariantViolated) {
-			descsCol.ReleaseAll(ctx)
+			continue
 		} else {
 			return err
 		}
