@@ -886,7 +886,7 @@ func (k *TenantTestingKnobs) CanSetClusterSettings() bool {
 // BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
 type BackupRestoreTestingKnobs struct {
 	// AllowImplicitAccess allows implicit access to data sources for non-admin
-	// users. This enables using nodelocal for testing RESTORE permissions.
+	// users. This enables using nodelocal for testing BACKUP/RESTORE permissions.
 	AllowImplicitAccess bool
 }
 
