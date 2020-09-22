@@ -286,45 +286,47 @@ func mustParseDJSON(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
-func mustParseDStringArray(t *testing.T, s string) tree.Datum {
-	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	d, _, err := tree.ParseDArrayFromString(&evalContext, s, types.String)
+func mustParseDUuid(t *testing.T, s string) tree.Datum {
+	d, err := tree.ParseDUuidFromString(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
-func mustParseDIntArray(t *testing.T, s string) tree.Datum {
-	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	d, _, err := tree.ParseDArrayFromString(&evalContext, s, types.Int)
-	if err != nil {
-		t.Fatal(err)
+func mustParseDArrayOfType(typ *types.T) func(t *testing.T, s string) tree.Datum {
+	return func(t *testing.T, s string) tree.Datum {
+		evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		d, _, err := tree.ParseDArrayFromString(&evalContext, s, typ)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
 	}
-	return d
-}
-func mustParseDDecimalArray(t *testing.T, s string) tree.Datum {
-	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	d, _, err := tree.ParseDArrayFromString(&evalContext, s, types.Decimal)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return d
 }
 
 var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
-	types.String:       func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
-	types.Bytes:        func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
-	types.Bool:         mustParseDBool,
-	types.Date:         mustParseDDate,
-	types.Time:         mustParseDTime,
-	types.TimeTZ:       mustParseDTimeTZ,
-	types.Timestamp:    mustParseDTimestamp,
-	types.TimestampTZ:  mustParseDTimestampTZ,
-	types.Interval:     mustParseDInterval,
-	types.Jsonb:        mustParseDJSON,
-	types.DecimalArray: mustParseDDecimalArray,
-	types.IntArray:     mustParseDIntArray,
-	types.StringArray:  mustParseDStringArray,
+	types.String:           func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
+	types.Bytes:            func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
+	types.Bool:             mustParseDBool,
+	types.Date:             mustParseDDate,
+	types.Time:             mustParseDTime,
+	types.TimeTZ:           mustParseDTimeTZ,
+	types.Timestamp:        mustParseDTimestamp,
+	types.TimestampTZ:      mustParseDTimestampTZ,
+	types.Interval:         mustParseDInterval,
+	types.Jsonb:            mustParseDJSON,
+	types.Uuid:             mustParseDUuid,
+	types.DecimalArray:     mustParseDArrayOfType(types.Decimal),
+	types.IntArray:         mustParseDArrayOfType(types.Int),
+	types.StringArray:      mustParseDArrayOfType(types.String),
+	types.BoolArray:        mustParseDArrayOfType(types.Bool),
+	types.UUIDArray:        mustParseDArrayOfType(types.Uuid),
+	types.DateArray:        mustParseDArrayOfType(types.Date),
+	types.TimeArray:        mustParseDArrayOfType(types.Time),
+	types.TimeTZArray:      mustParseDArrayOfType(types.TimeTZ),
+	types.TimestampArray:   mustParseDArrayOfType(types.Timestamp),
+	types.TimestampTZArray: mustParseDArrayOfType(types.TimestampTZ),
+	types.IntervalArray:    mustParseDArrayOfType(types.Interval),
 }
 
 func typeSet(tys ...*types.T) map[*types.T]struct{} {
@@ -396,12 +398,18 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
 		},
 		{
-			c:            tree.NewStrVal(`{1,2}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.IntArray, types.DecimalArray),
+			c: tree.NewStrVal(`{1,2}`),
+			parseOptions: typeSet(
+				types.String,
+				types.Bytes,
+				types.StringArray,
+				types.IntArray,
+				types.DecimalArray,
+				types.IntervalArray),
 		},
 		{
 			c:            tree.NewStrVal(`{1.5,2.0}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.DecimalArray),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.DecimalArray, types.IntervalArray),
 		},
 		{
 			c:            tree.NewStrVal(`{a,b}`),
@@ -410,6 +418,50 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c:            tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),
 			parseOptions: typeSet(types.String, types.Bytes),
+		},
+		{
+			c:            tree.NewStrVal(`18e7b17e-4ead-4e27-bfd5-bb6d11261bb6`),
+			parseOptions: typeSet(types.String, types.Bytes, types.Uuid),
+		},
+		{
+			c:            tree.NewStrVal(`{18e7b17e-4ead-4e27-bfd5-bb6d11261bb6, 18e7b17e-4ead-4e27-bfd5-bb6d11261bb7}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.UUIDArray),
+		},
+		{
+			c:            tree.NewStrVal("{true, false}"),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.BoolArray),
+		},
+		{
+			c:            tree.NewStrVal("{2010-09-28, 2010-09-29}"),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.DateArray, types.TimestampArray, types.TimestampTZArray),
+		},
+		{
+			c: tree.NewStrVal("{2010-09-28 12:00:00.1, 2010-09-29 12:00:00.1}"),
+			parseOptions: typeSet(
+				types.String,
+				types.Bytes,
+				types.StringArray,
+				types.TimeArray,
+				types.TimeTZArray,
+				types.TimestampArray,
+				types.TimestampTZArray,
+				types.DateArray),
+		},
+		{
+			c: tree.NewStrVal("{2006-07-08T00:00:00.000000123Z, 2006-07-10T00:00:00.000000123Z}"),
+			parseOptions: typeSet(
+				types.String,
+				types.Bytes,
+				types.StringArray,
+				types.TimeArray,
+				types.TimeTZArray,
+				types.TimestampArray,
+				types.TimestampTZArray,
+				types.DateArray),
+		},
+		{
+			c:            tree.NewStrVal("{PT12H2M, -23:00:00}"),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray, types.IntervalArray),
 		},
 	}
 
