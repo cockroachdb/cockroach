@@ -27,15 +27,29 @@ export interface LoginPageProps {
   handleLogin: (username: string, password: string) => Promise<any>;
 }
 
-interface LoginPageState {
+type Props = LoginPageProps & RouteComponentProps;
+
+const OIDCLoginButton = ({loginState}: {loginState: LoginAPIState}) => {
+  if (loginState.displayOIDCButton) {
+    return (
+      <a href="/oidc/v1/login" >
+        <Button className="submit-button-oidc" disabled={loginState.inProgress} textAlign={"center"}>
+          {loginState.oidcButtonText}
+        </Button>
+      </a>
+    );
+  } else {
+    return null;
+  }
+};
+
+interface PasswordLoginState {
   username?: string;
   password?: string;
 }
 
-type Props = LoginPageProps & RouteComponentProps;
-
-export class LoginPage extends React.Component<Props, LoginPageState> {
-  constructor(props: Props) {
+class PasswordLoginForm extends React.Component<LoginPageProps, PasswordLoginState> {
+  constructor(props: LoginPageProps) {
     super(props);
     this.state = {
       username: "",
@@ -56,6 +70,52 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
     });
   }
 
+  handleSubmit = (evt: React.FormEvent<any>) => {
+    const { handleLogin} = this.props;
+    const { username, password } = this.state;
+    evt.preventDefault();
+
+    handleLogin(username, password);
+  }
+
+  render() {
+    const { username, password } = this.state;
+    const { loginState } = this.props;
+
+    if (loginState.displayPasswordLogin) {
+      return (
+        <form id="loginForm" onSubmit={this.handleSubmit} className="form-internal" method="post">
+          <TextInput
+            name="username"
+            onChange={this.handleUpdateUsername}
+            placeholder="Username"
+            label="Username"
+            value={username}
+          />
+          <PasswordInput
+            name="password"
+            onChange={this.handleUpdatePassword}
+            placeholder="Password"
+            label="Password"
+            value={password}
+          />
+          <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress}
+                  textAlign={"center"}>
+            {loginState.inProgress ? "Logging in..." : "Log in"}
+          </Button>
+        </form>
+      );
+    } else {
+      return null;
+    }
+  }
+}
+
+export class LoginPage extends React.Component<Props> {
+  constructor(props: Props) {
+    super(props);
+  }
+
   componentDidUpdate() {
     const { loginState: { loggedInUser } } = this.props;
     if (loggedInUser !== null) {
@@ -67,14 +127,6 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
         history.push("/");
       }
     }
-  }
-
-  handleSubmit = (evt: React.FormEvent<any>) => {
-    const { handleLogin} = this.props;
-    const { username, password } = this.state;
-    evt.preventDefault();
-
-    handleLogin(username, password);
   }
 
   renderError() {
@@ -97,7 +149,6 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
   }
 
   render() {
-    const { username, password } = this.state;
     const { loginState } = this.props;
 
     return (
@@ -110,25 +161,8 @@ export class LoginPage extends React.Component<Props, LoginPageState> {
               <div className="form-container">
                 <Text textType={TextTypes.Heading2}>Log in to the Admin UI</Text>
                 {this.renderError()}
-                <form id="loginForm" onSubmit={this.handleSubmit} className="form-internal" method="post">
-                  <TextInput
-                    name="username"
-                    onChange={this.handleUpdateUsername}
-                    placeholder="Username"
-                    label="Username"
-                    value={username}
-                  />
-                  <PasswordInput
-                    name="password"
-                    onChange={this.handleUpdatePassword}
-                    placeholder="Password"
-                    label="Password"
-                    value={password}
-                  />
-                  <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress} textAlign={"center"}>
-                    {loginState.inProgress ? "Logging in..." : "Log in"}
-                  </Button>
-                </form>
+                <PasswordLoginForm {...this.props} />
+                <OIDCLoginButton loginState={loginState} />
               </div>
             </section>
             <section className="section login-page__info">

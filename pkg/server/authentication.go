@@ -21,16 +21,21 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
@@ -49,6 +54,40 @@ const (
 	// SessionCookieName is the name of the cookie used for HTTP auth.
 	SessionCookieName = "session"
 )
+
+type noOIDCConfigured struct{}
+
+func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
+	return ui.OIDCUIConf{
+		Enabled: false,
+	}
+}
+
+func (c *noOIDCConfigured) ValidateOIDCState(state *serverpb.OIDCState) error {
+	return errors.New("OIDC is not enabled")
+}
+
+// OIDC is an interface that an OIDC-based authentication module should implement to integrate with
+// the rest of the node's functionality
+type OIDC interface {
+	ui.OIDCUI
+	ValidateOIDCState(state *serverpb.OIDCState) error
+}
+
+// ConfigureOIDC is a hook for the `oidcccl` library to add OIDC login support. It's called during
+// server startup to initialize a client for OIDC support.
+var ConfigureOIDC = func(
+	ctx context.Context,
+	st *cluster.Settings,
+	mux *http.ServeMux,
+	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
+	ambientCtx log.AmbientContext,
+	cluster uuid.UUID,
+	nodeDialer *nodedialer.Dialer,
+	nodeID roachpb.NodeID,
+) (OIDC, error) {
+	return &noOIDCConfigured{}, nil
+}
 
 var webSessionTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 	"server.web_session_timeout",
@@ -120,6 +159,57 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 
+	cookie, err := s.createSessionFor(ctx, username)
+	if err != nil {
+		return nil, apiInternalError(ctx, err)
+	}
+
+	// Set the cookie header on the outgoing response.
+	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
+		return nil, apiInternalError(ctx, err)
+	}
+
+	return &serverpb.UserLoginResponse{}, nil
+}
+
+var errUsernameDoesNotExist = errors.New("username for session does not exist")
+
+func (s *authenticationServer) ValidateOIDCState(
+	ctx context.Context, req *serverpb.ValidateOIDCStateRequest,
+) (*serverpb.ValidateOIDCStateResponse, error) {
+	err := s.server.oidc.ValidateOIDCState(req.State)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.ValidateOIDCStateResponse{}, nil
+}
+
+// UserLoginFromSSO checks for the existence of a given username and if it exists,
+// creates a session for the username in the `web_sessions` table.
+// The session's ID and secret are returned to the caller as an HTTP cookie,
+// added via a "Set-Cookie" header.
+func (s *authenticationServer) UserLoginFromSSO(
+	ctx context.Context, username string,
+) (*http.Cookie, error) {
+	exists, _, _, _, err := sql.GetUserHashedPassword(
+		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
+	)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "failed creating session for username")
+	}
+
+	if !exists {
+		return nil, errUsernameDoesNotExist
+	}
+
+	return s.createSessionFor(ctx, username)
+}
+
+func (s *authenticationServer) createSessionFor(
+	ctx context.Context, username string,
+) (*http.Cookie, error) {
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.newAuthSession(ctx, username)
 	if err != nil {
@@ -133,17 +223,7 @@ func (s *authenticationServer) UserLogin(
 		ID:     id,
 		Secret: secret,
 	}
-	cookie, err := EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
-	if err != nil {
-		return nil, apiInternalError(ctx, err)
-	}
-
-	// Set the cookie header on the outgoing response.
-	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
-		return nil, apiInternalError(ctx, err)
-	}
-
-	return &serverpb.UserLoginResponse{}, nil
+	return EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
 }
 
 // UserLogout allows a user to terminate their currently active session.
