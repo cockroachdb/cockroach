@@ -337,6 +337,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.SearchPath != nil {
 		sd.SearchPath = *o.SearchPath
 	}
+	if o.DatabaseIDToTempSchemaID != nil {
+		sd.DatabaseIDToTempSchemaID = o.DatabaseIDToTempSchemaID
+	}
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(

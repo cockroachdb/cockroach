@@ -173,20 +173,24 @@ func (p *planner) prepareDrop(
 	if tableDesc == nil {
 		return nil, err
 	}
-	if err := p.canDropTable(ctx, tableDesc); err != nil {
+	if err := p.canDropTable(ctx, tableDesc, true /* checkOwnership */); err != nil {
 		return nil, err
 	}
 	return tableDesc, nil
 }
 
 // canDropTable returns an error if the user cannot drop the table.
-func (p *planner) canDropTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	// Don't check for ownership if the table is a temp table.
-	// ResolveSchema currently doesn't work for temp schemas.
-	// Hack until #53163 is fixed.
-	hasOwnership := false
+func (p *planner) canDropTable(
+	ctx context.Context, tableDesc *tabledesc.Mutable, checkOwnership bool,
+) error {
 	var err error
-	if !tableDesc.Temporary {
+	hasOwnership := false
+	// This checkOwnership stuff is rather unfortunate, but is required when an
+	// active session has created a temporary object in a database that is being
+	// dropped by a different session. The session trying to drop the database
+	// can't resolve the temporary schema, and would therefore return an
+	// error if we tried to check for ownership on the schema.
+	if checkOwnership {
 		// If the user owns the schema the table is part of, they can drop the table.
 		hasOwnership, err = p.HasOwnershipOnSchema(ctx, tableDesc.GetParentSchemaID())
 		if err != nil {
