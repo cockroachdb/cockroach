@@ -32,17 +32,19 @@ import (
 )
 
 const (
-	optFirstRun              = "first_run"
-	optOnExecFailure         = "on_execution_failure"
-	optOnPreviousRunning     = "on_previous_running"
-	optIgnoreExistingBackups = "ignore_existing_backups"
+	optFirstRun                = "first_run"
+	optOnExecFailure           = "on_execution_failure"
+	optOnPreviousRunning       = "on_previous_running"
+	optIgnoreExistingBackups   = "ignore_existing_backups"
+	optUpdatesLastBackupMetric = "updates_cluster_last_backup_time_metric"
 )
 
 var scheduledBackupOptionExpectValues = map[string]sql.KVStringOptValidate{
-	optFirstRun:              sql.KVStringOptRequireValue,
-	optOnExecFailure:         sql.KVStringOptRequireValue,
-	optOnPreviousRunning:     sql.KVStringOptRequireValue,
-	optIgnoreExistingBackups: sql.KVStringOptRequireNoValue,
+	optFirstRun:                sql.KVStringOptRequireValue,
+	optOnExecFailure:           sql.KVStringOptRequireValue,
+	optOnPreviousRunning:       sql.KVStringOptRequireValue,
+	optIgnoreExistingBackups:   sql.KVStringOptRequireNoValue,
+	optUpdatesLastBackupMetric: sql.KVStringOptRequireNoValue,
 }
 
 // scheduledBackupEval is a representation of tree.ScheduledBackup, prepared
@@ -283,6 +285,17 @@ func doCreateBackupSchedules(
 		}
 	}
 
+	_, updateMetricOnSuccess := scheduleOptions[optUpdatesLastBackupMetric]
+
+	if updateMetricOnSuccess {
+		// NB: as of 20.2, schedule creation requires admin so this is duplicative
+		// but in the future we might relax so you can schedule anything that you
+		// can backup, but then this cluster-wide metric should be admin-only.
+		if err := p.RequireAdminRole(ctx, optUpdatesLastBackupMetric); err != nil {
+			return err
+		}
+	}
+
 	evalCtx := &p.ExtendedEvalContext().EvalContext
 	firstRun, err := scheduleFirstRun(evalCtx, scheduleOptions)
 	if err != nil {
@@ -303,7 +316,7 @@ func doCreateBackupSchedules(
 		backupNode.AppendToLatest = true
 		inc, err := makeBackupSchedule(
 			env, p.User(), scheduleLabel,
-			incRecurrence, details, unpauseOnSuccessID, backupNode)
+			incRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
 
 		if err != nil {
 			return err
@@ -326,7 +339,7 @@ func doCreateBackupSchedules(
 	fullBackupStmt := tree.AsString(backupNode)
 	full, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel,
-		fullRecurrence, details, unpauseOnSuccessID, backupNode)
+		fullRecurrence, details, unpauseOnSuccessID, updateMetricOnSuccess, backupNode)
 	if err != nil {
 		return err
 	}
@@ -398,6 +411,7 @@ func makeBackupSchedule(
 	recurrence *scheduleRecurrence,
 	details jobspb.ScheduleDetails,
 	unpauseOnSuccess int64,
+	updateLastMetricOnSuccess bool,
 	backupNode *tree.Backup,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
@@ -405,7 +419,10 @@ func makeBackupSchedule(
 	sj.SetOwner(owner)
 
 	// Prepare arguments for scheduled backup execution.
-	args := &ScheduledBackupExecutionArgs{UnpauseOnSuccess: unpauseOnSuccess}
+	args := &ScheduledBackupExecutionArgs{
+		UnpauseOnSuccess:        unpauseOnSuccess,
+		UpdatesLastBackupMetric: updateLastMetricOnSuccess,
+	}
 	if backupNode.AppendToLatest {
 		args.BackupType = ScheduledBackupExecutionArgs_INCREMENTAL
 	} else {
