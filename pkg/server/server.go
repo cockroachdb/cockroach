@@ -111,28 +111,6 @@ var (
 	)
 )
 
-// TODO(peter): Until go1.11, ServeMux.ServeHTTP was not safe to call
-// concurrently with ServeMux.Handle. So we provide our own wrapper with proper
-// locking. Slightly less efficient because it locks unnecessarily, but
-// safe. See TestServeMuxConcurrency. Should remove once we've upgraded to
-// go1.11.
-type safeServeMux struct {
-	mu  syncutil.RWMutex
-	mux http.ServeMux
-}
-
-func (mux *safeServeMux) Handle(pattern string, handler http.Handler) {
-	mux.mu.Lock()
-	mux.mux.Handle(pattern, handler)
-	mux.mu.Unlock()
-}
-
-func (mux *safeServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	mux.mu.RLock()
-	mux.mux.ServeHTTP(w, r)
-	mux.mu.RUnlock()
-}
-
 // Server is the cockroach server node.
 type Server struct {
 	// The following fields are populated in NewServer.
@@ -140,7 +118,7 @@ type Server struct {
 	nodeIDContainer *base.NodeIDContainer
 	cfg             Config
 	st              *cluster.Settings
-	mux             safeServeMux
+	mux             http.ServeMux
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
@@ -160,6 +138,7 @@ type Server struct {
 	admin          *adminServer
 	status         *statusServer
 	authentication *authenticationServer
+	oidc           OIDC
 	tsDB           *ts.DB
 	tsServer       *ts.Server
 	raftTransport  *kvserver.RaftTransport
@@ -1591,6 +1570,14 @@ func (s *Server) Start(ctx context.Context) error {
 	// something associated to SQL tenants.
 	s.startSystemLogsGC(ctx)
 
+	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
+	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
+	oidc, err := ConfigureOIDC(ctx, s.ClusterSettings(), &s.mux, s.authentication.UserLoginFromSSO, s.cfg.AmbientCtx, s.ClusterID(), s.nodeDialer, s.NodeID())
+	if err != nil {
+		return err
+	}
+	s.oidc = oidc
+
 	// Serve UI assets.
 	//
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI
@@ -1603,6 +1590,7 @@ func (s *Server) Start(ctx context.Context) error {
 			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
 			LoginEnabled:         s.cfg.RequireWebSession(),
 			NodeID:               s.nodeIDContainer,
+			OIDC:                 oidc,
 			GetUser: func(ctx context.Context) *string {
 				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
 					return &u
