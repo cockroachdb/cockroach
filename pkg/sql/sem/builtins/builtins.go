@@ -22,6 +22,7 @@ import (
 	"hash/crc32"
 	"hash/fnv"
 	"math"
+	"math/bits"
 	"math/rand"
 	"net"
 	"regexp/syntax"
@@ -1782,6 +1783,30 @@ var builtins = map[string]builtinDefinition{
 				"insert timestamp and the ID of the node executing the statement, which " +
 				"guarantees this combination is globally unique. However, there can be " +
 				"gaps and the order is not completely guaranteed.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"unordered_unique_rowid": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// orig is [0][48 bits of ts][15 bits of node id]
+				orig := uint64(GenerateUniqueInt(ctx.NodeID.SQLInstanceID()))
+				// ts is [16 bits of 0][48 bits of ts]
+				ts := (orig & ((uint64(math.MaxUint64) >> 16) << 15)) >> 15
+				// v is [0][48 bits of reversed ts][15 bits of node id]
+				v := (bits.Reverse64(ts) >> 1) | (orig & (1<<15 - 1))
+				return tree.NewDInt(tree.DInt(v)), nil
+			},
+			Info: "Returns a unique ID. The value is a combination of the " +
+				"insert timestamp and the ID of the node executing the statement, which " +
+				"guarantees this combination is globally unique. The way it is generated" +
+				"there is no ordering",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
