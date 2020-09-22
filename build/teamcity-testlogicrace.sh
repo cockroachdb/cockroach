@@ -8,11 +8,14 @@ maybe_ccache
 
 mkdir -p artifacts
 
+TESTTIMEOUT=2h
+
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
   make testrace \
   GOTESTFLAGS=-json \
   PKG=./pkg/sql/logictest \
+  TESTTIMEOUT="${TESTTIMEOUT}" \
   TESTFLAGS='-v' \
   ENABLE_ROCKSDB_ASSERTIONS=1
 
@@ -25,6 +28,7 @@ run_json_test build/builder.sh \
   GOTESTFLAGS=-json \
   PKG=./pkg/sql/logictest \
   TESTS='^TestLogic/local$$' \
+  TESTTIMEOUT="${TESTTIMEOUT}" \
   TESTFLAGS='-optimizer-cost-perturbation=0.9 -v' \
   ENABLE_ROCKSDB_ASSERTIONS=1
 
@@ -43,9 +47,10 @@ for file in $LOGICTESTS; do
         run_json_test build/builder.sh \
           stdbuf -oL -eL \
           make testrace \
-    GOTESTFLAGS=-json \
+          GOTESTFLAGS=-json \
           PKG=./pkg/sql/logictest \
           TESTS='^TestLogic/local/'${file}'$$' \
+          TESTTIMEOUT="${TESTTIMEOUT}" \
           TESTFLAGS='-disable-opt-rule-probability=0.5 -v' \
           ENABLE_ROCKSDB_ASSERTIONS=1 \
     fi
