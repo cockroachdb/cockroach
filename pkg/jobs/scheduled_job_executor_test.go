@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -43,6 +44,7 @@ func (s *statusTrackingExecutor) NotifyJobTermination(
 	ctx context.Context,
 	jobID int64,
 	jobStatus Status,
+	_ jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 	ex sqlutil.InternalExecutor,
@@ -93,7 +95,7 @@ func TestJobTerminationNotification(t *testing.T) {
 	// Pretend it completes multiple runs with terminal statuses.
 	for _, s := range []Status{StatusCanceled, StatusFailed, StatusSucceeded} {
 		require.NoError(t, NotifyJobTermination(
-			ctx, h.env, 123, s, schedule.ScheduleID(), h.cfg.InternalExecutor, nil))
+			ctx, h.env, 123, s, nil, schedule.ScheduleID(), h.cfg.InternalExecutor, nil))
 	}
 
 	// Verify counts.
