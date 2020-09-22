@@ -34,6 +34,7 @@ spec:
               image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:master
               args:
                 - gc
+                -- --gce-project=cockroach-ephemeral,andrei-jepsen
                 - --slack-token
                 - $(SLACK_TOKEN)
               env:
