@@ -202,8 +202,7 @@ func (c *CustomFuncs) IsConstValueOrTuple(input opt.ScalarExpr) bool {
 // null element. Note that it only returns true if one element is known to be
 // null. For example, given the tuple (1, x), it will return false because x is
 // not guaranteed to be null.
-func (c *CustomFuncs) HasNullElement(input opt.ScalarExpr) bool {
-	tup := input.(*memo.TupleExpr)
+func (c *CustomFuncs) HasNullElement(tup *memo.TupleExpr) bool {
 	for _, e := range tup.Elems {
 		if e.Op() == opt.NullOp {
 			return true
@@ -217,8 +216,7 @@ func (c *CustomFuncs) HasNullElement(input opt.ScalarExpr) bool {
 // returns true if all elements are known to be null. For example, given the
 // tuple (NULL, x), it will return false because x is not guaranteed to be
 // null.
-func (c *CustomFuncs) HasAllNullElements(input opt.ScalarExpr) bool {
-	tup := input.(*memo.TupleExpr)
+func (c *CustomFuncs) HasAllNullElements(tup *memo.TupleExpr) bool {
 	for _, e := range tup.Elems {
 		if e.Op() != opt.NullOp {
 			return false
@@ -231,8 +229,7 @@ func (c *CustomFuncs) HasAllNullElements(input opt.ScalarExpr) bool {
 // non-null element. Note that it only returns true if one element is known to
 // be non-null. For example, given the tuple (NULL, x), it will return false
 // because x is not guaranteed to be non-null.
-func (c *CustomFuncs) HasNonNullElement(input opt.ScalarExpr) bool {
-	tup := input.(*memo.TupleExpr)
+func (c *CustomFuncs) HasNonNullElement(tup *memo.TupleExpr) bool {
 	for _, e := range tup.Elems {
 		// It is guaranteed that the input has at least one non-null element if
 		// e is not null and it is either a constant value, array, or tuple.
@@ -252,8 +249,7 @@ func (c *CustomFuncs) HasNonNullElement(input opt.ScalarExpr) bool {
 // only returns true if all elements are known to be non-null. For example,
 // given the tuple (1, x), it will return false because x is not guaranteed to
 // be non-null.
-func (c *CustomFuncs) HasAllNonNullElements(input opt.ScalarExpr) bool {
-	tup := input.(*memo.TupleExpr)
+func (c *CustomFuncs) HasAllNonNullElements(tup *memo.TupleExpr) bool {
 	for _, e := range tup.Elems {
 		// It is not guaranteed that the input has all non-null elements if e
 		// is null or it is neither a constant value, array, nor tuple. Note
@@ -408,10 +404,7 @@ func isMonotonicConversion(from, to *types.T) bool {
 
 // UnifyComparison attempts to convert a constant expression to the type of the
 // variable expression, if that conversion can round-trip and is monotonic.
-func (c *CustomFuncs) UnifyComparison(left, right opt.ScalarExpr) opt.ScalarExpr {
-	v := left.(*memo.VariableExpr)
-	cnst := right.(*memo.ConstExpr)
-
+func (c *CustomFuncs) UnifyComparison(v *memo.VariableExpr, cnst *memo.ConstExpr) opt.ScalarExpr {
 	desiredType := v.DataType()
 	originalType := cnst.DataType()
 

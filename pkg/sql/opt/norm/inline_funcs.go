@@ -237,9 +237,8 @@ func (c *CustomFuncs) InlineSelectProject(
 // operator). Each variable is replaced by the corresponding inlined projection
 // expression.
 func (c *CustomFuncs) InlineProjectProject(
-	input memo.RelExpr, projections memo.ProjectionsExpr, passthrough opt.ColSet,
+	innerProject *memo.ProjectExpr, projections memo.ProjectionsExpr, passthrough opt.ColSet,
 ) memo.RelExpr {
-	innerProject := input.(*memo.ProjectExpr)
 	innerProjections := innerProject.Projections
 
 	newProjections := make(memo.ProjectionsExpr, len(projections))
