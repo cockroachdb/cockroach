@@ -362,7 +362,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		}
 
 		return virtualTypeEntry{
-			desc:    typedesc.MakeSimpleAlias(typ),
+			desc:    typedesc.MakeSimpleAlias(typ, catconstants.PgCatalogID),
 			mutable: flags.RequireMutable,
 		}, nil
 	default:

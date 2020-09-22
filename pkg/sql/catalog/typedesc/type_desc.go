@@ -40,14 +40,18 @@ var _ catalog.MutableDescriptor = (*Mutable)(nil)
 // MakeSimpleAlias creates a type descriptor that is an alias for the input
 // type. It is intended to be used as an intermediate for name resolution, and
 // should not be serialized and stored on disk.
-func MakeSimpleAlias(typ *types.T) *Immutable {
+func MakeSimpleAlias(typ *types.T, parentSchemaID descpb.ID) *Immutable {
 	return NewImmutable(descpb.TypeDescriptor{
+		// TODO(#sql-features): this should be attached to the current database.
+		// We don't have a way of doing this yet (and virtual tables use some
+		// fake magic).
 		ParentID:       descpb.InvalidID,
-		ParentSchemaID: descpb.InvalidID,
+		ParentSchemaID: parentSchemaID,
 		Name:           typ.Name(),
-		ID:             descpb.InvalidID,
-		Kind:           descpb.TypeDescriptor_ALIAS,
-		Alias:          typ,
+		// TODO(#sql-features): give this a hardcoded alias.
+		ID:    descpb.InvalidID,
+		Kind:  descpb.TypeDescriptor_ALIAS,
+		Alias: typ,
 	})
 }
 
