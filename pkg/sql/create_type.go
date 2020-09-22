@@ -93,13 +93,15 @@ func getCreateTypeParams(
 		}
 	}
 	// Get the ID of the schema the type is being created in.
-	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, db.GetID(), name.Schema())
+	dbID := db.GetID()
+	schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, dbID, name.Schema())
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// Check permissions on the schema.
-	if err := params.p.canCreateOnSchema(params.ctx, schemaID, params.p.User()); err != nil {
+	if err := params.p.canCreateOnSchema(
+		params.ctx, schemaID, dbID, params.p.User(), skipCheckPublicSchema); err != nil {
 		return nil, 0, err
 	}
 
