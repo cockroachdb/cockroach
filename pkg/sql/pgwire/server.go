@@ -512,12 +512,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	if version == versionCancel {
 		// The cancel message is rather peculiar: it is sent without
 		// authentication, always over an unencrypted channel.
-		//
-		// Since we don't support this, close the door in the client's
-		// face. Make a note of that use in telemetry.
-		telemetry.Inc(sqltelemetry.CancelRequestCounter)
-		_ = conn.Close()
-		return nil
+		return handleCancel(conn)
 	}
 
 	// If the server is shutting down, terminate the connection early.
@@ -546,6 +541,14 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	switch version {
 	case version30:
 		// Normal SQL connection. Proceed normally below.
+
+	case versionCancel:
+		// The PostgreSQL protocol definition says that cancel payloads
+		// must be sent *prior to upgrading the connection to use TLS*.
+		// Yet, we've found clients in the wild that send the cancel
+		// after the TLS handshake, for example at
+		// https://github.com/cockroachlabs/support/issues/600.
+		return handleCancel(conn)
 
 	default:
 		// We don't know this protocol.
@@ -587,6 +590,14 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 			auth:            s.GetAuthenticationConfiguration(),
 			testingAuthHook: testingAuthHook,
 		})
+	return nil
+}
+
+func handleCancel(conn net.Conn) error {
+	// Since we don't support this, close the door in the client's
+	// face. Make a note of that use in telemetry.
+	telemetry.Inc(sqltelemetry.CancelRequestCounter)
+	_ = conn.Close()
 	return nil
 }
 
