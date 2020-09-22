@@ -74,6 +74,7 @@ func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 	ctx context.Context,
 	jobID int64,
 	jobStatus Status,
+	_ jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 	ex sqlutil.InternalExecutor,

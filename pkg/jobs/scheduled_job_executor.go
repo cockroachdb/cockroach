@@ -41,6 +41,7 @@ type ScheduledJobExecutor interface {
 		ctx context.Context,
 		jobID int64,
 		jobStatus Status,
+		details jobspb.Details,
 		env scheduledjobs.JobSchedulerEnv,
 		schedule *ScheduledJob,
 		ex sqlutil.InternalExecutor,
@@ -124,6 +125,7 @@ func NotifyJobTermination(
 	env scheduledjobs.JobSchedulerEnv,
 	jobID int64,
 	jobStatus Status,
+	jobDetails jobspb.Details,
 	scheduleID int64,
 	ex sqlutil.InternalExecutor,
 	txn *kv.Txn,
@@ -142,7 +144,7 @@ func NotifyJobTermination(
 	}
 
 	// Delegate handling of the job termination to the executor.
-	err = executor.NotifyJobTermination(ctx, jobID, jobStatus, env, schedule, ex, txn)
+	err = executor.NotifyJobTermination(ctx, jobID, jobStatus, jobDetails, env, schedule, ex, txn)
 	if err != nil {
 		return err
 	}
