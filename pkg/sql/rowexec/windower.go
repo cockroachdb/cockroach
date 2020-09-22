@@ -449,6 +449,10 @@ func (w *windower) processPartition(
 	for _, windowFnIdx := range w.orderOfWindowFnsProcessing {
 		windowFn := w.windowFns[windowFnIdx]
 
+		// TODO(yuzefovich): creating a new WindowFrameRun object for each
+		// partition and populating it below for a custom window frame is
+		// suboptimal. Consider extracting this logic into the constructor of
+		// the windower and reusing the same objects between partitions.
 		frameRun := &tree.WindowFrameRun{
 			ArgsIdxs:     windowFn.argsIdxs,
 			FilterColIdx: windowFn.filterColIdx,
