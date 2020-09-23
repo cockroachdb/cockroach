@@ -95,8 +95,12 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
-	// Inherit the parent privileges.
+	// Inherit the parent privileges and filter out those which are not valid for
+	// schemas.
 	privs := protoutil.Clone(db.GetPrivileges()).(*descpb.PrivilegeDescriptor)
+	for i := range privs.Users {
+		privs.Users[i].Privileges &= privilege.SchemaPrivileges.ToBitField()
+	}
 
 	if n.AuthRole != "" {
 		exists, err := p.RoleExists(params.ctx, n.AuthRole)
