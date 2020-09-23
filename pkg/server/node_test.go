@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -639,4 +640,50 @@ func TestNodeSendUnknownBatchRequest(t *testing.T) {
 	if _, ok := br.Error.GetDetail().(*roachpb.UnsupportedRequestError); !ok {
 		t.Fatalf("expected unsupported request, not %v", br.Error)
 	}
+}
+
+func BenchmarkTraceEmptyScan(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	params := base.TestServerArgs{}
+	s, _, _ := serverutils.StartServer(b, params)
+	defer s.Stopper().Stop(ctx)
+
+	var ba roachpb.BatchRequest
+
+	ba.RangeID = 1
+	ba.Replica = roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
+	get := roachpb.NewScan(keys.LocalMax, keys.LocalMax.Next(), false /* forUpdate */)
+	ba.Add(get)
+
+	invoke := func(b *testing.B, ctx context.Context) {
+		b.ReportAllocs()
+		_, pErr := s.Node().(*Node).Batch(ctx, &ba)
+		if pErr != nil {
+			b.Fatal(pErr)
+		}
+	}
+
+	for i := 0; i < 10; i++ {
+		invoke(b, ctx) // warmup
+	}
+
+	// No trace span.
+	b.Run("tracing=none", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			invoke(b, ctx)
+		}
+	})
+
+	// Always-on trace span (at time of writing: noopSpan).
+	b.Run("tracing=noop", func(b *testing.B) {
+		tracer := tracing.NewTracer()
+		for i := 0; i < b.N; i++ {
+			ctx, finish := tracing.EnsureContext(ctx, tracer, "noop")
+			invoke(b, ctx)
+			finish()
+		}
+	})
 }
