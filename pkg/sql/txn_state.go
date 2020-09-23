@@ -176,6 +176,8 @@ func (ts *txnState) resetForNewSQLTxn(
 		)
 	} else {
 		// Create a root span for this SQL txn.
+		// TODO(tbg): this is the only use of RecordableSpan. Can we instead interchange
+		// the span when we decide that it needs to be traced?
 		sp = tranCtx.tracer.(*tracing.Tracer).StartRootSpan(
 			opName, logtags.FromContext(connCtx), tracing.RecordableSpan)
 	}

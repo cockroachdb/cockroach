@@ -269,10 +269,12 @@ func (t *Tracer) StartSpan(
 	}
 
 	s := &span{
-		tracer:    t,
-		operation: operationName,
-		startTime: sso.StartTime,
-		logTags:   logTags,
+		crdbSpan: crdbSpan{
+			tracer:    t,
+			operation: operationName,
+			startTime: sso.StartTime,
+			logTags:   logTags,
+		},
 	}
 	if s.startTime.IsZero() {
 		s.startTime = time.Now()
@@ -364,14 +366,16 @@ func (t *Tracer) StartRootSpan(
 	}
 
 	s := &span{
-		spanMeta: spanMeta{
-			TraceID: uint64(rand.Int63()),
-			SpanID:  uint64(rand.Int63()),
+		crdbSpan: crdbSpan{
+			spanMeta: spanMeta{
+				TraceID: uint64(rand.Int63()),
+				SpanID:  uint64(rand.Int63()),
+			},
+			tracer:    t,
+			operation: opName,
+			startTime: time.Now(),
+			logTags:   logTags,
 		},
-		tracer:    t,
-		operation: opName,
-		startTime: time.Now(),
-		logTags:   logTags,
 	}
 	s.mu.duration = -1
 
@@ -426,11 +430,13 @@ func StartChildSpan(
 	pSpan := parentSpan.(*span)
 
 	s := &span{
-		tracer:       tr,
-		operation:    opName,
-		startTime:    time.Now(),
-		parentSpanID: pSpan.SpanID,
-		logTags:      logTags,
+		crdbSpan: crdbSpan{
+			tracer:       tr,
+			operation:    opName,
+			startTime:    time.Now(),
+			parentSpanID: pSpan.SpanID,
+			logTags:      logTags,
+		},
 	}
 
 	// Copy baggage from parent.
@@ -445,8 +451,8 @@ func StartChildSpan(
 	s.TraceID = pSpan.TraceID
 	s.SpanID = uint64(rand.Int63())
 
-	if pSpan.shadowTr != nil {
-		linkShadowSpan(s, pSpan.shadowTr, pSpan.shadowSpan.Context(), opentracing.ChildOfRef)
+	if pSpan.otSpan.shadowTr != nil {
+		linkShadowSpan(s, pSpan.otSpan.shadowTr, pSpan.otSpan.shadowSpan.Context(), opentracing.ChildOfRef)
 	}
 
 	recordingType := pSpan.mu.recording.recordingType
@@ -463,7 +469,7 @@ func StartChildSpan(
 		}
 	}
 
-	if pSpan.netTr != nil || pSpan.shadowTr != nil {
+	if pSpan.netTr != nil || pSpan.otSpan.shadowTr != nil {
 		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)

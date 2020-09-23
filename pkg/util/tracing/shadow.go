@@ -99,8 +99,8 @@ func linkShadowSpan(
 			ReferencedContext: parentShadowCtx,
 		})
 	}
-	s.shadowTr = shadowTr
-	s.shadowSpan = shadowTr.StartSpan(s.operation, opts...)
+	s.otSpan.shadowTr = shadowTr
+	s.otSpan.shadowSpan = shadowTr.StartSpan(s.operation, opts...)
 }
 
 func createLightStepTracer(token string) (shadowTracerManager, opentracing.Tracer) {

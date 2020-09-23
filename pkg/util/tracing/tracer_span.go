@@ -102,18 +102,12 @@ const (
 	SingleNodeRecording
 )
 
-type span struct {
+type crdbSpan struct {
 	spanMeta
 
 	parentSpanID uint64
 
 	tracer *Tracer
-
-	// x/net/trace.Trace instance; nil if not tracing to x/net/trace.
-	netTr trace.Trace
-	// Shadow tracer and span; nil if not using a shadow tracer.
-	shadowTr   *shadowTracer
-	shadowSpan opentracing.Span
 
 	operation string
 	startTime time.Time
@@ -161,11 +155,41 @@ type span struct {
 	}
 }
 
-var _ opentracing.Span = &span{}
-
-func (s *span) isRecording() bool {
+func (s *crdbSpan) isRecording() bool {
 	return atomic.LoadInt32(&s.recording) != 0
 }
+
+type otSpan struct {
+	// TODO(tbg): see if we can lose the shadowTr here and rely on shadowSpan.Tracer().
+	// Probably not - but worth checking.
+	// TODO(tbg): consider renaming 'shadow' -> 'ot' or 'external'.
+	shadowTr   *shadowTracer
+	shadowSpan opentracing.Span
+}
+
+type span struct {
+	crdbSpan // can be zero
+	// x/net/trace.Trace instance; nil if not tracing to x/net/trace.
+	netTr trace.Trace
+	// Shadow tracer and span; zero if not using a shadow tracer.
+	otSpan otSpan
+}
+
+// TODO(tbg): remove this. We don't need *span to be an opentracing.Span.
+var _ opentracing.Span = &span{}
+
+func (s *span) isBlackHole() bool {
+	return !s.crdbSpan.isRecording() && s.netTr == nil && s.otSpan == (otSpan{})
+}
+
+/*
+TODO(tbg): replace noopSpan with this concept:
+func (s *span) isNoop() bool {
+	// Special case: trace id zero implies that everything else,
+	// with the exception of the tracer, is also zero.
+	return s.isBlackHole() && s.crdbSpan.TraceID == 0
+}
+*/
 
 // IsRecording returns true if the span is recording its events.
 func IsRecording(s opentracing.Span) bool {
@@ -662,7 +686,7 @@ func IsBlackHoleSpan(s opentracing.Span) bool {
 		return true
 	}
 	sp := s.(*span)
-	return !sp.isRecording() && sp.netTr == nil && sp.shadowTr == nil
+	return sp.isBlackHole()
 }
 
 // IsNoopContext returns true if the span context is from a "no-op" span. If
@@ -698,8 +722,8 @@ func (s *span) FinishWithOptions(opts opentracing.FinishOptions) {
 	s.mu.Lock()
 	s.mu.duration = finishTime.Sub(s.startTime)
 	s.mu.Unlock()
-	if s.shadowTr != nil {
-		s.shadowSpan.Finish()
+	if s.otSpan.shadowTr != nil {
+		s.otSpan.shadowSpan.Finish()
 	}
 	if s.netTr != nil {
 		s.netTr.Finish()
@@ -723,9 +747,9 @@ func (s *span) Context() opentracing.SpanContext {
 		span:     s,
 		Baggage:  baggageCopy,
 	}
-	if s.shadowTr != nil {
-		sc.shadowTr = s.shadowTr
-		sc.shadowCtx = s.shadowSpan.Context()
+	if s.otSpan.shadowTr != nil {
+		sc.shadowTr = s.otSpan.shadowTr
+		sc.shadowCtx = s.otSpan.shadowSpan.Context()
 	}
 
 	if s.isRecording() {
@@ -736,8 +760,8 @@ func (s *span) Context() opentracing.SpanContext {
 
 // SetOperationName is part of the opentracing.Span interface.
 func (s *span) SetOperationName(operationName string) opentracing.Span {
-	if s.shadowTr != nil {
-		s.shadowSpan.SetOperationName(operationName)
+	if s.otSpan.shadowTr != nil {
+		s.otSpan.shadowSpan.SetOperationName(operationName)
 	}
 	s.operation = operationName
 	return s
@@ -749,8 +773,8 @@ func (s *span) SetTag(key string, value interface{}) opentracing.Span {
 }
 
 func (s *span) setTagInner(key string, value interface{}, locked bool) opentracing.Span {
-	if s.shadowTr != nil {
-		s.shadowSpan.SetTag(key, value)
+	if s.otSpan.shadowTr != nil {
+		s.otSpan.shadowSpan.SetTag(key, value)
 	}
 	if s.netTr != nil {
 		s.netTr.LazyPrintf("%s:%v", key, value)
@@ -771,8 +795,8 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 
 // LogFields is part of the opentracing.Span interface.
 func (s *span) LogFields(fields ...otlog.Field) {
-	if s.shadowTr != nil {
-		s.shadowSpan.LogFields(fields...)
+	if s.otSpan.shadowTr != nil {
+		s.otSpan.shadowSpan.LogFields(fields...)
 	}
 	if s.netTr != nil {
 		// TODO(radu): when LightStep supports arbitrary fields, we should make
@@ -831,8 +855,8 @@ func (s *span) setBaggageItemLocked(restrictedKey, value string) opentracing.Spa
 	}
 	s.mu.Baggage[restrictedKey] = value
 
-	if s.shadowTr != nil {
-		s.shadowSpan.SetBaggageItem(restrictedKey, value)
+	if s.otSpan.shadowTr != nil {
+		s.otSpan.shadowSpan.SetBaggageItem(restrictedKey, value)
 	}
 	// Also set a tag so it shows up in the Lightstep UI or x/net/trace.
 	s.setTagInner(restrictedKey, value, true /* locked */)
