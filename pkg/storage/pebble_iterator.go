@@ -242,6 +242,11 @@ func (p *pebbleIterator) unsafeRawKey() []byte {
 	return p.iter.Key()
 }
 
+// UnsafeRawKey returns the raw key.
+func (p *pebbleIterator) UnsafeRawKey() []byte {
+	return p.unsafeRawKey()
+}
+
 // UnsafeValue implements the Iterator interface.
 func (p *pebbleIterator) UnsafeValue() []byte {
 	if valid, err := p.Valid(); err != nil || !valid {

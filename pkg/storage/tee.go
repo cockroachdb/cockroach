@@ -1173,6 +1173,11 @@ func (t *TeeEngineIter) unsafeRawKey() []byte {
 	return t.iter1.(unsafeRawKeyGetter).unsafeRawKey()
 }
 
+// UnsafeRawKey is not implemented for tee
+func (t *TeeEngineIter) UnsafeRawKey() []byte {
+	return nil
+}
+
 // Value implements the Iterator interface.
 func (t *TeeEngineIter) Value() []byte {
 	return t.iter1.UnsafeValue()

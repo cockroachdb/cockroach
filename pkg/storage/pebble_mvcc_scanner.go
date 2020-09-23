@@ -44,7 +44,7 @@ func (p *pebbleResults) clear() {
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
 // <valueLen:Uint32><keyLen:Uint32><Key><Value>
 // This function adds to repr in that format.
-func (p *pebbleResults) put(key MVCCKey, value []byte) {
+func (p *pebbleResults) put(key []byte, value []byte) {
 	// Key value lengths take up 8 bytes (2 x Uint32).
 	const kvLenSize = 8
 	const minSize = 16
@@ -53,7 +53,7 @@ func (p *pebbleResults) put(key MVCCKey, value []byte) {
 	// We maintain a list of buffers, always encoding into the last one (a.k.a.
 	// pebbleResults.repr). The size of the buffers is exponentially increasing,
 	// capped at maxSize.
-	lenKey := key.Len()
+	lenKey := len(key)
 	lenToAdd := kvLenSize + lenKey + len(value)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
 		newSize := 2 * cap(p.repr)
@@ -73,7 +73,7 @@ func (p *pebbleResults) put(key MVCCKey, value []byte) {
 	p.repr = p.repr[:startIdx+lenToAdd]
 	binary.LittleEndian.PutUint32(p.repr[startIdx:], uint32(len(value)))
 	binary.LittleEndian.PutUint32(p.repr[startIdx+4:], uint32(lenKey))
-	encodeKeyToBuf(p.repr[startIdx+kvLenSize:startIdx+kvLenSize+lenKey], key, lenKey)
+	copy(p.repr[startIdx+kvLenSize:], key)
 	copy(p.repr[startIdx+kvLenSize+lenKey:], value)
 	p.count++
 	p.bytes += int64(lenToAdd)
@@ -123,6 +123,7 @@ type pebbleMVCCScanner struct {
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
 	curKey   MVCCKey
+	curRawKey []byte
 	curValue []byte
 	results  pebbleResults
 	intents  pebble.Batch
@@ -583,7 +584,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(val []byte) bool {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
-		p.results.put(p.curKey, val)
+		p.results.put(p.curRawKey, val)
 		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
 			// When the target bytes are met or exceeded, stop producing more
 			// keys. We implement this by reducing maxKeys to the current
@@ -646,6 +647,7 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 		return false
 	}
 
+	p.curRawKey = p.parent.UnsafeRawKey()
 	p.curKey = p.parent.UnsafeKey()
 	p.curValue = p.parent.UnsafeValue()
 	return true
@@ -728,9 +730,9 @@ func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool) {
 		// We need to save a copy of the current iterator key and value and adjust
 		// curRawKey, curKey and curValue to point to this saved data. We use a
 		// single buffer for this purpose: savedBuf.
-		p.savedBuf = append(p.savedBuf[:0], p.curKey.Key...)
+		p.savedBuf = append(p.savedBuf[:0], p.curRawKey...)
 		p.savedBuf = append(p.savedBuf, p.curValue...)
-		p.curKey.Key = p.savedBuf[:len(p.curKey.Key)]
+		p.curKey, _ = decodeMVCCKey(p.savedBuf[:len(p.curRawKey)])
 		p.curValue = p.savedBuf[len(p.curKey.Key):]
 
 		// With the current iterator state saved we can move the iterator to the
