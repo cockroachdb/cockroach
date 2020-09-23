@@ -13,11 +13,13 @@ package kv
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -793,6 +795,19 @@ func (e *AutoCommitError) Error() string {
 	return e.cause.Error()
 }
 
+var injectRetryRate = envutil.EnvOrDefaultFloat64("COCKROACH_INJECT_RETRY_RATE", .4)
+
+type injectRetryRateKey struct{}
+
+func ContextWithInjectRetry(ctx context.Context) context.Context {
+	return context.WithValue(ctx, injectRetryRateKey{}, (*injectRetryRateKey)(nil))
+}
+
+func shouldInjectRetry(ctx context.Context) bool {
+	_, ok := ctx.Value(injectRetryRateKey{}).(*injectRetryRateKey)
+	return ok
+}
+
 // exec executes fn in the context of a distributed transaction. The closure is
 // retried on retriable errors.
 // If no error is returned by the closure, an attempt to commit the txn is made.
@@ -910,6 +925,12 @@ func (txn *Txn) Send(
 	// place I found to set this field.
 	if txn.gatewayNodeID != 0 {
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
+	}
+	if injectRetryRate > 0 && !txn.hasFixedCommitTimestamp() && shouldInjectRetry(ctx) && ba.IsWrite() {
+		if r := rand.Float64(); r < injectRetryRate {
+			log.Infof(ctx, "injecting retry: %v < %v", r, injectRetryRate)
+			return nil, roachpb.NewError(txn.GenerateForcedRetryableError(ctx, "boom"))
+		}
 	}
 
 	txn.mu.Lock()
@@ -1285,4 +1306,10 @@ func (txn *Txn) ReleaseSavepoint(ctx context.Context, s SavepointToken) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.ReleaseSavepoint(ctx, s)
+}
+
+func (txn *Txn) hasFixedCommitTimestamp() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.CommitTimestampFixed()
 }
