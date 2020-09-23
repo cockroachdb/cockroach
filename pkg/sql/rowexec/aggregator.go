@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -228,6 +229,7 @@ const (
 type hashAggregator struct {
 	aggregatorBase
 
+	helper *rowenc.FingerprintHelper
 	// buckets is used during the accumulation phase to track the bucket keys
 	// that have been seen. After accumulation, the keys are extracted into
 	// bucketsIter for iteration.
@@ -293,6 +295,7 @@ func newAggregator(
 	}
 
 	ag := &hashAggregator{
+		helper:                  rowenc.NewFingerprintHelper(input.OutputTypes()),
 		buckets:                 make(map[string]aggregateFuncs),
 		bucketsLenGrowThreshold: hashAggregatorBucketsInitialLen,
 	}
@@ -828,6 +831,30 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 	return nil
 }
 
+// encode returns the encoding for the grouping columns, this is then used as
+// our group key to determine which bucket to add to.
+func (ag *hashAggregator) encode(
+	appendTo []byte, row rowenc.EncDatumRow,
+) (encoding []byte, err error) {
+	var newDatumMemUsage int64
+	appendTo, newDatumMemUsage, err = ag.helper.Fingerprint(row, ag.groupCols, &ag.datumAlloc, appendTo)
+	if err != nil {
+		return appendTo, err
+	}
+	// Note that it is possible that an aggregate function will keep a
+	// reference to a tree.Datum that was just decoded by Fingerprint function
+	// (e.g. the first datum in a group for any_not_null), and that aggregate
+	// function is expected to account for the memory of the datum, so we might
+	// end up double-counting some of the memory under the datums. This seems
+	// acceptable because we've seen OOMs because of under-accounting in
+	// general, and the worst that can happen with over-accounting is reaching
+	// the memory budget.
+	if err = ag.bucketsAcc.Grow(ag.Ctx, newDatumMemUsage); err != nil {
+		return appendTo, err
+	}
+	return appendTo, nil
+}
+
 // accumulateRow accumulates a single row, returning an error if accumulation
 // failed for any reason.
 func (ag *hashAggregator) accumulateRow(row rowenc.EncDatumRow) error {
@@ -925,14 +952,14 @@ func (a *aggregateFuncHolder) isDistinct(
 ) (bool, error) {
 	// Allocate one EncDatum that will be reused when encoding every argument.
 	ed := rowenc.EncDatum{Datum: firstArg}
-	encoded, err := ed.Fingerprint(firstArg.ResolvedType(), alloc, prefix)
+	encoded, err := ed.Fingerprint(firstArg.ResolvedType(), alloc, descpb.DatumEncoding_ASCENDING_KEY, prefix)
 	if err != nil {
 		return false, err
 	}
 	if otherArgs != nil {
 		for _, arg := range otherArgs {
 			ed.Datum = arg
-			encoded, err = ed.Fingerprint(arg.ResolvedType(), alloc, encoded)
+			encoded, err = ed.Fingerprint(arg.ResolvedType(), alloc, descpb.DatumEncoding_ASCENDING_KEY, encoded)
 			if err != nil {
 				return false, err
 			}
@@ -950,21 +977,6 @@ func (a *aggregateFuncHolder) isDistinct(
 	}
 	a.seen[s] = struct{}{}
 	return true, nil
-}
-
-// encode returns the encoding for the grouping columns, this is then used as
-// our group key to determine which bucket to add to.
-func (ag *aggregatorBase) encode(
-	appendTo []byte, row rowenc.EncDatumRow,
-) (encoding []byte, err error) {
-	for _, colIdx := range ag.groupCols {
-		appendTo, err = row[colIdx].Fingerprint(
-			ag.inputTypes[colIdx], &ag.datumAlloc, appendTo)
-		if err != nil {
-			return appendTo, err
-		}
-	}
-	return appendTo, nil
 }
 
 func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {

@@ -283,12 +283,20 @@ func (ed *EncDatum) Encode(
 	}
 }
 
-// Fingerprint appends a unique hash of ed to the given slice. If datums are intended
-// to be deduplicated or grouped with hashes, this function should be used
-// instead of encode. Additionally, Fingerprint has the property that if the
-// fingerprints of a set of datums are appended together, the resulting
+// Fingerprint appends a unique hash of ed to the given slice. If datums are
+// intended to be deduplicated or grouped with hashes, this function should be
+// used instead of encode. Additionally, Fingerprint has the property that if
+// the fingerprints of a set of datums are appended together, the resulting
 // fingerprint will uniquely identify the set.
-func (ed *EncDatum) Fingerprint(typ *types.T, a *DatumAlloc, appendTo []byte) ([]byte, error) {
+// - enc is the encoding to be used when fingerprinting the datum (it will be
+//   used when any encoding could work). It is up to the caller to provide the
+//   same encoding in order to fingerprint datums from a single column.
+// Note: this method might decode the EncDatum, and it is up to the caller to
+// decide whether to account for that allocation.
+// Note: consider whether rowenc.FingerprintHelper could be used instead.
+func (ed *EncDatum) Fingerprint(
+	typ *types.T, a *DatumAlloc, enc descpb.DatumEncoding, appendTo []byte,
+) ([]byte, error) {
 	// Note: we don't ed.EnsureDecoded on top of this method, because the default
 	// case uses ed.Encode, which has a fast path if the encoded bytes are already
 	// the right encoding.
@@ -301,12 +309,7 @@ func (ed *EncDatum) Fingerprint(typ *types.T, a *DatumAlloc, appendTo []byte) ([
 		// is encoded with the value encoding so that the hashes are indeed unique.
 		return EncodeTableValue(appendTo, descpb.ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
 	default:
-		// For values that are key encodable, using the ascending key.
-		// TODO (rohany): However, there should be a knob for the hasher that sees
-		//  what kind of encoding already exists on the enc datums incoming to the
-		//  DistSQL operators, and should use that encoding to avoid re-encoding
-		//  datums into different encoding types as much as possible.
-		return ed.Encode(typ, a, descpb.DatumEncoding_ASCENDING_KEY, appendTo)
+		return ed.Encode(typ, a, enc, appendTo)
 	}
 }
 
@@ -527,6 +530,56 @@ func (r EncDatumRows) String(types []*types.T) string {
 	}
 	b.WriteString("]")
 	return b.String()
+}
+
+// FingerprintHelper is a utility struct that helps with fingerprinting of the
+// EncDatumRows. It should be used when we need to deduplicate (or hash) the
+// rows based on a subset of columns. However, one needs to be careful when
+// using it in the case when hashing is performed on different logical streams
+// which might have different encodings already present (for example, the hash
+// router cannot use it and guarantee correct data routing for the case of a
+// distributed join).
+type FingerprintHelper struct {
+	inputTypes []*types.T
+	encodings  []descpb.DatumEncoding
+}
+
+// NewFingerprintHelper returns a new FingerprintHelper.
+func NewFingerprintHelper(inputTypes []*types.T) *FingerprintHelper {
+	return &FingerprintHelper{inputTypes: inputTypes}
+}
+
+// Fingerprint appends a unique hash of EncDatums on positions in
+// colsToFingerprint to appendTo (see EncDatum.Fingerprint for more details).
+// It will attempt to deduce the encoding that should be used for each EncDatum
+// based on the fact whether any encoded representation is available. It also
+// returns the memory usage of decoded tree.Datums.
+func (h *FingerprintHelper) Fingerprint(
+	row EncDatumRow, colsToFingerprint []uint32, a *DatumAlloc, appendTo []byte,
+) (_ []byte, newDatumMemUsage int64, err error) {
+	if h.encodings == nil {
+		// This is the first row to fingerprint, so we will decide which
+		// encodings to use. We assume that if the EncDatums from this row have
+		// some encoded representation, then all consequent rows will have the
+		// same - this will allow us to avoid decode-encode sequence. Note that
+		// if a datum doesn't have an encoded representation already, we'll use
+		// the default key ASC encoding for that column.
+		h.encodings = make([]descpb.DatumEncoding, len(row))
+		for _, colIdx := range colsToFingerprint {
+			h.encodings[colIdx], _ = row[colIdx].Encoding()
+		}
+	}
+	for _, colIdx := range colsToFingerprint {
+		before := row[colIdx].Size()
+		appendTo, err = row[colIdx].Fingerprint(
+			h.inputTypes[colIdx], a, h.encodings[colIdx], appendTo,
+		)
+		if err != nil {
+			return appendTo, newDatumMemUsage, err
+		}
+		newDatumMemUsage += int64(row[colIdx].Size() - before)
+	}
+	return appendTo, newDatumMemUsage, nil
 }
 
 // EncDatumRowContainer holds rows and can cycle through them.

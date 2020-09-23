@@ -74,6 +74,7 @@ type windower struct {
 	scratch       []byte
 	cancelChecker *cancelchecker.CancelChecker
 
+	helper                     *rowenc.FingerprintHelper
 	partitionBy                []uint32
 	allRowsPartitioned         *rowcontainer.HashDiskBackedRowContainer
 	partition                  *rowcontainer.DiskBackedIndexedRowContainer
@@ -112,6 +113,9 @@ func newWindower(
 	ctx := evalCtx.Ctx()
 
 	w.partitionBy = spec.PartitionBy
+	if len(w.partitionBy) > 0 {
+		w.helper = rowenc.NewFingerprintHelper(w.inputTypes)
+	}
 	windowFns := spec.WindowFns
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
 	w.builtins = make([]tree.WindowFunc, 0, len(windowFns))
@@ -674,17 +678,13 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		if len(w.partitionBy) > 0 {
 			// We need to hash the row according to partitionBy
 			// to figure out which partition the row belongs to.
-			w.scratch = w.scratch[:0]
-			for _, col := range w.partitionBy {
-				if int(col) >= len(row) {
-					return errors.AssertionFailedf(
-						"hash column %d, row with only %d columns", errors.Safe(col), errors.Safe(len(row)))
-				}
-				var err error
-				w.scratch, err = row[int(col)].Fingerprint(w.inputTypes[int(col)], &w.datumAlloc, w.scratch)
-				if err != nil {
-					return err
-				}
+			var newDatumMemUsage int64
+			w.scratch, newDatumMemUsage, err = w.helper.Fingerprint(row, w.partitionBy, &w.datumAlloc, w.scratch[:0])
+			if err != nil {
+				return err
+			}
+			if err = w.growMemAccount(&w.acc, newDatumMemUsage); err != nil {
+				return err
 			}
 			if string(w.scratch) != bucket {
 				// Current row is from the new bucket, so we "finalize" the previous

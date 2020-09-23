@@ -23,6 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -617,7 +618,17 @@ func (hr *hashRouter) computeDestination(row rowenc.EncDatumRow) (int, error) {
 			return -1, err
 		}
 		var err error
-		hr.buffer, err = row[col].Fingerprint(hr.types[col], &hr.alloc, hr.buffer)
+		// Note that we cannot use rowenc.FingerprintHelper here because we
+		// might need to guarantee that we're using the same encoding on
+		// different logical streams so that the "equal" data ends up on the
+		// same node. For example, if we have a distributed hash join and
+		// the equality column from the left input is coming in with key ASC
+		// encoding whereas the equality column from the right input is coming
+		// in with key DESC encoding. If we naively reuse already available
+		// encoded representation of datums (as rowenc.FingerprintHelper does),
+		// we might distribute the data incorrectly - simply because the same
+		// date is encoded differently.
+		hr.buffer, err = row[col].Fingerprint(hr.types[col], &hr.alloc, descpb.DatumEncoding_ASCENDING_KEY, hr.buffer)
 		if err != nil {
 			return -1, err
 		}

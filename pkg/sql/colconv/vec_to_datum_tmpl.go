@@ -27,6 +27,9 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+// TODO(yuzefovich): methods in this file do *not* perform memory accounting
+// of the newly allocated tree.Datums. This should be fixed.
+
 // VecToDatumConverter is a helper struct that converts vectors from batches to
 // their datum representations.
 // TODO(yuzefovich): the result of converting the vectors to datums is usually

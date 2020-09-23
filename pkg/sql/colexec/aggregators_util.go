@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -355,7 +356,7 @@ func (b *distinctAggregatorHelperBase) selectDistinctTuples(
 		for _, colIdx := range inputIdxs {
 			b.scratch.ed.Datum = b.aggColsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
 			b.scratch.encoded, err = b.scratch.ed.Fingerprint(
-				b.inputTypes[colIdx], b.datumAlloc, b.scratch.encoded,
+				b.inputTypes[colIdx], b.datumAlloc, descpb.DatumEncoding_ASCENDING_KEY, b.scratch.encoded,
 			)
 			if err != nil {
 				colexecerror.InternalError(err)

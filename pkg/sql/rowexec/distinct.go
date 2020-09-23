@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -204,7 +205,8 @@ func (d *distinct) encode(appendTo []byte, row rowenc.EncDatumRow) ([]byte, erro
 			continue
 		}
 
-		appendTo, err = datum.Fingerprint(d.types[i], &d.datumAlloc, appendTo)
+		// TODO(yuzefovich): reuse the helper here.
+		appendTo, err = datum.Fingerprint(d.types[i], &d.datumAlloc, descpb.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return nil, err
 		}

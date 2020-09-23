@@ -80,7 +80,7 @@ func (d *Datum) Cast(dVec interface{}, toType *types.T) (tree.Datum, error) {
 // Hash returns the hash of the datum as a byte slice.
 func (d *Datum) Hash(da *rowenc.DatumAlloc) []byte {
 	ed := rowenc.EncDatum{Datum: maybeUnwrapDatum(d)}
-	b, err := ed.Fingerprint(d.ResolvedType(), da, nil /* appendTo */)
+	b, err := ed.Fingerprint(d.ResolvedType(), da, descpb.DatumEncoding_ASCENDING_KEY, nil /* appendTo */)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}

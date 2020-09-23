@@ -18,6 +18,7 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -524,7 +525,10 @@ func (s *sketchInfo) addRow(
 		isNull := true
 		*buf = (*buf)[:0]
 		for _, col := range s.spec.Columns {
-			*buf, err = row[col].Fingerprint(typs[col], da, *buf)
+			// TODO(yuzefovich): we might decode the encoded datum (meaning we
+			// might incur an allocation) that is not accounted for. That
+			// should be fixed.
+			*buf, err = row[col].Fingerprint(typs[col], da, descpb.DatumEncoding_ASCENDING_KEY, *buf)
 			isNull = isNull && row[col].IsNull()
 			if err != nil {
 				return err
