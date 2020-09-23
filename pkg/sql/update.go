@@ -119,12 +119,6 @@ type updateRun struct {
 	numPassthrough int
 }
 
-// maxUpdateBatchSize is the max number of entries in the KV batch for
-// the update operation (including secondary index updates, FK
-// cascading updates, etc), before the current KV batch is executed
-// and a new batch is started.
-const maxUpdateBatchSize = 10000
-
 func (u *updateNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
@@ -182,7 +176,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if u.run.tu.currentBatchSize >= maxUpdateBatchSize {
+		if u.run.tu.currentBatchSize >= u.run.tu.maxBatchSize {
 			break
 		}
 	}
