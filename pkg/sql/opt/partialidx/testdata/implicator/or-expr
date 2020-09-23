@@ -65,6 +65,23 @@ predtest vars=(int)
 true
 └── remaining filters: none
 
+# Regression tests for #54649. Atoms that are contradictions, like NULL, should
+# not cause panics.
+predtest vars=(bool)
+@1
+=>
+(@1 OR NULL) OR @1
+----
+true
+└── remaining filters: @1
+
+predtest vars=(bool, bool)
+@1
+=>
+(@2 OR NULL) OR @2
+----
+false
+
 # Conjunction filters
 
 predtest vars=(bool, bool)
