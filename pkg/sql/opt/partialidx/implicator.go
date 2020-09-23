@@ -513,6 +513,19 @@ func (im *Implicator) atomImpliesAtom(
 		im.cacheConstraint(pred, predSet, predTight)
 	}
 
+	// If e is a contradiction, it represents an empty set of rows. The empty
+	// set is contained by all sets, so a contradiction implies all predicates.
+	if eSet == constraint.Contradiction {
+		return true
+	}
+
+	// If pred is a contradiction, it represents an empty set of rows. The only
+	// set contained by the empty set is itself (handled in the conditional
+	// above). No other filters imply a contradiction.
+	if predSet == constraint.Contradiction {
+		return false
+	}
+
 	// If either set has more than one constraint, then constraints cannot be
 	// used to prove containment. This happens when an expression has more than
 	// one variable. For example:
