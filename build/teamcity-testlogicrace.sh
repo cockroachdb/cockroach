@@ -8,7 +8,7 @@ maybe_ccache
 
 mkdir -p artifacts
 
-TESTTIMEOUT=2h
+TESTTIMEOUT=4h
 
 build/builder.sh \
 	stdbuf -oL -eL \
