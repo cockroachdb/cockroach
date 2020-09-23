@@ -533,3 +533,29 @@ query I colnames
 SELECT * FROM testuser.test_table
 ----
 a
+
+# Ensure that when we create a schema, it inherits privileges from its parent
+# database, but only those which are valid for schemas.
+subtest create_schema_inherits_db_privileges
+
+user root
+
+statement ok
+CREATE DATABASE d54662;
+GRANT CREATE, SELECT ON DATABASE d54662 TO testuser;
+USE d54662;
+CREATE SCHEMA s
+
+query T
+SELECT privilege_type FROM [SHOW GRANTS ON schema s FOR testuser]
+----
+CREATE
+
+statement ok
+GRANT USAGE ON SCHEMA s TO testuser
+
+query T rowsort
+SELECT privilege_type FROM [SHOW GRANTS ON schema s FOR testuser]
+----
+CREATE
+USAGE
