@@ -1,0 +1,2 @@
+refresh_stmt ::=
+	'REFRESH' 'MATERIALIZED' 'VIEW' opt_concurrently view_name opt_clear_data
