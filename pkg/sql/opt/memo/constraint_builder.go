@@ -440,7 +440,7 @@ func (cb *constraintsBuilder) buildFunctionConstraints(
 
 func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.Set, tight bool) {
 	switch t := e.(type) {
-	case *NullExpr:
+	case *FalseExpr, *NullExpr:
 		return contradiction, true
 
 	case *VariableExpr:

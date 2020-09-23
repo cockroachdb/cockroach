@@ -233,7 +233,7 @@ upsert xyz
       │         │    ├── key: (8)
       │         │    └── fd: (8)-->(5-7,9)
       │         └── filters
-      │              └── false [type=bool]
+      │              └── false [type=bool, constraints=(contradiction; tight)]
       └── projections
            └── NULL::FLOAT8 [as=column10:10, type=float, immutable]
 
