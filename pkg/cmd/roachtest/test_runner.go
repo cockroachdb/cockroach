@@ -755,9 +755,21 @@ func (r *testRunner) runTest(
 		t.spec.Run(runCtx, t, c)
 	}()
 
+	teardownL, err := c.l.ChildLogger("teardown", quietStderr, quietStdout)
+	if err != nil {
+		return false, err
+	}
 	select {
 	case <-done:
+		s := "success"
+		if t.Failed() {
+			s = "failure"
+		}
+		c.l.Printf("tearing down after %s; see teardown.log", s)
+		l, c.l, t.l = teardownL, teardownL, teardownL
 	case <-time.After(timeout):
+		c.l.Printf("tearing down after timeout; see teardown.log")
+		l, c.l, t.l = teardownL, teardownL, teardownL
 		// Timeouts are often opaque. Improve our changes by dumping the stack
 		// so that at least we can piece together what the test is trying to
 		// do at this very moment.
