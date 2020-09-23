@@ -575,7 +575,7 @@ message JobsResponse {
 message LocationsRequest {
 }
 
-// JobsResponse contains the job record for each matching job.
+// LocationsResponse contains the system locality records.
 message LocationsResponse {
   message Location {
     string locality_key = 1;
@@ -847,7 +847,28 @@ service Admin {
     };
   }
 
-  // Locations returns the locality location records.
+  // Locations the system locality records which are used to map a nodes locality to its
+  // longitude and latitude.
+  // Example usage:
+  //    curl "<admin UI>/_admin/v1/locations"
+  //
+  //    {
+  //     "locations": [
+  //        {
+  //          "localityKey": "region",
+  //          "localityValue": "europe-west1",
+  //          "latitude": 50.44816,
+  //          "longitude": 3.81886
+  //        },
+  //        ...
+  //        {
+  //          "localityKey": "region",
+  //          "localityValue": "us-west1",
+  //          "latitude": 43.804133,
+  //          "longitude": -120.554201
+  //        }
+  //      ]
+  //    }
   rpc Locations(LocationsRequest) returns (LocationsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/locations"
