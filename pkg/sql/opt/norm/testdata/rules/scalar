@@ -1918,7 +1918,7 @@ full-join (cross)
  │    └── key: (1)
  ├── scan xy
  └── filters
-      └── false
+      └── false [constraints=(contradiction; tight)]
 
 norm expect=(SimplifySameVarInequalities,SimplifyJoinFilters)
 SELECT a.k FROM a FULL OUTER JOIN xy ON a.k > a.k
@@ -1930,7 +1930,7 @@ full-join (cross)
  │    └── key: (1)
  ├── scan xy
  └── filters
-      └── false
+      └── false [constraints=(contradiction; tight)]
 
 norm expect=(SimplifySameVarInequalities,SimplifyJoinFilters)
 SELECT a.k FROM a FULL OUTER JOIN xy ON a.k < a.k
@@ -1942,7 +1942,7 @@ full-join (cross)
  │    └── key: (1)
  ├── scan xy
  └── filters
-      └── false
+      └── false [constraints=(contradiction; tight)]
 
 norm expect=SimplifySameVarInequalities
 SELECT k != k FROM a
