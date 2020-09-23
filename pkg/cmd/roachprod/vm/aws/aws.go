@@ -702,7 +702,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		case "gp2":
 			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,DeleteOnTermination=true}",
 				p.opts.EBSVolumeSize, t)
-		case "io1":
+		case "io1", "io2":
 			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,Iops=%d,DeleteOnTermination=true}",
 				p.opts.EBSVolumeSize, t, p.opts.EBSProvisionedIOPs)
 		default:
