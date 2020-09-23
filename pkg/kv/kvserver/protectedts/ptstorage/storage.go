@@ -82,14 +82,18 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	if failed := *row[0].(*tree.DBool); failed {
 		curNumSpans := int64(*row[1].(*tree.DInt))
 		if curNumSpans+int64(len(r.Spans)) > s.maxSpans {
-			return errors.Errorf("protectedts: limit exceeded: %d+%d > %d spans",
-				curNumSpans, len(r.Spans), s.maxSpans)
+			return errors.WithHint(
+				errors.Errorf("protectedts: limit exceeded: %d+%d > %d spans", curNumSpans,
+					len(r.Spans), s.maxSpans),
+				"SET CLUSTER SETTING kv.protectedts.max_spans to a higher value")
 		}
 		curBytes := int64(*row[2].(*tree.DInt))
 		recordBytes := int64(len(encodedSpans) + len(r.Meta) + len(r.MetaType))
 		if curBytes+recordBytes > s.maxBytes {
-			return errors.Errorf("protectedts: limit exceeded: %d+%d > %d bytes",
-				curBytes, recordBytes, s.maxBytes)
+			return errors.WithHint(
+				errors.Errorf("protectedts: limit exceeded: %d+%d > %d bytes", curBytes, recordBytes,
+					s.maxBytes),
+				"SET CLUSTER SETTING kv.protectedts.max_bytes to a higher value")
 		}
 		return protectedts.ErrExists
 	}
