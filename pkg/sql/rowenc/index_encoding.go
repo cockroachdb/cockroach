@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -1255,8 +1256,9 @@ func EncodeSecondaryIndexes(
 		//
 		// We must account for additional index entries in the index memory account
 		// if secondaryIndexEntries is going to get re-sliced.
-		if cap(entries)-len(secondaryIndexEntries) < len(entries) {
-			if err := indexBoundAccount.Grow(ctx, int64(cap(entries))); err != nil {
+		if cap(secondaryIndexEntries)-len(secondaryIndexEntries) < len(entries) {
+			if err := indexBoundAccount.Grow(ctx, int64(unsafe.Sizeof(IndexEntry{}))*
+				int64(cap(secondaryIndexEntries))); err != nil {
 				return nil, errors.Wrap(err, "failed to re-slice index entries buffer")
 			}
 		}

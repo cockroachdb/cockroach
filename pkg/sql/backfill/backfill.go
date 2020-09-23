@@ -744,7 +744,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// If the number of index entries are going to cause the entries buffer to
 		// re-slice, we must account for this in the index memory account.
 		if cap(entries)-len(entries) < len(buffer) {
-			if err := ib.boundAccount.Grow(ctx, int64(cap(entries))); err != nil {
+			if err := ib.boundAccount.Grow(ctx, int64(unsafe.Sizeof(rowenc.IndexEntry{}))*
+				int64(cap(entries))); err != nil {
 				return nil, nil, err
 			}
 		}
