@@ -11,6 +11,36 @@ true
 └── remaining filters: none
 
 predtest
+true
+=>
+false
+----
+false
+
+predtest
+true
+=>
+NULL
+----
+false
+
+predtest
+NULL
+=>
+false
+----
+true
+└── remaining filters: none
+
+predtest
+false
+=>
+NULL
+----
+true
+└── remaining filters: none
+
+predtest
 1 = 1
 =>
 2 = 2
@@ -75,7 +105,44 @@ true
 └── remaining filters: none
 
 predtest vars=(bool)
+false
+=>
+@1
+----
+true
+└── remaining filters: false
+
+predtest vars=(bool)
+NULL
+=>
+@1
+----
+true
+└── remaining filters: false
+
+predtest vars=(bool)
 NOT @1
+=>
+@1
+----
+false
+
+predtest vars=(bool)
+@1
+=>
+false
+----
+false
+
+predtest vars=(bool)
+@1
+=>
+NULL
+----
+false
+
+predtest vars=(bool)
+true
 =>
 @1
 ----
@@ -539,7 +606,6 @@ predtest vars=(bool, bool)
 ----
 false
 
-
 # Range filters
 
 predtest vars=(int)
@@ -613,6 +679,23 @@ predtest vars=(string)
 ----
 true
 └── remaining filters: (@1 = 'foo') OR (@1 = 'bar')
+
+# Regression tests for #54649. Atoms that are contradictions, like NULL, should
+# not cause panics.
+predtest vars=(bool)
+(@1 OR NULL) OR @1
+=>
+@1
+----
+true
+└── remaining filters: (@1 OR CAST(NULL AS BOOL)) OR @1
+
+predtest vars=(bool, bool)
+(@1 OR NULL) OR @1
+=>
+@2
+----
+false
 
 predtest vars=(int)
 @1 < 10 OR @1 > 100
