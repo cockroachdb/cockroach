@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -88,11 +87,12 @@ func registerAllocator(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    `replicate/wide`,
-		Owner:   OwnerKV,
-		Timeout: 10 * time.Minute,
-		Cluster: makeClusterSpec(9, cpu(1)),
-		Run:     runWideReplication,
+		Name:       `replicate/wide`,
+		Owner:      OwnerKV,
+		Timeout:    10 * time.Minute,
+		Cluster:    makeClusterSpec(9, cpu(1)),
+		MinVersion: "v19.2.0",
+		Run:        runWideReplication,
 	})
 }
 
@@ -255,7 +255,10 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 		t.Fatalf("9-node cluster required")
 	}
 
-	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	args := startArgs(
+		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
+		"--args=--vmodule=replicate_queue=6",
+	)
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, c.All(), args)
 
@@ -263,14 +266,7 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 	defer db.Close()
 
 	zones := func() []string {
-		oldVersion := false
 		rows, err := db.Query(`SELECT target FROM crdb_internal.zones`)
-		// TODO(solon): Remove this block once we are no longer running roachtest
-		// against version 19.1 and earlier.
-		if err != nil && strings.Contains(err.Error(), `column "target" does not exist`) {
-			oldVersion = true
-			rows, err = db.Query(`SELECT zone_name FROM crdb_internal.zones`)
-		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -280,19 +276,6 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 			var name string
 			if err := rows.Scan(&name); err != nil {
 				t.Fatal(err)
-			}
-			// TODO(solon): Remove this block once we are no longer running roachtest
-			// against version 19.1 and earlier.
-			if oldVersion {
-				which := "RANGE"
-				if name[0] == '.' {
-					name = name[1:]
-				} else if strings.Count(name, ".") == 0 {
-					which = "DATABASE"
-				} else {
-					which = "TABLE"
-				}
-				name = fmt.Sprintf("%s %s", which, name)
 			}
 			results = append(results, name)
 		}
