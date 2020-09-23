@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -1243,6 +1244,7 @@ func EncodeSecondaryIndexes(
 	if indexBoundAccount.Monitor() == nil {
 		panic("Memory monitor passed to EncodeSecondaryIndexes was nil")
 	}
+	const sizeOfIndexEntry = int64(unsafe.Sizeof(IndexEntry{}))
 
 	for i := range indexes {
 		entries, err := EncodeSecondaryIndex(codec, tableDesc, indexes[i], colMap, values, includeEmpty)
@@ -1253,10 +1255,13 @@ func EncodeSecondaryIndexes(
 		// indexes can have 0 or >1 entries, as well as secondary indexes which
 		// store columns from multiple column families.
 		//
-		// We must account for additional index entries in the index memory account
-		// if secondaryIndexEntries is going to get re-sliced.
-		if cap(entries)-len(secondaryIndexEntries) < len(entries) {
-			if err := indexBoundAccount.Grow(ctx, int64(cap(entries))); err != nil {
+		// The memory monitor has already accounted for cap(secondaryIndexEntries).
+		// If the number of index entries are going to cause the
+		// secondaryIndexEntries buffer to re-slice, then it will very likely double
+		// in capacity. Therefore, we must account for another
+		// cap(secondaryIndexEntries) in the index memory account.
+		if cap(secondaryIndexEntries)-len(secondaryIndexEntries) < len(entries) {
+			if err := indexBoundAccount.Grow(ctx, sizeOfIndexEntry*int64(cap(secondaryIndexEntries))); err != nil {
 				return nil, errors.Wrap(err, "failed to re-slice index entries buffer")
 			}
 		}

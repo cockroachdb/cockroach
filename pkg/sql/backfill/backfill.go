@@ -639,9 +639,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// This ought to be chunkSize but in most tests we are actually building smaller
 	// indexes so use a smaller value.
 	const initBufferSize = 1000
+	const sizeOfIndexEntry = int64(unsafe.Sizeof(rowenc.IndexEntry{}))
 
 	indexEntriesInChunkInitialBufferSize :=
-		int64(unsafe.Sizeof(rowenc.IndexEntry{})) * initBufferSize * int64(len(ib.added))
+		sizeOfIndexEntry * initBufferSize * int64(len(ib.added))
 	if err := ib.boundAccount.Grow(ctx,
 		indexEntriesInChunkInitialBufferSize); err != nil {
 		return nil, nil, errors.Wrap(err,
@@ -670,8 +671,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	}
 	ib.evalCtx.IVarContainer = iv
 
-	indexEntriesPerRowInitialBufferSize := int64(len(ib.added)) *
-		int64(unsafe.Sizeof(rowenc.IndexEntry{}))
+	indexEntriesPerRowInitialBufferSize := int64(len(ib.added)) * sizeOfIndexEntry
 	if err := ib.boundAccount.Grow(ctx, indexEntriesPerRowInitialBufferSize); err != nil {
 		return nil, nil, errors.Wrap(err,
 			"failed to initialize empty buffer to store the index entries of a single row")
@@ -741,10 +741,12 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			return nil, nil, err
 		}
 
-		// If the number of index entries are going to cause the entries buffer to
-		// re-slice, we must account for this in the index memory account.
+		// The memory monitor has already accounted for cap(entries). If the number
+		// of index entries are going to cause the entries buffer to re-slice, then
+		// it will very likely double in capacity. Therefore, we must account for
+		// another cap(entries) in the index memory account.
 		if cap(entries)-len(entries) < len(buffer) {
-			if err := ib.boundAccount.Grow(ctx, int64(cap(entries))); err != nil {
+			if err := ib.boundAccount.Grow(ctx, sizeOfIndexEntry*int64(cap(entries))); err != nil {
 				return nil, nil, err
 			}
 		}
