@@ -44,7 +44,7 @@ func (p *pebbleResults) clear() {
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
 // <valueLen:Uint32><keyLen:Uint32><Key><Value>
 // This function adds to repr in that format.
-func (p *pebbleResults) put(key MVCCKey, value []byte) {
+func (p *pebbleResults) put(key []byte, value []byte) {
 	// Key value lengths take up 8 bytes (2 x Uint32).
 	const kvLenSize = 8
 	const minSize = 16
@@ -53,7 +53,7 @@ func (p *pebbleResults) put(key MVCCKey, value []byte) {
 	// We maintain a list of buffers, always encoding into the last one (a.k.a.
 	// pebbleResults.repr). The size of the buffers is exponentially increasing,
 	// capped at maxSize.
-	lenKey := key.Len()
+	lenKey := len(key)
 	lenToAdd := kvLenSize + lenKey + len(value)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
 		newSize := 2 * cap(p.repr)
@@ -73,7 +73,7 @@ func (p *pebbleResults) put(key MVCCKey, value []byte) {
 	p.repr = p.repr[:startIdx+lenToAdd]
 	binary.LittleEndian.PutUint32(p.repr[startIdx:], uint32(len(value)))
 	binary.LittleEndian.PutUint32(p.repr[startIdx+4:], uint32(lenKey))
-	encodeKeyToBuf(p.repr[startIdx+kvLenSize:startIdx+kvLenSize+lenKey], key, lenKey)
+	copy(p.repr[startIdx+kvLenSize:], key)
 	copy(p.repr[startIdx+kvLenSize+lenKey:], value)
 	p.count++
 	p.bytes += int64(lenToAdd)
@@ -583,7 +583,9 @@ func (p *pebbleMVCCScanner) addAndAdvance(val []byte) bool {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
-		p.results.put(p.curKey, val)
+		type unsafeRawKeyGetter interface { unsafeRawKey() []byte }
+		rawKey := p.parent.(unsafeRawKeyGetter).unsafeRawKey()
+		p.results.put(rawKey, val)
 		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
 			// When the target bytes are met or exceeded, stop producing more
 			// keys. We implement this by reducing maxKeys to the current
