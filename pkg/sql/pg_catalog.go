@@ -1227,6 +1227,7 @@ CREATE TABLE pg_catalog.pg_database (
 	oid OID,
 	datname Name,
 	datdba OID,
+	owner Name,
 	encoding INT4,
 	datcollate STRING,
 	datctype STRING,
@@ -1237,7 +1238,6 @@ CREATE TABLE pg_catalog.pg_database (
 	datfrozenxid INT,
 	datminmxid INT,
 	dattablespace OID,
-  databaseowner NAME,
 	datacl STRING[]
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -1246,7 +1246,8 @@ CREATE TABLE pg_catalog.pg_database (
 				return addRow(
 					dbOid(db.GetID()),           // oid
 					tree.NewDName(db.GetName()), // datname
-					tree.DNull,                  // datdba
+					getOwnerOID(db),            // datdba
+					getOwnerName(db),
 					// If there is a change in encoding value for the database we must update
 					// the definitions of getdatabaseencoding within pg_builtin.
 					builtins.DatEncodingUTFId,  // encoding
@@ -1259,7 +1260,6 @@ CREATE TABLE pg_catalog.pg_database (
 					tree.DNull,                 // datfrozenxid
 					tree.DNull,                 // datminmxid
 					oidZero,                    // dattablespace
-					getOwnerName(db),           // databaseowner
 					tree.DNull,                 // datacl
 				)
 			})
@@ -1976,14 +1976,17 @@ CREATE TABLE pg_catalog.pg_namespace (
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
 				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
-					ownerDatum := tree.DNull
+					ownerOID := tree.DNull
 					if sc.Kind == catalog.SchemaUserDefined {
-						ownerDatum = getOwnerOID(sc.Desc)
+						ownerOID = getOwnerOID(sc.Desc)
+					} else if sc.Kind == catalog.SchemaPublic {
+						// admin is the owner of the public schema.
+            ownerOID = h.UserOid("admin")
 					}
 					return addRow(
 						h.NamespaceOid(db.GetID(), sc.Name), // oid
 						tree.NewDString(sc.Name),            // nspname
-						ownerDatum,                          // nspowner
+						ownerOID,                            // nspowner
 						tree.DNull,                          // nspacl
 					)
 				})

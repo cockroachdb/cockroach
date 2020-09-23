@@ -9,6 +9,11 @@
 #
 # https://github.com/github/gitignore/tree/master/Global
 
+# Hidden files
+.idea/*.xml
+.*
+!.gitignore
+
 artifacts
 /bin
 /bin.*
@@ -32,3 +37,4 @@ customenv.mk
 # Generated files containing include paths.
 zcgo_flags*.go
 build/Railroad.jar
+

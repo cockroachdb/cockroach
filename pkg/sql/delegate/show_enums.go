@@ -22,10 +22,11 @@ FROM
 			nsp.nspname AS schema,
 			type.typname AS name,
 			enum.enumlabel AS label,
-      pg_catalog.pg_get_userbyid(type.typowner) AS owner
+      rl.rolname AS owner
 		FROM
 			pg_catalog.pg_enum AS enum
 			JOIN pg_catalog.pg_type AS type ON (type.oid = enum.enumtypid)
+      JOIN pg_catalog.pg_roles AS rl on (type.typowner = rl.oid)
 			JOIN pg_catalog.pg_namespace AS nsp ON (type.typnamespace = nsp.oid)
 		ORDER BY
 			(enumtypid, enumsortorder)

@@ -18,8 +18,14 @@ import (
 )
 
 func (d *delegator) delegateShowDatabases(stmt *tree.ShowDatabases) (tree.Statement, error) {
+	// The 'node' role is internal-only (not exposed in the pg_roles table), so we have to hard-code its value here
 	query := `SELECT
-	datname AS database_name, databaseowner as database_owner
+	datname AS database_name,
+  CASE WHEN d.datdba = 3233629770
+  THEN 'node'
+  ELSE rl.rolname
+  END
+  AS database_owner
 `
 
 	if stmt.WithComment {
@@ -29,6 +35,7 @@ func (d *delegator) delegateShowDatabases(stmt *tree.ShowDatabases) (tree.Statem
 	query += `
 FROM
   pg_catalog.pg_database d
+  LEFT JOIN pg_catalog.pg_roles AS rl on (d.datdba = rl.oid)
 `
 	if stmt.WithComment {
 		query += fmt.Sprintf(`
