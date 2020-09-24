@@ -656,6 +656,7 @@ func init() {
 		f := cmd.Flags()
 		varFlag(f, &sqlCtx.setStmts, cliflags.Set)
 		varFlag(f, &sqlCtx.execStmts, cliflags.Execute)
+		stringFlag(f, &sqlCtx.inputFile, cliflags.File)
 		durationFlag(f, &sqlCtx.repeatDelay, cliflags.Watch)
 		boolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates)
 		boolFlag(f, &sqlCtx.debugMode, cliflags.CliDebugMode)
