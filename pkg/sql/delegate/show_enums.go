@@ -15,7 +15,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 func (d *delegator) delegateShowEnums() (tree.Statement, error) {
 	query := `
 SELECT
-	schema, name, owner, string_agg(label, '|') AS value
+	schema, name, string_agg(label, '|'), owner AS value
 FROM
 	(
 		SELECT
@@ -26,7 +26,7 @@ FROM
 		FROM
 			pg_catalog.pg_enum AS enum
 			JOIN pg_catalog.pg_type AS type ON (type.oid = enum.enumtypid)
-      JOIN pg_catalog.pg_roles AS rl on (type.typowner = rl.oid)
+      LEFT JOIN pg_catalog.pg_roles AS rl on (type.typowner = rl.oid)
 			JOIN pg_catalog.pg_namespace AS nsp ON (type.typnamespace = nsp.oid)
 		ORDER BY
 			(enumtypid, enumsortorder)
