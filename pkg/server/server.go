@@ -2304,3 +2304,8 @@ func (s *Server) RunLocalSQL(
 ) error {
 	return fn(ctx, s.sqlServer.internalExecutor)
 }
+
+// Insecure returns true iff the server has security disabled.
+func (s *Server) Insecure() bool {
+	return s.cfg.Insecure
+}

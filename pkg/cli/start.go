@@ -249,11 +249,11 @@ func runStartSingleNode(cmd *cobra.Command, args []string) error {
 	// Make the node auto-init the cluster if not done already.
 	serverCfg.AutoInitializeCluster = true
 
-	return runStart(cmd, args, true /*disableReplication*/)
+	return runStart(cmd, args, true /*startSingleNode*/)
 }
 
 func runStartJoin(cmd *cobra.Command, args []string) error {
-	return runStart(cmd, args, false /*disableReplication*/)
+	return runStart(cmd, args, false /*startSingleNode*/)
 }
 
 // runStart starts the cockroach node using --store as the list of
@@ -261,9 +261,9 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 //
-// If the argument disableReplication is set the replication factor
-// will be set to 1 all zone configs.
-func runStart(cmd *cobra.Command, args []string, disableReplication bool) error {
+// If the argument startSingleNode is set the replication factor
+// will be set to 1 all zone configs (see initial_sql.go).
+func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	tBegin := timeutil.Now()
 
 	// First things first: if the user wants background processing,
@@ -587,20 +587,13 @@ If problems persist, please see %s.`
 			if !cluster.TelemetryOptOut() {
 				s.PeriodicallyCheckForUpdates(ctx)
 			}
-
 			initialStart := s.InitialStart()
 
-			if disableReplication && initialStart {
-				// For start-single-node, set the default replication factor to
-				// 1 so as to avoid warning message and unnecessary rebalance
-				// churn.
-				if err := cliDisableReplication(ctx, s); err != nil {
-					log.Errorf(ctx, "could not disable replication: %v", err)
-					return err
-				}
-				log.Shout(ctx, log.Severity_INFO,
-					"Replication was disabled for this cluster.\n"+
-						"When/if adding nodes in the future, update zone configurations to increase the replication factor.")
+			// Run SQL for new clusters.
+			// TODO(knz): If/when we want auto-creation of an initial admin user,
+			// this can be achieved here.
+			if _, err := runInitialSQL(ctx, s, startSingleNode, "" /* adminUser */); err != nil {
+				return err
 			}
 
 			// Now inform the user that the server is running and tell the
