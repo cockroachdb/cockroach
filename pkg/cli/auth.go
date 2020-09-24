@@ -64,7 +64,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		checkInteractive()
+		checkInteractive(os.Stdin)
 		if cliCtx.isInteractive {
 			fmt.Fprintf(stderr, `#
 # Example uses:

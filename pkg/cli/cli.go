@@ -127,10 +127,6 @@ func (e *cliError) FormatError(p errors.Printer) error {
 // to be captured.
 var stderr = log.OrigStderr
 
-// stdin aliases os.Stdin; we use an alias here so that tests in this
-// package can redirect the input of the CLI shell.
-var stdin = os.Stdin
-
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "output version information",
