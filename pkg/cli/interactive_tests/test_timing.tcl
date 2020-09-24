@@ -8,10 +8,10 @@ spawn $argv demo movr
 eexpect root@
 
 start_test "Test that server execution time and network latency are printed by default."
-send "SELECT * FROM vehicles LIMIT 1;\r"
+send "SELECT pg_sleep(0.02) FROM vehicles LIMIT 1;\r"
 eexpect "1 row"
-eexpect "/ net"
-eexpect "/ other"
+eexpect "execution"
+eexpect "network"
 
 # Ditto with multiple statements on one line
 send "SELECT * FROM vehicles LIMIT 1; CREATE TABLE t(a int);\r"
@@ -21,10 +21,10 @@ end_test
 
 start_test "Test show_server_execution_times works correctly"
 send "\\set show_server_times=false\r"
-send "SELECT * FROM vehicles LIMIT 1;\r"
+send "SELECT pg_sleep(0.02) FROM vehicles LIMIT 1;\r"
 eexpect "\nTime:"
 send "\\set show_server_times=true\r"
-send "SELECT * FROM vehicles LIMIT 1;\r"
-eexpect "/ net"
-eexpect "/ other"
+send "SELECT pg_sleep(0.02) FROM vehicles LIMIT 1;\r"
+eexpect "execution"
+eexpect "network"
 end_test
