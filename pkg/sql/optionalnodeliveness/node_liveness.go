@@ -18,7 +18,7 @@ import (
 
 // Interface is the interface used in Container.
 type Interface interface {
-	Self() (kvserverpb.Liveness, error)
+	Self() (kvserverpb.Liveness, bool)
 	GetLivenesses() []kvserverpb.Liveness
 	IsLive(roachpb.NodeID) (bool, error)
 }
