@@ -681,7 +681,14 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 						"hash column %d, row with only %d columns", errors.Safe(col), errors.Safe(len(row)))
 				}
 				var err error
-				w.scratch, err = row[int(col)].Fingerprint(w.inputTypes[int(col)], &w.datumAlloc, w.scratch)
+				// We might allocate tree.Datums when hashing the row, so we'll
+				// ask the fingerprint to account for them. Note that if the
+				// datums are later used by the window functions (and accounted
+				// for accordingly), this can lead to over-accounting which is
+				// acceptable.
+				w.scratch, err = row[col].Fingerprint(
+					ctx, w.inputTypes[int(col)], &w.datumAlloc, w.scratch, &w.acc,
+				)
 				if err != nil {
 					return err
 				}
