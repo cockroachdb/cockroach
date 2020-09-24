@@ -433,6 +433,7 @@ func (w *tpcc) Tables() []workload.Table {
 				return []interface{}{(i + 1) * numWarehousesPerRange}
 			},
 		)),
+		Stats: w.tpccWarehouseStats(),
 	}
 	district := workload.Table{
 		Name: `district`,
@@ -451,6 +452,7 @@ func (w *tpcc) Tables() []workload.Table {
 				return []interface{}{(i + 1) * numWarehousesPerRange, 0}
 			},
 		)),
+		Stats: w.tpccDistrictStats(),
 	}
 	customer := workload.Table{
 		Name: `customer`,
@@ -482,6 +484,7 @@ func (w *tpcc) Tables() []workload.Table {
 				return []interface{}{(i + 1) * numWarehousesPerRange}
 			},
 		)),
+		Stats: w.tpccHistoryStats(),
 	}
 	order := workload.Table{
 		Name: `order`,
@@ -494,6 +497,7 @@ func (w *tpcc) Tables() []workload.Table {
 			NumBatches: numOrdersPerWarehouse * w.warehouses,
 			FillBatch:  w.tpccOrderInitialRowBatch,
 		},
+		Stats: w.tpccOrderStats(),
 	}
 	newOrder := workload.Table{
 		Name:   `new_order`,
