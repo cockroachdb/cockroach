@@ -337,7 +337,17 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 
 	c := serverpb.NewAdminClient(conn)
-	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs)
+	if err := runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs); err != nil {
+		cause := errors.Cause(err)
+		if s, ok := status.FromError(cause); ok && s.Code() == codes.NotFound {
+			// Are we trying to decommision a node that does not
+			// exist? See Server.Decommission for where this specific grpc error
+			// code is generated.
+			return errors.New("node does not exist")
+		}
+		return err
+	}
+	return nil
 }
 
 func handleNodeDecommissionSelf(
@@ -572,6 +582,13 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		// error is generated.
 		if s, ok := status.FromError(err); ok && s.Code() == codes.FailedPrecondition {
 			return errors.Newf("%s", s.Message())
+		}
+		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
+			// Are we trying to recommission node that does not
+			// exist? See Server.Decommission for where this specific grpc error
+			// code is generated.
+			fmt.Fprintln(stderr)
+			return errors.New("node does not exist")
 		}
 		return err
 	}
