@@ -1435,11 +1435,12 @@ func (m *multiTestContext) heartbeatLiveness(ctx context.Context, store int) err
 	m.mu.RLock()
 	nl := m.nodeLivenesses[store]
 	m.mu.RUnlock()
-	l, err := nl.Self()
-	if err != nil {
-		return err
+	l, ok := nl.Self()
+	if !ok {
+		return errors.New("liveness not found")
 	}
 
+	var err error
 	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
 		if err = nl.Heartbeat(ctx, l); !errors.Is(err, kvserver.ErrEpochIncremented) {
 			break
