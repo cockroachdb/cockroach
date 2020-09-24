@@ -112,6 +112,12 @@ type cliState struct {
 	errExit bool
 	// Determines whether to perform client-side syntax checking.
 	checkSyntax bool
+	// Determine whether the shell can invoke external processes,
+	// for example via tha \| command.
+	// This is disabled e.g. for running initial SQL upon cluster
+	// initialization, to avoid mis-use of the CockroachDB process
+	// to gain access to the host machine.
+	allowExternalCommands bool
 
 	// The prompt at the beginning of a multi-line entry.
 	fullPrompt string
@@ -172,7 +178,7 @@ type cliState struct {
 	autoTrace string
 }
 
-// cliStateEnum drives the CLI state machine in runInteractive().
+// cliStateEnum drives the CLI state machine in runShell().
 type cliStateEnum int
 
 const (
@@ -620,9 +626,16 @@ func execSyscmd(command string) (string, error) {
 }
 
 var errInvalidSyntax = errors.New("invalid syntax")
+var errNoExternalCommandsAllowed = errors.New("no external commands allowed in this sessionx")
 
 // runSyscmd runs system commands on the interactive CLI.
 func (c *cliState) runSyscmd(line string, nextState, errState cliStateEnum) cliStateEnum {
+	if !c.allowExternalCommands {
+		c.exitErr = errNoExternalCommandsAllowed
+		fmt.Fprintf(stderr, "%v", c.exitErr)
+		return errState
+	}
+
 	command := strings.Trim(line[2:], " \r\n\t\f")
 	if command == "" {
 		fmt.Fprintf(stderr, "Usage:\n  \\! [command]\n")
@@ -643,6 +656,12 @@ func (c *cliState) runSyscmd(line string, nextState, errState cliStateEnum) cliS
 
 // pipeSyscmd executes system commands and pipe the output into the current SQL.
 func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cliStateEnum {
+	if !c.allowExternalCommands {
+		c.exitErr = errNoExternalCommandsAllowed
+		fmt.Fprintf(stderr, "%v", c.exitErr)
+		return errState
+	}
+
 	command := strings.Trim(line[2:], " \n\r\t\f")
 	if command == "" {
 		fmt.Fprintf(stderr, "Usage:\n  \\| [command]\n")
@@ -1269,10 +1288,24 @@ func (c *cliState) doDecidePath() cliStateEnum {
 	return cliPrepareStatementLine
 }
 
-// runInteractive runs the SQL client interactively, presenting
+// runShell runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
-func runInteractive(conn *sqlConn, cmdIn *os.File) (exitErr error) {
-	c := cliState{conn: conn}
+//
+// Note that this code is involved in multiple use cases:
+// - to drive the interactive session in `cockroach sql` and `cockroach demo`.
+// - to run scripts non-interactively with `cockroach sql -f`.
+// - to run initialization SQL scripts when a cluster starts up, via `--initial-sql-dir`.
+//
+// Changes to the shell semantics should consider all these use cases
+// (especially the last) for backward-compatibility. Especially
+// changes to the behavior upon encountering errors (whether `errexit`
+// is set by default, short read at end of file etc) must be clear in
+// commit messages release notes.
+func runShell(conn *sqlConn, cmdIn *os.File, allowExternalCommands bool) (exitErr error) {
+	c := cliState{
+		conn:                  conn,
+		allowExternalCommands: allowExternalCommands,
+	}
 
 	state := cliStart
 	for {
@@ -1536,7 +1569,7 @@ func runClient(cmd *cobra.Command, conn *sqlConn, cmdIn *os.File) error {
 	// Enable safe updates, unless disabled.
 	setupSafeUpdates(cmd, conn)
 
-	return runInteractive(conn, cmdIn)
+	return runShell(conn, cmdIn, true /* allowExternalCommands */)
 }
 
 // setupSafeUpdates attempts to enable "safe mode" if the session is

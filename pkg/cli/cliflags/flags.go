@@ -622,6 +622,25 @@ the socket name programmatically. To use, for example:
 </PRE>`,
 	}
 
+	InitialSQLDir = FlagInfo{
+		Name:   "initial-sql-dir",
+		EnvVar: "COCKROACH_INITIAL_SQL_DIR",
+		Description: `
+When set, CockroachDB will run any .sql files
+contained inside the directory exactly once, prior
+to accepting client connections. If the directory
+does not exist, the parameter is ignored.
+
+The only-once semantics are enforced cluster-wide: if multiple
+nodes have a directory configured, only one of the
+nodes will execute the .sql files within.
+
+This option can be used with containers and orchestration,
+for example by pointing it to a volume mount containing
+SQL scripts to customize a new cluster.
+`,
+	}
+
 	ClientInsecure = FlagInfo{
 		Name:   "insecure",
 		EnvVar: "COCKROACH_INSECURE",

@@ -13,6 +13,8 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // runInitialSQL concerns itself with running "initial SQL" code when
@@ -48,6 +51,7 @@ func runInitialSQL(
 	}
 
 	if startSingleNode {
+		log.Infof(ctx, "disabling replication for single-node cluster")
 		// For start-single-node, set the default replication factor to
 		// 1 so as to avoid warning messages and unnecessary rebalance
 		// churn.
@@ -60,10 +64,16 @@ func runInitialSQL(
 	}
 
 	if adminUser != "" && !s.Insecure() {
+		log.Infof(ctx, "creating admin user %q", adminUser)
 		adminPassword, err = createAdminUser(ctx, s, adminUser)
 		if err != nil {
 			return "", err
 		}
+	}
+
+	// If there are initialization scripts, run them.
+	if err := maybeRunScripts(ctx, s); err != nil {
+		return "", err
 	}
 
 	// We completed the SQL initialization. Tell all the other nodes we're done.
@@ -183,4 +193,60 @@ func cliDisableReplication(ctx context.Context, s *server.Server) error {
 
 			return nil
 		})
+}
+
+// maybeRunScripts runs the configured initial configuration scripts.
+func maybeRunScripts(ctx context.Context, s *server.Server) error {
+	if startCtx.initialSQLDir == "" {
+		// Directory not configured. No-op.
+		return nil
+	}
+
+	scripts, err := filepath.Glob(filepath.Join(startCtx.initialSQLDir, "*.sql"))
+	if err != nil {
+		return err
+	}
+	if len(scripts) == 0 {
+		log.Infof(ctx, "no custom initial SQL scripts found in %q", startCtx.initialSQLDir)
+		return nil
+	}
+
+	// Fixup the CLI configuration since we're in a running server.
+	// TODO(knz): make this state part of the sqlConn object,
+	// instead of a global object.
+	cliCtx.isInteractive = false
+
+	// There are scripts to run. Use a loopback connection to run them.
+	// We use the root account for now.
+	sqlConn := newLoopbackSQLConn(s, security.RootUser)
+	if err := sqlConn.ensureConn(); err != nil {
+		return err
+	}
+
+	// Now run the scripts.
+	// TODO(knz): We may want to redirect stdout/stderr
+	// from the script to the log file.
+	for _, script := range scripts {
+		log.Infof(ctx, "executing initial SQL from %s", script)
+		if err := func() (err error) {
+			var f *os.File
+			f, err = os.Open(script)
+			if err != nil {
+				return err
+			}
+			defer func() {
+				err = errors.CombineErrors(err, f.Close())
+			}()
+
+			// Run the script inside the shell.
+			// We disable the execution of external commands with \! etc.
+			// so that the node process cannot be used to gain access
+			// to the host system.
+			return runShell(sqlConn, f, false /* allowExternalCommands */)
+		}(); err != nil {
+			log.Infof(ctx, "%s: initial SQL failed: %v", script, err)
+			return err
+		}
+	}
+	return nil
 }
