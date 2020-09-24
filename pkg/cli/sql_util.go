@@ -985,12 +985,23 @@ func maybeShowTimes(
 	// output will be execution time(s).
 	fmt.Fprintln(w)
 
+	// Suggested by Radu: for sub-second results, show simplified
+	// timings in milliseconds.
+	unit := "s"
+	multiplier := 1.
+	precision := 3
+	if clientSideQueryTime.Seconds() < 1 {
+		unit = "ms"
+		multiplier = 1000.
+		precision = 0
+	}
+
 	if sqlCtx.verboseTimings {
 		fmt.Fprintf(w, "Time: %s", clientSideQueryTime)
 	} else {
 		// Simplified displays: human users typically can't
 		// distinguish sub-millisecond latencies.
-		fmt.Fprintf(w, "Time: %.3fs", clientSideQueryTime.Seconds())
+		fmt.Fprintf(w, "Time: %.*f%s", precision, clientSideQueryTime.Seconds()*multiplier, unit)
 	}
 
 	if !sqlCtx.enableServerExecutionTimings {
@@ -1012,15 +1023,15 @@ func maybeShowTimes(
 	if sqlCtx.verboseTimings {
 		fmt.Fprintf(w, " (parse %s / plan %s / exec %s / other %s / network %s)\n",
 			parseLat, planLat, execLat, otherLat, networkLat)
-	} else if clientSideQueryTime.Milliseconds() > 1 {
+	} else {
 		// Simplified display: just show the execution/network breakdown.
 		//
-		// Note: we omit the report of percentages for queries that
+		// Note: we omit the report details for queries that
 		// last for a millisecond or less. This is because for such
 		// small queries, the detail is just noise to the human observer.
 		sep := " ("
 		reportTiming := func(label string, lat time.Duration) {
-			fmt.Fprintf(w, "%s%s %.3fs", sep, label, lat.Seconds())
+			fmt.Fprintf(w, "%s%s %.*f%s", sep, label, precision, lat.Seconds()*multiplier, unit)
 			sep = " / "
 		}
 		reportTiming("execution", serviceLat)
