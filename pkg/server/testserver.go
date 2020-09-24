@@ -711,7 +711,7 @@ func StartTenant(
 		return "", "", err
 	}
 
-	if err := s.start(ctx,
+	if err := s.preStart(ctx,
 		args.stopper,
 		args.TestingKnobs,
 		connManager,
@@ -719,6 +719,13 @@ func StartTenant(
 		socketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
+		return "", "", err
+	}
+	if err := s.startServeSQL(ctx,
+		args.stopper,
+		s.connManager,
+		s.pgL,
+		socketFile); err != nil {
 		return "", "", err
 	}
 

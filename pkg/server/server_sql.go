@@ -93,6 +93,12 @@ type sqlServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 	sqlLivenessProvider     sqlliveness.Provider
 	metricsRegistry         *metric.Registry
+
+	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
+	pgL net.Listener
+	// connManager is the connection manager to use to set up additional
+	// SQL listeners in AcceptClients().
+	connManager netutil.Server
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -652,7 +658,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	}, nil
 }
 
-func (s *sqlServer) start(
+func (s *sqlServer) preStart(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
@@ -668,6 +674,8 @@ func (s *sqlServer) start(
 			return err
 		}
 	}
+	s.connManager = connManager
+	s.pgL = pgL
 	s.sqlLivenessProvider.Start(ctx)
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
@@ -754,11 +762,6 @@ func (s *sqlServer) start(
 	}
 
 	log.Infof(ctx, "done ensuring all necessary migrations have run")
-
-	// Start serving SQL clients.
-	if err := s.startServeSQL(ctx, stopper, connManager, pgL, socketFile); err != nil {
-		return err
-	}
 
 	// Start the async migration to upgrade namespace entries from the old
 	// namespace table (id 2) to the new one (id 30).
