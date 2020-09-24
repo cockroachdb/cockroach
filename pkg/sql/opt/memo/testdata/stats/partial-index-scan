@@ -70,7 +70,7 @@ DROP INDEX idx
 # Test for select filter applied after an unconstrained partial index scan.
 
 exec-ddl
-CREATE INDEX idx ON a (s) WHERE i > 0 AND i < 100
+CREATE INDEX idx ON a (s) WHERE i > 0 AND i < 50
 ----
 
 opt
@@ -83,16 +83,16 @@ select
  ├── fd: (1)-->(2-4)
  ├── index-join a
  │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
- │    ├── stats: [rows=990]
+ │    ├── stats: [rows=490]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    └── scan a@idx,partial
  │         ├── columns: k:1(int!null) s:3(string)
- │         ├── stats: [rows=990, distinct(2)=99, null(2)=0]
+ │         ├── stats: [rows=490, distinct(2)=49, null(2)=0]
  │         ├── key: (1)
  │         └── fd: (1)-->(3)
  └── filters
-      └── (i:2 > 25) AND (i:2 < 50) [type=bool, outer=(2), constraints=(/2: [/26 - /49]; tight)]
+      └── i:2 > 25 [type=bool, outer=(2), constraints=(/2: [/26 - ]; tight)]
 
 exec-ddl
 DROP INDEX idx
@@ -460,13 +460,13 @@ ALTER TABLE hist INJECT STATISTICS '[
 ]'
 ----
 
-# TODO(mgartner): The distinct(2) stat for the partial index scan should be 10
-# not 11. It is currently one more than it should be because
+# TODO(mgartner): The distinct(2) stat for the partial index scan should be 5.454545
+# not 6.454545. It is currently one more than it should be because
 # updateDistinctCountFromHistogram increments the distinct count before the null
 # count has been set to zero.
 
 exec-ddl
-CREATE INDEX idx ON hist (s) WHERE i > 100 AND i <= 200
+CREATE INDEX idx ON hist (s) WHERE i > 100 AND i <= 150
 ----
 
 opt
@@ -481,14 +481,14 @@ select
  ├── fd: (1)-->(2,3)
  ├── index-join hist
  │    ├── columns: k:1(int!null) i:2(int) s:3(string)
- │    ├── stats: [rows=190]
+ │    ├── stats: [rows=90.9090909]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    └── scan hist@idx,partial
  │         ├── columns: k:1(int!null) s:3(string)
- │         ├── stats: [rows=190, distinct(2)=11, null(2)=0]
- │         │   histogram(2)=  0   0   180  10
- │         │                <--- 100 ----- 200
+ │         ├── stats: [rows=90.9090909, distinct(2)=6.45454545, null(2)=0]
+ │         │   histogram(2)=  0   0   89.091 1.8182
+ │         │                <--- 100 -------- 150 -
  │         ├── key: (1)
  │         └── fd: (1)-->(3)
  └── filters
