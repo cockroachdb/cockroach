@@ -92,6 +92,8 @@ type Iterator interface {
 	Prev()
 	// Key returns the current key.
 	Key() MVCCKey
+	// UnsafeRawKey returns the current raw key (i.e. the encoded MVCC key).
+	UnsafeRawKey() []byte
 	// Value returns the current value as a byte slice.
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently

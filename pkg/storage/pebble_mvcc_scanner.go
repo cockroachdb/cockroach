@@ -44,7 +44,7 @@ func (p *pebbleResults) clear() {
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
 // <valueLen:Uint32><keyLen:Uint32><Key><Value>
 // This function adds to repr in that format.
-func (p *pebbleResults) put(key MVCCKey, value []byte) {
+func (p *pebbleResults) put(key []byte, value []byte) {
 	// Key value lengths take up 8 bytes (2 x Uint32).
 	const kvLenSize = 8
 	const minSize = 16
@@ -53,7 +53,7 @@ func (p *pebbleResults) put(key MVCCKey, value []byte) {
 	// We maintain a list of buffers, always encoding into the last one (a.k.a.
 	// pebbleResults.repr). The size of the buffers is exponentially increasing,
 	// capped at maxSize.
-	lenKey := key.Len()
+	lenKey := len(key)
 	lenToAdd := kvLenSize + lenKey + len(value)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
 		newSize := 2 * cap(p.repr)
@@ -73,7 +73,7 @@ func (p *pebbleResults) put(key MVCCKey, value []byte) {
 	p.repr = p.repr[:startIdx+lenToAdd]
 	binary.LittleEndian.PutUint32(p.repr[startIdx:], uint32(len(value)))
 	binary.LittleEndian.PutUint32(p.repr[startIdx+4:], uint32(lenKey))
-	encodeKeyToBuf(p.repr[startIdx+kvLenSize:startIdx+kvLenSize+lenKey], key, lenKey)
+	copy(p.repr[startIdx+kvLenSize:], key)
 	copy(p.repr[startIdx+kvLenSize+lenKey:], value)
 	p.count++
 	p.bytes += int64(lenToAdd)
@@ -122,10 +122,11 @@ type pebbleMVCCScanner struct {
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
-	curKey   MVCCKey
-	curValue []byte
-	results  pebbleResults
-	intents  pebble.Batch
+	curKey    MVCCKey
+	curRawKey []byte
+	curValue  []byte
+	results   pebbleResults
+	intents   pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is above the scan
 	// timestamp. Only applicable if failOnMoreRecent is true. If set and no
 	// other error is hit, a WriteToOld error will be returned from the scan.
@@ -287,7 +288,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		if p.curKey.Timestamp.LessEq(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer than
 			// the most recent version's timestamp.
-			return p.addAndAdvance(p.curValue)
+			return p.addAndAdvance(p.curRawKey, p.curValue)
 		}
 
 		if p.failOnMoreRecent {
@@ -331,7 +332,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 	}
 	if len(p.meta.RawBytes) != 0 {
 		// 5. Emit immediately if the value is inline.
-		return p.addAndAdvance(p.meta.RawBytes)
+		return p.addAndAdvance(p.curRawKey, p.meta.RawBytes)
 	}
 
 	if p.meta.Txn == nil {
@@ -381,8 +382,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// that lie before the resume key.
 			return false
 		}
-		p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], p.curKey)
-		p.err = p.intents.Set(p.keyBuf, p.curValue, nil)
+		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
 		if p.err != nil {
 			return false
 		}
@@ -402,8 +402,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// Note that this will trigger an error higher up the stack. We
 		// continue scanning so that we can return all of the intents
 		// in the scan range.
-		p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], p.curKey)
-		p.err = p.intents.Set(p.keyBuf, p.curValue, nil)
+		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
 		if p.err != nil {
 			return false
 		}
@@ -437,7 +436,8 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// about to advance. If this proves to be a problem later, we can extend
 			// addAndAdvance to take an MVCCKey explicitly.
 			p.curKey.Timestamp = metaTS
-			return p.addAndAdvance(value)
+			p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], p.curKey)
+			return p.addAndAdvance(p.keyBuf, value)
 		}
 		// 11. If no value in the intent history has a sequence number equal to
 		// or less than the read, we must ignore the intents laid down by the
@@ -576,14 +576,14 @@ func (p *pebbleMVCCScanner) advanceKeyAtNewKey(key []byte) bool {
 	return true
 }
 
-// Adds the specified value to the result set, excluding tombstones unless
+// Adds the specified key and value to the result set, excluding tombstones unless
 // p.tombstones is true. Advances to the next key unless we've reached the max
 // results limit.
-func (p *pebbleMVCCScanner) addAndAdvance(val []byte) bool {
+func (p *pebbleMVCCScanner) addAndAdvance(rawKey []byte, val []byte) bool {
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
-		p.results.put(p.curKey, val)
+		p.results.put(rawKey, val)
 		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
 			// When the target bytes are met or exceeded, stop producing more
 			// keys. We implement this by reducing maxKeys to the current
@@ -620,7 +620,7 @@ func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool)
 			if uncertaintyCheck && p.ts.Less(p.curKey.Timestamp) {
 				return p.uncertaintyError(p.curKey.Timestamp)
 			}
-			return p.addAndAdvance(p.curValue)
+			return p.addAndAdvance(p.curRawKey, p.curValue)
 		}
 	}
 
@@ -635,7 +635,7 @@ func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool)
 		if uncertaintyCheck && p.ts.Less(p.curKey.Timestamp) {
 			return p.uncertaintyError(p.curKey.Timestamp)
 		}
-		return p.addAndAdvance(p.curValue)
+		return p.addAndAdvance(p.curRawKey, p.curValue)
 	}
 	return p.advanceKey()
 }
@@ -646,7 +646,13 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 		return false
 	}
 
-	p.curKey = p.parent.UnsafeKey()
+	p.curRawKey = p.parent.UnsafeRawKey()
+
+	var err error
+	p.curKey, err = DecodeMVCCKey(p.curRawKey)
+	if err != nil {
+		panic(err)
+	}
 	p.curValue = p.parent.UnsafeValue()
 	return true
 }
@@ -728,10 +734,13 @@ func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool) {
 		// We need to save a copy of the current iterator key and value and adjust
 		// curRawKey, curKey and curValue to point to this saved data. We use a
 		// single buffer for this purpose: savedBuf.
-		p.savedBuf = append(p.savedBuf[:0], p.curKey.Key...)
+		p.savedBuf = append(p.savedBuf[:0], p.curRawKey...)
 		p.savedBuf = append(p.savedBuf, p.curValue...)
-		p.curKey.Key = p.savedBuf[:len(p.curKey.Key)]
-		p.curValue = p.savedBuf[len(p.curKey.Key):]
+		p.curRawKey = p.savedBuf[:len(p.curRawKey)]
+		p.curValue = p.savedBuf[len(p.curRawKey):]
+		// The raw key is always a prefix of the encoded MVCC key. Take advantage of this to
+		// sub-slice the raw key directly, instead of calling SplitMVCCKey.
+		p.curKey.Key = p.curRawKey[:len(p.curKey.Key)]
 
 		// With the current iterator state saved we can move the iterator to the
 		// previous entry.
