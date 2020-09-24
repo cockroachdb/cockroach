@@ -237,8 +237,8 @@ func (p *pebbleIterator) UnsafeKey() MVCCKey {
 	return mvccKey
 }
 
-// unsafeRawKey returns the raw key from the underlying pebble.Iterator.
-func (p *pebbleIterator) unsafeRawKey() []byte {
+// UnsafeRawKey returns the raw key from the underlying pebble.Iterator.
+func (p *pebbleIterator) UnsafeRawKey() []byte {
 	return p.iter.Key()
 }
 
