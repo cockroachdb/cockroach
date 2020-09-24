@@ -229,6 +229,8 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 // drainNode initiates the draining mode for the node, which
 // starts draining range leases.
 func (s *Server) drainNode(ctx context.Context, reporter func(int, redact.SafeString)) error {
-	s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter)
+	if err := s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
+		return err
+	}
 	return s.node.SetDraining(true /* drain */, reporter)
 }

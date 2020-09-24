@@ -256,7 +256,7 @@ func (nl *NodeLiveness) sem(nodeID roachpb.NodeID) chan struct{} {
 // pkg/server/drain.go for details.
 func (nl *NodeLiveness) SetDraining(
 	ctx context.Context, drain bool, reporter func(int, redact.SafeString),
-) {
+) error {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		oldLivenessRec, err := nl.SelfEx()
@@ -270,8 +270,13 @@ func (nl *NodeLiveness) SetDraining(
 			}
 			continue
 		}
-		return
+		return nil
 	}
+	// TODO(irfansharif): The code flow here seems buggy? It seems it is only a
+	// best effort attempt at marking the node as draining. It can return
+	// without an error after trying unsuccessfully a few times. Is that what we
+	// want?
+	return nil
 }
 
 // SetMembershipStatus changes the liveness record to reflect the target
