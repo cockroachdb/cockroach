@@ -199,7 +199,7 @@ func (c *sqlConn) ensureConn() error {
 // SHOW LAST QUERY STATISTICS statements. This allows the CLI client to report
 // server side execution timings instead of timing on the client.
 func (c *sqlConn) tryEnableServerExecutionTimings() {
-	_, _, err := c.getLastQueryStatistics()
+	_, _, _, _, err := c.getLastQueryStatistics()
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: cannot show server execution timings: unexpected column found\n")
 		sqlCtx.enableServerExecutionTimings = false
@@ -393,13 +393,12 @@ func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
 // performs sanity checks, and returns the exec latency and service latency from
 // the sql row parsed as time.Duration.
 func (c *sqlConn) getLastQueryStatistics() (
-	execLatency time.Duration,
-	serviceLatency time.Duration,
+	parseLat, planLat, execLat, serviceLat time.Duration,
 	err error,
 ) {
 	rows, err := c.Query("SHOW LAST QUERY STATISTICS", nil)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
 	defer func() {
 		closeErr := rows.Close()
@@ -407,17 +406,22 @@ func (c *sqlConn) getLastQueryStatistics() (
 	}()
 
 	if len(rows.Columns()) != 4 {
-		return 0, 0,
+		return 0, 0, 0, 0,
 			errors.New("unexpected number of columns in SHOW LAST QUERY STATISTICS")
 	}
 
-	if rows.Columns()[2] != "exec_latency" || rows.Columns()[3] != "service_latency" {
-		return 0, 0,
+	if rows.Columns()[0] != "parse_latency" ||
+		rows.Columns()[1] != "plan_latency" ||
+		rows.Columns()[2] != "exec_latency" ||
+		rows.Columns()[3] != "service_latency" {
+		return 0, 0, 0, 0,
 			errors.New("unexpected columns in SHOW LAST QUERY STATISTICS")
 	}
 
 	iter := newRowIter(rows, true /* showMoreChars */)
 	nRows := 0
+	var parseLatencyRaw string
+	var planLatencyRaw string
 	var execLatencyRaw string
 	var serviceLatencyRaw string
 	for {
@@ -425,9 +429,11 @@ func (c *sqlConn) getLastQueryStatistics() (
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return 0, 0, err
+			return 0, 0, 0, 0, err
 		}
 
+		parseLatencyRaw = formatVal(row[0], false, false)
+		planLatencyRaw = formatVal(row[1], false, false)
 		execLatencyRaw = formatVal(row[2], false, false)
 		serviceLatencyRaw = formatVal(row[3], false, false)
 
@@ -435,14 +441,18 @@ func (c *sqlConn) getLastQueryStatistics() (
 	}
 
 	if nRows != 1 {
-		return 0, 0,
+		return 0, 0, 0, 0,
 			errors.Newf("unexpected number of rows in SHOW LAST QUERY STATISTICS: %d", nRows)
 	}
 
 	parsedExecLatency, _ := tree.ParseDInterval(execLatencyRaw)
 	parsedServiceLatency, _ := tree.ParseDInterval(serviceLatencyRaw)
+	parsedPlanLatency, _ := tree.ParseDInterval(planLatencyRaw)
+	parsedParseLatency, _ := tree.ParseDInterval(parseLatencyRaw)
 
-	return time.Duration(parsedExecLatency.Duration.Nanos()),
+	return time.Duration(parsedParseLatency.Duration.Nanos()),
+		time.Duration(parsedPlanLatency.Duration.Nanos()),
+		time.Duration(parsedExecLatency.Duration.Nanos()),
 		time.Duration(parsedServiceLatency.Duration.Nanos()),
 		nil
 }
@@ -975,12 +985,23 @@ func maybeShowTimes(
 	// output will be execution time(s).
 	fmt.Fprintln(w)
 
+	// Suggested by Radu: for sub-second results, show simplified
+	// timings in milliseconds.
+	unit := "s"
+	multiplier := 1.
+	precision := 3
+	if clientSideQueryTime.Seconds() < 1 {
+		unit = "ms"
+		multiplier = 1000.
+		precision = 0
+	}
+
 	if sqlCtx.verboseTimings {
 		fmt.Fprintf(w, "Time: %s", clientSideQueryTime)
 	} else {
 		// Simplified displays: human users typically can't
 		// distinguish sub-millisecond latencies.
-		fmt.Fprintf(w, "Time: %.3fs", clientSideQueryTime.Seconds())
+		fmt.Fprintf(w, "Time: %.*f%s", precision, clientSideQueryTime.Seconds()*multiplier, unit)
 	}
 
 	if !sqlCtx.enableServerExecutionTimings {
@@ -989,23 +1010,33 @@ func maybeShowTimes(
 	}
 
 	// If discrete server/network timings are available, also print them.
-	execLatency, serviceLatency, err := conn.getLastQueryStatistics()
+	parseLat, planLat, execLat, serviceLat, err := conn.getLastQueryStatistics()
 	if err != nil {
 		fmt.Fprintf(stderr, "\nwarning: %v", err)
 		return
 	}
 
-	networkLatency := clientSideQueryTime - serviceLatency
+	fmt.Fprint(stderr, " total")
+
+	networkLat := clientSideQueryTime - serviceLat
+	otherLat := serviceLat - parseLat - planLat - execLat
 	if sqlCtx.verboseTimings {
-		fmt.Fprintf(w, " total (exec %s / net %s / other %s)\n",
-			execLatency, networkLatency, serviceLatency-execLatency)
+		fmt.Fprintf(w, " (parse %s / plan %s / exec %s / other %s / network %s)\n",
+			parseLat, planLat, execLat, otherLat, networkLat)
 	} else {
-		// Simplified display: just show percentages.
-		totalSeconds := clientSideQueryTime.Seconds()
-		fmt.Fprintf(w, " total (exec %.1f%% / net %.1f%% / other %.1f%%)\n",
-			execLatency.Seconds()*100/totalSeconds,
-			networkLatency.Seconds()*100/totalSeconds,
-			(serviceLatency-execLatency).Seconds()*100/totalSeconds)
+		// Simplified display: just show the execution/network breakdown.
+		//
+		// Note: we omit the report details for queries that
+		// last for a millisecond or less. This is because for such
+		// small queries, the detail is just noise to the human observer.
+		sep := " ("
+		reportTiming := func(label string, lat time.Duration) {
+			fmt.Fprintf(w, "%s%s %.*f%s", sep, label, precision, lat.Seconds()*multiplier, unit)
+			sep = " / "
+		}
+		reportTiming("execution", serviceLat)
+		reportTiming("network", networkLat)
+		fmt.Fprintln(w, ")")
 	}
 }
 

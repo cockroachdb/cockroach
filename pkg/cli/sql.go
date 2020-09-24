@@ -1271,7 +1271,7 @@ func (c *cliState) doDecidePath() cliStateEnum {
 
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
-func runInteractive(conn *sqlConn) (exitErr error) {
+func runInteractive(conn *sqlConn, cmdIn *os.File) (exitErr error) {
 	c := cliState{conn: conn}
 
 	state := cliStart
@@ -1281,7 +1281,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		}
 		switch state {
 		case cliStart:
-			cleanupFn, err := c.configurePreShellDefaults()
+			cleanupFn, err := c.configurePreShellDefaults(cmdIn)
 			defer cleanupFn()
 			if err != nil {
 				return err
@@ -1340,7 +1340,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 //
 // The returned cleanupFn must be called even when the err return is
 // not nil.
-func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
+func (c *cliState) configurePreShellDefaults(cmdIn *os.File) (cleanupFn func(), err error) {
 	if cliCtx.terminalOutput {
 		// If results are shown on a terminal also enable printing of
 		// times by default.
@@ -1373,11 +1373,11 @@ func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
 		// the doStart() method because of the defer.
 		c.ins, c.exitErr = readline.InitFiles("cockroach",
 			true, /* wideChars */
-			stdin, os.Stdout, stderr)
+			cmdIn, os.Stdout, stderr)
 		if errors.Is(c.exitErr, readline.ErrWidecharNotSupported) {
 			log.Warning(context.TODO(), "wide character support disabled")
 			c.ins, c.exitErr = readline.InitFiles("cockroach",
-				false, stdin, os.Stdout, stderr)
+				false, cmdIn, os.Stdout, stderr)
 		}
 		if c.exitErr != nil {
 			return cleanupFn, c.exitErr
@@ -1391,7 +1391,7 @@ func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
 		cleanupFn = func() { c.ins.Close() }
 	} else {
 		c.ins = noLineEditor
-		c.buf = bufio.NewReader(stdin)
+		c.buf = bufio.NewReader(cmdIn)
 		cleanupFn = func() {}
 	}
 
@@ -1476,18 +1476,41 @@ func (c *cliState) runStatements(stmts []string) error {
 
 // checkInteractive sets the isInteractive parameter depending on the
 // execution environment and the presence of -e flags.
-func checkInteractive() {
+func checkInteractive(stdin *os.File) {
 	// We don't consider sessions interactives unless we have a
 	// serious hunch they are. For now, only `cockroach sql` *without*
 	// `-e` has the ability to input from a (presumably) human user,
 	// and we'll also assume that there is no human if the standard
 	// input is not terminal-like -- likely redirected from a file,
 	// etc.
-	cliCtx.isInteractive = len(sqlCtx.execStmts) == 0 && isatty.IsTerminal(os.Stdin.Fd())
+	cliCtx.isInteractive = len(sqlCtx.execStmts) == 0 && isatty.IsTerminal(stdin.Fd())
+}
+
+// getInputFile establishes where we are reading from.
+func getInputFile() (cmdIn *os.File, closeFn func(), err error) {
+	if sqlCtx.inputFile == "" {
+		return os.Stdin, func() {}, nil
+	}
+
+	if len(sqlCtx.execStmts) != 0 {
+		return nil, nil, errors.Newf("unsupported combination: --%s and --%s", cliflags.Execute.Name, cliflags.File.Name)
+	}
+
+	f, err := os.Open(sqlCtx.inputFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f, func() { _ = f.Close() }, nil
 }
 
 func runTerm(cmd *cobra.Command, args []string) error {
-	checkInteractive()
+	cmdIn, closeFn, err := getInputFile()
+	if err != nil {
+		return err
+	}
+	defer closeFn()
+
+	checkInteractive(cmdIn)
 
 	if cliCtx.isInteractive {
 		// The user only gets to see the welcome message on interactive sessions.
@@ -1500,10 +1523,10 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	return runClient(cmd, conn)
+	return runClient(cmd, conn, cmdIn)
 }
 
-func runClient(cmd *cobra.Command, conn *sqlConn) error {
+func runClient(cmd *cobra.Command, conn *sqlConn, cmdIn *os.File) error {
 	// Open the connection to make sure everything is OK before running any
 	// statements. Performs authentication.
 	if err := conn.ensureConn(); err != nil {
@@ -1513,7 +1536,7 @@ func runClient(cmd *cobra.Command, conn *sqlConn) error {
 	// Enable safe updates, unless disabled.
 	setupSafeUpdates(cmd, conn)
 
-	return runInteractive(conn)
+	return runInteractive(conn, cmdIn)
 }
 
 // setupSafeUpdates attempts to enable "safe mode" if the session is

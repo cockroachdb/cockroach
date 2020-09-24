@@ -204,7 +204,13 @@ var sqlCtx = struct {
 	setStmts statementsValue
 
 	// execStmts is a list of statements to execute.
+	// Only valid if inputFile is empty.
 	execStmts statementsValue
+
+	// inputFile is the file to read from.
+	// If empty, os.Stdin is used.
+	// Only valid if execStmts is empty.
+	inputFile string
 
 	// repeatDelay indicates that the execStmts should be "watched"
 	// at the specified time interval. Zero disables
@@ -240,6 +246,7 @@ var sqlCtx = struct {
 func setSQLContextDefaults() {
 	sqlCtx.setStmts = nil
 	sqlCtx.execStmts = nil
+	sqlCtx.inputFile = ""
 	sqlCtx.repeatDelay = 0
 	sqlCtx.safeUpdates = false
 	sqlCtx.showTimes = false
