@@ -12,12 +12,11 @@ package kvserver
 
 import (
 	"bytes"
-	"fmt"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/redact"
 )
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
@@ -35,48 +34,31 @@ type ReplicaSnapshotDiff struct {
 // exposes a formatting helper.
 type ReplicaSnapshotDiffSlice []ReplicaSnapshotDiff
 
-// WriteTo writes a string representation of itself to the given writer.
-func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write([]byte("--- leaseholder\n+++ follower\n"))
-	if err != nil {
-		return 0, err
-	}
+// SafeFormat implements redact.SafeFormatter.
+func (rsds ReplicaSnapshotDiffSlice) SafeFormat(buf redact.SafePrinter, _ rune) {
+	buf.Printf("--- leaseholder\n+++ follower\n")
 	for _, d := range rsds {
-		prefix := "+"
+		prefix := redact.SafeString("+")
 		if d.LeaseHolder {
 			// Lease holder (RHS) has something follower (LHS) does not have.
-			prefix = "-"
+			prefix = redact.SafeString("-")
 		}
-		ts := d.Timestamp
-		const format = `%s%d.%09d,%d %s
+		const format = `%s%s %s
 %s    ts:%s
 %s    value:%s
 %s    raw mvcc_key/value: %x %x
 `
-		var prettyTime string
-		if d.Timestamp == (hlc.Timestamp{}) {
-			prettyTime = "<zero>"
-		} else {
-			prettyTime = d.Timestamp.GoTime().UTC().String()
-		}
-		mvccKey := storage.MVCCKey{Key: d.Key, Timestamp: ts}
-		num, err := fmt.Fprintf(w, format,
-			prefix, ts.WallTime/1e9, ts.WallTime%1e9, ts.Logical, d.Key,
-			prefix, prettyTime,
+		mvccKey := storage.MVCCKey{Key: d.Key, Timestamp: d.Timestamp}
+		buf.Printf(format,
+			prefix, d.Timestamp, d.Key,
+			prefix, d.Timestamp.GoTime(),
 			prefix, SprintKeyValue(storage.MVCCKeyValue{Key: mvccKey, Value: d.Value}, false /* printKey */),
 			prefix, storage.EncodeKey(mvccKey), d.Value)
-		if err != nil {
-			return 0, err
-		}
-		n += num
 	}
-	return int64(n), nil
 }
 
 func (rsds ReplicaSnapshotDiffSlice) String() string {
-	var buf bytes.Buffer
-	_, _ = rsds.WriteTo(&buf)
-	return buf.String()
+	return redact.StringWithoutMarkers(rsds)
 }
 
 // diffs the two kv dumps between the lease holder and the replica.

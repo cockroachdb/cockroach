@@ -7586,15 +7586,13 @@ func TestDiffRange(t *testing.T) {
 +    ts:1970-01-01 00:00:00.000001729 +0000 UTC
 +    value:"foo"
 +    raw mvcc_key/value: 6162636465660000000000000006c1000000010d 666f6f
-+0.000000000,0 "foo"
-+    ts:<zero>
++0,0 "foo"
++    ts:1970-01-01 00:00:00 +0000 UTC
 +    value:"foo"
 +    raw mvcc_key/value: 666f6f00 666f6f
 `
 
-	if diff := stringDiff.String(); diff != expDiff {
-		t.Fatalf("expected:\n%s\ngot:\n%s", expDiff, diff)
-	}
+	require.Equal(t, expDiff, stringDiff.String())
 }
 
 func TestSyncSnapshot(t *testing.T) {
