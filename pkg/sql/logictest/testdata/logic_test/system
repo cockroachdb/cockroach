@@ -1,5 +1,5 @@
 # LogicTest: !3node-tenant(49854)
-query T
+query TT
 SHOW DATABASES
 ----
 defaultdb
@@ -7,7 +7,7 @@ postgres
 system
 test
 
-query TTTT
+query TTTTI
 SHOW TABLES FROM system
 ----
 public  comments                         table  NULL

@@ -13,7 +13,7 @@ CREATE TABLE information_schema.t (x INT)
 query error database "information_schema" does not exist
 DROP DATABASE information_schema
 
-query TTTI
+query TTTTI
 SHOW TABLES FROM information_schema
 ----
 information_schema  administrable_role_authorizations  table  NULL
@@ -113,7 +113,7 @@ TRUNCATE TABLE information_schema.tables
 
 # Verify information_schema handles reflection correctly.
 
-query T
+query TT
 SHOW DATABASES
 ----
 defaultdb
@@ -121,7 +121,7 @@ postgres
 system
 test
 
-query TTTI
+query TTTTI
 SHOW TABLES FROM test.information_schema
 ----
 information_schema  administrable_role_authorizations  table  NULL
