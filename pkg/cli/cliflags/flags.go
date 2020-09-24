@@ -256,7 +256,20 @@ Execute the SQL statement(s) on the command line, then exit. This flag may be
 specified multiple times and each value may contain multiple semicolon
 separated statements. If an error occurs in any statement, the command exits
 with a non-zero status code and further statements are not executed. The
-results of each SQL statement are printed on the standard output.`,
+results of each SQL statement are printed on the standard output.
+
+This flag is incompatible with --file / -f.`,
+	}
+
+	File = FlagInfo{
+		Name:      "file",
+		Shorthand: "f",
+		Description: `
+Read and execute the SQL statement(s) from the specified file.
+The file is processed as if it has been redirected on the standard
+input of the shell.
+
+This flag is incompatible with --execute / -e.`,
 	}
 
 	Watch = FlagInfo{

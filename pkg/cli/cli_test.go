@@ -2060,3 +2060,32 @@ func Example_dump_no_visible_columns() {
 	// CREATE TABLE public.t (FAMILY "primary" (rowid)
 	// );
 }
+
+// Example_read_from_file tests the -f parameter.
+// The input file contains a mix of client-side and
+// server-side commands to ensure that both are supported with -f.
+func Example_read_from_file() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.RunWithArgs([]string{"sql", "-e", "select 1", "-f", "testdata/inputfile.sql"})
+	c.RunWithArgs([]string{"sql", "-f", "testdata/inputfile.sql"})
+
+	// Output:
+	// sql -e select 1 -f testdata/inputfile.sql
+	// ERROR: unsupported combination: --execute and --file
+	// sql -f testdata/inputfile.sql
+	// SET
+	// CREATE TABLE
+	// > INSERT INTO test(s) VALUES ('hello'), ('world');
+	// INSERT 2
+	// > SELECT * FROM test;
+	// s
+	// hello
+	// world
+	// > SELECT undefined;
+	// ERROR: column "undefined" does not exist
+	// SQLSTATE: 42703
+	// ERROR: column "undefined" does not exist
+	// SQLSTATE: 42703
+}

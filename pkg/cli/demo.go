@@ -252,6 +252,12 @@ func checkDemoConfiguration(
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
+	cmdIn, closeFn, err := getInputFile()
+	if err != nil {
+		return err
+	}
+	defer closeFn()
+
 	if gen, err = checkDemoConfiguration(cmd, gen); err != nil {
 		return err
 	}
@@ -282,7 +288,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	}
 	demoCtx.transientCluster = &c
 
-	checkInteractive()
+	checkInteractive(cmdIn)
 
 	if cliCtx.isInteractive {
 		fmt.Printf(`#
@@ -358,7 +364,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	conn := makeSQLConn(c.connURL)
 	defer conn.Close()
 
-	return runClient(cmd, conn)
+	return runClient(cmd, conn, cmdIn)
 }
 
 func waitForLicense(licenseDone <-chan error) error {
