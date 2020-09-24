@@ -26,13 +26,13 @@ import (
 )
 
 func runDebugDecodeProto(_ *cobra.Command, _ []string) error {
-	if isatty.IsTerminal(stdin.Fd()) {
+	if isatty.IsTerminal(os.Stdin.Fd()) {
 		fmt.Fprintln(stderr,
 			`# Reading proto-encoded pieces of data from stdin.
 # Press Ctrl+C or Ctrl+D to terminate.`,
 		)
 	}
-	return streamMap(os.Stdout, stdin,
+	return streamMap(os.Stdout, os.Stdin,
 		func(s string) (bool, string, error) { return tryDecodeValue(s, debugDecodeProtoName) })
 }
 

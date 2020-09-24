@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -282,7 +283,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	}
 	demoCtx.transientCluster = &c
 
-	checkInteractive()
+	checkInteractive(os.Stdin)
 
 	if cliCtx.isInteractive {
 		fmt.Printf(`#
