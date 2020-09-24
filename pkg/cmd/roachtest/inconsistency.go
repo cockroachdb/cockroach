@@ -39,6 +39,12 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 
 	{
 		db := c.Conn(ctx, 1)
+		// Disable consistency checks. We're going to be introducing an inconsistency and wish for it to be detected when
+		// we've set up the test to expect it.
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
+		if err != nil {
+			t.Fatal(err)
+		}
 		waitForFullReplication(t, db)
 		_, db = db.Close(), nil
 	}
