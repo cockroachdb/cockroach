@@ -182,7 +182,40 @@ type NodeLiveness struct {
 
 	mu struct {
 		syncutil.RWMutex
-		callbacks         []IsLiveCallback
+		callbacks []IsLiveCallback
+		// nodes is an in-memory cache of liveness records that NodeLiveness
+		// knows about (having learnt of them through gossip or through KV).
+		// It's a look-aside cache, and is accessed primarily through
+		// `getLivenessLocked` and callers.
+		//
+		// TODO(irfansharif): The caching story for NodeLiveness is a bit
+		// complicated. This can be attributed to the fact that pre-20.2, we
+		// weren't always guaranteed for us liveness records for every given
+		// node. Because of this it wasn't possible to have a
+		// look-through cache (it wouldn't know where to fetch from if a record
+		// was found to be missing).
+		//
+		// Now that we're always guaranteed to have a liveness records present,
+		// we should change this out to be a look-through cache instead (it can
+		// fall back to KV when a given record is missing). This would help
+		// simplify our current structure where do the following:
+		//
+		// - Consult this cache to find an existing liveness record
+		// - If missing, fetch the record from KV
+		// - Update the liveness record in KV
+		// - Add the updated record into this cache (see `maybeUpdate`)
+		//
+		// (See `StartHeartbeat` for an example of this pattern.)
+		//
+		// What we want instead is a bit simpler:
+		//
+		// - Consult this cache to find an existing liveness record
+		// - If missing, fetch the record from KV, update and return from cache
+		// - Update the liveness record in KV
+		// - Add the updated record into this cache
+		//
+		// More concretely, we want `getLivenessRecordFromKV` to be tucked away
+		// within `getLivenessLocked`.
 		nodes             map[roachpb.NodeID]LivenessRecord
 		heartbeatCallback HeartbeatCallback
 		// Before heartbeating, we write to each of these engines to avoid
