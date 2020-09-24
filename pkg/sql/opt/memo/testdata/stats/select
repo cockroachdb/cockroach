@@ -808,13 +808,19 @@ select
       └── l_commitdate:12 = '1995-08-01' [type=bool, outer=(12), constraints=(/12: [/'1995-08-01' - /'1995-08-01']; tight), fd=()-->(12)]
 
 # Create a table with an inverted index to test statistics around
-# JSON containment filter operators and zigzag joins.
+# JSON/Array containment filter operators and zigzag joins.
 exec-ddl
-CREATE TABLE tjson (a INT PRIMARY KEY, b JSON, c JSON, INVERTED INDEX b_idx (b))
+CREATE TABLE t_json_arr (
+  a INT PRIMARY KEY,
+  b JSON,
+  c JSON,
+  d INT[],
+  INVERTED INDEX b_idx (b)
+)
 ----
 
 exec-ddl
-ALTER TABLE tjson INJECT STATISTICS '[
+ALTER TABLE t_json_arr INJECT STATISTICS '[
   {
     "columns": ["a"],
     "created_at": "2018-01-01 2:00:00.00000+00:00",
@@ -832,21 +838,27 @@ ALTER TABLE tjson INJECT STATISTICS '[
     "created_at": "2018-01-01 2:00:00.00000+00:00",
     "row_count": 5000,
     "distinct_count": 2500
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 2500
   }
 ]'
 ----
 
 # Should generate a scan on the inverted index.
 opt
-SELECT * FROM tjson WHERE b @> '{"a":"b"}'
+SELECT * FROM t_json_arr WHERE b @> '{"a":"b"}'
 ----
-index-join tjson
- ├── columns: a:1(int!null) b:2(jsonb!null) c:3(jsonb)
+index-join t_json_arr
+ ├── columns: a:1(int!null) b:2(jsonb!null) c:3(jsonb) d:4(int[])
  ├── immutable
  ├── stats: [rows=555.555556]
  ├── key: (1)
- ├── fd: (1)-->(2,3)
- └── scan tjson@b_idx
+ ├── fd: (1)-->(2-4)
+ └── scan t_json_arr@b_idx
       ├── columns: a:1(int!null)
       ├── constraint: /2/1: [/'{"a": "b"}' - /'{"a": "b"}']
       ├── stats: [rows=555.555556]
@@ -855,17 +867,17 @@ index-join tjson
 # Should generate a zigzag join on the inverted index. Row count should be
 # strictly lower than the above scan.
 opt
-SELECT * FROM tjson WHERE b @> '{"a":"b", "c":"d"}'
+SELECT * FROM t_json_arr WHERE b @> '{"a":"b", "c":"d"}'
 ----
-inner-join (lookup tjson)
- ├── columns: a:1(int!null) b:2(jsonb!null) c:3(jsonb)
+inner-join (lookup t_json_arr)
+ ├── columns: a:1(int!null) b:2(jsonb!null) c:3(jsonb) d:4(int[])
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=61.7283951]
  ├── key: (1)
- ├── fd: (1)-->(2,3)
- ├── inner-join (zigzag tjson@b_idx tjson@b_idx)
+ ├── fd: (1)-->(2-4)
+ ├── inner-join (zigzag t_json_arr@b_idx t_json_arr@b_idx)
  │    ├── columns: a:1(int!null)
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [2] = ['{"a": "b"}']
@@ -878,40 +890,78 @@ inner-join (lookup tjson)
 # Should generate a select on the table with a JSON filter, since c does not
 # have an inverted index.
 opt
-SELECT * FROM tjson WHERE c @> '{"a":"b"}'
+SELECT * FROM t_json_arr WHERE c @> '{"a":"b"}'
 ----
 select
- ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb!null)
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb!null) d:4(int[])
  ├── immutable
  ├── stats: [rows=555.555556]
  ├── key: (1)
- ├── fd: (1)-->(2,3)
- ├── scan tjson
- │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── fd: (1)-->(2-4)
+ ├── scan t_json_arr
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
  │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(3)=2500, null(3)=0]
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  └── filters
       └── c:3 @> '{"a": "b"}' [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # Should have a lower row count than the above case, due to a containment query
 # on 2 json paths.
 opt
-SELECT * FROM tjson WHERE c @> '{"a":"b", "c":"d"}'
+SELECT * FROM t_json_arr WHERE c @> '{"a":"b", "c":"d"}'
 ----
 select
- ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb!null)
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb!null) d:4(int[])
  ├── immutable
  ├── stats: [rows=61.7283951]
  ├── key: (1)
- ├── fd: (1)-->(2,3)
- ├── scan tjson
- │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
+ ├── fd: (1)-->(2-4)
+ ├── scan t_json_arr
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
  │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(3)=2500, null(3)=0]
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  └── filters
       └── c:3 @> '{"a": "b", "c": "d"}' [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+# Tests for array containment.
+opt
+SELECT * FROM t_json_arr WHERE d @> ARRAY[1]
+----
+select
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[]!null)
+ ├── immutable
+ ├── stats: [rows=555.555556]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan t_json_arr
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=2500, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── d:4 @> ARRAY[1] [type=bool, outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Should have a lower row count than the above case, due to a containment query
+# on 2 array elements.
+opt
+SELECT * FROM t_json_arr WHERE d @> ARRAY[1,2]
+----
+select
+ ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[]!null)
+ ├── immutable
+ ├── stats: [rows=61.7283951]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan t_json_arr
+ │    ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[])
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=2500, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── d:4 @> ARRAY[1,2] [type=bool, outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
 
 # Bump up null counts.
 exec-ddl

@@ -524,7 +524,7 @@ EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1]
 ·           distribution         local                ·       ·
 ·           vectorized           true                 ·       ·
 index join  ·                    ·                    (a, b)  ·
- │          estimated row count  330 (missing stats)  ·       ·
+ │          estimated row count  110 (missing stats)  ·       ·
  │          table                e@primary            ·       ·
  │          key columns          a                    ·       ·
  └── scan   ·                    ·                    (a)     ·
@@ -552,7 +552,7 @@ EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
 ·            distribution         local                ·       ·
 ·            vectorized           true                 ·       ·
 index join   ·                    ·                    (a, b)  ·
- │           estimated row count  330 (missing stats)  ·       ·
+ │           estimated row count  110 (missing stats)  ·       ·
  │           table                e@primary            ·       ·
  │           key columns          a                    ·       ·
  └── norows  ·                    ·                    (a)     ·
@@ -580,22 +580,22 @@ filter     ·                    ·                     (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
 ----
-·                    distribution           local                ·       ·
-·                    vectorized             true                 ·       ·
-lookup join (inner)  ·                      ·                    (a, b)  ·
- │                   estimated row count    330 (missing stats)  ·       ·
- │                   table                  e@primary            ·       ·
- │                   equality               (a) = (a)            ·       ·
- │                   equality cols are key  ·                    ·       ·
- │                   pred                   b @> ARRAY[1,2]      ·       ·
- └── zigzag join     ·                      ·                    (a)     ·
-·                    estimated row count    12 (missing stats)   ·       ·
-·                    left table             e@e_b_idx            ·       ·
-·                    left columns           (a)                  ·       ·
-·                    left fixed values      1 column             ·       ·
-·                    right table            e@e_b_idx            ·       ·
-·                    right columns          ()                   ·       ·
-·                    right fixed values     1 column             ·       ·
+·                    distribution           local               ·       ·
+·                    vectorized             true                ·       ·
+lookup join (inner)  ·                      ·                   (a, b)  ·
+ │                   estimated row count    12 (missing stats)  ·       ·
+ │                   table                  e@primary           ·       ·
+ │                   equality               (a) = (a)           ·       ·
+ │                   equality cols are key  ·                   ·       ·
+ │                   pred                   b @> ARRAY[1,2]     ·       ·
+ └── zigzag join     ·                      ·                   (a)     ·
+·                    estimated row count    12 (missing stats)  ·       ·
+·                    left table             e@e_b_idx           ·       ·
+·                    left columns           (a)                 ·       ·
+·                    left fixed values      1 column            ·       ·
+·                    right table            e@e_b_idx           ·       ·
+·                    right columns          ()                  ·       ·
+·                    right fixed values     1 column            ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
@@ -603,7 +603,7 @@ EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
 ·                    distribution           local                                ·       ·
 ·                    vectorized             true                                 ·       ·
 lookup join (inner)  ·                      ·                                    (a, b)  ·
- │                   estimated row count    110 (missing stats)                  ·       ·
+ │                   estimated row count    12 (missing stats)                   ·       ·
  │                   table                  e@primary                            ·       ·
  │                   equality               (a) = (a)                            ·       ·
  │                   equality cols are key  ·                                    ·       ·
