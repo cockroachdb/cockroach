@@ -13,7 +13,9 @@ package security
 import (
 	"crypto/sha256"
 	"fmt"
+	"math/rand"
 	"os"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
@@ -87,3 +89,18 @@ var MinPasswordLength = settings.RegisterNonNegativeIntSetting(
 		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
 	1,
 )
+
+// GenerateRandomPassword generates a somewhat secure password
+// composed of alphanumeric characters.
+func GenerateRandomPassword() string {
+	// Length 43 and 62 symbols gives us at least 256 bits of entropy.
+	// If 256 random bits are good enough for AES, it's good enough for us.
+	const length = 43
+	const symbols = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	var result strings.Builder
+	for i := 0; i < length; i++ {
+		r := rand.Intn(len(symbols))
+		result.WriteByte(symbols[r])
+	}
+	return result.String()
+}
