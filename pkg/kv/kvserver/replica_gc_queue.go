@@ -165,8 +165,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		// dormant ranges. Make sure NodeLiveness isn't nil because it can be in
 		// tests/benchmarks.
 		if repl.store.cfg.NodeLiveness != nil {
-			if liveness, err := repl.store.cfg.NodeLiveness.Self(); err == nil &&
-				!liveness.Membership.Active() {
+			if liveness, ok := repl.store.cfg.NodeLiveness.Self(); ok && !liveness.Membership.Active() {
 				return true, replicaGCPriorityDefault
 			}
 		}
