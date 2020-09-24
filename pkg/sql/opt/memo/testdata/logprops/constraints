@@ -6,6 +6,30 @@ exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
 ----
 
+# A tight contradiction constraint is built for a false filter.
+build
+SELECT * FROM a WHERE false
+----
+project
+ ├── columns: x:1(int) y:2(int)
+ ├── cardinality: [0 - 0]
+ ├── prune: (1,2)
+ └── select
+      ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
+      ├── cardinality: [0 - 0]
+      ├── key: (3)
+      ├── fd: (3)-->(1,2,4)
+      ├── prune: (1-4)
+      ├── interesting orderings: (+3)
+      ├── scan a
+      │    ├── columns: x:1(int) y:2(int) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(1,2,4)
+      │    ├── prune: (1-4)
+      │    └── interesting orderings: (+3)
+      └── filters
+           └── false [type=bool, constraints=(contradiction; tight)]
+
 opt
 SELECT * FROM a WHERE x > 1
 ----

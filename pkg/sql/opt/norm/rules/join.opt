@@ -36,7 +36,12 @@
 (Join
     $left:*
     $right:*
-    [ ... $item:(FiltersItem) & (IsContradiction $item) ... ]
+    $on:[
+            ...
+            $item:(FiltersItem) & (IsContradiction $item)
+            ...
+        ] &
+        ^(IsFilterFalse $on)
     $private:*
 )
 =>

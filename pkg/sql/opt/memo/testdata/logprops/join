@@ -1663,7 +1663,7 @@ full-join (cross)
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── filters
-      └── false [type=bool]
+      └── false [type=bool, constraints=(contradiction; tight)]
 
 exec-ddl
 CREATE TABLE t1 (x INT, y INT)
