@@ -119,10 +119,10 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  ├── G8: (index-join G10 t,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 4.50]
  │    │    ├── best: (sort G8)
- │    │    └── cost: 16095.08
+ │    │    └── cost: 22095.08
  │    └── []
  │         ├── best: (index-join G10 t,cols=(1,2))
- │         └── cost: 15342.03
+ │         └── cost: 21342.03
  ├── G9: (function G11 st_intersects)
  ├── G10: (inverted-filter G12 g_inverted_key)
  │    └── []

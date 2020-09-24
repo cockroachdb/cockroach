@@ -775,21 +775,21 @@ index-join hist
       └── fd: (8)-->(3)
 
 opt
-SELECT * FROM hist WHERE (d >= 5 AND d < 15) OR d >= 40
+SELECT * FROM hist WHERE (d >= 5 AND d < 12) OR d >= 40
 ----
 index-join hist
  ├── columns: a:1(int) b:2(date) c:3(decimal) d:4(float!null) e:5(timestamp) f:6(timestamptz) g:7(string)
- ├── stats: [rows=185, distinct(4)=11.5, null(4)=0]
- │   histogram(4)=  0          0          45   10   90          0           0   40
- │                <--- 4.999999999999999 ---- 10.0 ---- 14.999999999999998 --- 40.0
+ ├── stats: [rows=131, distinct(4)=8.5, null(4)=0]
+ │   histogram(4)=  0          0          45   10   36          0           0   40
+ │                <--- 4.999999999999999 ---- 10.0 ---- 11.999999999999998 --- 40.0
  └── scan hist@idx_d
       ├── columns: d:4(float!null) rowid:8(int!null)
       ├── constraint: /4/8
-      │    ├── [/5.0 - /14.999999999999998]
+      │    ├── [/5.0 - /11.999999999999998]
       │    └── [/40.0 - ]
-      ├── stats: [rows=185, distinct(4)=11.5, null(4)=0]
-      │   histogram(4)=  0          0          45   10   90          0           0   40
-      │                <--- 4.999999999999999 ---- 10.0 ---- 14.999999999999998 --- 40.0
+      ├── stats: [rows=131, distinct(4)=8.5, null(4)=0]
+      │   histogram(4)=  0          0          45   10   36          0           0   40
+      │                <--- 4.999999999999999 ---- 10.0 ---- 11.999999999999998 --- 40.0
       ├── key: (8)
       └── fd: (8)-->(4)
 
