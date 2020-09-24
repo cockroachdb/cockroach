@@ -1102,7 +1102,7 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 	oldLivenessRec, err := callerNodeLiveness.GetLiveness(nodeID)
 	assert.Nil(t, err)
 	if _, err := callerNodeLiveness.SetDecommissioningInternal(
-		ctx, nodeID, oldLivenessRec, kvserverpb.MembershipStatus_ACTIVE,
+		ctx, oldLivenessRec, kvserverpb.MembershipStatus_ACTIVE,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1159,7 +1159,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	// When the node simply never existed, expect an error.
 	if _, err := mtc.nodeLivenesses[0].SetMembershipStatus(
 		ctx, goneNodeID, kvserverpb.MembershipStatus_DECOMMISSIONING,
-	); !errors.Is(err, kvserver.ErrNoLivenessRecord) {
+	); !errors.Is(err, kvserver.ErrMissingLivenessRecord) {
 		t.Fatal(err)
 	}
 
