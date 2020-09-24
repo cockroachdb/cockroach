@@ -204,7 +204,12 @@ func (d *distinct) encode(appendTo []byte, row rowenc.EncDatumRow) ([]byte, erro
 			continue
 		}
 
-		appendTo, err = datum.Fingerprint(d.types[i], &d.datumAlloc, appendTo)
+		// We might allocate tree.Datums when hashing the row, so we'll ask the
+		// fingerprint to account for them. Note that even though we're losing
+		// the references to the row (and to the newly allocated datums)
+		// shortly, it'll likely take some time before GC reclaims that memory,
+		// so we choose the over-accounting route to be safe.
+		appendTo, err = datum.Fingerprint(d.Ctx, d.types[i], &d.datumAlloc, appendTo, &d.memAcc)
 		if err != nil {
 			return nil, err
 		}

@@ -617,7 +617,9 @@ func (hr *hashRouter) computeDestination(row rowenc.EncDatumRow) (int, error) {
 			return -1, err
 		}
 		var err error
-		hr.buffer, err = row[col].Fingerprint(hr.types[col], &hr.alloc, hr.buffer)
+		// We choose to not perform the memory accounting for possibly decoded
+		// tree.Datum because we will lose the references to row very soon.
+		hr.buffer, err = row[col].Fingerprint(context.TODO(), hr.types[col], &hr.alloc, hr.buffer, nil /* acc */)
 		if err != nil {
 			return -1, err
 		}
