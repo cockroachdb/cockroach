@@ -1233,8 +1233,9 @@ func TestLint(t *testing.T) {
 
 		ignoredRules := []string{
 			"licence",
-			"mitre",   // PostGIS commands spell these as mitre.
-			"analyse", // required by SQL grammar
+			"mitre",     // PostGIS commands spell these as mitre.
+			"analyse",   // required by SQL grammar
+			"seperator", // pkg/ui depends on 3rd party package (rc-calendar) with spelling
 		}
 
 		if err := stream.ForEach(stream.Sequence(

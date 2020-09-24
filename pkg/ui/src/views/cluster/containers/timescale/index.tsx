@@ -10,7 +10,6 @@
 
 import _ from "lodash";
 import moment from "moment";
-import { queryByName, queryToObj, queryToString } from "src/util/query";
 import React, { useEffect, useState } from "react";
 import { connect } from "react-redux";
 import { useLocation, useHistory } from "react-router-dom";
@@ -23,10 +22,11 @@ import Dropdown, {
   DropdownOption,
 } from "src/views/shared/components/dropdown";
 import TimeFrameControls from "../../components/controls";
-import RangeSelect, { DateTypes } from "../../components/range";
+import RangeSelect from "../../components/range";
 import "./timescale.styl";
 import { Divider } from "antd";
 import classNames from "classnames";
+import { createSelector } from "reselect";
 
 export const dateFormat = "MMM DD,";
 export const timeFormat = "h:mmA";
@@ -136,10 +136,12 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       dispatchRefreshNodes();
     }
   });
-  useEffect(() => {
-    getQueryParams();
-    // tslint:disable-next-line: align
-  }, []);
+  useEffect(
+    () => {
+      getQueryParams();
+    },
+    [],
+  );
 
   const [isOpened, setIsOpened] = useState(false);
 
@@ -227,29 +229,20 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   };
 
   const getQueryParams = () => {
-    const queryStart = queryByName(location, "start");
-    const queryEnd = queryByName(location, "end");
+    const urlSearchParams = new URLSearchParams(history.location.search);
+    const queryStart = urlSearchParams.get("start");
+    const queryEnd = urlSearchParams.get("end");
     const start = queryStart && moment.unix(Number(queryStart)).utc();
     const end = queryEnd && moment.unix(Number(queryEnd)).utc();
 
     setDatesByQueryParams({ start, end });
   };
 
-  const setQueryParams = (date: moment.Moment, type: DateTypes) => {
-    const dataType = type === DateTypes.DATE_FROM ? "start" : "end";
-    const timestamp = moment.utc(date).format("X");
-    const query = queryToObj(location, dataType, timestamp);
-    history.push({
-      pathname: location.pathname,
-      search: `?${queryToString(query)}`,
-    });
-  };
-
   const setQueryParamsByDates = (
     duration: moment.Duration,
     dateEnd: moment.Moment,
   ) => {
-    const { pathname, search } = location;
+    const { pathname, search } = history.location;
     const urlParams = new URLSearchParams(search);
     const seconds = duration.clone().asSeconds();
     const end = dateEnd.clone();
@@ -285,31 +278,26 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     setTimeScale(timeScale);
   };
 
-  const setDate = (date: moment.Moment, type: DateTypes) => {
-    const window = _.clone(currentWindow);
-    const selected = _.clone(currentScale);
-    const end =
-      window.end.utc() || moment.utc().set({ hours: 23, minutes: 59, seconds: 0 });
-    const start =
-      window.start.utc() || moment.utc().set({ hours: 0, minutes: 0, seconds: 0 });
-    switch (type) {
-      case DateTypes.DATE_FROM:
-        setQueryParams(date, DateTypes.DATE_FROM);
-        window.start = date;
-        window.end = end;
-        break;
-      case DateTypes.DATE_TO:
-        setQueryParams(date, DateTypes.DATE_TO);
-        window.start = start;
-        window.end = date;
-        break;
-      default:
-        console.error("Unknown type: ", type);
-    }
+  const setDateRange = ([start, end]: [moment.Moment, moment.Moment]) => {
+    const seconds = moment.duration(moment.utc(end).diff(start)).asSeconds();
+    const timeScale = timewindow.findClosestTimeScale(seconds);
+    setTimeScale({
+      ...timeScale,
+      key: "Custom",
+    });
+    setTimeRange({
+      ...window,
+      start,
+      end,
+    });
 
-    selected.key = "Custom";
-    setTimeScale(selected);
-    setTimeRange(window);
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.set("start", start.format("X"));
+    searchParams.set("end", end.format("X"));
+    history.replace({
+      pathname: location.pathname,
+      search: searchParams.toString(),
+    });
   };
 
   const onOpened = () => {
@@ -338,7 +326,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
             useTimeRange={useTimeRange}
             selected={getTimeRangeTitle(currentWindow, currentScale)}
             onChange={changeSettings}
-            changeDate={setDate}
+            changeDate={setDateRange}
             options={getTimescaleOptions()}
           />
         }
@@ -351,16 +339,33 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   );
 };
 
+const scaleSelector = createSelector(
+  (state: AdminUIState) => state?.timewindow,
+  tw => tw?.scale,
+);
+
+const currentWindowSelector = createSelector(
+  (state: AdminUIState) => state?.timewindow,
+  tw => tw?.currentWindow,
+);
+
+const timeRangeSelector = createSelector(
+  (state: AdminUIState) => state?.timewindow,
+  tw => tw?.useTimeRange,
+);
+
+const isValidNodeStatus = createSelector(
+  (state: AdminUIState) => state?.cachedData?.nodes,
+  nodes => nodes?.valid,
+);
+
 export default connect(
-  (state: AdminUIState) => {
-    return {
-      nodeStatusesValid: state.cachedData.nodes.valid,
-      currentScale: (state.timewindow as timewindow.TimeWindowState).scale,
-      currentWindow: (state.timewindow as timewindow.TimeWindowState)
-        .currentWindow,
-      useTimeRange: state.timewindow.useTimeRange,
-    };
-  },
+  (state: AdminUIState) => ({
+    nodeStatusesValid: isValidNodeStatus(state),
+    currentScale: scaleSelector(state),
+    currentWindow: currentWindowSelector(state),
+    useTimeRange: timeRangeSelector(state),
+  }),
   {
     setTimeScale: timewindow.setTimeScale,
     setTimeRange: timewindow.setTimeRange,
