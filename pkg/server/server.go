@@ -2204,6 +2204,16 @@ func (s *Server) PGServer() *pgwire.Server {
 	return s.sqlServer.pgServer
 }
 
+// ConnectLocalSQL establishes an in-memory client connection to the
+// SQL server but without actually touching the OS and
+// filesystem. This makes it possible for SQL client code to run from
+// within the server process using a regular client driver and benefit
+// from all the SQL executor machinery, but without a dependency on
+// network addresses and a working unix socket.
+func (s *Server) ConnectLocalSQL(ctx context.Context) (net.Conn, error) {
+	return s.sqlServer.loopbackLn.Connect(ctx)
+}
+
 // TODO(benesch): Use https://github.com/NYTimes/gziphandler instead.
 // gzipResponseWriter reinvents the wheel and is not as robust.
 type gzipResponseWriter struct {

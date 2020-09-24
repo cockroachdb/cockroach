@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/marusama/semaphore"
 	"google.golang.org/grpc"
 )
@@ -99,6 +100,9 @@ type sqlServer struct {
 	// connManager is the connection manager to use to set up additional
 	// SQL listeners in AcceptClients().
 	connManager netutil.Server
+	// loopbackLn can be used to run client code in the server
+	// process. See ConnectLocalSQL().
+	loopbackLn *loopbackListener
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -791,6 +795,26 @@ func (s *sqlServer) preStart(
 		},
 		scheduledjobs.ProdJobSchedulerEnv,
 	)
+
+	// Serve the SQL loopback, for internal SQL execution without
+	// obstacles from the OS-level network configuration.
+	log.Info(ctx, "starting loopback SQL listener")
+	s.loopbackLn = newLoopbackListener(ctx, stopper)
+	stopper.RunWorker(ctx, func(pgCtx context.Context) {
+		<-stopper.ShouldQuiesce()
+		_ = s.loopbackLn.Close()
+	})
+	stopper.RunWorker(ctx, func(pgCtx context.Context) {
+		netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, s.loopbackLn, func(conn net.Conn) {
+			connCtx := logtags.AddTag(pgCtx, "client", "loopback")
+			// Note: the loopback listener behaves a little bit like a unix socket.
+			// However its type is "loopback" which always uses the "trust"
+			// authentication method.
+			if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketLoopback); err != nil {
+				log.Errorf(connCtx, "%v", err)
+			}
+		}))
+	})
 
 	return nil
 }

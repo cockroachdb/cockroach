@@ -54,7 +54,19 @@ type sqlConnI interface {
 }
 
 type sqlConn struct {
-	url          string
+	// url is the connection URL to connect to.
+	url string
+
+	// dialer is the dialer to use to connect to the URL. If nil (the
+	// default), the regular network stack is used and pg notices are
+	// supported. If non-nil, pq.DialOpen() is used and pg notices
+	// are not supported.
+	//
+	// Note: the odd behavior wrt notices is due to lib/pq missing an
+	// API to customize both the dialer and the notice handler.
+	dialer pq.Dialer
+
+	// conn is the established connection.
 	conn         sqlConnI
 	reconnecting bool
 
@@ -142,19 +154,25 @@ func (c *sqlConn) ensureConn() error {
 			fmt.Fprintf(stderr, "warning: connection lost!\n"+
 				"opening new connection: all session settings will be lost\n")
 		}
-		base, err := pq.NewConnector(c.url)
-		if err != nil {
-			return wrapConnError(err)
+		var conn driver.Conn
+		var connErr error
+		if c.dialer == nil {
+			base, err := pq.NewConnector(c.url)
+			if err != nil {
+				return wrapConnError(err)
+			}
+			// Add a notice handler - re-use the cliOutputError function in this case.
+			connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+				c.handleNotice(notice)
+			})
+			// TODO(cli): we can't thread ctx through ensureConn usages, as it needs
+			// to follow the gosql.DB interface. We should probably look at initializing
+			// connections only once instead. The context is only used for dialing.
+			conn, connErr = connector.Connect(context.TODO())
+		} else {
+			conn, connErr = pq.DialOpen(c.dialer, c.url)
 		}
-		// Add a notice handler - re-use the cliOutputError function in this case.
-		connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
-			c.handleNotice(notice)
-		})
-		// TODO(cli): we can't thread ctx through ensureConn usages, as it needs
-		// to follow the gosql.DB interface. We should probably look at initializing
-		// connections only once instead. The context is only used for dialing.
-		conn, err := connector.Connect(context.TODO())
-		if err != nil {
+		if connErr != nil {
 			// Connection failed: if the failure is due to a mispresented
 			// password, we're going to fill the password here.
 			//
@@ -162,10 +180,10 @@ func (c *sqlConn) ensureConn() error {
 			// (28P01) for password auth errors, so we have to "make do"
 			// with a string match. This should be cleaned up by adding
 			// the missing code server-side.
-			errStr := strings.TrimPrefix(err.Error(), "pq: ")
+			errStr := strings.TrimPrefix(connErr.Error(), "pq: ")
 			if strings.HasPrefix(errStr, "password authentication failed") && c.passwordMissing {
 				if pErr := c.fillPassword(); pErr != nil {
-					return errors.CombineErrors(err, pErr)
+					return errors.CombineErrors(connErr, pErr)
 				}
 				// Recurse, once. We recurse to ensure that pq.NewConnector
 				// and ConnectorWithNoticeHandler get called with the new URL.
@@ -175,7 +193,7 @@ func (c *sqlConn) ensureConn() error {
 				return c.ensureConn()
 			}
 			// Not a password auth error, or password already set. Simply fail.
-			return wrapConnError(err)
+			return wrapConnError(connErr)
 		}
 		if c.reconnecting && c.dbName != "" {
 			// Attempt to reset the current database.

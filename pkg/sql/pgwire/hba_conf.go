@@ -258,6 +258,13 @@ var insecureEntry = hba.Entry{
 	Method:   hba.String{Value: "--insecure"},
 }
 
+var loopbackEntry = hba.Entry{
+	ConnType: hba.ConnLocal,
+	User:     []hba.String{{Value: "all", Quoted: false}},
+	Address:  hba.AnyAddr{},
+	Method:   hba.String{Value: "<loopback>"},
+}
+
 var rootEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
 	User:     []hba.String{{Value: security.RootUser, Quoted: false}},
