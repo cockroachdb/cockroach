@@ -146,7 +146,17 @@
     "markdown-to-jsx": "~6.11.4",
     "node-fetch": "~2.6.1",
     "serialize-javascript": "~3.1.0",
-    "yargs-parser": "~13.1.2"
+    "yargs-parser": "~13.1.2",
+    "protobufjs/cli/**/semver": "5.5.0",
+    "protobufjs/cli/**/chalk": "1.1.3",
+    "protobufjs/cli/**/glob": "7.1.2",
+    "protobufjs/cli/**/jsdoc": "3.6.3",
+    "protobufjs/cli/**/minimist": "1.2.0",
+    "protobufjs/cli/**/tmp": "0.0.33",
+    "protobufjs/cli/**/uglify-js": "2.8.29",
+    "protobufjs/cli/**/espree": "3.5.4",
+    "protobufjs/cli/**/escodegen": "1.12.0",
+    "protobufjs/cli/**/estraverse": "4.2.0"
   },
   "engines": {
     "node": ">=12",
