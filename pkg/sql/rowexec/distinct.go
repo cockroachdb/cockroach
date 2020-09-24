@@ -204,7 +204,7 @@ func (d *distinct) encode(appendTo []byte, row rowenc.EncDatumRow) ([]byte, erro
 			continue
 		}
 
-		appendTo, err = datum.Fingerprint(d.types[i], &d.datumAlloc, appendTo)
+		appendTo, err = datum.Fingerprint(d.Ctx, d.types[i], &d.datumAlloc, appendTo, &d.memAcc)
 		if err != nil {
 			return nil, err
 		}
