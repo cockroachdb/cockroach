@@ -951,6 +951,10 @@ func (sc *SchemaChanger) distBackfill(
 
 	for len(todoSpans) > 0 {
 		log.VEventf(ctx, 2, "backfill: process %+v spans", todoSpans)
+		// Make sure not to update todoSpans inside the transaction closure as it
+		// may not commit. Instead write the updated value for todoSpans to this
+		// variable and assign to todoSpans after committing.
+		var updatedTodoSpans []roachpb.Span
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Report schema change progress. We define progress at this point
 			// as the the fraction of fully-backfilled ranges of the primary index of
@@ -984,7 +988,7 @@ func (sc *SchemaChanger) distBackfill(
 			}
 			metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.BulkProcessorProgress != nil {
-					todoSpans = roachpb.SubtractSpans(todoSpans,
+					updatedTodoSpans = roachpb.SubtractSpans(todoSpans,
 						meta.BulkProcessorProgress.CompletedSpans)
 				}
 				return nil
@@ -1021,6 +1025,8 @@ func (sc *SchemaChanger) distBackfill(
 		}); err != nil {
 			return err
 		}
+		todoSpans = updatedTodoSpans
+
 		if !inMemoryStatusEnabled {
 			var resumeSpans []roachpb.Span
 			// There is a worker node of older version that will communicate
@@ -1037,7 +1043,6 @@ func (sc *SchemaChanger) distBackfill(
 			}
 			// A \intersect B = A - (A - B)
 			todoSpans = roachpb.SubtractSpans(todoSpans, roachpb.SubtractSpans(todoSpans, resumeSpans))
-
 		}
 		// Record what is left to do for the job.
 		// TODO(spaskob): Execute this at a regular cadence.
