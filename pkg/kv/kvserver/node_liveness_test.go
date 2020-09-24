@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -481,9 +482,10 @@ func TestNodeLivenessRestart(t *testing.T) {
 	// seeing the liveness record properly gossiped at store startup.
 	var expKeys []string
 	for _, g := range mtc.gossips {
-		key := gossip.MakeNodeLivenessKey(g.NodeID.Get())
+		nodeID := g.NodeID.Get()
+		key := gossip.MakeNodeLivenessKey(nodeID)
 		expKeys = append(expKeys, key)
-		if err := g.AddInfoProto(key, &kvserverpb.Liveness{}, 0); err != nil {
+		if err := g.AddInfoProto(key, &kvserverpb.Liveness{NodeID: nodeID}, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -612,7 +614,15 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	liveness, _ := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+	var liveness kvserver.LivenessRecord
+	testutils.SucceedsSoon(t, func() error {
+		livenessRec, err := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+		if err != nil {
+			return err
+		}
+		liveness = livenessRec
+		return nil
+	})
 
 	testutils.SucceedsSoon(t, func() error {
 		if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
@@ -668,7 +678,15 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 
 	// Advance the clock but only heartbeat node 0.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
-	liveness, _ := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+	var liveness kvserver.LivenessRecord
+	testutils.SucceedsSoon(t, func() error {
+		livenessRec, err := mtc.nodeLivenesses[0].GetLiveness(mtc.gossips[0].NodeID.Get())
+		if err != nil {
+			return err
+		}
+		liveness = livenessRec
+		return nil
+	})
 	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness.Liveness); err != nil {
 		t.Fatal(err)
 	}
@@ -791,7 +809,9 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	// Verify success on failed update of a liveness record that already has the
 	// given draining setting.
 	if err := mtc.nodeLivenesses[drainingNodeIdx].SetDrainingInternal(
-		ctx, kvserver.LivenessRecord{}, false,
+		ctx, kvserver.LivenessRecord{Liveness: kvserverpb.Liveness{
+			NodeID: drainingNodeID,
+		}}, false,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1079,8 +1099,10 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 
 	// Verify success on failed update of a liveness record that already has the
 	// given decommissioning setting.
+	oldLivenessRec, err := callerNodeLiveness.GetLiveness(nodeID)
+	assert.Nil(t, err)
 	if _, err := callerNodeLiveness.SetDecommissioningInternal(
-		ctx, nodeID, kvserver.LivenessRecord{}, kvserverpb.MembershipStatus_ACTIVE,
+		ctx, nodeID, oldLivenessRec, kvserverpb.MembershipStatus_ACTIVE,
 	); err != nil {
 		t.Fatal(err)
 	}

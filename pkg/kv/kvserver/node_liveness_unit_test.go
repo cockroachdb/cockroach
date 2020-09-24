@@ -58,8 +58,8 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	}{
 		{
 			// Epoch update only.
-			kvserverpb.Liveness{},
 			l(1, hlc.Timestamp{}, false, "active"),
+			l(2, hlc.Timestamp{}, false, "active"),
 			yes,
 		},
 		{
