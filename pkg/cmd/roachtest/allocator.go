@@ -328,6 +328,7 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 
 	// Stop the cluster and restart 2/3 of the nodes.
 	c.Stop(ctx)
+	tBeginDown := timeutil.Now()
 	c.Start(ctx, t, c.Range(1, 6), args)
 
 	waitForUnderReplicated := func(count int) {
@@ -376,6 +377,10 @@ FROM crdb_internal.kv_store_status
 	// because the allocator cannot select a replica for removal that is on a
 	// store for which it doesn't have a store descriptor.
 	run(`SET CLUSTER SETTING server.time_until_store_dead = '90s'`)
+	// Sleep until the node is dead so that when we actually wait for replication,
+	// we can expect things to move swiftly.
+	time.Sleep(90*time.Second - timeutil.Now().Sub(tBeginDown))
+
 	setReplication(5)
 	waitForReplication(5)
 
