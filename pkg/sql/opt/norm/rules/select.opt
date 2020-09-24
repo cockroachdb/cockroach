@@ -46,16 +46,6 @@
 =>
 (Select $input (ConsolidateFilters $filters))
 
-# DetectSelectContradiction replaces a Select with an empty Values if it detects
-# a contradiction in the filter.
-[DetectSelectContradiction, Normalize]
-(Select
-    $input:*
-    [ ... $item:(FiltersItem) & (IsContradiction $item) ... ]
-)
-=>
-(ConstructEmptyValues (OutputCols $input))
-
 # EliminateSelect discards an unnecessary Select operator in the case where its
 # filter is always true. Keep this near the top of the file so that it tends to
 # be checked early.

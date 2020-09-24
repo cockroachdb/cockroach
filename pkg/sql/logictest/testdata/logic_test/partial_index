@@ -1345,3 +1345,28 @@ SELECT distinct(a) FROM t53922
 1
 2
 3
+
+# Regression tests for #54649. Do not panic with NULL atoms in filter and
+# predicate expressions.
+subtest regression_54649
+
+statement ok
+CREATE TABLE t54649_a (
+  i INT,
+  b BOOL,
+  INDEX (i) WHERE b
+)
+
+statement ok
+SELECT i FROM t54649_a WHERE (NULL OR b) OR b
+
+statement ok
+CREATE TABLE t54649_b (
+  i INT,
+  b BOOL,
+  c BOOL,
+  INDEX (i) WHERE (b OR NULL) OR b
+)
+
+statement ok
+SELECT i FROM t54649_b WHERE c

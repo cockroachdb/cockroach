@@ -1345,28 +1345,6 @@ project
            └── (i:2 + k:1) IS NOT NULL [outer=(1,2), immutable]
 
 # --------------------------------------------------
-# DetectSelectContradiction
-# --------------------------------------------------
-
-norm expect=DetectSelectContradiction
-SELECT k FROM b WHERE k<1 AND k>2
-----
-values
- ├── columns: k:1!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1)
-
-norm expect=DetectSelectContradiction
-SELECT k FROM b WHERE i=5 AND k<1 AND k>2 AND s='foo'
-----
-values
- ├── columns: k:1!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1)
-
-# --------------------------------------------------
 # PushSelectIntoProjectSet
 # --------------------------------------------------
 norm expect=PushSelectIntoProjectSet

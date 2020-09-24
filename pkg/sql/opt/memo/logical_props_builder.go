@@ -246,7 +246,15 @@ func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relat
 	// -----------
 	// Select filter can filter any or all rows.
 	rel.Cardinality = inputProps.Cardinality.AsLowAs(0)
-	if sel.Filters.IsFalse() {
+	isContradiction := false
+	for i := range sel.Filters {
+		filterProps := sel.Filters[i].ScalarProps()
+		if filterProps.Constraints == constraint.Contradiction {
+			isContradiction = true
+			break
+		}
+	}
+	if isContradiction {
 		rel.Cardinality = props.ZeroCardinality
 	} else if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)

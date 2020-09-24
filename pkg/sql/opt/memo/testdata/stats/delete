@@ -104,4 +104,4 @@ delete xyz
       │    ├── key: (5)
       │    └── fd: (5)-->(6-8)
       └── filters
-           └── false [type=bool]
+           └── false [type=bool, constraints=(contradiction; tight)]

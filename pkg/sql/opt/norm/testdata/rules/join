@@ -114,7 +114,7 @@ full-join (cross)
  │    ├── key: (7)
  │    └── fd: (7)-->(8)
  └── filters
-      └── false
+      └── false [constraints=(contradiction; tight)]
 
 # --------------------------------------------------
 # PushFilterIntoJoinLeft
