@@ -358,8 +358,11 @@ func (b *distinctAggregatorHelperBase) selectDistinctTuples(
 			// encoding and return it without updating the EncDatum; therefore,
 			// simply setting Datum field to the argument is sufficient.
 			b.scratch.ed.Datum = b.aggColsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
+			// We know that we have tree.Datum, so there will definitely be no
+			// need to decode b.scratch.ed for fingerprinting, so we pass in
+			// nil memory account.
 			b.scratch.encoded, err = b.scratch.ed.Fingerprint(
-				b.inputTypes[colIdx], b.datumAlloc, b.scratch.encoded,
+				ctx, b.inputTypes[colIdx], b.datumAlloc, b.scratch.encoded, nil, /* acc */
 			)
 			if err != nil {
 				colexecerror.InternalError(err)
