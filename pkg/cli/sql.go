@@ -1486,8 +1486,31 @@ func checkInteractive(stdin *os.File) {
 	cliCtx.isInteractive = len(sqlCtx.execStmts) == 0 && isatty.IsTerminal(stdin.Fd())
 }
 
+// getInputFile establishes where we are reading from.
+func getInputFile() (cmdIn *os.File, closeFn func(), err error) {
+	if sqlCtx.inputFile == "" {
+		return os.Stdin, func() {}, nil
+	}
+
+	if len(sqlCtx.execStmts) != 0 {
+		return nil, nil, errors.Newf("unsupported combination: --%s and --%s", cliflags.Execute.Name, cliflags.File.Name)
+	}
+
+	f, err := os.Open(sqlCtx.inputFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f, func() { _ = f.Close() }, nil
+}
+
 func runTerm(cmd *cobra.Command, args []string) error {
-	checkInteractive(os.Stdin)
+	cmdIn, closeFn, err := getInputFile()
+	if err != nil {
+		return err
+	}
+	defer closeFn()
+
+	checkInteractive(cmdIn)
 
 	if cliCtx.isInteractive {
 		// The user only gets to see the welcome message on interactive sessions.
@@ -1500,10 +1523,10 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	return runClient(cmd, conn)
+	return runClient(cmd, conn, cmdIn)
 }
 
-func runClient(cmd *cobra.Command, conn *sqlConn) error {
+func runClient(cmd *cobra.Command, conn *sqlConn, cmdIn *os.File) error {
 	// Open the connection to make sure everything is OK before running any
 	// statements. Performs authentication.
 	if err := conn.ensureConn(); err != nil {
@@ -1513,7 +1536,7 @@ func runClient(cmd *cobra.Command, conn *sqlConn) error {
 	// Enable safe updates, unless disabled.
 	setupSafeUpdates(cmd, conn)
 
-	return runInteractive(conn, os.Stdin)
+	return runInteractive(conn, cmdIn)
 }
 
 // setupSafeUpdates attempts to enable "safe mode" if the session is
