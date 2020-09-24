@@ -501,6 +501,15 @@ func (im *Implicator) atomImpliesAtom(
 		return res
 	}
 
+	// If e is a FalseExpr, then it is a contradiction and it represents an
+	// empty set of rows. The empty set is contained by all sets, so a
+	// contradiction implies all predicates. This check is performed before
+	// building constraints because the constraint builder does not build a
+	// contradiction constraint for the FalseExpr.
+	if _, ok := e.(*memo.FalseExpr); ok {
+		return true
+	}
+
 	// Build constraint sets for e and pred, unless they have been cached.
 	eSet, eTight, ok := im.fetchConstraint(e)
 	if !ok {
@@ -511,6 +520,19 @@ func (im *Implicator) atomImpliesAtom(
 	if !ok {
 		predSet, predTight = memo.BuildConstraints(pred, im.md, im.evalCtx)
 		im.cacheConstraint(pred, predSet, predTight)
+	}
+
+	// If e is a contradiction, it represents an empty set of rows. The empty
+	// set is contained by all sets, so a contradiction implies all predicates.
+	if eSet == constraint.Contradiction {
+		return true
+	}
+
+	// If pred is a contradiction, it represents an empty set of rows. The only
+	// set contained by the empty set is itself (handled in the conditional
+	// above). No other filters imply a contradiction.
+	if predSet == constraint.Contradiction {
+		return false
 	}
 
 	// If either set has more than one constraint, then constraints cannot be
