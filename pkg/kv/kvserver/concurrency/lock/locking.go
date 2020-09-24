@@ -24,3 +24,6 @@ func init() {
 		}
 	}
 }
+
+// SafeValue implements redact.SafeValue.
+func (WaitPolicy) SafeValue() {}
