@@ -590,7 +590,9 @@ If problems persist, please see %s.`
 			initialStart := s.InitialStart()
 
 			// Run SQL for new clusters.
-			if err := runInitialSQL(ctx, s, startSingleNode); err != nil {
+			// TODO(knz): If/when we want auto-creation of an initial admin user,
+			// this can be achieved here.
+			if _, err := runInitialSQL(ctx, s, startSingleNode, "" /* adminUser */); err != nil {
 				return err
 			}
 

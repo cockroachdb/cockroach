@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,8 +56,6 @@ environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 const demoOrg = "Cockroach Demo"
 
 const defaultGeneratorName = "movr"
-
-const defaultRootPassword = "admin"
 
 var defaultGenerator workload.Generator
 
@@ -337,8 +334,8 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 		if !demoCtx.insecure {
 			fmt.Printf(
 				"# The user %q with password %q has been created. Use it to access the Web UI!\n#\n",
-				security.RootUser,
-				defaultRootPassword,
+				c.adminUser,
+				c.adminPassword,
 			)
 		}
 		// If we didn't launch a workload, we still need to inform the
