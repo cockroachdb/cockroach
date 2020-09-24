@@ -11,9 +11,12 @@
 package security
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
+	"math/big"
 	"os"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
@@ -87,3 +90,28 @@ var MinPasswordLength = settings.RegisterNonNegativeIntSetting(
 		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
 	1,
 )
+
+// GenerateRandomPassword generates a somewhat secure password
+// composed of alphanumeric characters.
+func GenerateRandomPassword() (string, error) {
+	// Length 43 and 62 symbols gives us at least 256 bits of entropy.
+	// If 256 random bits are good enough for AES, it's good enough for us.
+	const length = 43
+	const symbols = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	var result strings.Builder
+	max := big.NewInt(int64(len(symbols)))
+	for i := 0; i < length; i++ {
+		// The following code is really equivalent to
+		// 	   r := rand.Intn(len(symbols))
+		// with the math/rand package. However we want to use the crypto
+		// package for better randomness.
+		br, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", err
+		}
+		r := int(br.Int64())
+
+		result.WriteByte(symbols[r])
+	}
+	return result.String(), nil
+}
