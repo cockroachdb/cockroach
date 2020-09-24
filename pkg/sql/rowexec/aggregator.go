@@ -828,6 +828,26 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 	return nil
 }
 
+// encode returns the encoding for the grouping columns, this is then used as
+// our group key to determine which bucket to add to.
+func (ag *hashAggregator) encode(
+	appendTo []byte, row rowenc.EncDatumRow,
+) (encoding []byte, err error) {
+	for _, colIdx := range ag.groupCols {
+		// We might allocate tree.Datums when hashing the row, so we'll ask the
+		// fingerprint to account for them. Note that if the datums are later
+		// used by the aggregate functions (and accounted for accordingly),
+		// this can lead to over-accounting which is acceptable.
+		appendTo, err = row[colIdx].Fingerprint(
+			ag.Ctx, ag.inputTypes[colIdx], &ag.datumAlloc, appendTo, &ag.bucketsAcc,
+		)
+		if err != nil {
+			return appendTo, err
+		}
+	}
+	return appendTo, nil
+}
+
 // accumulateRow accumulates a single row, returning an error if accumulation
 // failed for any reason.
 func (ag *hashAggregator) accumulateRow(row rowenc.EncDatumRow) error {
@@ -925,7 +945,9 @@ func (a *aggregateFuncHolder) isDistinct(
 ) (bool, error) {
 	// Allocate one EncDatum that will be reused when encoding every argument.
 	ed := rowenc.EncDatum{Datum: firstArg}
-	encoded, err := ed.Fingerprint(firstArg.ResolvedType(), alloc, prefix)
+	// We know that we have tree.Datum, so there will definitely be no need to
+	// decode ed for fingerprinting, so we pass in nil memory account.
+	encoded, err := ed.Fingerprint(ctx, firstArg.ResolvedType(), alloc, prefix, nil /* acc */)
 	if err != nil {
 		return false, err
 	}
@@ -936,7 +958,7 @@ func (a *aggregateFuncHolder) isDistinct(
 			// encoding and return it without updating the EncDatum; therefore,
 			// simply setting Datum field to the argument is sufficient.
 			ed.Datum = arg
-			encoded, err = ed.Fingerprint(arg.ResolvedType(), alloc, encoded)
+			encoded, err = ed.Fingerprint(ctx, arg.ResolvedType(), alloc, encoded, nil /* acc */)
 			if err != nil {
 				return false, err
 			}
@@ -954,21 +976,6 @@ func (a *aggregateFuncHolder) isDistinct(
 	}
 	a.seen[s] = struct{}{}
 	return true, nil
-}
-
-// encode returns the encoding for the grouping columns, this is then used as
-// our group key to determine which bucket to add to.
-func (ag *aggregatorBase) encode(
-	appendTo []byte, row rowenc.EncDatumRow,
-) (encoding []byte, err error) {
-	for _, colIdx := range ag.groupCols {
-		appendTo, err = row[colIdx].Fingerprint(
-			ag.inputTypes[colIdx], &ag.datumAlloc, appendTo)
-		if err != nil {
-			return appendTo, err
-		}
-	}
-	return appendTo, nil
 }
 
 func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
