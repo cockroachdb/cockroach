@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft"
 )
 
@@ -219,9 +219,10 @@ func (r *Replica) executeWriteBatch(
 			slowTimer.Read = true
 			r.store.metrics.SlowRaftRequests.Inc(1)
 
-			log.Errorf(ctx, "range unavailable: %v",
-				rangeUnavailableMessage(r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
-					r.RaftStatus(), ba, timeutil.Since(startPropTime)))
+			var s redact.StringBuilder
+			rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
+				r.RaftStatus(), ba, timeutil.Since(startPropTime))
+			log.Errorf(ctx, "range unavailable: %v", s)
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
@@ -241,16 +242,13 @@ func (r *Replica) executeWriteBatch(
 }
 
 func rangeUnavailableMessage(
+	s *redact.StringBuilder,
 	desc *roachpb.RangeDescriptor,
 	lm IsLiveMap,
 	rs *raft.Status,
 	ba *roachpb.BatchRequest,
 	dur time.Duration,
-) string {
-	cpy := *desc
-	desc = &cpy
-	desc.StartKey, desc.EndKey = nil, nil // scrub PII
-
+) {
 	var liveReplicas, otherReplicas []roachpb.ReplicaDescriptor
 	for _, rDesc := range desc.Replicas().All() {
 		if lm[rDesc.NodeID].IsLive {
@@ -259,7 +257,13 @@ func rangeUnavailableMessage(
 			otherReplicas = append(otherReplicas, rDesc)
 		}
 	}
-	return fmt.Sprintf(`have been waiting %.2fs for proposing command %s.
+
+	// Ensure that these are going to redact nicely.
+	var _ redact.SafeFormatter = ba
+	var _ redact.SafeFormatter = desc
+	var _ redact.SafeFormatter = roachpb.ReplicaDescriptors{}
+
+	s.Printf(`have been waiting %.2fs for proposing command %s.
 This range is likely unavailable.
 Please submit this message to Cockroach Labs support along with the following information:
 
@@ -280,7 +284,7 @@ support contract. Otherwise, please open an issue at:
 		desc,
 		roachpb.MakeReplicaDescriptors(liveReplicas),
 		roachpb.MakeReplicaDescriptors(otherReplicas),
-		rs,
+		redact.Safe(rs), // raft status contains no PII
 		desc.RangeID,
 	)
 }
