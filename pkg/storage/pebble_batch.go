@@ -270,7 +270,6 @@ func (p *pebbleBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) erro
 		panic("distinct batch open")
 	}
 
-	type unsafeRawKeyGetter interface{ unsafeRawKey() []byte }
 	// Note that this method has the side effect of modifying iter's bounds.
 	// Since all calls to `ClearIterRange` are on new throwaway iterators with no
 	// lower bounds, calling SetUpperBound should be sufficient and safe.
@@ -287,7 +286,7 @@ func (p *pebbleBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) erro
 			break
 		}
 
-		err = p.batch.Delete(iter.(unsafeRawKeyGetter).unsafeRawKey(), nil)
+		err = p.batch.Delete(iter.UnsafeRawKey(), nil)
 		if err != nil {
 			return err
 		}
