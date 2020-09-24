@@ -210,7 +210,7 @@ on-txn-updated txn=txn2 status=aborted
 ----
 [-] update txn: aborting txn2
 [2] handle write intent error req1: detected pusher aborted
-[2] handle write intent error req1: handled conflicting intents on "k", returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[2] handle write intent error req1: handled conflicting intents on "k", returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 
 debug-lock-table
 ----

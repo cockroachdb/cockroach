@@ -161,7 +161,7 @@ on-txn-updated txn=txn1 status=aborted
 ----
 [-] update txn: aborting txn1
 [4] sequence req1r: detected pusher aborted
-[4] sequence req1r: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[4] sequence req1r: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [6] sequence req3r: resolving intent "a" for txn 00000001 with ABORTED status
 [6] sequence req3r: acquiring latches
 [6] sequence req3r: scanning lock table for conflicting locks
@@ -380,7 +380,7 @@ on-txn-updated txn=txn1 status=aborted
 [4] sequence req4w: scanning lock table for conflicting locks
 [4] sequence req4w: sequencing complete, returned guard
 [5] sequence req1w2: detected pusher aborted
-[5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [7] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
 [7] sequence req3w2: pushing txn 00000004 to detect request deadlock
 [7] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -612,7 +612,7 @@ on-txn-updated txn=txn4 status=aborted
 ----
 [-] update txn: aborting txn4
 [4] sequence req4w: detected pusher aborted
-[4] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[4] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [5] sequence req1w2: acquiring latches
 [5] sequence req1w2: scanning lock table for conflicting locks
 [5] sequence req1w2: sequencing complete, returned guard
@@ -836,7 +836,7 @@ on-txn-updated txn=txn1 status=aborted
 ----
 [-] update txn: aborting txn1
 [5] sequence req1w2: detected pusher aborted
-[5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [6] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
 [6] sequence req3w2: acquiring latches
 [6] sequence req3w2: scanning lock table for conflicting locks
@@ -1081,7 +1081,7 @@ on-txn-updated txn=txn4 status=aborted
 ----
 [-] update txn: aborting txn4
 [5] sequence req4w: detected pusher aborted
-[5] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[5] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [6] sequence req3w2: acquiring latches
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: sequencing complete, returned guard
