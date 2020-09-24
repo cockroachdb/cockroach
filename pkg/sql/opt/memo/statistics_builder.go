@@ -2635,6 +2635,11 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 	}
 
 	switch t := e.(type) {
+	case *IndexJoinExpr:
+		// An index join is like a lookup join with no additional ON filters. The
+		// number of rows processed equals the number of output rows.
+		return e.Relational().Stats.RowCount
+
 	case *LookupJoinExpr:
 		var lookupJoinPrivate *LookupJoinPrivate
 		switch t.JoinType {

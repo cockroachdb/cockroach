@@ -880,7 +880,7 @@ EXPLAIN (OPT,VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 sort
  ├── columns: a:1 b:2
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
- ├── cost: 56.7943856
+ ├── cost: 76.5943856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
@@ -888,7 +888,7 @@ sort
  └── index-join tc
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-      ├── cost: 55.92
+      ├── cost: 75.72
       ├── fd: ()-->(1)
       ├── prune: (2)
       ├── interesting orderings: (+1)
@@ -906,7 +906,7 @@ EXPLAIN (OPT,TYPES) SELECT * FROM tc WHERE a = 10 ORDER BY b
 sort
  ├── columns: a:1(int!null) b:2(int)
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
- ├── cost: 56.7943856
+ ├── cost: 76.5943856
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
@@ -914,7 +914,7 @@ sort
  └── index-join tc
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-      ├── cost: 55.92
+      ├── cost: 75.72
       ├── fd: ()-->(1)
       ├── prune: (2)
       ├── interesting orderings: (+1)

@@ -336,7 +336,7 @@ SELECT * FROM abc WHERE c = 1
 index-join abc
  ├── columns: a:1!null b:2 c:3!null
  ├── stats: [rows=9.9000002, distinct(3)=1, null(3)=0]
- ├── cost: 54.609001
+ ├── cost: 74.2110014
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
