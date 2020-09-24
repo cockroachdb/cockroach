@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ClientVisibleRetryError is to be implemented by errors visible by
@@ -35,10 +36,18 @@ type ClientVisibleAmbiguousError interface {
 }
 
 func (e *UnhandledRetryableError) Error() string {
-	return e.PErr.Message
+	return e.String()
 }
 
 var _ error = &UnhandledRetryableError{}
+
+func (e *UnhandledRetryableError) SafeFormat(s redact.SafePrinter, r rune) {
+	e.PErr.SafeFormat(s, r)
+}
+
+func (e *UnhandledRetryableError) String() string {
+	return redact.StringWithoutMarkers(e)
+}
 
 // transactionRestartError is an interface implemented by errors that cause
 // a transaction to be restarted.
@@ -149,12 +158,28 @@ func NewErrorf(format string, a ...interface{}) *Error {
 	return NewError(err)
 }
 
+func (e *Error) SafeFormat(s redact.SafePrinter, _ rune) {
+	if e == nil {
+		s.Print(nil)
+	} else if detail := e.GetDetail(); detail != nil {
+		// NB: we ignore e.Message because it's never redactable.
+		// If there's no error detail, GoError() will be an opaque
+		// error holding the message, so this generates gracefully.
+		// We do assume that if a detail is present, e.Message does
+		// correspond to that detail's message. This assumption
+		// is not enforced but appears sane.
+		// NB: we can't print e.GoError() because that sometimes
+		// prepends an UnhandledRetryableError and we'd end up
+		// with an infinite recursion.
+		s.Print(detail)
+	} else {
+		s.Print(e.Message)
+	}
+}
+
 // String implements fmt.Stringer.
 func (e *Error) String() string {
-	if e == nil {
-		return "<nil>"
-	}
-	return e.Message
+	return redact.StringWithoutMarkers(e)
 }
 
 type internalError Error
@@ -826,25 +851,32 @@ func NewReadWithinUncertaintyIntervalError(
 	return rwue
 }
 
+func (e *ReadWithinUncertaintyIntervalError) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
+		"previous write with future timestamp %s within uncertainty interval `t <= %v`; "+
+		"observed timestamps: ",
+		e.ReadTimestamp, e.ExistingTimestamp, e.MaxTimestamp)
+
+	s.SafeRune('[')
+	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {
+		if i > 0 {
+			s.SafeRune(' ')
+		}
+		s.Printf("{%d %v}", ot.NodeID, ot.Timestamp)
+	}
+	s.SafeRune(']')
+}
+
+func (e *ReadWithinUncertaintyIntervalError) String() string {
+	return redact.StringWithoutMarkers(e)
+}
+
 func (e *ReadWithinUncertaintyIntervalError) Error() string {
-	return e.message(nil)
+	return e.String()
 }
 
 func (e *ReadWithinUncertaintyIntervalError) message(_ *Error) string {
-	var ts strings.Builder
-	ts.WriteByte('[')
-	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {
-		if i > 0 {
-			ts.WriteByte(' ')
-		}
-		fmt.Fprintf(&ts, "{%d %v}", ot.NodeID, ot.Timestamp)
-	}
-	ts.WriteByte(']')
-
-	return fmt.Sprintf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
-		"previous write with future timestamp %s within uncertainty interval `t <= %v`; "+
-		"observed timestamps: %s",
-		e.ReadTimestamp, e.ExistingTimestamp, e.MaxTimestamp, ts.String())
+	return e.String()
 }
 
 // Type is part of the ErrorDetailInterface.

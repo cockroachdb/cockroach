@@ -110,6 +110,7 @@ message RangeKeyMismatchError {
 // lower bound for a new timestamp at which at least the read producing
 // this error would succeed on retry.
 message ReadWithinUncertaintyIntervalError {
+  option (gogoproto.goproto_stringer) = false;
   option (gogoproto.equal) = true;
 
   // This data below is purely informational and used to tailor the
@@ -374,6 +375,8 @@ message StoreNotFoundError {
 // them into TransactionRetryWithProtoRefreshError. For non-transactional requests,
 // this error will be observed by layers above the TxnCoordSender.
 message UnhandledRetryableError {
+  option (gogoproto.goproto_stringer) = false;
+
   // The underlying storage error that is being marshaled.
   // pErr.TransactionRestart is expected to be set, and the error
   // detail is one of the retryable ones.
