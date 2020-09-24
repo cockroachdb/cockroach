@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 type testError struct{}
@@ -90,4 +92,22 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 			t.Fatalf("expected: %s\ngot: %s", a, expOld)
 		}
 	}
+}
+
+func TestErrorRedaction(t *testing.T) {
+	// NB: most other errors don't redact properly. More elbow grease is needed.
+	wrappedPErr := NewError(NewReadWithinUncertaintyIntervalError(
+		hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
+		&Transaction{
+			MaxTimestamp:       hlc.Timestamp{WallTime: 3},
+			ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.Timestamp{WallTime: 4}}},
+		}))
+	r := &UnhandledRetryableError{
+		PErr: *wrappedPErr,
+	}
+	var s redact.StringBuilder
+	s.Print(r)
+	act := s.RedactableString()
+	const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 within uncertainty interval `t <= 0.000000003,0`; observed timestamps: [{12 0.000000004,0}]"
+	require.EqualValues(t, exp, act)
 }
