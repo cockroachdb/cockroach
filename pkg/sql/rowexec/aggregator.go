@@ -957,14 +957,22 @@ func (a *aggregateFuncHolder) isDistinct(
 func (ag *aggregatorBase) encode(
 	appendTo []byte, row rowenc.EncDatumRow,
 ) (encoding []byte, err error) {
+	// We might allocate tree.Datums when hashing the row, so we'll
+	// track those allocations and account for them. Note that if the
+	// datums are later used by the window functions (and accounted for
+	// accordingly), this can lead to over-accounting which is
+	// acceptable.
+	newMemUsage := uintptr(0)
 	for _, colIdx := range ag.groupCols {
+		newMemUsage -= row[colIdx].Size()
 		appendTo, err = row[colIdx].Fingerprint(
 			ag.inputTypes[colIdx], &ag.datumAlloc, appendTo)
 		if err != nil {
 			return appendTo, err
 		}
+		newMemUsage += row[colIdx].Size()
 	}
-	return appendTo, nil
+	return appendTo, ag.bucketsAcc.Grow(ag.Ctx, int64(newMemUsage))
 }
 
 func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {

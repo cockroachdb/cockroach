@@ -675,16 +675,27 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			// We need to hash the row according to partitionBy
 			// to figure out which partition the row belongs to.
 			w.scratch = w.scratch[:0]
+			// We might allocate tree.Datums when hashing the row, so we'll
+			// track those allocations and account for them. Note that if the
+			// datums are later used by the window functions (and accounted for
+			// accordingly), this can lead to over-accounting which is
+			// acceptable.
+			newMemUsage := uintptr(0)
 			for _, col := range w.partitionBy {
 				if int(col) >= len(row) {
 					return errors.AssertionFailedf(
 						"hash column %d, row with only %d columns", errors.Safe(col), errors.Safe(len(row)))
 				}
+				newMemUsage -= row[col].Size()
 				var err error
-				w.scratch, err = row[int(col)].Fingerprint(w.inputTypes[int(col)], &w.datumAlloc, w.scratch)
+				w.scratch, err = row[col].Fingerprint(w.inputTypes[int(col)], &w.datumAlloc, w.scratch)
 				if err != nil {
 					return err
 				}
+				newMemUsage += row[col].Size()
+			}
+			if err = w.growMemAccount(&w.acc, int64(newMemUsage)); err != nil {
+				return err
 			}
 			if string(w.scratch) != bucket {
 				// Current row is from the new bucket, so we "finalize" the previous

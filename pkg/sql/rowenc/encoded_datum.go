@@ -288,6 +288,9 @@ func (ed *EncDatum) Encode(
 // instead of encode. Additionally, Fingerprint has the property that if the
 // fingerprints of a set of datums are appended together, the resulting
 // fingerprint will uniquely identify the set.
+// Note that this method *might* decode the encoded representation and allocate
+// a new tree.Datum, and it's up to the caller to account (or not) for that
+// allocation.
 func (ed *EncDatum) Fingerprint(typ *types.T, a *DatumAlloc, appendTo []byte) ([]byte, error) {
 	// Note: we don't ed.EnsureDecoded on top of this method, because the default
 	// case uses ed.Encode, which has a fast path if the encoded bytes are already
@@ -302,10 +305,13 @@ func (ed *EncDatum) Fingerprint(typ *types.T, a *DatumAlloc, appendTo []byte) ([
 		return EncodeTableValue(appendTo, descpb.ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
 	default:
 		// For values that are key encodable, using the ascending key.
-		// TODO (rohany): However, there should be a knob for the hasher that sees
-		//  what kind of encoding already exists on the enc datums incoming to the
-		//  DistSQL operators, and should use that encoding to avoid re-encoding
-		//  datums into different encoding types as much as possible.
+		// Note that using a value encoding will not easily work in case when
+		// there already exists the encoded representation because that
+		// contains a value tag as a prefix which makes it unsuitable for
+		// equality checks. We could have reused the descending key encoding
+		// when already present, but it doesn't seem worth it at this point.
+		// TODO(yuzefovich): consider reusing the descending key encoding when
+		// already present.
 		return ed.Encode(typ, a, descpb.DatumEncoding_ASCENDING_KEY, appendTo)
 	}
 }
