@@ -1123,7 +1123,7 @@ func (r *restoreResumer) Resume(
 		// the first place, as a special case.
 		var newDescriptorChangeJobs []*jobs.StartableJob
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-			newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol)
+			newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol, details)
 			return err
 		}
 		if err := descs.Txn(
@@ -1173,7 +1173,7 @@ func (r *restoreResumer) Resume(
 	}
 	var newDescriptorChangeJobs []*jobs.StartableJob
 	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-		newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol)
+		newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol, details)
 		return err
 	}
 	if err := descs.Txn(
@@ -1182,6 +1182,8 @@ func (r *restoreResumer) Resume(
 	); err != nil {
 		return err
 	}
+	// Reload the details as we may have updated the job.
+	details = r.job.Details().(jobspb.RestoreDetails)
 
 	// Start the schema change jobs we created.
 	for _, newJob := range newDescriptorChangeJobs {
@@ -1273,9 +1275,11 @@ func insertStats(
 
 // publishDescriptors updates the RESTORED descriptors' status from OFFLINE to
 // PUBLIC. The schema change jobs are returned to be started after the
-// transaction commits.
+// transaction commits. The details struct is passed in rather than loaded
+// from r.job as the call to r.job.SetDetails will overwrite the job details
+// with a new value even if this transaction does not commit.
 func (r *restoreResumer) publishDescriptors(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, details jobspb.RestoreDetails,
 ) (newDescriptorChangeJobs []*jobs.StartableJob, err error) {
 	defer func() {
 		if err == nil {
@@ -1288,7 +1292,6 @@ func (r *restoreResumer) publishDescriptors(
 		}
 		newDescriptorChangeJobs = nil
 	}()
-	details := r.job.Details().(jobspb.RestoreDetails)
 	if details.DescriptorsPublished {
 		return nil, nil
 	}
@@ -1297,7 +1300,7 @@ func (r *restoreResumer) publishDescriptors(
 			return nil, err
 		}
 	}
-	log.Event(ctx, "making tables live")
+	log.VEventf(ctx, 1, "making tables live")
 
 	// Write the new descriptors and flip state over to public so they can be
 	// accessed.
