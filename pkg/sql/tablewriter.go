@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -114,11 +115,16 @@ type tableWriterBase struct {
 	b *kv.Batch
 	// batchSize is the current batch size (when known).
 	batchSize int
+	// maxBatchSize determines the maximum number of entries in the KV batch
+	// for a mutation operation. By default, it will be set to 10k but can be
+	// a different value in tests.
+	maxBatchSize int
 }
 
 func (tb *tableWriterBase) init(txn *kv.Txn) {
 	tb.txn = txn
 	tb.b = txn.NewBatch()
+	tb.maxBatchSize = mutations.MaxBatchSize()
 }
 
 // flushAndStartNewBatch shares the common flushAndStartNewBatch() code between

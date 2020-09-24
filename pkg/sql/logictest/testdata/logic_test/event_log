@@ -363,6 +363,7 @@ WHERE "eventType" = 'set_cluster_setting'
 AND info NOT LIKE '%version%' AND info NOT LIKE '%sql.defaults.distsql%' AND info NOT LIKE '%cluster.secret%'
 AND info NOT LIKE '%sql.stats.automatic_collection.enabled%'
 AND info NOT LIKE '%sql.defaults.vectorize%'
+AND info NOT LIKE '%sql.testing%'
 ORDER BY "timestamp"
 ----
 0  1  {"SettingName":"diagnostics.reporting.enabled","Value":"true","User":"root"}

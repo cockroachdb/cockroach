@@ -70,12 +70,6 @@ func (n *upsertNode) Next(params runParams) (bool, error) { panic("not valid") }
 // in plan_batch.go.
 func (n *upsertNode) Values() tree.Datums { panic("not valid") }
 
-// maxUpsertBatchSize is the max number of entries in the KV batch for
-// the upsert operation (including secondary index updates, FK
-// cascading updates, etc), before the current KV batch is executed
-// and a new batch is started.
-const maxUpsertBatchSize = 10000
-
 // BatchedNext implements the batchedPlanNode interface.
 func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 	if n.run.done {
@@ -112,7 +106,7 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if n.run.tw.curBatchSize() >= maxUpsertBatchSize {
+		if n.run.tw.curBatchSize() >= n.run.tw.maxBatchSize {
 			break
 		}
 	}

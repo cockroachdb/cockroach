@@ -981,6 +981,12 @@ type logicTest struct {
 
 	curPath   string
 	curLineNo int
+
+	// randomizedMutationsMaxBatchSize stores the randomized max batch size for
+	// the mutation operations. The max batch size will randomly be set to 1
+	// with 25% probability, a random value in [2, 100] range with 25%
+	// probability, or default max batch size with 50% probability.
+	randomizedMutationsMaxBatchSize int
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1258,7 +1264,12 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
+	}
 
+	if _, err := t.cluster.ServerConn(0).Exec(
+		"SET CLUSTER SETTING sql.testing.mutations.max_batch_size = $1", t.randomizedMutationsMaxBatchSize,
+	); err != nil {
+		t.Fatal(err)
 	}
 
 	if cfg.overrideAutoStats != "" {
@@ -2414,9 +2425,19 @@ var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", fals
 var logicTestsConfigExclude = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_SKIP_CONFIG", "")
 var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_CONFIG", "")
 
+// TestServerArgs contains the parameters that callers of RunLogicTest might
+// want to specify for the test clusters to be created with.
+type TestServerArgs struct {
+	// DisableMutationsMaxBatchSizeRandomization determines whether the test
+	// runner should randomize the max batch size for mutation operations. This
+	// should only be set to 'true' when the tests expect to return different
+	// output when the KV batches of writes have different boundaries.
+	DisableMutationsMaxBatchSizeRandomization bool
+}
+
 // RunLogicTest is the main entry point for the logic test. The globs parameter
 // specifies the default sets of files to run.
-func RunLogicTest(t *testing.T, globs ...string) {
+func RunLogicTest(t *testing.T, serverArgs TestServerArgs, globs ...string) {
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
@@ -2478,6 +2499,15 @@ func RunLogicTest(t *testing.T, globs ...string) {
 		}
 	}
 
+	rng, _ := randutil.NewPseudoRand()
+	randomizedMutationsMaxBatchSize := mutations.MaxBatchSize()
+	if !serverArgs.DisableMutationsMaxBatchSizeRandomization {
+		randomizedMutationsMaxBatchSize = randomValue(rng, []int{1, 2 + rng.Intn(99)}, []float64{0.25, 0.25}, mutations.MaxBatchSize())
+		if randomizedMutationsMaxBatchSize != mutations.MaxBatchSize() {
+			t.Log(fmt.Sprintf("randomize mutations.MaxBatchSize to %d", randomizedMutationsMaxBatchSize))
+		}
+	}
+
 	// The tests below are likely to run concurrently; `log` is shared
 	// between all the goroutines and thus all tests, so it doesn't make
 	// sense to try to use separate `log.Scope` instances for each test.
@@ -2520,10 +2550,11 @@ func RunLogicTest(t *testing.T, globs ...string) {
 					}
 					rng, _ := randutil.NewPseudoRand()
 					lt := logicTest{
-						rootT:           t,
-						verbose:         verbose,
-						perErrorSummary: make(map[string][]string),
-						rng:             rng,
+						rootT:                           t,
+						verbose:                         verbose,
+						perErrorSummary:                 make(map[string][]string),
+						rng:                             rng,
+						randomizedMutationsMaxBatchSize: randomizedMutationsMaxBatchSize,
 					}
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
@@ -2738,4 +2769,30 @@ func (t *logicTest) printCompletion(path string, config testClusterConfig) {
 	}
 	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.name,
 		t.progress, t.failures, unsupportedMsg)
+}
+
+// randomValue randomly chooses one element from values according to
+// probabilities (the sum of which must not exceed 1.0). If the sum of
+// probabilities is less than 1.0, then defaultValue will be chosen in 1.0-sum
+// proportion of cases.
+func randomValue(rng *rand.Rand, values []int, probabilities []float64, defaultValue int) int {
+	if len(values) != len(probabilities) {
+		panic(errors.Errorf("mismatched number of values %d and probabilities %d", len(values), len(probabilities)))
+	}
+	probabilitiesSum := 0.0
+	for _, p := range probabilities {
+		probabilitiesSum += p
+	}
+	if probabilitiesSum > 1.0 {
+		panic(errors.Errorf("sum of probabilities %v is larger than 1.0", probabilities))
+	}
+	randVal := rng.Float64()
+	probabilitiesSum = 0
+	for i, p := range probabilities {
+		if randVal < probabilitiesSum+p {
+			return values[i]
+		}
+		probabilitiesSum += p
+	}
+	return defaultValue
 }

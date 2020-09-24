@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,9 +33,9 @@ var insertFastPathNodePool = sync.Pool{
 }
 
 // Check that exec.InsertFastPathMaxRows does not exceed the default
-// maxInsertBatchSize.
+// mutations.MaxBatchSize.
 func init() {
-	if maxInsertBatchSize < exec.InsertFastPathMaxRows {
+	if mutations.MaxBatchSize() < exec.InsertFastPathMaxRows {
 		panic("decrease exec.InsertFastPathMaxRows")
 	}
 }

@@ -173,12 +173,6 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	return nil
 }
 
-// maxInsertBatchSize is the max number of entries in the KV batch for
-// the insert operation (including secondary index updates, FK
-// cascading updates, etc), before the current KV batch is executed
-// and a new batch is started.
-var maxInsertBatchSize = 10000
-
 func (n *insertNode) startExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
@@ -237,7 +231,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		n.run.rowCount++
 
 		// Are we done yet with the current batch?
-		if n.run.ti.curBatchSize() >= maxInsertBatchSize {
+		if n.run.ti.curBatchSize() >= n.run.ti.maxBatchSize {
 			break
 		}
 	}
@@ -289,11 +283,4 @@ func (n *insertNode) Close(ctx context.Context) {
 // See planner.autoCommit.
 func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
-}
-
-// TestingSetInsertBatchSize exports a constant for testing only.
-func TestingSetInsertBatchSize(val int) func() {
-	oldVal := maxInsertBatchSize
-	maxInsertBatchSize = val
-	return func() { maxInsertBatchSize = oldVal }
 }

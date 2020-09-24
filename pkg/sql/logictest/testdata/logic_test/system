@@ -533,6 +533,7 @@ FROM system.settings
 WHERE name != 'sql.defaults.distsql'
 AND name != 'sql.stats.automatic_collection.enabled'
 AND name NOT LIKE '%sql.defaults.vectorize%'
+AND name NOT LIKE '%sql.testing%'
 ORDER BY name
 ----
 cluster.secret
@@ -549,7 +550,8 @@ SELECT name, value
 FROM system.settings
 WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret',
   'sql.stats.automatic_collection.enabled', 'sql.defaults.vectorize',
-  'sql.defaults.vectorize_row_count_threshold')
+  'sql.defaults.vectorize_row_count_threshold',
+  'sql.testing.mutations.max_batch_size')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                  true

@@ -1,5 +1,12 @@
 # LogicTest: fakedist fakedist-metadata
 
+# Note that this file was moved from the regular logic tests as a part of
+# introducing the randomization of the max batch size of mutations. That
+# randomization needs to be disabled for these queries because they become
+# non-deterministic. However, there is no easy to do so just for a single file,
+# so the file was moved into execbuilder tests which disable that
+# randomization.
+
 # Disable automatic stats
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
