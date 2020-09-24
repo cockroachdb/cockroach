@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -1375,25 +1376,24 @@ func (ds *DistSender) sendPartialBatchAsync(
 }
 
 func slowRangeRPCWarningStr(
+	s *redact.StringBuilder,
 	ba roachpb.BatchRequest,
 	dur time.Duration,
 	attempts int64,
 	desc *roachpb.RangeDescriptor,
 	err error,
 	br *roachpb.BatchResponse,
-) string {
-	var resp string
-	if err != nil {
-		resp = err.Error()
-	} else {
-		resp = br.String()
+) {
+	resp := interface{}(err)
+	if resp == nil {
+		resp = br
 	}
-	return fmt.Sprintf("have been waiting %.2fs (%d attempts) for RPC %s to %s; resp: %s",
+	s.Printf("have been waiting %.2fs (%d attempts) for RPC %s to %s; resp: %s",
 		dur.Seconds(), attempts, ba, desc, resp)
 }
 
-func slowRangeRPCReturnWarningStr(dur time.Duration, attempts int64) string {
-	return fmt.Sprintf("slow RPC finished after %.2fs (%d attempts)", dur.Seconds(), attempts)
+func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, attempts int64) {
+	s.Printf("slow RPC finished after %.2fs (%d attempts)", dur.Seconds(), attempts)
 }
 
 // sendPartialBatch sends the supplied batch to the range specified by
@@ -1496,16 +1496,20 @@ func (ds *DistSender) sendPartialBatch(
 
 		const slowDistSenderThreshold = time.Minute
 		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && !tBegin.IsZero() {
-			log.Warningf(ctx, "slow range RPC: %v",
-				slowRangeRPCWarningStr(ba, dur, attempts, routingTok.Desc(), err, reply))
+			{
+				var s redact.StringBuilder
+				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
+				log.Warningf(ctx, "slow range RPC: %v", s)
+			}
 			// If the RPC wasn't successful, defer the logging of a message once the
 			// RPC is not retried any more.
 			if err != nil || reply.Error != nil {
 				ds.metrics.SlowRPCs.Inc(1)
 				defer func(tBegin time.Time, attempts int64) {
 					ds.metrics.SlowRPCs.Dec(1)
-					log.Warningf(ctx, "slow RPC response: %v",
-						slowRangeRPCReturnWarningStr(timeutil.Since(tBegin), attempts))
+					var s redact.StringBuilder
+					slowRangeRPCReturnWarningStr(&s, timeutil.Since(tBegin), attempts)
+					log.Warningf(ctx, "slow RPC response: %v", s)
 				}(tBegin, attempts)
 			}
 			tBegin = time.Time{} // prevent reentering branch for this RPC
