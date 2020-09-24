@@ -115,6 +115,14 @@ func RegisterNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSet
 	})
 }
 
+// RegisterPublicNonNegativeIntSetting defines a new setting with type int with
+// a validation function and makes it public.
+func RegisterPublicNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	s := RegisterNonNegativeIntSetting(key, desc, defaultValue)
+	s.SetVisibility(Public)
+	return s
+}
+
 // RegisterPositiveIntSetting defines a new setting with type int.
 func RegisterPositiveIntSetting(key, desc string, defaultValue int64) *IntSetting {
 	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {

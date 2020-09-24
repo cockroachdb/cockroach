@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -74,6 +75,14 @@ var logSessionAuth = settings.RegisterPublicBoolSetting(
 	sql.AuthAuditingClusterSettingName,
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false)
+
+const maxNumConnectionsClusterSettingName = "server.max_connections"
+
+var MaxNumConnections = settings.RegisterPublicNonNegativeIntSetting(
+	maxNumConnectionsClusterSettingName,
+	"the maximum number of SQL connections to the server allowed at a given time, disabled if 0",
+	0,
+)
 
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
@@ -180,6 +189,9 @@ type Server struct {
 
 	sqlMemoryPool *mon.BytesMonitor
 	connMonitor   *mon.BytesMonitor
+
+	// numOpenConns is an atomic that represents the number of open connections.
+	numOpenConns int64
 
 	// testingLogEnabled is used in unit tests in this package to
 	// force-enable conn/auth logging without dancing around the
@@ -481,7 +493,7 @@ func (s *Server) TestingEnableConnAuthLogging() {
 //
 // An error is returned if the initial handshake of the connection fails.
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType SocketType) error {
-	ctx, draining, onCloseFn := s.registerConn(ctx)
+	ctx, onCloseFn, registrationErr := s.registerConn(ctx)
 	defer onCloseFn()
 
 	// Some bookkeeping, for security-minded administrators.
@@ -515,11 +527,6 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		return handleCancel(conn)
 	}
 
-	// If the server is shutting down, terminate the connection early.
-	if draining {
-		return s.sendErr(ctx, conn, newAdminShutdownErr(ErrDrainingNewConn))
-	}
-
 	// Compute the initial connType.
 	connType, err := socketType.asConnType()
 	if err != nil {
@@ -536,6 +543,14 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		return s.sendErr(ctx, conn, clientErr)
 	}
 	ctx = logtags.AddTag(ctx, connType.String(), nil)
+
+	// If the server returned an error when registering the connection, terminate
+	// the connection early. A TLS connection must be established if requested
+	// before sending an error:
+	// https://www.postgresql.org/docs/current/protocol-flow.html#id-1.10.5.7.11
+	if registrationErr != nil {
+		return s.sendErr(ctx, conn, registrationErr)
+	}
 
 	// What does the client want to do?
 	switch version {
@@ -761,21 +776,40 @@ func (s *Server) maybeUpgradeToSecureConn(
 }
 
 // registerConn registers the incoming connection to the map of active connections,
-// which can be canceled by a concurrent server drain. It also returns
-// the current draining status of the server.
+// which can be canceled by a concurrent server drain.
 //
-// The onCloseFn() callback must be called at the end of the
-// connection by the caller.
-func (s *Server) registerConn(
-	ctx context.Context,
-) (newCtx context.Context, draining bool, onCloseFn func()) {
-	onCloseFn = func() {}
-	newCtx = ctx
+// The returned callback must be called at the end of the connection by the
+// caller regardless of the error returned.
+//
+// If there was an error registering a connection (e.g. the server is draining
+// or this connection would bring the server over server.max_connections).
+func (s *Server) registerConn(ctx context.Context) (context.Context, func(), error) {
+	onCloseFn := func() {}
+	// Optimistically add this conn to the number of open connections. Note that
+	// we do not use the accompanying metrics value since we want the load and
+	// increment operations to be atomic.
+	maxConns := MaxNumConnections.Get(&s.execCfg.Settings.SV)
+	if newVal := atomic.AddInt64(&s.numOpenConns, 1); maxConns != 0 && newVal > maxConns {
+		// There are now too many open connections.
+		atomic.AddInt64(&s.numOpenConns, -1)
+		return ctx, onCloseFn, errors.WithHint(
+			pgerror.New(
+				pgcode.TooManyConnections, "sorry, too many clients already",
+			),
+			fmt.Sprintf(
+				"the maximum number of allowed connections is %d and can be modified using the %s cluster setting",
+				maxConns,
+				maxNumConnectionsClusterSettingName,
+			),
+		)
+	}
+
 	s.mu.Lock()
-	draining = s.mu.draining
+	defer s.mu.Unlock()
+	draining := s.mu.draining
 	if !draining {
 		var cancel context.CancelFunc
-		newCtx, cancel = contextutil.WithCancel(ctx)
+		ctx, cancel = contextutil.WithCancel(ctx)
 		done := make(chan struct{})
 		s.mu.connCancelMap[done] = cancel
 		onCloseFn = func() {
@@ -786,19 +820,21 @@ func (s *Server) registerConn(
 			s.mu.Unlock()
 		}
 	}
-	s.mu.Unlock()
 
 	// If the Server is draining, we will use the connection only to send an
 	// error, so we don't count it in the stats. This makes sense since
 	// DrainClient() waits for that number to drop to zero,
 	// so we don't want it to oscillate unnecessarily.
+	var err error
 	if !draining {
 		s.metrics.NewConns.Inc(1)
 		s.metrics.Conns.Inc(1)
 		prevOnCloseFn := onCloseFn
-		onCloseFn = func() { prevOnCloseFn(); s.metrics.Conns.Dec(1) }
+		onCloseFn = func() { prevOnCloseFn(); s.metrics.Conns.Dec(1); atomic.AddInt64(&s.numOpenConns, -1) }
+	} else {
+		err = newAdminShutdownErr(ErrDrainingNewConn)
 	}
-	return
+	return ctx, onCloseFn, err
 }
 
 // readVersion reads the start-up message, then returns the version

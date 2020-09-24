@@ -33,7 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -44,6 +46,7 @@ import (
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 func wrongArgCountString(want, got int) string {
@@ -233,6 +236,88 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 
 		pgServer.Undrain()
 	})
+}
+
+func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	require.Zero(t, pgwire.MaxNumConnections.Get(&st.SV), "expected default max_connections value to be 0")
+
+	var (
+		ctx    = context.Background()
+		params = base.TestServerArgs{
+			Settings: st,
+		}
+		pgServer = serverutils.NewServer(params)
+	)
+
+	require.NoError(t, pgServer.Start())
+	defer pgServer.Stopper().Stop(ctx)
+
+	pgURL, cleanup := sqlutils.PGUrl(t, pgServer.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+	db, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	// Disable caching connections.
+	db.SetMaxIdleConns(-1)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	openConn := func() (func(), error) {
+		c, err := db.Conn(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return func() {
+			_ = c.Close()
+		}, err
+	}
+
+	// Given that max connections was required to be 0 above, the limit is
+	// disabled, so creating a single connection should succeed.
+	closeConn1, err := openConn()
+	require.NoError(t, err)
+	defer func() {
+		// closeConn1 might be set to nil if called by the test. If not, we'd like
+		// to clean up the goroutine so that the leak detector doesn't complain.
+		if closeConn1 != nil {
+			closeConn1()
+		}
+	}()
+
+	// Set max connection limit to 1.
+	pgwire.MaxNumConnections.Override(&st.SV, 1)
+
+	// Try to create another connection. This would bring the number of
+	// connections over the limit so an error is expected.
+	closeConn2, err := openConn()
+	if closeConn2 != nil {
+		// We expect to not create a connection, but in the event that connection
+		// creation is successful, close it so that no goroutine is leaked.
+		defer closeConn2()
+	}
+
+	require.Error(t, err)
+	pqErr, ok := err.(*pq.Error)
+	require.True(t, ok, "expected pq error: %v", err)
+	require.True(t, pgcode.TooManyConnections.String() == string(pqErr.Code), "expected pgcode %s (TooManyConnections) but got %s", pgcode.TooManyConnections, pqErr.Code)
+
+	closeConn1()
+
+	// Now that the first connection was closed, a new connection can be opened.
+	closeConn3, err := openConn()
+	require.NoError(t, err)
+	defer closeConn3()
+
+	// And if the limit is disabled, opening an additional connection should
+	// succeed.
+	pgwire.MaxNumConnections.Override(&st.SV, 0)
+	closeConn4, err := openConn()
+	require.NoError(t, err)
+	defer closeConn4()
 }
 
 // We want to ensure that despite use of errors.{Wrap,Wrapf}, we are surfacing a
