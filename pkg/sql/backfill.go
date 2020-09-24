@@ -803,6 +803,10 @@ func (sc *SchemaChanger) distBackfill(
 		}); err != nil {
 			return err
 		}
+		// Make sure not to update todoSpans inside the transaction closure as it
+		// may not commit. Instead write the updated value for todoSpans to this
+		// variable and assign to todoSpans after committing.
+		var updatedTodoSpans []roachpb.Span
 		for len(todoSpans) > 0 {
 			log.VEventf(ctx, 2, "backfill: process %+v spans", todoSpans)
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -863,7 +867,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 				metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) {
 					if meta.BulkProcessorProgress != nil {
-						todoSpans = roachpb.SubtractSpans(todoSpans,
+						updatedTodoSpans = roachpb.SubtractSpans(todoSpans,
 							meta.BulkProcessorProgress.CompletedSpans)
 					}
 				}
@@ -899,6 +903,7 @@ func (sc *SchemaChanger) distBackfill(
 			}); err != nil {
 				return err
 			}
+			todoSpans = updatedTodoSpans
 			if !inMemoryStatusEnabled {
 				var resumeSpans []roachpb.Span
 				// There is a worker node of older version that will communicate
