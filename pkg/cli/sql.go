@@ -66,6 +66,8 @@ Query Buffer
 
 Input/Output
   \echo [STRING]    write the provided string to standard output.
+  \i                execute commands from the specified file.
+  \ir               as \i, but relative to the location of the current script.
 
 Informational
   \l                list all databases in the CockroachDB cluster.
@@ -125,6 +127,12 @@ type cliState struct {
 	ins readline.EditLine
 	// buf is used to read lines if isInteractive is false.
 	buf *bufio.Reader
+
+	// levels is the number of inclusion recursion levels.
+	levels int
+	// includeDir is the directory relative to which relative
+	// includes (\ir) resolve the file name.
+	includeDir string
 
 	// The prompt at the beginning of a multi-line entry.
 	fullPrompt string
@@ -1044,6 +1052,12 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\!`:
 		return c.runSyscmd(c.lastInputLine, loopState, errState)
 
+	case `\i`:
+		return c.runInclude(cmd[1:], loopState, errState, false /* relative */)
+
+	case `\ir`:
+		return c.runInclude(cmd[1:], loopState, errState, true /* relative */)
+
 	case `\p`:
 		// This is analogous to \show but does not need a special case.
 		// Implemented for compatibility with psql.
@@ -1111,6 +1125,65 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	}
 
 	return loopState
+}
+
+const maxRecursionLevels = 10
+
+func (c *cliState) runInclude(
+	cmd []string, contState, errState cliStateEnum, relative bool,
+) (resState cliStateEnum) {
+	if len(cmd) != 1 {
+		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+	}
+
+	if c.levels >= maxRecursionLevels {
+		c.exitErr = errors.Newf(`\i: too many recursion levels (max %d)`, maxRecursionLevels)
+		fmt.Fprintf(stderr, "%v\n", c.exitErr)
+		return errState
+	}
+
+	if len(c.partialLines) > 0 {
+		return c.invalidSyntax(errState, `cannot use \i during multi-line entry.`)
+	}
+
+	filename := cmd[0]
+	if !filepath.IsAbs(filename) && relative {
+		// In relative mode, the filename is resolved relative to the
+		// surrounding script.
+		filename = filepath.Join(c.includeDir, filename)
+	}
+
+	f, err := os.Open(filename)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		c.exitErr = err
+		return errState
+	}
+	// Close the file at the end.
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Fprintf(stderr, "error: closing %s: %v\n", filename, err)
+			c.exitErr = errors.CombineErrors(c.exitErr, err)
+			resState = errState
+		}
+	}()
+
+	newState := cliState{
+		conn:       c.conn,
+		includeDir: filepath.Dir(filename),
+		ins:        noLineEditor,
+		buf:        bufio.NewReader(f),
+		levels:     c.levels + 1,
+	}
+
+	if err := newState.doRunShell(cliStartLine, f); err != nil {
+		// Note: a message was already printed on stderr at the point at
+		// which the error originated. No need to repeat it here.
+		c.exitErr = errors.Wrapf(err, "%v", filename)
+		return errState
+	}
+
+	return contState
 }
 
 func (c *cliState) doPrepareStatementLine(
@@ -1293,9 +1366,14 @@ func (c *cliState) doDecidePath() cliStateEnum {
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(conn *sqlConn, cmdIn *os.File) (exitErr error) {
-	c := cliState{conn: conn}
+	c := cliState{
+		conn:       conn,
+		includeDir: ".",
+	}
+	return c.doRunShell(cliStart, cmdIn)
+}
 
-	state := cliStart
+func (c *cliState) doRunShell(state cliStateEnum, cmdIn *os.File) (exitErr error) {
 	for {
 		if state == cliStop {
 			break
