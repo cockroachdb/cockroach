@@ -8,10 +8,13 @@ maybe_ccache
 
 mkdir -p artifacts
 
+TESTTIMEOUT=4h
+
 build/builder.sh \
 	stdbuf -oL -eL \
 	make testrace \
 	PKG=./pkg/sql/logictest \
+	TESTTIMEOUT="${TESTTIMEOUT}" \
 	TESTFLAGS='-v' \
 	ENABLE_ROCKSDB_ASSERTIONS=1 \
 	2>&1 \
@@ -26,6 +29,7 @@ build/builder.sh \
 	make testrace \
 	PKG=./pkg/sql/logictest \
 	TESTS='^TestLogic/local$$' \
+	TESTTIMEOUT="${TESTTIMEOUT}" \
 	TESTFLAGS='-optimizer-cost-perturbation=0.9 -v' \
 	ENABLE_ROCKSDB_ASSERTIONS=1 \
 	2>&1 \
@@ -49,6 +53,7 @@ for file in $LOGICTESTS; do
 	        make testrace \
 	        PKG=./pkg/sql/logictest \
 	        TESTS='^TestLogic/local/'${file}'$$' \
+	        TESTTIMEOUT="${TESTTIMEOUT}" \
 	        TESTFLAGS='-disable-opt-rule-probability=0.5 -v' \
 	        ENABLE_ROCKSDB_ASSERTIONS=1 \
 	        2>&1 \
