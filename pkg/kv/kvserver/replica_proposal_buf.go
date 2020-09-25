@@ -114,7 +114,7 @@ func (c *propBufCnt) read() propBufCntRes {
 // ensure that lease indexes are not assigned in a different order from that in
 // which commands are proposed (and thus likely applied). If this order was to
 // get out of sync then some commands would necessarily be rejected beneath Raft
-// during application (see checkForcedErrLocked).
+// during application (see checkForcedErr).
 //
 // Proposals enter the buffer via Insert() or ReinsertLocked(). They are moved
 // into Raft via FlushLockedWithRaftGroup() when the buffer fills up, or during
@@ -188,7 +188,7 @@ func (b *propBuf) LastAssignedLeaseIndexRLocked() uint64 {
 func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
 	// Request a new max lease applied index for any request that isn't itself
 	// a lease request. Lease requests don't need unique max lease index values
-	// because their max lease indexes are ignored. See checkForcedErrLocked.
+	// because their max lease indexes are ignored. See checkForcedErr.
 	isLease := p.Request.IsLeaseRequest()
 	req := makePropBufCntReq(!isLease)
 

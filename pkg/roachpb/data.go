@@ -1900,7 +1900,7 @@ func (l Lease) Equivalent(newL Lease) bool {
 
 		// For expiration-based leases, extensions are considered equivalent.
 		// This is the one case where Equivalent is not commutative and, as
-		// such, requires special handling beneath Raft (see checkForcedErrLocked).
+		// such, requires special handling beneath Raft (see checkForcedErr).
 		if l.GetExpiration().LessEq(newL.GetExpiration()) {
 			l.Expiration, newL.Expiration = nil, nil
 		}
