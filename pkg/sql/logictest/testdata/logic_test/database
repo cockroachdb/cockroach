@@ -98,21 +98,22 @@ CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
 statement ok
 CREATE DATABASE c
 
-query T
+query TT
 SHOW DATABASES
 ----
-a
-b
-b2
-b3
-b4
-b5
-b6
-c
-defaultdb
-postgres
-system
-test
+a          root
+b          root
+b2         root
+b3         root
+b4         root
+b5         root
+b6         root
+b7         root
+c          root
+defaultdb  root
+postgres   root
+system     node
+test       root
 
 statement ok
 CREATE TABLE b.a (id INT PRIMARY KEY)
