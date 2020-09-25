@@ -195,7 +195,7 @@ func setCliContextDefaults() {
 	cliCtx.allowUnencryptedClientPassword = false
 }
 
-// sqlCtx captures the command-line parameters of the `sql` command.
+// sqlCtx captures the configuration of the `sql` command.
 // See below for defaults.
 var sqlCtx = struct {
 	*cliContext
@@ -238,6 +238,19 @@ var sqlCtx = struct {
 
 	// Determine whether to show raw durations.
 	verboseTimings bool
+
+	// Determines whether to stop the client upon encountering an error.
+	errExit bool
+
+	// Determines whether to perform client-side syntax checking.
+	checkSyntax bool
+
+	// autoTrace, when non-empty, encloses the executed statements
+	// by suitable SET TRACING and SHOW TRACE FOR SESSION statements.
+	autoTrace string
+
+	// The string used to produce the value of fullPrompt.
+	customPromptPattern string
 }{cliContext: &cliCtx}
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
@@ -254,6 +267,10 @@ func setSQLContextDefaults() {
 	sqlCtx.echo = false
 	sqlCtx.enableServerExecutionTimings = false
 	sqlCtx.verboseTimings = false
+	sqlCtx.errExit = false
+	sqlCtx.checkSyntax = false
+	sqlCtx.autoTrace = ""
+	sqlCtx.customPromptPattern = defaultPromptPattern
 }
 
 // zipCtx captures the command-line parameters of the `zip` command.
