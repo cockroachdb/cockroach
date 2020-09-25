@@ -13,9 +13,9 @@ CREATE VIEW c AS SELECT k,v from b
 query TTTTI
 SHOW TABLES FROM test
 ----
-public  a  table  0
-public  b  view   0
-public  c  view   0
+public  a  table  root  0
+public  b  view   root  0
+public  c  view   root  0
 
 statement error cannot drop relation "a" because view "b" depends on it
 DROP TABLE a
@@ -41,11 +41,11 @@ GRANT ALL ON d TO testuser
 query TTTTI
 SHOW TABLES FROM test
 ----
-public  a        table  0
-public  b        view   0
-public  c        view   0
-public  d        view   0
-public  diamond  view   0 
+public  a        table  root  0
+public  b        view   root  0
+public  c        view   root  0
+public  d        view   root  0
+public  diamond  view   root  0
 
 user testuser
 
@@ -78,14 +78,14 @@ GRANT ALL ON testuser3 to testuser
 query TTTTI
 SHOW TABLES FROM test
 ----
-public  a          table  0
-public  b          view   0
-public  c          view   0
-public  d          view   0
-public  diamond    view   0
-public  testuser1  view   0
-public  testuser2  view   0
-public  testuser3  view   0
+public  a          table  root  0
+public  b          view   root  0
+public  c          view   root  0
+public  d          view   root  0
+public  diamond    view   root  0
+public  testuser1  view   root  0
+public  testuser2  view   root  0
+public  testuser3  view   root  0
 
 user testuser
 

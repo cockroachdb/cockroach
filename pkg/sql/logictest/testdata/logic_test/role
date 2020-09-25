@@ -1144,12 +1144,18 @@ user testuser
 query TT
 SHOW DATABASES
 ----
-publicdb
+db2        root
+defaultdb  root
+postgres   root
+privatedb  root
+publicdb   root
+system     node
+test       root
 
 query TTTTI
 SHOW TABLES FROM publicdb
 ----
-public  publictable  table  NULL
+public  publictable  table  root  NULL
 
 query TTTTI
 SHOW TABLES FROM privatedb

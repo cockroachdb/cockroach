@@ -1,4 +1,4 @@
-Tstatement ok
+statement ok
 CREATE TABLE a(a INT)
 
 statement ok
@@ -8,14 +8,14 @@ CREATE DATABASE public; CREATE TABLE public.public.t(a INT)
 query TTTTI
 SHOW TABLES FROM public
 ----
-public  a  table  0
+public  a  table  root  0
 
 # To access all tables in database "public", one must specify
 # its public schema explicitly.
 query TTTTI
 SHOW TABLES FROM public.public
 ----
-public  t  table  NULL
+public  t  table  root  NULL
 
 # Of course one can also list the tables in "public" by making it the
 # current database.
@@ -25,7 +25,7 @@ SET database = public
 query TTTTI
 SHOW TABLES
 ----
-public  t  table  0
+public  t  table  root  0
 
 statement ok
 SET database = test; DROP DATABASE public

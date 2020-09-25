@@ -5,10 +5,10 @@ statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
 query TTTTI
-TSHOW TABLES FROM test
+SHOW TABLES FROM test
 ----
-public  a  table  0
-public  b  table  0
+public  a  table  root  0
+public  b  table  root  0
 
 statement ok
 INSERT INTO a VALUES (3),(7),(2)
@@ -36,7 +36,7 @@ SCHEMA CHANGE GC  running
 query TTTTI
 SHOW TABLES FROM test
 ----
-public  b  table  0
+public  b  table  root  0
 
 statement error pgcode 42P01 relation "a" does not exist
 SELECT * FROM a

@@ -22,7 +22,7 @@ SELECT * FROM kv
 query TTTTI
 SHOW TABLES
 ----
-public  kv  table  0
+public  kv  table  root  0
 
 statement ok
 ALTER TABLE kv RENAME TO new_kv
@@ -39,7 +39,7 @@ SELECT * FROM new_kv
 query TTTTI
 SHOW TABLES
 ----
-public  new_kv  table  0
+public  new_kv  table  root  0
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
 query TTTTT
@@ -98,8 +98,8 @@ ALTER TABLE test.t RENAME TO t2
 query TTTTI
 SHOW TABLES
 ----
-public  new_kv  table  0
-public  t2      table  0
+public  new_kv  table  root  0
+public  t2      table  root  0
 
 user testuser
 
@@ -129,8 +129,8 @@ SHOW TABLES
 query TTTTI
 SHOW TABLES FROM test2
 ----
-public  t   table  NULL
-public  t2  table  NULL
+public  t   table  root  NULL
+public  t2  table  root  NULL
 
 user root
 
@@ -247,7 +247,7 @@ USE d
 query TTTTI
 SHOW TABLES
 ----
-public  kv  table  0
+public  kv  table  root  0
 
 query TTT
 EXPLAIN ALTER TABLE kv RENAME TO kv2
@@ -260,4 +260,4 @@ rename table  ·             ·
 query TTTTI
 SHOW TABLES
 ----
-public  kv  table  0
+public  kv  table  root  0

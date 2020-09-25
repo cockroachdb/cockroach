@@ -171,9 +171,9 @@ CREATE VIEW v2 AS SELECT name FROM v
 query TTTTI
 SHOW TABLES
 ----
-public  users  table  0
-public  v      view   0
-public  v2     view   0 
+public  users  table  root  0
+public  v      view   root  0
+public  v2     view   root  0
 
 statement ok
 GRANT ALL ON users to testuser
@@ -200,7 +200,7 @@ users       primary     false       1             id           ASC        false 
 query TTTTI
 SHOW TABLES
 ----
-public  users  table  0
+public  users  table  root  0
 
 # Test the syntax without a '@'
 
