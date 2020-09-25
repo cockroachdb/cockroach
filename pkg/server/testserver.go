@@ -588,7 +588,7 @@ func (ts *TestServer) StartTenant(
 
 	if !params.Existing {
 		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1, $2)", params.TenantID.ToUint64(), params.TenantInfo,
+			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
 		); err != nil {
 			return "", "", err
 		}

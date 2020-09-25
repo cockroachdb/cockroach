@@ -1026,8 +1026,10 @@ func createImportingDescriptors(
 				}
 
 				for _, tenant := range details.Tenants {
-					const inactive = false
-					if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, tenant.ID, inactive, tenant.Info); err != nil {
+					// Mark the tenant info as adding.
+					tenantInfo := tenant.Info
+					tenantInfo.State = descpb.TenantInfo_ADD
+					if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, &tenantInfo); err != nil {
 						return err
 					}
 				}

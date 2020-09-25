@@ -727,9 +727,10 @@ func backupPlanHook(
 			// TODO isn't there a general problem here with tenant IDs > MaxInt64?
 			id := uint64(tree.MustBeDInt(row[0]))
 
-			var info []byte
-			if row[2] != tree.DNull {
-				info = []byte(tree.MustBeDBytes(row[2]))
+			info := descpb.TenantInfo{}
+			infoBytes := []byte(tree.MustBeDBytes(row[2]))
+			if err := protoutil.Unmarshal(infoBytes, &info); err != nil {
+				return err
 			}
 
 			prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(id))

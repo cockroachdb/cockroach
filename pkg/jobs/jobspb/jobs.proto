@@ -17,6 +17,7 @@ import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/descpb/tenant.proto";
 import "util/hlc/timestamp.proto";
 
 message Lease {
@@ -154,7 +155,7 @@ message RestoreDetails {
   repeated sqlbase.SchemaDescriptor schema_descs = 15;
   message Tenant {
     uint64 id = 1 [(gogoproto.customname) = "ID"];
-    bytes info = 2;
+    sqlbase.TenantInfo info = 2 [(gogoproto.nullable) = false];
   }
   repeated Tenant tenants = 13 [(gogoproto.nullable) = false];
 
