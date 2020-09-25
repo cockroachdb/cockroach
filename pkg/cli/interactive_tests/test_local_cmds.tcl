@@ -221,6 +221,18 @@ eexpect "with no argument"
 eexpect root@
 end_test
 
+start_test "Check that \\echo behaves well."
+send "\\echo\r"
+eexpect "\r\n"
+eexpect "\r\n"
+eexpect root@
+
+send "\\echo hello  world\r"
+# echo removes double spaces within the line. That's expected.
+eexpect "hello world"
+eexpect root@
+end_test
+
 start_test "Check that commands are also recognized with a final semicolon."
 send "\\set;\r"
 eexpect "display_format"

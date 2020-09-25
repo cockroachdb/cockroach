@@ -64,6 +64,9 @@ Query Buffer
   \r                during a multi-line statement, erase all the SQL entered so far.
   \| CMD            run an external command and run its output as SQL statements.
 
+Input/Output
+  \echo [STRING]    write the provided string to standard output.
+
 Informational
   \l                list all databases in the CockroachDB cluster.
   \dt               show the tables of the current schema in the current database.
@@ -1028,6 +1031,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\`, `\?`, `\help`:
 		c.printCliHelp()
+
+	case `\echo`:
+		fmt.Println(strings.Join(cmd[1:], " "))
 
 	case `\set`:
 		return c.handleSet(cmd[1:], loopState, errState)
