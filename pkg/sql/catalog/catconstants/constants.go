@@ -10,14 +10,7 @@
 
 package catconstants
 
-import (
-	"math"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-)
-
-// DefaultSearchPath is the search path used by virgin sessions.
-var DefaultSearchPath = sessiondata.MakeSearchPath([]string{"public"})
+import "math"
 
 // ReportableAppNamePrefix indicates that the application name can be
 // reported in telemetry without scrubbing. (Note this only applies to

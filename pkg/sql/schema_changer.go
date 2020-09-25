@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -1898,7 +1897,6 @@ func createSchemaChangeEvalCtx(
 ) extendedEvalContext {
 
 	sd := newFakeSessionData()
-
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
 		// because it sets "enabled: false" and thus none of the
@@ -1942,7 +1940,7 @@ func createSchemaChangeEvalCtx(
 
 func newFakeSessionData() *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
-		SearchPath: catconstants.DefaultSearchPath,
+		SearchPath: sessiondata.DefaultSearchPathForUser(security.NodeUser),
 		// The database is not supposed to be needed in schema changes, as there
 		// shouldn't be unqualified identifiers in backfills, and the pure functions
 		// that need it should have already been evaluated.
