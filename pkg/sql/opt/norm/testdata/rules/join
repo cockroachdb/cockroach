@@ -98,6 +98,38 @@ left-join (cross)
  │    └── fd: ()-->(7,8)
  └── filters (true)
 
+# Regression test for #54717. SimplifyJoinFilters should not simplify
+# contradictions. Doing so can split the filter expressions into two
+# FiltersItems such that they are no longer considered a contradiction, and
+# DetectJoinContradiction does not fire.
+norm expect=DetectJoinContradiction
+SELECT * FROM a LEFT JOIN b ON k<1 AND k>2
+----
+left-join (cross)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:7 y:8
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,7,8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── values
+ │    ├── columns: x:7!null y:8!null
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(7,8)
+ └── filters (true)
+
+norm expect=DetectJoinContradiction
+SELECT * FROM a INNER JOIN xy ON NULL
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:7!null y:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5,7,8)
+
 norm expect=DetectJoinContradiction
 SELECT * FROM a FULL JOIN b ON i=5 AND ((k<1 AND k>2) OR (k<4 AND k>5)) AND s='foo'
 ----
