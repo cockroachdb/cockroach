@@ -403,7 +403,7 @@ func (w *tpch) tpchOrdersInitialRowBatch(
 		totalPrice := float32(0)
 		for j := 0; j < l.orderData.nOrders; j++ {
 			ep := l.orderData.quantities[j] * makeRetailPriceFromPartKey(l.orderData.partKeys[j])
-			totalPrice += ep * (1 + l.orderData.tax[j]) * (1 - l.orderData.discount[j])
+			totalPrice += float32(ep * (1 + l.orderData.tax[j]) * (1 - l.orderData.discount[j]))
 		}
 		// O_TOTALPRICE computed as:
 		// sum (L_EXTENDEDPRICE * (1+L_TAX) * (1-L_DISCOUNT)) for all LINEITEM of
