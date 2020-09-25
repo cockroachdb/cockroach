@@ -721,7 +721,7 @@ message NameInfo {
 // descriptor.
 // It is illegal to transition DROP to any other state.
 enum DescriptorState {
-  // Not used.
+  // Descriptor is visible and can be leased.
   PUBLIC = 0;
   // Descriptor is being added.
   ADD = 1;
