@@ -3742,6 +3742,7 @@ CREATE TABLE d.t (
 // the backfilled columns.
 func TestSchemaChangeEvalContext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 54775, "flaky test")
 	defer log.Scope(t).Close(t)
 	const numNodes = 3
 	const chunkSize = 200
