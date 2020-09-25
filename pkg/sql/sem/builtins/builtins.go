@@ -3000,7 +3000,7 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				j, err := protoreflect.MessageToJSON(msg)
+				j, err := protoreflect.MessageToJSON(msg, true /* emitDefaults */)
 				if err != nil {
 					return nil, err
 				}

@@ -64,10 +64,12 @@ func DecodeMessage(name string, data []byte) (protoutil.Message, error) {
 	return msg, nil
 }
 
-// MessageToJSON converts a protocol message into a JSONB object.
-func MessageToJSON(msg protoutil.Message) (jsonb.JSON, error) {
+// MessageToJSON converts a protocol message into a JSONB object. The
+// emitDefaults flag dictates whether fields with zero values are rendered or
+// not.
+func MessageToJSON(msg protoutil.Message, emitDefaults bool) (jsonb.JSON, error) {
 	// Convert to json.
-	jsonEncoder := jsonpb.Marshaler{EmitDefaults: false}
+	jsonEncoder := jsonpb.Marshaler{EmitDefaults: emitDefaults}
 	msgJSON, err := jsonEncoder.MarshalToString(msg)
 	if err != nil {
 		return nil, errors.Wrapf(err, "marshaling %s; msg=%+v", proto.MessageName(msg), msg)
