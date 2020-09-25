@@ -3,10 +3,10 @@
 query TT
 SHOW DATABASES
 ----
-defaultdb
-postgres
-system
-test
+defaultdb  root
+postgres   root
+system     node
+test       root
 
 query TTTT
 SHOW GRANTS ON DATABASE test
@@ -58,10 +58,10 @@ SHOW GRANTS ON DATABASE test
 query TT
 SHOW DATABASES
 ----
-defaultdb
-postgres
-system
-u
+defaultdb  root
+postgres   root
+system     node
+u          root
 
 # check the name in descriptor is also changed
 query TTTT
@@ -115,7 +115,7 @@ ALTER DATABASE t RENAME TO v
 query TT
 SHOW DATABASES
 ----
-t
+t          root
 
 user root
 
@@ -154,11 +154,11 @@ ALTER DATABASE defaultdb RENAME TO w;
 query TT
 SHOW DATABASES
 ----
-defaultdb
-postgres
-system
-t
-v
+defaultdb  root
+postgres   root
+system     node
+t          root
+v          root
 
 query TTT
 EXPLAIN ALTER DATABASE v RENAME TO x
@@ -172,11 +172,11 @@ query TT colnames
 SHOW DATABASES
 ----
 database_name
-defaultdb
-postgres
-system
-t
-v
+defaultdb  root
+postgres   root
+system     node
+t          root
+v          root
 
 # Test dependent sequences on different databases upon renames
 # return the appropriate error message, as well as testing
