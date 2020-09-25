@@ -126,6 +126,9 @@ type cliState struct {
 	// buf is used to read lines if isInteractive is false.
 	buf *bufio.Reader
 
+	// levels is the number of inclusion recursion levels.
+	levels int
+
 	// The prompt at the beginning of a multi-line entry.
 	fullPrompt string
 	// The prompt on a continuation line in a multi-line entry.
@@ -1044,6 +1047,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\!`:
 		return c.runSyscmd(c.lastInputLine, loopState, errState)
 
+	case `\i`:
+		return c.runRecursive(cmd[1:], loopState, errState)
+
 	case `\p`:
 		// This is analogous to \show but does not need a special case.
 		// Implemented for compatibility with psql.
@@ -1111,6 +1117,58 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	}
 
 	return loopState
+}
+
+const maxRecursionLevels = 10
+
+func (c *cliState) runRecursive(
+	cmd []string, contState, errState cliStateEnum,
+) (resState cliStateEnum) {
+	if len(cmd) != 1 {
+		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+	}
+
+	if c.levels >= maxRecursionLevels {
+		c.exitErr = errors.New(`\i: too many recursion levels`)
+		fmt.Fprintf(stderr, "%v\n", c.exitErr)
+		return errState
+	}
+
+	if len(c.partialLines) > 0 {
+		return c.invalidSyntax(errState, `cannot use \i during multi-line entry.`)
+	}
+
+	filename := cmd[0]
+	f, err := os.Open(filename)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		c.exitErr = err
+		return errState
+	}
+	// Close the file at the end.
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Fprintf(stderr, "closing %s: %v\n", filename, err)
+			c.exitErr = errors.CombineErrors(c.exitErr, err)
+			resState = errState
+		}
+	}()
+
+	newState := cliState{
+		conn:   c.conn,
+		ins:    noLineEditor,
+		buf:    bufio.NewReader(f),
+		levels: c.levels + 1,
+	}
+
+	if err := newState.doRunShell(cliStartLine, f); err != nil {
+		// Note: a message was already printed on stderr at the point at
+		// which the error originated. No need to repeat it here.
+		c.exitErr = errors.Wrapf(err, "%v", filename)
+		return errState
+	}
+
+	return contState
 }
 
 func (c *cliState) doPrepareStatementLine(
@@ -1294,8 +1352,10 @@ func (c *cliState) doDecidePath() cliStateEnum {
 // a prompt to the user for each statement.
 func runInteractive(conn *sqlConn, cmdIn *os.File) (exitErr error) {
 	c := cliState{conn: conn}
+	return c.doRunShell(cliStart, cmdIn)
+}
 
-	state := cliStart
+func (c *cliState) doRunShell(state cliStateEnum, cmdIn *os.File) (exitErr error) {
 	for {
 		if state == cliStop {
 			break
