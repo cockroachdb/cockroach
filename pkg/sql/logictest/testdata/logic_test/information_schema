@@ -36,6 +36,7 @@ information_schema  statistics                         table  NULL  NULL
 information_schema  table_constraints                  table  NULL  NULL
 information_schema  table_privileges                   table  NULL  NULL
 information_schema  tables                             table  NULL  NULL
+information_schema  type_privileges                    table  NULL  NULL
 information_schema  user_privileges                    table  NULL  NULL
 information_schema  views                              table  NULL  NULL
 
