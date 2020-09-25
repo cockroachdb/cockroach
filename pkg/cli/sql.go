@@ -60,7 +60,8 @@ Help
   \hf [NAME]        help on SQL built-in functions.
 
 Query Buffer
-  \show             during a multi-line statement, show the SQL entered so far.
+  \p                during a multi-line statement, show the SQL entered so far.
+  \r                during a multi-line statement, erase all the SQL entered so far.
   \| CMD            run an external command and run its output as SQL statements.
 
 Informational
@@ -1045,7 +1046,18 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\!`:
 		return c.runSyscmd(c.lastInputLine, loopState, errState)
 
+	case `\p`:
+		// This is analogous to \show but does not need a special case.
+		// Implemented for compatibility with psql.
+		fmt.Println(strings.Join(c.partialLines, "\n"))
+
+	case `\r`:
+		// Reset the input buffer so far. This is useful when e.g. a user
+		// got confused with string delimiters and multi-line input.
+		return cliStartLine
+
 	case `\show`:
+		fmt.Fprintln(stderr, `warning: \show is deprecated. Use \p.`)
 		if len(c.partialLines) == 0 {
 			fmt.Fprintf(stderr, "No input so far. Did you mean SHOW?\n")
 		} else {
