@@ -17,12 +17,18 @@
 package sql
 
 import (
+	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // Constants for the String() representation of the session states. Shared with
@@ -430,6 +436,25 @@ func noTxnToOpen(args fsm.Args) error {
 	ev := args.Event.(eventTxnStart)
 	payload := args.Payload.(eventTxnStartPayload)
 	ts := args.Extended.(*txnState)
+
+	if payload.tranCtx.numOpenTxns != nil &&
+		!(payload.tranCtx.user == security.RootUser || *payload.tranCtx.execType == executorTypeInternal) {
+		// Optimistically add this txn to the number of open txns.
+		maxOpenTxns := MaxOpenTxns.Get(&payload.tranCtx.settings.SV)
+		if newVal := atomic.AddInt64(payload.tranCtx.numOpenTxns, 1); maxOpenTxns != 0 && newVal > maxOpenTxns {
+			// There are now too many open txns.
+			atomic.AddInt64(payload.tranCtx.numOpenTxns, -1)
+			return errors.WithHint(
+				pgerror.New(pgcode.ConfigurationLimitExceeded, "too many open txns"),
+				fmt.Sprintf(
+					"maximum open txn limit is %d, consider increasing %s", maxOpenTxns, maxOpenTxnsClusterSettingName,
+				),
+			)
+		}
+		ts.onFinish = func() {
+			atomic.AddInt64(payload.tranCtx.numOpenTxns, -1)
+		}
+	}
 
 	txnTyp := explicitTxn
 	advCode := advanceOne

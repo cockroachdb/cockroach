@@ -108,6 +108,9 @@ type txnState struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
+
+	// onFinish is a callback that will be called in finishSQLTxn.
+	onFinish func()
 }
 
 // txnType represents the type of a SQL transaction.
@@ -231,6 +234,9 @@ func (ts *txnState) resetForNewSQLTxn(
 // the current SQL txn. This needs to be called before resetForNewSQLTxn() is
 // called for starting another SQL txn.
 func (ts *txnState) finishSQLTxn() {
+	if ts.onFinish != nil {
+		ts.onFinish()
+	}
 	ts.mon.Stop(ts.Ctx)
 	if ts.cancel != nil {
 		ts.cancel()
@@ -425,6 +431,13 @@ type transitionCtx struct {
 	// state machine needs to see if session tracing is enabled.
 	sessionTracing *SessionTracing
 	settings       *cluster.Settings
+
+	// numOpenTxns is a pointer to an atomic on the SQL server singleton.
+	numOpenTxns *int64
+	// user is the user running this transaction.
+	user string
+	// execType specifies whether the executor is user-facing or internal.
+	execType *executorType
 }
 
 var noRewind = rewindCapability{}

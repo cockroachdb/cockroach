@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -897,6 +898,101 @@ func TestShowLastQueryStatistics(t *testing.T) {
 	if rows.Next() {
 		t.Fatalf("unexpected number of rows returned by last query statistics: %v", err)
 	}
+}
+
+func TestMaxOpenTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	require.Zero(t, sql.MaxOpenTxns.Get(&st.SV), "expected default max_open_txns to be 0")
+
+	var (
+		params = base.TestServerArgs{
+			Settings: st,
+		}
+		s, rootDB, _ = serverutils.StartServer(t, params)
+		ctx          = context.Background()
+	)
+
+	defer s.Stopper().Stop(ctx)
+	defer func() {
+		_ = rootDB.Close()
+	}()
+
+	_, err := rootDB.Exec("CREATE USER testuser")
+	require.NoError(t, err)
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User("testuser"))
+	defer cleanup()
+	nonRootDB, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer func() {
+		_ = nonRootDB.Close()
+	}()
+
+	var openTxns []*gosql.Tx
+
+	openTx := func(db *gosql.DB) error {
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		openTxns = append(openTxns, tx)
+		return nil
+	}
+
+	closeOpenTxns := func() error {
+		for _, tx := range openTxns {
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+		}
+		openTxns = nil
+		return nil
+	}
+
+	defer func() {
+		_ = closeOpenTxns()
+	}()
+
+	// The root user can open a transaction.
+	require.NoError(t, openTx(rootDB))
+	// A non root user can open transactions with no limit.
+	require.NoError(t, openTx(nonRootDB))
+	require.NoError(t, closeOpenTxns())
+
+	// Override max open txns to 1.
+	sql.MaxOpenTxns.Override(&st.SV, 1)
+
+	// The root user can open a transaction.
+	require.NoError(t, openTx(rootDB))
+	// A non root user can open a transaction since the root user's transactions
+	// do not count towards the limit.
+	require.NoError(t, openTx(nonRootDB))
+
+	assertTxnLimitExceededError := func(t *testing.T, err error) {
+		t.Helper()
+		pqErr := (*pq.Error)(nil)
+		require.True(t, errors.As(err, &pqErr), "unexpected error %v", err)
+		require.Equal(t, pgcode.ConfigurationLimitExceeded.String(), string(pqErr.Code))
+	}
+
+	// But if we attempt to open another non-root transaction, an error should be
+	// returned indicating that the maximum number of open transactions was
+	// reached.
+	assertTxnLimitExceededError(t, openTx(nonRootDB))
+
+	// Opening another root txn should succeed since it does not count towards the
+	// limit.
+	require.NoError(t, openTx(rootDB))
+
+	require.NoError(t, closeOpenTxns())
+
+	sql.MaxOpenTxns.Override(&st.SV, 0)
+
+	// Now that the limit is newly disabled there is no limit anymore.
+	require.NoError(t, openTx(nonRootDB))
+	require.NoError(t, openTx(nonRootDB))
 }
 
 // dynamicRequestFilter exposes a filter method which is a

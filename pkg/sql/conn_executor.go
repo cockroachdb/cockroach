@@ -65,6 +65,18 @@ import (
 // logging overall usage growth in the log.
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_SESSION_MEMORY_USAGE", 1024*1024)
 
+const maxOpenTxnsClusterSettingName = "sql.max_open_txns"
+
+// MaxOpenTxns is a cluster setting that specifies the maximum number of open
+// txns allowed per node.
+var MaxOpenTxns = settings.RegisterPublicNonNegativeIntSetting(
+	maxOpenTxnsClusterSettingName,
+	"the maximum number of open SQL transactions allowed on a gateway server "+
+		"at once, disabled if 0. Note that this limit does not affect root users and "+
+		"internal transactions",
+	0,
+)
+
 // A connExecutor is in charge of executing queries received on a given client
 // connection. The connExecutor implements a state machine (dictated by the
 // Postgres/pgwire session semantics). The state machine is supposed to run
@@ -249,6 +261,11 @@ type Server struct {
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
 	// into reported stats when sqlStats is cleared.
 	reportedStats sqlStats
+
+	// numOpenTxns is an atomic that is incremented by conn executors as
+	// transactions are opened. This is used to implement the sql.max_open_txns
+	// limit.
+	numOpenTxns int64
 
 	reCache *tree.RegexpCache
 
@@ -611,9 +628,11 @@ func (s *Server) newConnExecutor(
 			nodeIDOrZero: nodeIDOrZero,
 			clock:        s.cfg.Clock,
 			// Future transaction's monitors will inherits from sessionRootMon.
-			connMon:  sessionRootMon,
-			tracer:   s.cfg.AmbientCtx.Tracer,
-			settings: s.cfg.Settings,
+			connMon:     sessionRootMon,
+			tracer:      s.cfg.AmbientCtx.Tracer,
+			settings:    s.cfg.Settings,
+			numOpenTxns: &s.numOpenTxns,
+			user:        sd.User,
 		},
 		memMetrics: memMetrics,
 		planner:    planner{execCfg: s.cfg, alloc: &rowenc.DatumAlloc{}},
@@ -625,6 +644,7 @@ func (s *Server) newConnExecutor(
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 	}
+	ex.transitionCtx.execType = &ex.executorType
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
 
@@ -1594,7 +1614,13 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		var err error
 		advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
 		if err != nil {
-			return err
+			if code := pgerror.GetPGCode(err); code != pgcode.ConfigurationLimitExceeded {
+				return err
+			}
+			ev, payload = ex.makeErrEvent(err, ex.curStmt)
+			advInfo = advanceInfo{
+				code: skipBatch,
+			}
 		}
 	} else {
 		// If no event was generated synthesize an advance code.
