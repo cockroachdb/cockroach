@@ -51,21 +51,32 @@ const (
 #
 `
 	helpMessageFmt = `You are using 'cockroach sql', CockroachDB's lightweight SQL client.
-Type:
-  \? or "help"      print this help.
+General
   \q, quit, exit    exit the shell (Ctrl+C/Ctrl+D also supported).
-  \! CMD            run an external command and print its results on standard output.
-  \| CMD            run an external command and run its output as SQL statements.
-  \set [NAME]       set a client-side flag or (without argument) print the current settings.
-  \unset NAME       unset a flag.
-  \show             during a multi-line statement or transaction, show the SQL entered so far.
+
+Help
+  \? or "help"      print this help.
   \h [NAME]         help on syntax of SQL commands.
   \hf [NAME]        help on SQL built-in functions.
+
+Query Buffer
+  \show             during a multi-line statement, show the SQL entered so far.
+  \| CMD            run an external command and run its output as SQL statements.
+
+Informational
   \l                list all databases in the CockroachDB cluster.
   \dt               show the tables of the current schema in the current database.
   \dT               show the user defined types of the current database.
   \du               list the users for all databases.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
+
+Operating System
+  \! CMD            run an external command and print its results on standard output.
+
+Configuration
+  \set [NAME]       set a client-side flag or (without argument) print the current settings.
+  \unset NAME       unset a flag.
+
 %s
 More documentation about our SQL dialect and the CLI shell is available online:
 %s
