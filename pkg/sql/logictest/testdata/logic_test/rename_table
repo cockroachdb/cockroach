@@ -19,7 +19,7 @@ SELECT * FROM kv
 1 2
 3 4
 
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 public  kv  table  0
@@ -36,7 +36,7 @@ SELECT * FROM new_kv
 1 2
 3 4
 
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 public  new_kv  table  0
@@ -95,7 +95,7 @@ GRANT CREATE ON DATABASE test TO testuser
 statement ok
 ALTER TABLE test.t RENAME TO t2
 
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 public  new_kv  table  0
@@ -122,11 +122,11 @@ ALTER TABLE test.new_kv RENAME TO test2.t
 statement ok
 ALTER TABLE test.t2 RENAME TO test2.t2
 
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 
-query TTTI
+query TTTTI
 SHOW TABLES FROM test2
 ----
 public  t   table  NULL
@@ -244,7 +244,7 @@ INSERT INTO d.kv2 (k,v) VALUES ('c', 'd')
 statement ok
 USE d
 
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 public  kv  table  0
@@ -257,7 +257,7 @@ EXPLAIN ALTER TABLE kv RENAME TO kv2
 rename table  ·             ·
 
 # Verify that the EXPLAIN above does not actually rename the table (#30543)
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 public  kv  table  0

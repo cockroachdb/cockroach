@@ -22,7 +22,7 @@ SELECT * FROM v
 1 2
 3 4
 
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 public  kv  table  0
@@ -44,7 +44,7 @@ SELECT * FROM new_v
 1 2
 3 4
 
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 public  kv     table  0
@@ -107,7 +107,7 @@ GRANT CREATE ON DATABASE test TO testuser
 statement ok
 ALTER VIEW test.v RENAME TO v2
 
-query TTTI
+query TTTTI
 SHOW TABLES FROM test
 ----
 public  kv     table  0
@@ -136,11 +136,11 @@ ALTER VIEW test.new_v RENAME TO test2.v
 statement ok
 ALTER VIEW test.v2 RENAME TO test2.v2
 
-query TTTI
+query TTTTI
 SHOW TABLES FROM test
 ----
 
-query TTTI
+query TTTTI
 SHOW TABLES FROM test2
 ----
 public  v   view  NULL

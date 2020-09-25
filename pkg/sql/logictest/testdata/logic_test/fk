@@ -1030,7 +1030,7 @@ statement ok
 DROP INDEX refers@another_idx
 
 # refers is not visible because it is in the ADD state.
-query TTTI
+query TTTTI
 SHOW TABLES FROM test
 ----
 public  bar                   table  0

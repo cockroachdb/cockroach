@@ -1,6 +1,6 @@
 # TestLogic: local-mixed-20.1-20.2
 
-query T
+query TT
 SHOW DATABASES
 ----
 defaultdb
@@ -55,7 +55,7 @@ SELECT * FROM kv
 statement error target database or schema does not exist
 SHOW GRANTS ON DATABASE test
 
-query T
+query TT
 SHOW DATABASES
 ----
 defaultdb
@@ -112,7 +112,7 @@ user testuser
 statement error must be owner of database t
 ALTER DATABASE t RENAME TO v
 
-query T
+query TT
 SHOW DATABASES
 ----
 t
@@ -151,7 +151,7 @@ ALTER DATABASE defaultdb RENAME TO w;
   ALTER DATABASE postgres RENAME TO defaultdb;
   ALTER DATABASE w RENAME TO postgres
 
-query T
+query TT
 SHOW DATABASES
 ----
 defaultdb
@@ -168,7 +168,7 @@ EXPLAIN ALTER DATABASE v RENAME TO x
 rename database  ·             ·
 
 # Verify that the EXPLAIN above does not actually rename the database (#30543)
-query T colnames
+query TT colnames
 SHOW DATABASES
 ----
 database_name

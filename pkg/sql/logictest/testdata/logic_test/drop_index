@@ -168,7 +168,7 @@ users       foo         true        2             id           ASC        false 
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
 
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 public  users  table  0
@@ -197,7 +197,7 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
 
-query TTTI
+query TTTTI
 SHOW TABLES
 ----
 public  users  table  0
