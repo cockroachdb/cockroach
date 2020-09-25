@@ -81,11 +81,13 @@ func (jb *joinerBase) init(
 	condTypes = append(condTypes, leftTypes...)
 	condTypes = append(condTypes, rightTypes...)
 
-	outputSize := len(leftTypes)
-	if jb.joinType.ShouldIncludeRightColsInOutput() {
-		outputSize += len(rightTypes)
+	outputTypes := condTypes[:]
+	if !jb.joinType.ShouldIncludeLeftColsInOutput() {
+		outputTypes = outputTypes[len(leftTypes):]
 	}
-	outputTypes := condTypes[:outputSize]
+	if !jb.joinType.ShouldIncludeRightColsInOutput() {
+		outputTypes = outputTypes[:len(outputTypes)-len(rightTypes)]
+	}
 
 	if err := jb.ProcessorBase.Init(
 		self, post, outputTypes, flowCtx, processorID, output, nil /* memMonitor */, opts,
@@ -134,13 +136,13 @@ func (jb *joinerBase) renderUnmatchedRow(row rowenc.EncDatumRow, side joinSide) 
 	return jb.combinedRow
 }
 
-// shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
+// shouldEmitUnmatchedRow determines if we should emit am unmatched row (with
 // NULLs for the columns of the other stream). This happens in FULL OUTER joins
 // and LEFT or RIGHT OUTER joins and ANTI joins (depending on which stream is
 // stored).
 func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 	switch joinType {
-	case descpb.LeftSemiJoin, descpb.InnerJoin, descpb.IntersectAllJoin:
+	case descpb.LeftSemiJoin, descpb.InnerJoin, descpb.IntersectAllJoin, descpb.RightSemiJoin:
 		return false
 	case descpb.RightOuterJoin:
 		return side == rightSide
@@ -152,8 +154,10 @@ func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 		return side == leftSide
 	case descpb.FullOuterJoin:
 		return true
+	case descpb.RightAntiJoin:
+		return side == rightSide
 	default:
-		return true
+		panic(errors.AssertionFailedf("unexpected join type %s", joinType))
 	}
 }
 

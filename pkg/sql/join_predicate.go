@@ -74,16 +74,11 @@ type joinPredicate struct {
 func getJoinResultColumns(
 	joinType descpb.JoinType, left, right colinfo.ResultColumns,
 ) colinfo.ResultColumns {
-	// For anti and semi joins, the right columns are omitted from the output (but
-	// they must be available internally for the ON condition evaluation).
-	omitRightColumns := joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin
-
-	// The structure of the join data source results is like this:
-	// - all the left columns,
-	// - then all the right columns (except for anti/semi join).
 	columns := make(colinfo.ResultColumns, 0, len(left)+len(right))
-	columns = append(columns, left...)
-	if !omitRightColumns {
+	if joinType.ShouldIncludeLeftColsInOutput() {
+		columns = append(columns, left...)
+	}
+	if joinType.ShouldIncludeRightColsInOutput() {
 		columns = append(columns, right...)
 	}
 	return columns

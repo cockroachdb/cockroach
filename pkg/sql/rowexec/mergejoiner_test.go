@@ -427,7 +427,7 @@ func TestMergeJoiner(t *testing.T) {
 			expected:      rowenc.EncDatumRows{},
 		},
 		{
-			// Ensure that semi joins doesn't output duplicates from
+			// Ensure that left semi join doesn't output duplicates from
 			// the right side.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
@@ -459,7 +459,7 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			// Ensure that duplicate rows in the left are matched
-			// in the output in semi-joins.
+			// in the output in left semi-joins.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
 					colinfo.ColumnOrdering{
@@ -493,7 +493,7 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			// Ensure that NULL == NULL doesn't match in semi-join.
+			// Ensure that NULL == NULL doesn't match in left semi-join.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
 					colinfo.ColumnOrdering{
@@ -523,7 +523,7 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			// Ensure that OnExprs are satisfied for semi-joins.
+			// Ensure that OnExprs are satisfied for left semi-joins.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
 					colinfo.ColumnOrdering{
@@ -570,7 +570,7 @@ func TestMergeJoiner(t *testing.T) {
 		},
 		{
 			// Ensure that duplicate rows in the left are matched
-			// in the output in anti-joins.
+			// in the output in left anti-joins.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
 					colinfo.ColumnOrdering{
@@ -603,7 +603,7 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			// Ensure that NULL == NULL doesn't match in anti-join.
+			// Ensure that NULL == NULL doesn't match in left anti-join.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
 					colinfo.ColumnOrdering{
@@ -633,7 +633,7 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			// Ensure that OnExprs are satisfied for semi-joins.
+			// Ensure that OnExprs are satisfied for left anti-joins.
 			spec: execinfrapb.MergeJoinerSpec{
 				LeftOrdering: execinfrapb.ConvertToSpecOrdering(
 					colinfo.ColumnOrdering{

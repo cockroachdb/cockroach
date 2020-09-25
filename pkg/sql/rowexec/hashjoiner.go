@@ -143,6 +143,9 @@ func newHashJoiner(
 	output execinfra.RowReceiver,
 	disableTempStorage bool,
 ) (*hashJoiner, error) {
+	if spec.Type == descpb.RightSemiJoin || spec.Type == descpb.RightAntiJoin {
+		return nil, errors.New("right semi/anti hash join is not yet supported")
+	}
 	h := &hashJoiner{
 		initialBufferSize: hashJoinerInitialBufferSize,
 		leftSource:        leftSource,
