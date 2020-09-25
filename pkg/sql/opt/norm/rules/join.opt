@@ -21,7 +21,8 @@
             $item:(FiltersItem
                     (And | True | False | Null | Or)
                 ) &
-                ^(IsUnsimplifiableOr $item)
+                ^(IsUnsimplifiableOr $item) &
+                ^(IsContradiction $item)
             ...
         ] &
         ^(IsFilterFalse $on)
