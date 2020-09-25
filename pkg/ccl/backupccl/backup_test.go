@@ -5591,6 +5591,84 @@ func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".bank`), statsBackup2)
 }
 
+// TestProtectedTimestampSpanSelectionDuringBackup tests that the expected spans
+// to timestamp protect are selected during a backup. It does not rigorously
+// test the correctness of protecting the timestamp as this is covered by
+// TestProtectedTimestampsDuringBackup.
+func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	allowRequest := make(chan struct{})
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+			for _, ru := range ba.Requests {
+				switch ru.GetInner().(type) {
+				case *roachpb.ExportRequest:
+					<-allowRequest
+				}
+			}
+			return nil
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	close(allowRequest)
+	conn := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE DATABASE test; USE test;")
+	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, INDEX bar (v))")
+
+	// Create an interleave hierarchy of tables.
+	runner.Exec(t, "CREATE TABLE grandparent (a INT PRIMARY KEY, v BYTES, INDEX gpindex (v))")
+	runner.Exec(t, "CREATE TABLE parent (a INT, b INT, v BYTES, "+
+		"PRIMARY KEY(a, b)) INTERLEAVE IN PARENT grandparent(a)")
+	runner.Exec(t, "CREATE TABLE child (a INT, b INT, c INT, v BYTES, "+
+		"PRIMARY KEY(a, b, c)) INTERLEAVE IN PARENT parent(a, b)")
+
+	// We expect 3 spans to be protected:
+	// - Full table span for non-interleaved table foo
+	// - Index span corresponding to secondary index gpindex.
+	// - Index span corresponding to primary index of grandparent.
+	// The two interleaved tables, parent and child, would have generated spans
+	// overlapping the primary index of grandparent, as that is the greatest
+	// ancestor in the interleave hierarchy.
+	expectedProtectedSpans := 3
+
+	allowRequest = make(chan struct{})
+	baseBackupURI := "nodelocal://0/foo"
+	g, _ := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`,
+			baseBackupURI)) // create a base backup.
+		return nil
+	})
+
+	var actualNumProtectedSpans int
+	testutils.SucceedsSoon(t, func() error {
+		row := conn.QueryRow("SELECT num_spans FROM system.protected_ts_records")
+		return row.Scan(&actualNumProtectedSpans)
+	})
+
+	require.Equal(t, expectedProtectedSpans, actualNumProtectedSpans)
+
+	// Unblock the blocked backup request.
+	close(allowRequest)
+
+	require.NoError(t, g.Wait())
+}
+
 // TestProtectedTimestampsDuringBackup ensures that the timestamp at which a
 // table is taken offline is protected during a BACKUP job to ensure that if
 // data can be read for a period longer than the default GC interval.

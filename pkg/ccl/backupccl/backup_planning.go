@@ -208,6 +208,84 @@ func spansForAllTableIndexes(
 	return spans
 }
 
+// getTableSpansToTimestampProtect returns non-overlapping spans of the tables
+// being backed up, for the protected timestamp record to cover. It handles
+// interleaved and non-interleaved tables differently as explained below, so as
+// to optimize for the number/size of spans that need to be timestamp protected.
+func getTableSpansToTimestampProtect(
+	codec keys.SQLCodec, tables []catalog.TableDescriptor, revs []BackupManifest_DescriptorRevision,
+) []roachpb.Span {
+	var spansToProtect []roachpb.Span
+	added := make(map[tableAndIndex]bool, len(tables))
+	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
+	for _, table := range tables {
+		// For tables which are not interleaved in a parent table, and do not have
+		// child tables interleaved in them, we can simply protect a Span that
+		// corresponds to the entire table.
+		if !table.IsInterleaved() {
+			spansToProtect = append(spansToProtect, table.TableSpan(codec))
+		} else {
+			// For tables with any interleaving involved there are two scenarios:
+			//
+			// - If the table has indexes interleaved in a parent table, then we must
+			// protect a Span that corresponds to the index of the farthest ancestor
+			// (in the interleave chain) table being interleaved into. IndexSpan()
+			// returns this span.
+			//
+			// - If the table is being interleaved into by child tables, there is
+			// potential for overlapping spans being generated. Once when processing
+			// the indexes of the current table, and a second time when processing the
+			// child table as explained in scenario 1. We must leverage the interval
+			// tree to resolve this overlap.
+			for _, index := range table.AllNonDropIndexes() {
+				if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.ID)), false); err != nil {
+					panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
+				}
+				added[tableAndIndex{tableID: table.GetID(), indexID: index.ID}] = true
+			}
+		}
+	}
+
+	// If there are desc revisions, ensure that we also protect any index spans in
+	// them that we didn't already get above e.g. indexes or tables that are not
+	// in latest because they were dropped during the time window in question.
+	for _, rev := range revs {
+		// If the table was dropped during the last interval, it will have
+		// at least 2 revisions, and the first one should have the table in a PUBLIC
+		// state. We want (and do) ignore tables that have been dropped for the
+		// entire interval. DROPPED tables should never later become PUBLIC.
+		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
+		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
+			tbl := tabledesc.NewImmutable(*rawTbl)
+			// If the table is non-interleaved, then we have already accounted for a
+			// Span that corresponds to the entire table, so we do not need to protect
+			// any additional spans.
+			if !tbl.IsInterleaved() {
+				continue
+			}
+			for _, idx := range tbl.AllNonDropIndexes() {
+				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
+				if !added[key] {
+					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.ID)), false); err != nil {
+						panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
+					}
+					added[key] = true
+				}
+			}
+		}
+	}
+
+	_ = sstIntervalTree.Do(func(r interval.Interface) bool {
+		spansToProtect = append(spansToProtect, roachpb.Span{
+			Key:    roachpb.Key(r.Range().Start),
+			EndKey: roachpb.Key(r.Range().End),
+		})
+		return false
+	})
+
+	return spansToProtect
+}
+
 func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
 	parsedURI, err := url.Parse(uri)
 	if err != nil {
@@ -947,6 +1025,7 @@ func backupPlanHook(
 			CreatedBy: backupStmt.CreatedByInfo,
 		}
 
+		spansToProtect := getTableSpansToTimestampProtect(p.ExecCfg().Codec, tables, revs)
 		if backupStmt.Options.Detached {
 			// When running inside an explicit transaction, we simply create the job
 			// record. We do not wait for the job to finish.
@@ -959,7 +1038,7 @@ func backupPlanHook(
 			// The protect timestamp logic for a DETACHED BACKUP can be run within the
 			// same txn as the BACKUP is being planned in, because we do not wait for
 			// the BACKUP job to complete.
-			err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, *aj.ID(), spans,
+			err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, *aj.ID(), spansToProtect,
 				startTime, endTime, backupDetails)
 			if err != nil {
 				return err
@@ -976,7 +1055,7 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-			err = protectTimestampForBackup(ctx, p, txn, *sj.ID(), spans, startTime, endTime,
+			err = protectTimestampForBackup(ctx, p, txn, *sj.ID(), spansToProtect, startTime, endTime,
 				backupDetails)
 			return err
 		}); err != nil {

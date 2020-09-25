@@ -110,6 +110,7 @@ type TableDescriptor interface {
 	ForeachIndex(opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error) error
 	AllNonDropIndexes() []*descpb.IndexDescriptor
 	ForeachNonDropIndex(f func(idxDesc *descpb.IndexDescriptor) error) error
+	TableSpan(codec keys.SQLCodec) roachpb.Span
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
 	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)
 	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error)
