@@ -148,7 +148,7 @@ physical memory.`,
 	SQLAuditLogDirName = FlagInfo{
 		Name: "sql-audit-dir",
 		Description: `
-If non-empty, create a SQL audit log in this drectory.
+If non-empty, create a SQL audit log in this directory.
 `,
 	}
 

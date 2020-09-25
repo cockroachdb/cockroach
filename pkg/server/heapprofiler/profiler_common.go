@@ -31,8 +31,8 @@ var resetHighWaterMarkInterval = func() time.Duration {
 	return dur
 }()
 
-// timestampFormat is chosen to mimix that used by the log
-// package. This is not a hard requirement thought; the profiles are
+// timestampFormat is chosen to mimic that used by the log
+// package. This is not a hard requirement though; the profiles are
 // stored in a separate directory.
 const timestampFormat = "2006-01-02T15_04_05.999"
 
