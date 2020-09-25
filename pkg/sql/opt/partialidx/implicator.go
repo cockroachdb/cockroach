@@ -711,8 +711,12 @@ func (im *Implicator) warmCache(filters memo.FiltersExpr) {
 func (im *Implicator) simplifyFiltersExpr(
 	e memo.FiltersExpr, exactMatches exprSet,
 ) memo.FiltersExpr {
-	filters := make(memo.FiltersExpr, 0, len(e))
+	// If exactMatches is empty, then e cannot be simplified.
+	if exactMatches.empty() {
+		return e
+	}
 
+	filters := make(memo.FiltersExpr, 0, len(e))
 	for i := range e {
 		// If an entire FiltersItem exists in exactMatches, don't add it to the
 		// output filters.
@@ -828,6 +832,11 @@ func (s exprSet) addIf(e opt.Expr, fn func() bool) {
 	if s != nil && fn() {
 		s[e] = struct{}{}
 	}
+}
+
+// empty returns true if the set is nil or empty.
+func (s exprSet) empty() bool {
+	return len(s) == 0
 }
 
 // contains returns true if the set is non-nil and the given expression exists
