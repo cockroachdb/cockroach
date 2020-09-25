@@ -284,7 +284,7 @@ scan  ·              ·
 
 # We use the WHERE condition to force the use of the index.
 query TTT
-EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 30 ORDER BY b, a, d
+EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 15 ORDER BY b, a, d
 ----
 ·                distribution     local
 ·                vectorized       true
@@ -296,7 +296,7 @@ sort             ·                ·
       └── scan   ·                ·
 ·                missing stats    ·
 ·                table            abc@ba
-·                spans            [/11 - /29]
+·                spans            [/11 - /14]
 
 # An inequality should not be enough to force the use of the index.
 query TTT

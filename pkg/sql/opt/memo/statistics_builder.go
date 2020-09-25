@@ -2634,6 +2634,11 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 	}
 
 	switch t := e.(type) {
+	case *IndexJoinExpr:
+		// An index join is like a lookup join with no additional ON filters. The
+		// number of rows processed equals the number of output rows.
+		return e.Relational().Stats.RowCount
+
 	case *LookupJoinExpr:
 		var lookupJoinPrivate *LookupJoinPrivate
 		switch t.JoinType {
@@ -2830,11 +2835,11 @@ const (
 	multiColWeight = 9.0 / 10.0
 )
 
-// countJSONPaths returns the number of JSON paths in the specified
-// FiltersItem. Used in the calculation of unapplied conjuncts in a JSON
+// countPaths returns the number of JSON or Array paths in the specified
+// FiltersItem. Used in the calculation of unapplied conjuncts in a
 // Contains operator. Returns 0 if paths could not be counted for any
 // reason, such as malformed JSON.
-func countJSONPaths(conjunct *FiltersItem) int {
+func countPaths(conjunct *FiltersItem) int {
 	rhs := conjunct.Condition.Child(1)
 	if !CanExtractConstDatum(rhs) {
 		return 0
@@ -2843,18 +2848,22 @@ func countJSONPaths(conjunct *FiltersItem) int {
 	if rightDatum == tree.DNull {
 		return 0
 	}
-	rd, ok := rightDatum.(*tree.DJSON)
-	if !ok {
-		return 0
+
+	if rd, ok := rightDatum.(*tree.DJSON); ok {
+		// TODO(itsbilal): Replace this with a method that only counts paths
+		// instead of generating a slice for all of them.
+		paths, err := json.AllPaths(rd.JSON)
+		if err != nil {
+			return 0
+		}
+		return len(paths)
 	}
 
-	// TODO(itsbilal): Replace this with a method that only counts paths
-	// instead of generating a slice for all of them.
-	paths, err := json.AllPaths(rd.JSON)
-	if err != nil {
-		return 0
+	if rd, ok := rightDatum.(*tree.DArray); ok {
+		return rd.Len()
 	}
-	return len(paths)
+
+	return 0
 }
 
 // filterRelExpr is called from buildScan and buildSelect to calculate the stats
@@ -2951,12 +2960,12 @@ func (sb *statisticsBuilder) applyFilter(
 			return
 		}
 
-		// Special case: The current conjunct is a JSON Contains operator.
+		// Special case: The current conjunct is a JSON or Array Contains operator.
 		// If so, count every path to a leaf node in the RHS as a separate
-		// conjunct. If for whatever reason we can't get to the JSON datum
+		// conjunct. If for whatever reason we can't get to the JSON or Array datum
 		// or enumerate its paths, count the whole operator as one conjunct.
 		if conjunct.Condition.Op() == opt.ContainsOp {
-			numPaths := countJSONPaths(conjunct)
+			numPaths := countPaths(conjunct)
 			if numPaths == 0 {
 				numUnappliedConjuncts++
 			} else {
