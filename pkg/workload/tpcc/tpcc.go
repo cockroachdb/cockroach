@@ -141,7 +141,7 @@ var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
 		` using a rich schema of multiple tables`,
-	Version:      `2.1.0`,
+	Version:      `2.2.0`,
 	PublicFacing: true,
 	New: func() workload.Generator {
 		g := &tpcc{}
@@ -162,9 +162,6 @@ var tpccMeta = workload.Meta{
 			`workers`:            {RuntimeOnly: true},
 			`conns`:              {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
-			// We set runtime only to true for deprecated-fk-indexes so that it
-			// doesn't appear in the fixture name output.
-			`deprecated-fk-indexes`: {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
