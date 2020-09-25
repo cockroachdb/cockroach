@@ -76,7 +76,7 @@ func (x *ConstraintValidity) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ConstraintValidity) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{0}
 }
 
 // SystemColumnKind is an enum representing the different kind of system
@@ -121,7 +121,7 @@ func (x *SystemColumnKind) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SystemColumnKind) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{1}
+	return fileDescriptor_structured_7058934a8610dc30, []int{1}
 }
 
 // State indicates whether a descriptor is public (i.e., normally visible,
@@ -133,7 +133,7 @@ func (SystemColumnKind) EnumDescriptor() ([]byte, []int) {
 type DescriptorState int32
 
 const (
-	// Not used.
+	// Descriptor is visible and can be leased.
 	DescriptorState_PUBLIC DescriptorState = 0
 	// Descriptor is being added.
 	DescriptorState_ADD DescriptorState = 1
@@ -173,7 +173,7 @@ func (x *DescriptorState) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (DescriptorState) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{2}
+	return fileDescriptor_structured_7058934a8610dc30, []int{2}
 }
 
 type ForeignKeyReference_Action int32
@@ -218,7 +218,7 @@ func (x *ForeignKeyReference_Action) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ForeignKeyReference_Action) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{0, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{0, 0}
 }
 
 // Match is the algorithm used to compare composite keys.
@@ -258,7 +258,7 @@ func (x *ForeignKeyReference_Match) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ForeignKeyReference_Match) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{0, 1}
+	return fileDescriptor_structured_7058934a8610dc30, []int{0, 1}
 }
 
 // The direction of a column in the index.
@@ -295,7 +295,7 @@ func (x *IndexDescriptor_Direction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IndexDescriptor_Direction) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{7, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{7, 0}
 }
 
 // The type of the index.
@@ -332,7 +332,7 @@ func (x *IndexDescriptor_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IndexDescriptor_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{7, 1}
+	return fileDescriptor_structured_7058934a8610dc30, []int{7, 1}
 }
 
 type ConstraintToUpdate_ConstraintType int32
@@ -375,7 +375,7 @@ func (x *ConstraintToUpdate_ConstraintType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ConstraintToUpdate_ConstraintType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{8, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{8, 0}
 }
 
 // A descriptor within a mutation is unavailable for reads, writes
@@ -440,7 +440,7 @@ func (x *DescriptorMutation_State) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (DescriptorMutation_State) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{12, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{12, 0}
 }
 
 // Direction of mutation.
@@ -483,7 +483,7 @@ func (x *DescriptorMutation_Direction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (DescriptorMutation_Direction) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{12, 1}
+	return fileDescriptor_structured_7058934a8610dc30, []int{12, 1}
 }
 
 // AuditMode indicates which auditing actions to take when this table is used.
@@ -520,7 +520,7 @@ func (x *TableDescriptor_AuditMode) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (TableDescriptor_AuditMode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14, 0}
 }
 
 // Represents the kind of type that this type descriptor represents.
@@ -560,7 +560,7 @@ func (x *TypeDescriptor_Kind) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (TypeDescriptor_Kind) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{16, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{16, 0}
 }
 
 // Represents what operations are allowed on this ENUM member.
@@ -601,7 +601,7 @@ func (x *TypeDescriptor_EnumMember_Capability) UnmarshalJSON(data []byte) error 
 	return nil
 }
 func (TypeDescriptor_EnumMember_Capability) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{16, 0, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{16, 0, 0}
 }
 
 // ForeignKeyReference is deprecated, replaced by ForeignKeyConstraint in v19.2
@@ -631,7 +631,7 @@ func (m *ForeignKeyReference) Reset()         { *m = ForeignKeyReference{} }
 func (m *ForeignKeyReference) String() string { return proto.CompactTextString(m) }
 func (*ForeignKeyReference) ProtoMessage()    {}
 func (*ForeignKeyReference) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{0}
 }
 func (m *ForeignKeyReference) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -679,7 +679,7 @@ func (m *ForeignKeyConstraint) Reset()         { *m = ForeignKeyConstraint{} }
 func (m *ForeignKeyConstraint) String() string { return proto.CompactTextString(m) }
 func (*ForeignKeyConstraint) ProtoMessage()    {}
 func (*ForeignKeyConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{1}
+	return fileDescriptor_structured_7058934a8610dc30, []int{1}
 }
 func (m *ForeignKeyConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -744,7 +744,7 @@ func (m *ColumnDescriptor) Reset()         { *m = ColumnDescriptor{} }
 func (m *ColumnDescriptor) String() string { return proto.CompactTextString(m) }
 func (*ColumnDescriptor) ProtoMessage()    {}
 func (*ColumnDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{2}
+	return fileDescriptor_structured_7058934a8610dc30, []int{2}
 }
 func (m *ColumnDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -800,7 +800,7 @@ func (m *ColumnFamilyDescriptor) Reset()         { *m = ColumnFamilyDescriptor{}
 func (m *ColumnFamilyDescriptor) String() string { return proto.CompactTextString(m) }
 func (*ColumnFamilyDescriptor) ProtoMessage()    {}
 func (*ColumnFamilyDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{3}
+	return fileDescriptor_structured_7058934a8610dc30, []int{3}
 }
 func (m *ColumnFamilyDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -846,7 +846,7 @@ func (m *InterleaveDescriptor) Reset()         { *m = InterleaveDescriptor{} }
 func (m *InterleaveDescriptor) String() string { return proto.CompactTextString(m) }
 func (*InterleaveDescriptor) ProtoMessage()    {}
 func (*InterleaveDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{4}
+	return fileDescriptor_structured_7058934a8610dc30, []int{4}
 }
 func (m *InterleaveDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -890,7 +890,7 @@ func (m *InterleaveDescriptor_Ancestor) Reset()         { *m = InterleaveDescrip
 func (m *InterleaveDescriptor_Ancestor) String() string { return proto.CompactTextString(m) }
 func (*InterleaveDescriptor_Ancestor) ProtoMessage()    {}
 func (*InterleaveDescriptor_Ancestor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{4, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{4, 0}
 }
 func (m *InterleaveDescriptor_Ancestor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -945,7 +945,7 @@ func (m *ShardedDescriptor) Reset()         { *m = ShardedDescriptor{} }
 func (m *ShardedDescriptor) String() string { return proto.CompactTextString(m) }
 func (*ShardedDescriptor) ProtoMessage()    {}
 func (*ShardedDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{5}
+	return fileDescriptor_structured_7058934a8610dc30, []int{5}
 }
 func (m *ShardedDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -990,7 +990,7 @@ func (m *PartitioningDescriptor) Reset()         { *m = PartitioningDescriptor{}
 func (m *PartitioningDescriptor) String() string { return proto.CompactTextString(m) }
 func (*PartitioningDescriptor) ProtoMessage()    {}
 func (*PartitioningDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{6}
+	return fileDescriptor_structured_7058934a8610dc30, []int{6}
 }
 func (m *PartitioningDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1033,7 +1033,7 @@ func (m *PartitioningDescriptor_List) Reset()         { *m = PartitioningDescrip
 func (m *PartitioningDescriptor_List) String() string { return proto.CompactTextString(m) }
 func (*PartitioningDescriptor_List) ProtoMessage()    {}
 func (*PartitioningDescriptor_List) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{6, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{6, 0}
 }
 func (m *PartitioningDescriptor_List) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1078,7 +1078,7 @@ func (m *PartitioningDescriptor_Range) Reset()         { *m = PartitioningDescri
 func (m *PartitioningDescriptor_Range) String() string { return proto.CompactTextString(m) }
 func (*PartitioningDescriptor_Range) ProtoMessage()    {}
 func (*PartitioningDescriptor_Range) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{6, 1}
+	return fileDescriptor_structured_7058934a8610dc30, []int{6, 1}
 }
 func (m *PartitioningDescriptor_Range) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1242,7 +1242,7 @@ func (m *IndexDescriptor) Reset()         { *m = IndexDescriptor{} }
 func (m *IndexDescriptor) String() string { return proto.CompactTextString(m) }
 func (*IndexDescriptor) ProtoMessage()    {}
 func (*IndexDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{7}
+	return fileDescriptor_structured_7058934a8610dc30, []int{7}
 }
 func (m *IndexDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1293,7 +1293,7 @@ func (m *ConstraintToUpdate) Reset()         { *m = ConstraintToUpdate{} }
 func (m *ConstraintToUpdate) String() string { return proto.CompactTextString(m) }
 func (*ConstraintToUpdate) ProtoMessage()    {}
 func (*ConstraintToUpdate) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{8}
+	return fileDescriptor_structured_7058934a8610dc30, []int{8}
 }
 func (m *ConstraintToUpdate) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1336,7 +1336,7 @@ func (m *PrimaryKeySwap) Reset()         { *m = PrimaryKeySwap{} }
 func (m *PrimaryKeySwap) String() string { return proto.CompactTextString(m) }
 func (*PrimaryKeySwap) ProtoMessage()    {}
 func (*PrimaryKeySwap) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{9}
+	return fileDescriptor_structured_7058934a8610dc30, []int{9}
 }
 func (m *PrimaryKeySwap) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1376,7 +1376,7 @@ func (m *ComputedColumnSwap) Reset()         { *m = ComputedColumnSwap{} }
 func (m *ComputedColumnSwap) String() string { return proto.CompactTextString(m) }
 func (*ComputedColumnSwap) ProtoMessage()    {}
 func (*ComputedColumnSwap) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{10}
+	return fileDescriptor_structured_7058934a8610dc30, []int{10}
 }
 func (m *ComputedColumnSwap) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1424,7 +1424,7 @@ func (m *MaterializedViewRefresh) Reset()         { *m = MaterializedViewRefresh
 func (m *MaterializedViewRefresh) String() string { return proto.CompactTextString(m) }
 func (*MaterializedViewRefresh) ProtoMessage()    {}
 func (*MaterializedViewRefresh) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{11}
+	return fileDescriptor_structured_7058934a8610dc30, []int{11}
 }
 func (m *MaterializedViewRefresh) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1481,7 +1481,7 @@ func (m *DescriptorMutation) Reset()         { *m = DescriptorMutation{} }
 func (m *DescriptorMutation) String() string { return proto.CompactTextString(m) }
 func (*DescriptorMutation) ProtoMessage()    {}
 func (*DescriptorMutation) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{12}
+	return fileDescriptor_structured_7058934a8610dc30, []int{12}
 }
 func (m *DescriptorMutation) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1819,7 +1819,7 @@ func (m *NameInfo) Reset()         { *m = NameInfo{} }
 func (m *NameInfo) String() string { return proto.CompactTextString(m) }
 func (*NameInfo) ProtoMessage()    {}
 func (*NameInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{13}
+	return fileDescriptor_structured_7058934a8610dc30, []int{13}
 }
 func (m *NameInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2001,7 +2001,7 @@ func (m *TableDescriptor) Reset()         { *m = TableDescriptor{} }
 func (m *TableDescriptor) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor) ProtoMessage()    {}
 func (*TableDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14}
 }
 func (m *TableDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2308,7 +2308,7 @@ func (m *TableDescriptor_SchemaChangeLease) Reset()         { *m = TableDescript
 func (m *TableDescriptor_SchemaChangeLease) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_SchemaChangeLease) ProtoMessage()    {}
 func (*TableDescriptor_SchemaChangeLease) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14, 0}
 }
 func (m *TableDescriptor_SchemaChangeLease) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2354,7 +2354,7 @@ func (m *TableDescriptor_CheckConstraint) Reset()         { *m = TableDescriptor
 func (m *TableDescriptor_CheckConstraint) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_CheckConstraint) ProtoMessage()    {}
 func (*TableDescriptor_CheckConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14, 1}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14, 1}
 }
 func (m *TableDescriptor_CheckConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2394,7 +2394,7 @@ func (m *TableDescriptor_Reference) Reset()         { *m = TableDescriptor_Refer
 func (m *TableDescriptor_Reference) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_Reference) ProtoMessage()    {}
 func (*TableDescriptor_Reference) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14, 2}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14, 2}
 }
 func (m *TableDescriptor_Reference) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2431,7 +2431,7 @@ func (m *TableDescriptor_MutationJob) Reset()         { *m = TableDescriptor_Mut
 func (m *TableDescriptor_MutationJob) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_MutationJob) ProtoMessage()    {}
 func (*TableDescriptor_MutationJob) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14, 3}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14, 3}
 }
 func (m *TableDescriptor_MutationJob) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2474,7 +2474,7 @@ func (m *TableDescriptor_SequenceOpts) Reset()         { *m = TableDescriptor_Se
 func (m *TableDescriptor_SequenceOpts) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_SequenceOpts) ProtoMessage()    {}
 func (*TableDescriptor_SequenceOpts) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14, 4}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14, 4}
 }
 func (m *TableDescriptor_SequenceOpts) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2514,7 +2514,7 @@ func (m *TableDescriptor_SequenceOpts_SequenceOwner) String() string {
 }
 func (*TableDescriptor_SequenceOpts_SequenceOwner) ProtoMessage() {}
 func (*TableDescriptor_SequenceOpts_SequenceOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14, 4, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14, 4, 0}
 }
 func (m *TableDescriptor_SequenceOpts_SequenceOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2554,7 +2554,7 @@ func (m *TableDescriptor_Replacement) Reset()         { *m = TableDescriptor_Rep
 func (m *TableDescriptor_Replacement) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_Replacement) ProtoMessage()    {}
 func (*TableDescriptor_Replacement) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14, 5}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14, 5}
 }
 func (m *TableDescriptor_Replacement) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2591,7 +2591,7 @@ func (m *TableDescriptor_GCDescriptorMutation) Reset()         { *m = TableDescr
 func (m *TableDescriptor_GCDescriptorMutation) String() string { return proto.CompactTextString(m) }
 func (*TableDescriptor_GCDescriptorMutation) ProtoMessage()    {}
 func (*TableDescriptor_GCDescriptorMutation) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{14, 6}
+	return fileDescriptor_structured_7058934a8610dc30, []int{14, 6}
 }
 func (m *TableDescriptor_GCDescriptorMutation) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2640,7 +2640,7 @@ func (m *DatabaseDescriptor) Reset()         { *m = DatabaseDescriptor{} }
 func (m *DatabaseDescriptor) String() string { return proto.CompactTextString(m) }
 func (*DatabaseDescriptor) ProtoMessage()    {}
 func (*DatabaseDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{15}
+	return fileDescriptor_structured_7058934a8610dc30, []int{15}
 }
 func (m *DatabaseDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2741,7 +2741,7 @@ func (m *DatabaseDescriptor_SchemaInfo) Reset()         { *m = DatabaseDescripto
 func (m *DatabaseDescriptor_SchemaInfo) String() string { return proto.CompactTextString(m) }
 func (*DatabaseDescriptor_SchemaInfo) ProtoMessage()    {}
 func (*DatabaseDescriptor_SchemaInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{15, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{15, 0}
 }
 func (m *DatabaseDescriptor_SchemaInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2803,7 +2803,7 @@ func (m *TypeDescriptor) Reset()         { *m = TypeDescriptor{} }
 func (m *TypeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*TypeDescriptor) ProtoMessage()    {}
 func (*TypeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{16}
+	return fileDescriptor_structured_7058934a8610dc30, []int{16}
 }
 func (m *TypeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2944,7 +2944,7 @@ func (m *TypeDescriptor_EnumMember) Reset()         { *m = TypeDescriptor_EnumMe
 func (m *TypeDescriptor_EnumMember) String() string { return proto.CompactTextString(m) }
 func (*TypeDescriptor_EnumMember) ProtoMessage()    {}
 func (*TypeDescriptor_EnumMember) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{16, 0}
+	return fileDescriptor_structured_7058934a8610dc30, []int{16, 0}
 }
 func (m *TypeDescriptor_EnumMember) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2992,7 +2992,7 @@ func (m *SchemaDescriptor) Reset()         { *m = SchemaDescriptor{} }
 func (m *SchemaDescriptor) String() string { return proto.CompactTextString(m) }
 func (*SchemaDescriptor) ProtoMessage()    {}
 func (*SchemaDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{17}
+	return fileDescriptor_structured_7058934a8610dc30, []int{17}
 }
 func (m *SchemaDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3095,7 +3095,7 @@ func (m *Descriptor) Reset()         { *m = Descriptor{} }
 func (m *Descriptor) String() string { return proto.CompactTextString(m) }
 func (*Descriptor) ProtoMessage()    {}
 func (*Descriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_structured_deab1322b4be7680, []int{18}
+	return fileDescriptor_structured_7058934a8610dc30, []int{18}
 }
 func (m *Descriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -15733,10 +15733,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/catalog/descpb/structured.proto", fileDescriptor_structured_deab1322b4be7680)
+	proto.RegisterFile("sql/catalog/descpb/structured.proto", fileDescriptor_structured_7058934a8610dc30)
 }
 
-var fileDescriptor_structured_deab1322b4be7680 = []byte{
+var fileDescriptor_structured_7058934a8610dc30 = []byte{
 	// 4611 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x3b, 0x4b, 0x6c, 0x1b, 0x67,
 	0x7a, 0xe2, 0x9b, 0xfc, 0xf8, 0x1a, 0xfd, 0x96, 0x6d, 0x5a, 0x49, 0x24, 0x99, 0x8e, 0x13, 0x25,
