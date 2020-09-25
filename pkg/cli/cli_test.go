@@ -2089,3 +2089,46 @@ func Example_read_from_file() {
 	// ERROR: column "undefined" does not exist
 	// SQLSTATE: 42703
 }
+
+// Example_includes tests the \i command.
+func Example_includes() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.RunWithArgs([]string{"sql", "-f", "testdata/i_twolevels1.sql"})
+	c.RunWithArgs([]string{"sql", "-f", "testdata/i_multiline.sql"})
+	c.RunWithArgs([]string{"sql", "-f", "testdata/i_stopmiddle.sql"})
+	c.RunWithArgs([]string{"sql", "-f", "testdata/i_maxrecursion.sql"})
+
+	// Output:
+	// sql -f testdata/i_twolevels1.sql
+	// > SELECT 123;
+	// ?column?
+	// 123
+	// > SELECT 789;
+	// ?column?
+	// 789
+	// ?column?
+	// 456
+	// sql -f testdata/i_multiline.sql
+	// ERROR: at or near "\": syntax error
+	// SQLSTATE: 42601
+	// DETAIL: source SQL:
+	// SELECT -- incomplete statement, \i invalid
+	// \i testdata/i_twolevels2.sql
+	// ^
+	// HINT: try \h SELECT
+	// ERROR: at or near "\": syntax error
+	// SQLSTATE: 42601
+	// DETAIL: source SQL:
+	// SELECT -- incomplete statement, \i invalid
+	// \i testdata/i_twolevels2.sql
+	// ^
+	// HINT: try \h SELECT
+	// sql -f testdata/i_stopmiddle.sql
+	// ?column?
+	// 123
+	// sql -f testdata/i_maxrecursion.sql
+	// \i: too many recursion levels (max 10)
+	// ERROR: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: \i: too many recursion levels (max 10)
+}
