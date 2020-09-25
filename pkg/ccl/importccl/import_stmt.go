@@ -159,6 +159,15 @@ var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs)
 // IMPORT INTO.
 var importIntoRequiredPrivileges = []privilege.Kind{privilege.INSERT, privilege.DROP}
 
+var resolveImportFileFormat = map[string]roachpb.IOFileFormat_FileFormat{
+	"CSV":       roachpb.IOFileFormat_CSV,
+	"DELIMITED": roachpb.IOFileFormat_MysqlOutfile,
+	"MYSQLDUMP": roachpb.IOFileFormat_Mysqldump,
+	"PGCOPY":    roachpb.IOFileFormat_PgCopy,
+	"PGDUMP":    roachpb.IOFileFormat_PgDump,
+	"AVRO":      roachpb.IOFileFormat_Avro,
+}
+
 // File formats supported for IMPORT INTO
 var allowedIntoFormats = map[string]struct{}{
 	"CSV":       {},
@@ -230,6 +239,18 @@ func ensureRequiredPrivileges(
 	return nil
 }
 
+// addToFileFormatTelemetry records the different stages of IMPORT on a per file
+// format basis.
+//
+// The current states being counted are:
+// attempted: Counted at the very beginning of the IMPORT.
+// started: Counted just before the IMPORT job is started.
+// failed: Counted when the IMPORT job is failed or canceled.
+// succeeded: Counted when the IMPORT job completes successfully.
+func addToFileFormatTelemetry(fileFormat, state string) {
+	telemetry.Count(fmt.Sprintf("%s.%s.%s", "import", fileFormat, state))
+}
+
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -238,7 +259,14 @@ func importPlanHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
-	telemetry.Count("import.total.attempted")
+
+	format := roachpb.IOFileFormat{}
+	var fileFormat roachpb.IOFileFormat_FileFormat
+	if fileFormat, ok = resolveImportFileFormat[importStmt.FileFormat]; !ok {
+		return nil, nil, nil, false, unimplemented.Newf("import.format", "unsupported import format: %q", importStmt.FileFormat)
+	}
+	format.Format = fileFormat
+	addToFileFormatTelemetry(fileFormat.String(), "attempted")
 
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionPartitionedBackup) {
 		return nil, nil, nil, false, errors.Errorf("IMPORT requires a cluster fully upgraded to version >= 19.2")
@@ -387,14 +415,11 @@ func importPlanHook(
 			parentSchemaID = keys.PublicSchemaID
 		}
 
-		format := roachpb.IOFileFormat{}
 		switch importStmt.FileFormat {
 		case "CSV":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, csvAllowedOptions); err != nil {
 				return err
 			}
-			telemetry.Count("import.format.csv")
-			format.Format = roachpb.IOFileFormat_CSV
 			// Set the default CSV separator for the cases when it is not overwritten.
 			format.Csv.Comma = ','
 			if override, ok := opts[csvDelimiter]; ok {
@@ -437,8 +462,6 @@ func importPlanHook(
 			if err = validateFormatOptions(importStmt.FileFormat, opts, mysqlOutAllowedOptions); err != nil {
 				return err
 			}
-			telemetry.Count("import.format.mysqlout")
-			format.Format = roachpb.IOFileFormat_MysqlOutfile
 			format.MysqlOut = roachpb.MySQLOutfileOptions{
 				RowSeparator:   '\n',
 				FieldSeparator: '\t',
@@ -497,14 +520,10 @@ func importPlanHook(
 			if err = validateFormatOptions(importStmt.FileFormat, opts, mysqlDumpAllowedOptions); err != nil {
 				return err
 			}
-			telemetry.Count("import.format.mysqldump")
-			format.Format = roachpb.IOFileFormat_Mysqldump
 		case "PGCOPY":
 			if err = validateFormatOptions(importStmt.FileFormat, opts, pgCopyAllowedOptions); err != nil {
 				return err
 			}
-			telemetry.Count("import.format.pgcopy")
-			format.Format = roachpb.IOFileFormat_PgCopy
 			format.PgCopy = roachpb.PgCopyOptions{
 				Delimiter: '\t',
 				Null:      `\N`,
@@ -535,8 +554,6 @@ func importPlanHook(
 			if err = validateFormatOptions(importStmt.FileFormat, opts, pgDumpAllowedOptions); err != nil {
 				return err
 			}
-			telemetry.Count("import.format.pgdump")
-			format.Format = roachpb.IOFileFormat_PgDump
 			maxRowSize := int32(defaultScanBuffer)
 			if override, ok := opts[optMaxRowSize]; ok {
 				sz, err := humanizeutil.ParseBytes(override)
@@ -867,7 +884,14 @@ func importPlanHook(
 			}
 			return err
 		}
-		return sj.Run(ctx)
+
+		err = sj.Run(ctx)
+		if err != nil {
+			return err
+		}
+		addToFileFormatTelemetry(format.Format.String(), "started")
+
+		return nil
 	}
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
 }
@@ -875,9 +899,6 @@ func importPlanHook(
 func parseAvroOptions(
 	ctx context.Context, opts map[string]string, p sql.PlanHookState, format *roachpb.IOFileFormat,
 ) error {
-	telemetry.Count("import.format.avro")
-	format.Format = roachpb.IOFileFormat_Avro
-
 	// Default input format is OCF.
 	format.Avro.Format = roachpb.AvroOptions_OCF
 	_, format.Avro.StrictMode = opts[avroStrict]
@@ -1183,8 +1204,6 @@ func (r *importResumer) prepareTableDescsForIngestion(
 func (r *importResumer) Resume(
 	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	telemetry.Count("import.total.started")
-
 	details := r.job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
 	ptsID := details.ProtectedTimestampRecord
@@ -1298,7 +1317,7 @@ func (r *importResumer) Resume(
 		}
 	}
 
-	telemetry.Count("import.total.succeeded")
+	addToFileFormatTelemetry(details.Format.Format.String(), "succeeded")
 	telemetry.CountBucketed("import.rows", r.res.Rows)
 	const mb = 1 << 20
 	sizeMb := r.res.DataSize / mb
@@ -1411,8 +1430,8 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
-	telemetry.Count("import.total.failed")
-
+	details := r.job.Details().(jobspb.ImportDetails)
+	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
 	cfg := phs.(sql.PlanHookState).ExecCfg()
 	lm, ie, db := cfg.LeaseManager, cfg.InternalExecutor, cfg.DB
 	return descs.Txn(ctx, cfg.Settings, lm, ie, db, func(
