@@ -89,6 +89,8 @@ func buildOpaque(
 		plan, err = p.CreateSequence(ctx, n)
 	case *tree.CreateStats:
 		plan, err = p.CreateStatistics(ctx, n)
+	case *tree.CreateExtension:
+		plan, err = p.CreateExtension(ctx, n)
 	case *tree.Deallocate:
 		plan, err = p.Deallocate(ctx, n)
 	case *tree.Discard:
@@ -113,6 +115,8 @@ func buildOpaque(
 		plan, err = p.Grant(ctx, n)
 	case *tree.GrantRole:
 		plan, err = p.GrantRole(ctx, n)
+	case *tree.ReassignOwnedBy:
+		plan, err = p.ReassignOwnedBy(ctx, n)
 	case *tree.RefreshMaterializedView:
 		plan, err = p.RefreshMaterializedView(ctx, n)
 	case *tree.RenameColumn:
@@ -195,6 +199,7 @@ func init() {
 		&tree.CommentOnIndex{},
 		&tree.CommentOnTable{},
 		&tree.CreateDatabase{},
+		&tree.CreateExtension{},
 		&tree.CreateIndex{},
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
@@ -213,6 +218,7 @@ func init() {
 		&tree.DropSequence{},
 		&tree.Grant{},
 		&tree.GrantRole{},
+		&tree.ReassignOwnedBy{},
 		&tree.RefreshMaterializedView{},
 		&tree.RenameColumn{},
 		&tree.RenameDatabase{},

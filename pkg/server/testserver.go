@@ -256,6 +256,14 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
 	}
 	cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck = true
+
+	if params.Knobs.SQLExecutor == nil {
+		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
+	}
+	if !params.DisableTestingDescriptorValidation {
+		cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs).TestingDescriptorValidation = true
+	}
+
 	return cfg
 }
 
@@ -290,6 +298,11 @@ type TestServer struct {
 // Node returns the Node as an interface{}.
 func (ts *TestServer) Node() interface{} {
 	return ts.node
+}
+
+// NodeID returns the ID of this node within its cluster.
+func (ts *TestServer) NodeID() roachpb.NodeID {
+	return ts.rpcContext.NodeID.Get()
 }
 
 // Stopper returns the embedded server's Stopper.
@@ -338,6 +351,15 @@ func (ts *TestServer) JobRegistry() interface{} {
 func (ts *TestServer) MigrationManager() interface{} {
 	if ts != nil {
 		return ts.sqlServer.migMgr
+	}
+	return nil
+}
+
+// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
+// interface{}.
+func (ts *TestServer) NodeLiveness() interface{} {
+	if ts != nil {
+		return ts.nodeLiveness
 	}
 	return nil
 }

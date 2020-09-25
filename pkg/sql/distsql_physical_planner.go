@@ -411,26 +411,6 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 		return rec, nil
 
-	case *interleavedJoinNode:
-		if err := checkExpr(n.leftFilter); err != nil {
-			return cannotDistribute, err
-		}
-		if err := checkExpr(n.rightFilter); err != nil {
-			return cannotDistribute, err
-		}
-		if err := checkExpr(n.onCond); err != nil {
-			return cannotDistribute, err
-		}
-		if n.left.lockingStrength != descpb.ScanLockingStrength_FOR_NONE ||
-			n.right.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
-			// Scans that are performing row-level locking cannot currently be
-			// distributed because their locks would not be propagated back to
-			// the root transaction coordinator.
-			// TODO(nvanbenschoten): lift this restriction.
-			return cannotDistribute, cannotDistributeRowLevelLockingErr
-		}
-		return shouldDistribute, nil
-
 	case *limitNode:
 		// Note that we don't need to check whether we support distribution of
 		// n.countExpr or n.offsetExpr because those expressions are evaluated
@@ -2304,6 +2284,15 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 		InvertedColIdx: uint32(n.invColumn),
 		InvertedExpr:   *n.expression.ToProto(),
 	}
+	if n.preFiltererExpr != nil {
+		invertedFiltererSpec.PreFiltererSpec = &execinfrapb.InvertedFiltererSpec_PreFiltererSpec{
+			Type: n.preFiltererType,
+		}
+		if invertedFiltererSpec.PreFiltererSpec.Expression, err = physicalplan.MakeExpression(
+			n.preFiltererExpr, planCtx, nil); err != nil {
+			return nil, err
+		}
+	}
 
 	// Cases:
 	// - Last stage is a single processor (local or remote): Place the inverted
@@ -2560,9 +2549,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *joinNode:
 		plan, err = dsp.createPlanForJoin(planCtx, n)
-
-	case *interleavedJoinNode:
-		plan, err = dsp.createPlanForInterleavedJoin(planCtx, n)
 
 	case *limitNode:
 		plan, err = dsp.createPhysPlanForPlanNode(planCtx, n.plan)
@@ -3559,13 +3545,4 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 	for i := range plan.Processors {
 		plan.Processors[i].Spec.ProcessorID = int32(i)
 	}
-}
-
-func makeTableReaderSpans(spans roachpb.Spans) []execinfrapb.TableReaderSpan {
-	trSpans := make([]execinfrapb.TableReaderSpan, len(spans))
-	for i, span := range spans {
-		trSpans[i].Span = span
-	}
-
-	return trSpans
 }

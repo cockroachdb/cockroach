@@ -76,6 +76,21 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	if !ok {
 		return nil, nil
 	}
+	if err := catalog.FilterDescriptorState(db, flags); err != nil {
+		if flags.Required {
+			return nil, err
+		}
+		return nil, nil
+	}
+	// Immediately after a RENAME an old name still points to the descriptor
+	// during the drain phase for the name. Do not return a descriptor during
+	// draining.
+	if db.GetName() != name {
+		if flags.Required {
+			return nil, sqlerrors.NewUndefinedDatabaseError(name)
+		}
+		return nil, nil
+	}
 	return db, nil
 }
 
@@ -122,6 +137,21 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	}
 	sc, ok := untypedDesc.(catalog.SchemaDescriptor)
 	if !ok {
+		return false, catalog.ResolvedSchema{}, nil
+	}
+	if err := catalog.FilterDescriptorState(sc, flags); err != nil {
+		if flags.Required {
+			return false, catalog.ResolvedSchema{}, err
+		}
+		return false, catalog.ResolvedSchema{}, nil
+	}
+	// Immediately after a RENAME an old name still points to the descriptor
+	// during the drain phase for the name. Do not return a descriptor during
+	// draining.
+	if sc.GetName() != scName {
+		if flags.Required {
+			return false, catalog.ResolvedSchema{}, sqlerrors.NewUndefinedSchemaError(scName)
+		}
 		return false, catalog.ResolvedSchema{}, nil
 	}
 	return true, catalog.ResolvedSchema{
@@ -242,7 +272,12 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 
 	ok, schema, err := a.GetSchema(ctx, txn, codec, dbID, scName,
-		tree.SchemaLookupFlags{Required: flags.Required, AvoidCached: flags.AvoidCached})
+		tree.SchemaLookupFlags{
+			Required:       flags.Required,
+			AvoidCached:    flags.AvoidCached,
+			IncludeDropped: flags.IncludeDropped,
+			IncludeOffline: flags.IncludeOffline,
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -280,36 +315,33 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	if err != nil {
 		return nil, err
 	}
-	switch desc := desc.(type) {
-	case catalog.TableDescriptor:
-		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
-		// OFFLINE if the relevant flag is set.
-		acceptableStates := map[descpb.DescriptorState]bool{
-			descpb.DescriptorState_ADD:     true,
-			descpb.DescriptorState_PUBLIC:  true,
-			descpb.DescriptorState_OFFLINE: flags.IncludeOffline,
-			descpb.DescriptorState_DROP:    flags.IncludeDropped,
-		}
-		if acceptableStates[desc.GetState()] {
-			// Immediately after a RENAME an old name still points to the
-			// descriptor during the drain phase for the name. Do not
-			// return a descriptor during draining.
-			//
-			// The second or condition ensures that clusters < 20.1 access the
-			// system.namespace_deprecated table when selecting from system.namespace.
-			// As this table can not be renamed by users, it is okay that the first
-			// check fails.
-			if desc.GetName() == object ||
-				object == systemschema.NamespaceTableName && db == systemschema.SystemDatabaseName {
-				return desc, nil
-			}
+	// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
+	// OFFLINE if the relevant flag is set.
+	if err := catalog.FilterDescriptorState(desc, flags.CommonLookupFlags); err != nil {
+		if flags.Required {
+			return nil, err
 		}
 		return nil, nil
-	case catalog.TypeDescriptor:
-		if desc.Dropped() {
-			return nil, nil
-		}
-		return desc, nil
 	}
-	return nil, nil
+	// Immediately after a RENAME an old name still points to the descriptor
+	// during the drain phase for the name. Do not return a descriptor during
+	// draining.
+	if _, ok := desc.(catalog.TableDescriptor); ok {
+		// This condition ensures that clusters < 20.1 access the
+		// system.namespace_deprecated table when selecting from system.namespace.
+		// As this table can not be renamed by users, it is okay that the subsequent
+		// check fails.
+		if object == systemschema.NamespaceTableName &&
+			db == systemschema.SystemDatabaseName {
+			return desc, nil
+		}
+	}
+	if desc.GetName() != object {
+		if flags.Required {
+			a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
+			return nil, sqlerrors.NewUndefinedObjectError(&a.tn, flags.DesiredObjectKind)
+		}
+		return nil, nil
+	}
+	return desc, nil
 }

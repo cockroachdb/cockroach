@@ -1260,17 +1260,47 @@ insert partial_indexes
  │    ├── column1:5 => a:1
  │    ├── column2:6 => b:2
  │    └── column3:7 => c:3
- ├── partial index put columns: column8:8 column9:9 column10:10 column11:11
+ ├── partial index put columns: partial_index_put1:8 partial_index_put2:9 partial_index_put3:10 partial_index_put4:11
  └── project
-      ├── columns: column8:8!null column9:9!null column10:10!null column11:11!null column1:5!null column2:6!null column3:7!null
+      ├── columns: partial_index_put1:8!null partial_index_put2:9!null partial_index_put3:10!null partial_index_put4:11!null column1:5!null column2:6!null column3:7!null
       ├── values
       │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    └── (2, 1, 'bar')
       └── projections
-           ├── column3:7 = 'foo' [as=column8:8]
-           ├── (column1:5 > column2:6) AND (column3:7 = 'bar') [as=column9:9]
-           ├── column3:7 = 'delete-only' [as=column10:10]
-           └── column3:7 = 'write-only' [as=column11:11]
+           ├── column3:7 = 'foo' [as=partial_index_put1:8]
+           ├── (column1:5 > column2:6) AND (column3:7 = 'bar') [as=partial_index_put2:9]
+           ├── column3:7 = 'delete-only' [as=partial_index_put3:10]
+           └── column3:7 = 'write-only' [as=partial_index_put4:11]
+
+# Do not error with "column reference is ambiguous" when table column names
+# match synthesized column names.
+exec-ddl
+CREATE TABLE t (
+    partial_index_put1 INT,
+    UNIQUE INDEX (partial_index_put1) WHERE partial_index_put1 > 0
+)
+----
+
+build
+INSERT INTO t (partial_index_put1) VALUES (1)
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => t.partial_index_put1:1
+ │    └── column5:5 => rowid:2
+ ├── partial index put columns: partial_index_put1:6
+ └── project
+      ├── columns: partial_index_put1:6!null column1:4!null column5:5
+      ├── project
+      │    ├── columns: column5:5 column1:4!null
+      │    ├── values
+      │    │    ├── columns: column1:4!null
+      │    │    └── (1,)
+      │    └── projections
+      │         └── unique_rowid() [as=column5:5]
+      └── projections
+           └── column1:4 > 0 [as=partial_index_put1:6]
 
 # Regression test for issue #52546. Building partial index predicate expressions
 # that are only a single column reference should not panic.

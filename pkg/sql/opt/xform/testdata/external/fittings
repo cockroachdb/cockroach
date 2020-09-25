@@ -2584,7 +2584,7 @@ project
       │    │    ├── ordering: -1
       │    │    └── limit hint: 900.00
       │    └── filters
-      │         └── items:10 @> '[32880]' [outer=(10), immutable]
+      │         └── items:10 @> '[32880]' [outer=(10), immutable, constraints=(/10: (/NULL - ])]
       └── 100
 
 # Find the 100 most recent Skybreakers. A Skybreaker is a very rare ship,
@@ -2639,5 +2639,5 @@ project
       │    │    ├── ordering: -1
       │    │    └── limit hint: 900.00
       │    └── filters
-      │         └── items:10 @> '[54731]' [outer=(10), immutable]
+      │         └── items:10 @> '[54731]' [outer=(10), immutable, constraints=(/10: (/NULL - ])]
       └── 100

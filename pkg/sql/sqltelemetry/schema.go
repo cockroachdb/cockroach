@@ -66,6 +66,10 @@ var (
 	// geometry inverted index is created. These are a subset of the
 	// indexes counted in InvertedIndexCounter.
 	GeometryInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.geometry_inverted_index")
+
+	// PartialIndexCounter is to be incremented every time a partial index is
+	// created.
+	PartialIndexCounter = telemetry.GetCounterOnce("sql.schema.partial_index")
 )
 
 var (

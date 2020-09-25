@@ -185,16 +185,22 @@ func (ef *execFactory) ConstructFilter(
 
 // ConstructInvertedFilter is part of the exec.Factory interface.
 func (ef *execFactory) ConstructInvertedFilter(
-	n exec.Node, invFilter *invertedexpr.SpanExpression, invColumn exec.NodeColumnOrdinal,
+	n exec.Node,
+	invFilter *invertedexpr.SpanExpression,
+	preFiltererExpr tree.TypedExpr,
+	preFiltererType *types.T,
+	invColumn exec.NodeColumnOrdinal,
 ) (exec.Node, error) {
 	inputCols := planColumns(n.(planNode))
 	columns := make(colinfo.ResultColumns, len(inputCols))
 	copy(columns, inputCols)
 	n = &invertedFilterNode{
-		input:         n.(planNode),
-		expression:    invFilter,
-		invColumn:     int(invColumn),
-		resultColumns: columns,
+		input:           n.(planNode),
+		expression:      invFilter,
+		preFiltererExpr: preFiltererExpr,
+		preFiltererType: preFiltererType,
+		invColumn:       int(invColumn),
+		resultColumns:   columns,
 	}
 	return n, nil
 }
@@ -389,63 +395,6 @@ func (ef *execFactory) ConstructMergeJoin(
 	node.reqOrdering = ReqOrdering(reqOrdering)
 
 	return node, nil
-}
-
-// ConstructInterleavedJoin is part of the exec.Factory interface.
-func (ef *execFactory) ConstructInterleavedJoin(
-	joinType descpb.JoinType,
-	leftTable cat.Table,
-	leftIndex cat.Index,
-	leftParams exec.ScanParams,
-	leftFilter tree.TypedExpr,
-	rightTable cat.Table,
-	rightIndex cat.Index,
-	rightParams exec.ScanParams,
-	rightFilter tree.TypedExpr,
-	leftIsAncestor bool,
-	onCond tree.TypedExpr,
-	reqOrdering exec.OutputOrdering,
-) (exec.Node, error) {
-	n := &interleavedJoinNode{
-		joinType:       joinType,
-		leftIsAncestor: leftIsAncestor,
-	}
-
-	left, err := ef.ConstructScan(leftTable, leftIndex, leftParams, nil /* reqOrdering */)
-	if err != nil {
-		return nil, err
-	}
-	n.left = left.(*scanNode)
-
-	right, err := ef.ConstructScan(rightTable, rightIndex, rightParams, nil /* reqOrdering */)
-	if err != nil {
-		return nil, err
-	}
-	n.right = right.(*scanNode)
-
-	if leftFilter != nil {
-		f := &filterNode{
-			source: asDataSource(n.left),
-		}
-		ivarHelper := tree.MakeIndexedVarHelper(f, len(f.source.columns))
-		n.leftFilter = ivarHelper.Rebind(leftFilter)
-	}
-
-	if rightFilter != nil {
-		f := &filterNode{
-			source: asDataSource(n.right),
-		}
-		ivarHelper := tree.MakeIndexedVarHelper(f, len(f.source.columns))
-		n.rightFilter = ivarHelper.Rebind(rightFilter)
-	}
-
-	pred := makePredicate(joinType, n.left.resultColumns, n.right.resultColumns)
-	n.columns = pred.cols
-	n.onCond = pred.iVarHelper.Rebind(onCond)
-
-	n.reqOrdering = ReqOrdering(reqOrdering)
-
-	return n, nil
 }
 
 // ConstructScalarGroupBy is part of the exec.Factory interface.
@@ -930,6 +879,11 @@ func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Node
 
 // ConstructScanBuffer is part of the exec.Factory interface.
 func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
+	if n, ok := ref.(*explain.Node); ok {
+		// This can happen if we used explain on the main query but we construct the
+		// scan buffer inside a separate plan (e.g. recursive CTEs).
+		ref = n.WrappedNode()
+	}
 	return &scanBufferNode{
 		buffer: ref.(*bufferNode),
 		label:  label,
@@ -1526,7 +1480,7 @@ func (ef *execFactory) ConstructUpsert(
 		// in the table.
 		ups.run.tw.tabColIdxToRetIdx = row.ColMapping(tabDesc.Columns, returnColDescs)
 		ups.run.tw.returnCols = returnColDescs
-		ups.run.tw.collectRows = true
+		ups.run.tw.rowsNeeded = true
 	}
 
 	if autoCommit {
@@ -1749,7 +1703,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 
 	expirationTime, err := parseExpirationTime(ef.planner.EvalContext(), expiration)
@@ -1770,7 +1724,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 
 	return &unsplitNode{
@@ -1783,7 +1737,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 
 	return &unsplitAllNode{
@@ -1797,7 +1751,7 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 	index cat.Index, input exec.Node, relocateLease bool,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
 	}
 
 	return &relocateNode{

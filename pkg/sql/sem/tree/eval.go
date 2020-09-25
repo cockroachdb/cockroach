@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -3027,8 +3028,9 @@ type EvalSessionAccessor interface {
 // interface only work on the gateway node (i.e. not from
 // distributed processors).
 type ClientNoticeSender interface {
-	// SendClientNotice sends a notice out-of-band to the client.
-	SendClientNotice(ctx context.Context, notice error)
+	// BufferClientNotice buffers the notice to send to the client.
+	// This is flushed before the connection is closed.
+	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 }
 
 // InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is

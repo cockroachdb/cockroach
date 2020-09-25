@@ -88,7 +88,8 @@ SELECT
 FROM %s S
 WHERE next_run < %s
 ORDER BY random()
-%s`, env.SystemJobsTableName(), CreatedByScheduledJobs,
+%s 
+FOR UPDATE`, env.SystemJobsTableName(), CreatedByScheduledJobs,
 		StatusSucceeded, StatusCanceled, StatusFailed,
 		env.ScheduledJobsTableName(), env.NowExpr(), limitClause)
 }
@@ -173,8 +174,9 @@ func (s *jobScheduler) processSchedule(
 
 	// Grab job executor and execute the job.
 	log.Infof(ctx,
-		"Starting job for schedule %d (%s); next run scheduled for %s",
-		schedule.ScheduleID(), schedule.ScheduleLabel(), schedule.NextRun())
+		"Starting job for schedule %d (%q); scheduled to run at %s; next run scheduled for %s",
+		schedule.ScheduleID(), schedule.ScheduleLabel(),
+		schedule.ScheduledRunTime(), schedule.NextRun())
 
 	if err := executor.ExecuteJob(ctx, s.JobExecutionConfig, s.env, schedule, txn); err != nil {
 		return errors.Wrapf(err, "executing schedule %d", schedule.ScheduleID())
@@ -297,7 +299,7 @@ func (s *jobScheduler) executeSchedules(
 		if processErr := withSavePoint(ctx, txn, func() error {
 			return s.processSchedule(ctx, schedule, numRunning, stats, txn)
 		}); processErr != nil {
-			if errors.HasType(err, (*savePointError)(nil)) {
+			if errors.HasType(processErr, (*savePointError)(nil)) {
 				return errors.Wrapf(err, "savepoint error for schedule %d", schedule.ScheduleID())
 			}
 

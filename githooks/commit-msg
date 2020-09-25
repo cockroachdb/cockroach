@@ -139,6 +139,7 @@ else
                 case $lcat in
                     "cli change") ;;
                     "sql change") ;;
+                    "api change") ;;
                     "admin ui change") ;;
                     "general change") ;;
                     "build change") ;;
@@ -153,6 +154,8 @@ else
                         hint "Try 'Release note ($lcat)' -> 'Release note (security update)'" ;;
                     sql*)
                         hint "Try 'Release note ($lcat)' -> 'Release note (sql change)'" ;;
+                    api*)
+                        hint "Try 'Release note ($lcat)' -> 'Release note (api change)'" ;;
                     "backwards-incompatible"*|"backward incompatible"*)
                         hint "Try '$lcat' -> 'backward-incompatible change'" ;;
                     *) hint "unknown category '$lcat'" ;;

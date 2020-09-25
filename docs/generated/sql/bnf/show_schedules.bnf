@@ -1,0 +1,5 @@
+show_schedules_stmt ::=
+	'SHOW' 'SCHEDULES' 'FOR' 'BACKUP'
+	| 'SHOW' 'RUNNING' 'SCHEDULES' 'FOR' 'BACKUP'
+	| 'SHOW' 'PAUSED' 'SCHEDULES' 'FOR' 'BACKUP'
+	| 'SHOW' 'SCHEDULE' a_expr

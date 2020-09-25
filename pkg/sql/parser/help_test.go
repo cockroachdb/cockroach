@@ -117,6 +117,8 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE DATABASE IF NOT ??`, `CREATE DATABASE`},
 		{`CREATE DATABASE blih ??`, `CREATE DATABASE`},
 
+		{`CREATE EXTENSION ??`, `CREATE EXTENSION`},
+
 		{`CREATE USER blih ??`, `CREATE ROLE`},
 		{`CREATE USER blih WITH ??`, `CREATE ROLE`},
 
@@ -241,6 +243,9 @@ func TestContextualHelp(t *testing.T) {
 		{`PAUSE JOBS ??`, `PAUSE JOBS`},
 		{`PAUSE SCHEDULE ??`, `PAUSE SCHEDULES`},
 		{`PAUSE SCHEDULES ??`, `PAUSE SCHEDULES`},
+
+		{`REASSIGN OWNED BY ?? TO ??`, `REASSIGN OWNED BY`},
+		{`REASSIGN OWNED BY foo, bar TO ??`, `REASSIGN OWNED BY`},
 
 		{`RESUME ??`, `RESUME`},
 		{`RESUME JOB ??`, `RESUME JOBS`},

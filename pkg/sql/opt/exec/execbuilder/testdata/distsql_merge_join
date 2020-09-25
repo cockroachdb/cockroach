@@ -1,0 +1,745 @@
+# LogicTest: 5node
+
+# The following tables form the interleaved hierarchy:
+#   name:             primary key:                # rows:   'a' = id mod X :
+#   parent1           (pid1)                      40        8
+#     child1          (pid1, cid1)                150       66
+#       grandchild1   (pid1, cid1, gcid1)         410       201
+#     child2          (pid1, cid2, cid3)          15        7
+#       grandchild2   (pid1, cid2, cid3, gcid2)   51        13
+#   parent2           (pid2)                      5         2
+# Additional rows in child1, child2, and grandchild1 with no corresponding
+# parent row are also inserted.
+#
+# All IDs belonging to a table (pid1 --> parent1, cid1 --> child1, cid2,cid3
+# --> child2, etc.) start from 1 up to (# rows).
+# Foreign keys are modded by their ancestor's (# rows). For example, for child1
+# row with cid1=500, we take ((cid1-1) % 200 + 1) = 100 as pid1.
+# One exception is cid3, which is taken as cid2 % 15.
+# There's a column 'a' that's modded by a factor.
+#
+# This allows us to test the following edge cases (in order of tests):
+#   - one-to-many (parent1 - child1)
+#   - one-to-one and one-to-none (parent1 - child2)
+#   - parent-grandchild (parent1 - grandchild1)
+#   - multiple interleaved columns (child2 - grandchild2)
+#   - additional ancestor above (child2 - grandchild2)
+#   - no interleaved relationship (parent1 - parent2, parent2 - child1)
+
+#################
+# Create tables #
+#################
+
+statement ok
+CREATE TABLE parent1 (pid1 INT PRIMARY KEY, pa1 INT, FAMILY (pid1,pa1))
+
+statement ok
+CREATE TABLE parent2 (pid2 INT PRIMARY KEY, pa2 INT, FAMILY (pid2, pa2))
+
+statement ok
+CREATE TABLE child1 (
+  pid1 INT,
+  cid1 INT,
+  ca1 INT,
+  PRIMARY KEY(pid1, cid1),
+  FAMILY (pid1,cid1,ca1)
+)
+INTERLEAVE IN PARENT parent1 (pid1)
+
+statement ok
+CREATE TABLE child2 (
+  pid1 INT,
+  cid2 INT,
+  cid3 INT,
+  ca2 INT,
+  PRIMARY KEY(pid1, cid2, cid3),
+  FAMILY (pid1,cid2,cid3,ca2)
+)
+INTERLEAVE IN PARENT parent1 (pid1)
+
+statement ok
+CREATE TABLE grandchild1 (
+  pid1 INT,
+  cid1 INT,
+  gcid1 INT,
+  gca1 INT,
+  PRIMARY KEY(pid1, cid1, gcid1),
+  FAMILY (pid1,cid1,gcid1,gca1)
+)
+INTERLEAVE IN PARENT child1 (pid1, cid1)
+
+# No foreign key since we are permitting the rows to overflow out of child2
+# for pid1 > 15.
+statement ok
+CREATE TABLE grandchild2 (
+  pid1 INT,
+  cid2 INT,
+  cid3 INT,
+  gcid2 INT,
+  gca2 INT,
+  PRIMARY KEY(pid1, cid2, cid3, gcid2),
+  FAMILY (pid1, cid2, cid3, gcid2, gca2)
+)
+INTERLEAVE IN PARENT child2 (pid1, cid2, cid3)
+
+####################
+# Split our ranges #
+####################
+
+# Split at parent1 key into five parts.
+statement ok
+ALTER TABLE parent1 SPLIT AT SELECT i FROM generate_series(8, 32, 8) AS g(i)
+
+# Split at child1 keys in between parent1 parts (total 10 parts).
+statement ok
+ALTER TABLE child1 SPLIT AT SELECT pid1, pid1 + 40 FROM
+generate_series(4, 36, 8) AS g(pid1)
+
+# Split at grandchild2 keys in between the 10 parts (total 20 parts).
+statement ok
+ALTER TABLE grandchild2 SPLIT AT SELECT pid1, pid1 + 40, pid1, pid1 FROM
+generate_series(2, 38, 4) AS g(pid1)
+
+# Relocate the twenty parts to the five nodes.
+statement ok
+ALTER TABLE grandchild2 EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[((i-1)/2)::INT%5+1], i, i+20, i, i FROM generate_series(1, 39, 2) AS g(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE parent1]
+----
+start_key                   end_key                     replicas  lease_holder
+NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
+/2/#/56/1/42/2/#/58/1/2     /4/#/55/1/44                {2}       2
+/4/#/55/1/44                /6/#/56/1/46/6/#/58/1/6     {3}       3
+/6/#/56/1/46/6/#/58/1/6     /8                          {4}       4
+/8                          /10/#/56/1/50/10/#/58/1/10  {5}       5
+/10/#/56/1/50/10/#/58/1/10  /12/#/55/1/52               {1}       1
+/12/#/55/1/52               /14/#/56/1/54/14/#/58/1/14  {2}       2
+/14/#/56/1/54/14/#/58/1/14  /16                         {3}       3
+/16                         /18/#/56/1/58/18/#/58/1/18  {4}       4
+/18/#/56/1/58/18/#/58/1/18  /20/#/55/1/60               {5}       5
+/20/#/55/1/60               /22/#/56/1/62/22/#/58/1/22  {1}       1
+/22/#/56/1/62/22/#/58/1/22  /24                         {2}       2
+/24                         /26/#/56/1/66/26/#/58/1/26  {3}       3
+/26/#/56/1/66/26/#/58/1/26  /28/#/55/1/68               {4}       4
+/28/#/55/1/68               /30/#/56/1/70/30/#/58/1/30  {5}       5
+/30/#/56/1/70/30/#/58/1/30  /32                         {1}       1
+/32                         /34/#/56/1/74/34/#/58/1/34  {2}       2
+/34/#/56/1/74/34/#/58/1/34  /36/#/55/1/76               {3}       3
+/36/#/55/1/76               /38/#/56/1/78/38/#/58/1/38  {4}       4
+/38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE child1]
+----
+start_key                   end_key                     replicas  lease_holder
+NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
+/2/#/56/1/42/2/#/58/1/2     /4/#/55/1/44                {2}       2
+/4/#/55/1/44                /6/#/56/1/46/6/#/58/1/6     {3}       3
+/6/#/56/1/46/6/#/58/1/6     /8                          {4}       4
+/8                          /10/#/56/1/50/10/#/58/1/10  {5}       5
+/10/#/56/1/50/10/#/58/1/10  /12/#/55/1/52               {1}       1
+/12/#/55/1/52               /14/#/56/1/54/14/#/58/1/14  {2}       2
+/14/#/56/1/54/14/#/58/1/14  /16                         {3}       3
+/16                         /18/#/56/1/58/18/#/58/1/18  {4}       4
+/18/#/56/1/58/18/#/58/1/18  /20/#/55/1/60               {5}       5
+/20/#/55/1/60               /22/#/56/1/62/22/#/58/1/22  {1}       1
+/22/#/56/1/62/22/#/58/1/22  /24                         {2}       2
+/24                         /26/#/56/1/66/26/#/58/1/26  {3}       3
+/26/#/56/1/66/26/#/58/1/26  /28/#/55/1/68               {4}       4
+/28/#/55/1/68               /30/#/56/1/70/30/#/58/1/30  {5}       5
+/30/#/56/1/70/30/#/58/1/30  /32                         {1}       1
+/32                         /34/#/56/1/74/34/#/58/1/34  {2}       2
+/34/#/56/1/74/34/#/58/1/34  /36/#/55/1/76               {3}       3
+/36/#/55/1/76               /38/#/56/1/78/38/#/58/1/38  {4}       4
+/38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE grandchild1]
+----
+start_key                   end_key                     replicas  lease_holder
+NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
+/2/#/56/1/42/2/#/58/1/2     /4/#/55/1/44                {2}       2
+/4/#/55/1/44                /6/#/56/1/46/6/#/58/1/6     {3}       3
+/6/#/56/1/46/6/#/58/1/6     /8                          {4}       4
+/8                          /10/#/56/1/50/10/#/58/1/10  {5}       5
+/10/#/56/1/50/10/#/58/1/10  /12/#/55/1/52               {1}       1
+/12/#/55/1/52               /14/#/56/1/54/14/#/58/1/14  {2}       2
+/14/#/56/1/54/14/#/58/1/14  /16                         {3}       3
+/16                         /18/#/56/1/58/18/#/58/1/18  {4}       4
+/18/#/56/1/58/18/#/58/1/18  /20/#/55/1/60               {5}       5
+/20/#/55/1/60               /22/#/56/1/62/22/#/58/1/22  {1}       1
+/22/#/56/1/62/22/#/58/1/22  /24                         {2}       2
+/24                         /26/#/56/1/66/26/#/58/1/26  {3}       3
+/26/#/56/1/66/26/#/58/1/26  /28/#/55/1/68               {4}       4
+/28/#/55/1/68               /30/#/56/1/70/30/#/58/1/30  {5}       5
+/30/#/56/1/70/30/#/58/1/30  /32                         {1}       1
+/32                         /34/#/56/1/74/34/#/58/1/34  {2}       2
+/34/#/56/1/74/34/#/58/1/34  /36/#/55/1/76               {3}       3
+/36/#/55/1/76               /38/#/56/1/78/38/#/58/1/38  {4}       4
+/38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
+
+###############
+# Merge joins #
+###############
+
+query TTT
+EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
+----
+·           distribution       full
+·           vectorized         true
+merge join  ·                  ·
+ │          equality           (pid1) = (pid1)
+ │          left cols are key  ·
+ ├── scan   ·                  ·
+ │          missing stats      ·
+ │          table              parent1@primary
+ │          spans              FULL SCAN
+ └── scan   ·                  ·
+·           missing stats      ·
+·           table              child1@primary
+·           spans              FULL SCAN
+
+# Select over two ranges for parent/child with split at children key.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
+----
+·                        distribution         full                 ·                             ·
+·                        vectorized           true                 ·                             ·
+project                  ·                    ·                    (pid1, pa1, cid1, ca1)        ·
+ │                       estimated row count  30 (missing stats)   ·                             ·
+ └── merge join (inner)  ·                    ·                    (pid1, pa1, pid1, cid1, ca1)  ·
+      │                  estimated row count  30 (missing stats)   ·                             ·
+      │                  equality             (pid1) = (pid1)      ·                             ·
+      │                  left cols are key    ·                    ·                             ·
+      │                  merge ordering       +"(pid1=pid1)"       ·                             ·
+      ├── scan           ·                    ·                    (pid1, pa1)                   +pid1
+      │                  estimated row count  3 (missing stats)    ·                             ·
+      │                  table                parent1@primary      ·                             ·
+      │                  spans                /3-/5/#              ·                             ·
+      │                  parallel             ·                    ·                             ·
+      └── scan           ·                    ·                    (pid1, cid1, ca1)             +pid1
+·                        estimated row count  30 (missing stats)   ·                             ·
+·                        table                child1@primary       ·                             ·
+·                        spans                /3/#/55/1-/5/#/55/2  ·                             ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEVN1q20wQvf-eYpnc2F_WrFY_LggMCo3bKjhyaru0kOpCkaa2QNGquxI0BL97kddgyTiK3bj0TrMzZ-bMmYOeQf3MwIX5eDJ-vyCVzMiH2fSW3I-_3U2u_ID0rv35Yv550ifbkv91QRFJzEtObqZ-QOJVmiWcfJn7wUfSK9KE98nXT-PZWAfke2UYFo6I1SdXwXXzMR4Rpx8ChVwkGESPqMC9Bw4UTKBgQUihkCJGpYSsU8-bQj_5Ba5BIc2LqtTPZVpmCC5UuZAJSkyAQoJllGZ1PlyHFGIhEdxdaSAGomDDvUIKoiq3bUMKqoyWCK69po3RvDH6QONF9JDhDKMEJTNa7WErm1fI9DGST0BhXkS5cgmzBsxmF8xxGGe2DW0iu94PT2QVqVW7q8dhs-GWLP9Tsma7rT7rIa5bouejbL5Iedfn0GHB45f14KOqDmx_i3KJNyLNUTK7jcnwR9nz-GV_JNPlSn8ChWlVusTj1DOpZ1PPgZcsY7VWMo-_Aj_WMg3xB8xhF2c0zQl0rSNNs8-2Dswzmsb8J6Zx_qZpjO4rzFAVIld41B_MqDfBZIlaHyUqGeOdFPFmjA6nG9zmIUFV6uw7Hfi5TtUEm2C-D-ZNsNUC89PAw26wecJk8zTwsBtsdQpmdNO23yJYN_gVwZy3CNYNfkWw4UmChev_fgcAAP__kmG_Pw==
+
+# Swap parent1 and child1 tables.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
+----
+·                        distribution         full                 ·                             ·
+·                        vectorized           true                 ·                             ·
+project                  ·                    ·                    (pid1, cid1, ca1, pa1)        ·
+ │                       estimated row count  30 (missing stats)   ·                             ·
+ └── merge join (inner)  ·                    ·                    (pid1, cid1, ca1, pid1, pa1)  ·
+      │                  estimated row count  30 (missing stats)   ·                             ·
+      │                  equality             (pid1) = (pid1)      ·                             ·
+      │                  right cols are key   ·                    ·                             ·
+      │                  merge ordering       +"(pid1=pid1)"       ·                             ·
+      ├── scan           ·                    ·                    (pid1, cid1, ca1)             +pid1
+      │                  estimated row count  30 (missing stats)   ·                             ·
+      │                  table                child1@primary       ·                             ·
+      │                  spans                /3/#/55/1-/5/#/55/2  ·                             ·
+      └── scan           ·                    ·                    (pid1, pa1)                   +pid1
+·                        estimated row count  3 (missing stats)    ·                             ·
+·                        table                parent1@primary      ·                             ·
+·                        spans                /3-/5/#              ·                             ·
+·                        parallel             ·                    ·                             ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEVE1r20AQvfdXLNOL3ayRVh8uCAwKjdsqOHJqu7SQ6qBIU1ugaNXdFTQE__dir8GScRSrcelNszNv5s2bh55A_srBg_l4Mv6wIJXIycfZ9Ibcjb_fTi6DkPSugvli_mXSJ7uSd7ogWWV5ysj1NAhJGQssFCNf50H4ifTKLGV98u3zeDbWAflRmaaNI2L3yWV4VX9MRsTtR0Ch4CmG8QNK8O6AAQULKNgQUSgFT1BKLjapp21hkP4Gz6SQFWWl9LPKVI7gQVVwkaLAFCikqOIs3-SjdUQh4QLB25eGfMBLY3hQSIFXatc2oiBVvETwnDWtjWa10UcaL-L7HGcYpygMs9EetGx-KbKHWDwChXkZF9Ijhm28NVzXYAPD2X0ZjgNNOvsJ949kFctVs7fPYLvnjjL7W8pWs-3uusc4n4-s9SzZfZ9jhwWfXWwGn1R1ZO8bFEu85lmBwnCamBx_qp7PLvojkS1X-hMoTCvlEZ9R36K-TX0XnrOM3VjJOl1_dqJlatoPDFcH1hkt04GyfaplDjmf0TTWfzGN-y9NY7ZfYIay5IXEk_5g5mYTTJeo9ZG8EgneCp5sx-hwusVtH1KUSmff6yAodGpDsA5mh2BWB9sNMOsGHraDrQ6TrW7gYTvYbhXMbKftvEawdvALgrmvEawd_IJgw06CRes3fwIAAP__OOu_PQ==
+
+# Select over two ranges for parent/child with split at grandchild key.
+# Also, rows with pid1 <= 30 should have 4 rows whereas pid1 > 30 should
+# have 3 rows.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1
+----
+·                   distribution         full                   ·                             ·
+·                   vectorized           true                   ·                             ·
+merge join (inner)  ·                    ·                      (pid1, pa1, pid1, cid1, ca1)  +pid1
+ │                  estimated row count  30 (missing stats)     ·                             ·
+ │                  equality             (pid1) = (pid1)        ·                             ·
+ │                  left cols are key    ·                      ·                             ·
+ │                  merge ordering       +"(pid1=pid1)"         ·                             ·
+ ├── scan           ·                    ·                      (pid1, pa1)                   +pid1
+ │                  estimated row count  3 (missing stats)      ·                             ·
+ │                  table                parent1@primary        ·                             ·
+ │                  spans                /29-/31/#              ·                             ·
+ │                  parallel             ·                      ·                             ·
+ └── scan           ·                    ·                      (pid1, cid1, ca1)             +pid1
+·                   estimated row count  30 (missing stats)     ·                             ·
+·                   table                child1@primary         ·                             ·
+·                   spans                /29/#/55/1-/31/#/55/2  ·                             ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy8UtFum0AQfO9XnDYvcXPpcYdxGiRLpA1VHTmQYkttlfJAYGsjEY4eIDWy_O8VxpWLZRNct3ljb3d2doZZQP4jARMm9th-PyWlSsgHz70l9_aXu_HVyCGn16PJdPJp3CPrkdf1QBYoTAtObtyRQ8J5nEScuM7v5zdZHHEyXDfq6vNH27PJaWPiW6lpOg6JuOyRK-d6VzccEp33iOtd2x5597XB4AOFVEboBI-Yg3kPHCgY4FPIlAwxz6WqnheroVH0E0yNQpxmZVE9-xRCqRDMBRRxkSCYMA0eEvQwiFCxaleERRAnq9VrXitT8WOgnoDCJAvS3CRM19gJMwaMswttXbxlnOnaOdM5OwF_SUGWxZp1Q_bwROZBPm_SWBz8pU8hL4IZgsmX9O-u15tr6x9x-PHMMJg4SoHYq2CzR6oIFUbbe84q4k5TO8y4RTXDGxmnqJjRxCT4vTi1-FlvqOLZvP4ECm5ZmMTi1BLU0qnVp5axpXyjSj9O1Y57HXkuMzZoTO9j7zfYefdUaF0zLS7P90fjHyb6gNtFx0SLyzq2_H8pEHsVvFyi-y-Y6B2neJhnMs2xU1q1SgxGM6wtymWpQrxTMlzR1KW7wq3cjDAv6u6gLkZp3aoO7A4W7WB-ALM4DCzawWIbrP0J1tvP1lvBFw2wtg3uH-N2O_gZt41j3G4HP-P24CC3_eWrXwEAAP__iRfeKg==
+
+# Parent-child where pid1 <= 15 have one joined row and pid1 > 15 have no
+# joined rows (since child2 only has 15 rows up to pid1 = 15).
+# Note this spans all 5 nodes, which makes sense since we want to read all
+# parent rows even if child rows are non-existent (so we can support OUTER
+# joins).
+# TODO(richardwu): we can remove nodes reading from just one table for INNER
+# joins or LEFT/RIGHT joins.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1
+----
+·                        distribution         full                 ·                                   ·
+·                        vectorized           true                 ·                                   ·
+project                  ·                    ·                    (pid1, pa1, cid2, cid3, ca2)        +pid1
+ │                       estimated row count  333 (missing stats)  ·                                   ·
+ └── merge join (inner)  ·                    ·                    (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
+      │                  estimated row count  333 (missing stats)  ·                                   ·
+      │                  equality             (pid1) = (pid1)      ·                                   ·
+      │                  left cols are key    ·                    ·                                   ·
+      │                  merge ordering       +"(pid1=pid1)"       ·                                   ·
+      ├── scan           ·                    ·                    (pid1, pa1)                         +pid1
+      │                  estimated row count  333 (missing stats)  ·                                   ·
+      │                  table                parent1@primary      ·                                   ·
+      │                  spans                /12-                 ·                                   ·
+      └── scan           ·                    ·                    (pid1, cid2, cid3, ca2)             +pid1
+·                        estimated row count  333 (missing stats)  ·                                   ·
+·                        table                child2@primary       ·                                   ·
+·                        spans                /12/#/56/1-          ·                                   ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1vuzYUxu_3Kayzm3Z_R2Dz0gSpEtuabanapEs6bVOXCxq8BCkFZoi0qsp3n4B0WV7wgVnhLg78sB-f38XzAdlfa_BgNnwYfv9MNnJNfphOHsnL8Lenh29HY3J1N5o9z35-uCa7V76pXkgDKeKckfvJaEwWq2gdcvLLbDT-kVylUciuya8_DadDUvwmf2xM0xK3hHEymd4Np-S738sHc6AQJ6EYB28iA-8FGFDgQMECCjZQcGBOIZXJQmRZIotXPkpgFP4NnkkhitNNXvw9p7BIpADvA_IoXwvw4Dl4XYupCEIhDRMohCIPonW5ze7sfiqjt0C-A4VZGsSZRwzGewbjxteG4xjMcDgJ4pBwkuQrITOYbykkm3y3536r13eyCrLV4SY-g_l2TiHLg6UAj23p_zv74PCz1VWfOTo3P4_tmj2DlyHcYsV3i77BDF4lYlUirUC8NtD-O4kMhRTh8Xe-FBs3euvM3TwKuRT3SRQLabCjwa7Fn_mVz75c38pouap-AoXJJveIz6jPqW9T36G-exR9H8vSi3XmwOOkl6QGcw5er9vePtieNdeENVd8r3fPYPanJ469WxSeMPtS5reI5DQ0n3263kkcXhunQ-_Zhb3nzafEG4tXN5uewdxL6dYiiNtUt25y8NocHXrGL-yZ1Xw8VmPP3J7B-v_OqL9blDPqX8qzFkFumnrWTQ5em6NDz6wLe2Y3H4_d2LO62fQOutiljGsRqd_UuK4T8dpEHbpnd9ghz5xlKrI0iTPRqB6aRRoRLkV1R1mykQvxJJNFuU21nJRcWU1CkeXVU14tRnH1qDhgc9jVgQc6MNM6N3PUNGtxZbwd7OrAAx2YaZ376MpOaH5Mm_-lLfV9W0qYHd6ZeUzbOoKrYURwNYwIroYxwREaEdzREVwNI4KrYURwNYwJjtCI4K6O4Dc6iqphRFE1jCiqhjFFERpRtK-jqBpGFFXDiKJqGFMUoRFFBzqKMq2egNCIpAiNWIrQmKYYjnUFvbKg1xb06oJmX9ArDEyrMbCTytDKVjWN2aqmMVvVNGorgmO2tilLpzNr05ba0pitrfpSaxyz9aQ8KG2db7_6JwAA__9-zsYU
+
+# These rows are all on the same node 1 (gateway).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1
+----
+·                        distribution         full                                                                                   ·                                   ·
+·                        vectorized           true                                                                                   ·                                   ·
+project                  ·                    ·                                                                                      (pid1, pa1, cid2, cid3, ca2)        +pid1
+ │                       estimated row count  40 (missing stats)                                                                     ·                                   ·
+ └── merge join (inner)  ·                    ·                                                                                      (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
+      │                  estimated row count  40 (missing stats)                                                                     ·                                   ·
+      │                  equality             (pid1) = (pid1)                                                                        ·                                   ·
+      │                  left cols are key    ·                                                                                      ·                                   ·
+      │                  merge ordering       +"(pid1=pid1)"                                                                         ·                                   ·
+      ├── scan           ·                    ·                                                                                      (pid1, pa1)                         +pid1
+      │                  estimated row count  4 (missing stats)                                                                      ·                                   ·
+      │                  table                parent1@primary                                                                        ·                                   ·
+      │                  spans                /1-/1/# /11-/11/# /21-/21/# /31-/31/#                                                  ·                                   ·
+      │                  parallel             ·                                                                                      ·                                   ·
+      └── scan           ·                    ·                                                                                      (pid1, cid2, cid3, ca2)             +pid1
+·                        estimated row count  40 (missing stats)                                                                     ·                                   ·
+·                        table                child2@primary                                                                         ·                                   ·
+·                        spans                /1/#/56/1-/1/#/56/2 /11/#/56/1-/11/#/56/2 /21/#/56/1-/21/#/56/2 /31/#/56/1-/31/#/56/2  ·                                   ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJycktFv0zAQxt_5K063lxaMUrtsD5GQAixApq4ZSRGgKQ8mPtpImR1sRwJV_d9RnEqjUweUt_P5-86_7-Qtuu8txlimi_TNCnrbwtsiv4bb9PPN4lW2hMllVq7KD4sp7CVPR0EnLWnP4SrPllBvmlYJ-Fhmy3cw6RrFp_DpfVqkMNQwjOEMOGcgOIM5n0JeXKYFvP4SBBUy1EbRUt6Rw_gWOVYMO2tqcs7YobUNgkz9wHjGsNFd74d2xbA2ljDeom98SxjjSn5tqSCpyEYzZKjIy6YNY_fMSWebO2l_IsOyk9rFEPHnEY_OQGoFczB-Q9ZhtWNoen__kvNyTRjzHfs_Gn5IMy7tGEx0Fp1f7JmGSvwbmHgU7J6n18YqsqQOWKrB-TfJkXTXZNd0ZRpNNhKH6Vr65icJfzZ9aZv1ZiyRYd77GBLOEsGSFyw5Z8nFo3nmpyy6INcZ7ehhrqOTZ0MYUmsal-NMb2u6saYOz4zHPPhCQ5Hz460YD5kOV-En_G7mJ5jFQ7P4o3l-YJ7tqt2TXwEAAP__rsIvEw==
+
+# Parent-grandchild.
+# We add the pa1 > 0 condition so a lookup join is not considered to be a better plan.
+query TTTTT
+EXPLAIN (VERBOSE)
+  SELECT * FROM parent1 JOIN grandchild2 USING(pid1) WHERE
+    pid1 >= 11 AND pid1 <= 13
+    OR pid1 >= 19 AND pid1 <= 21
+    OR pid1 >= 31 AND pid1 <= 33
+    OR pa1 > 0
+----
+·                        distribution         full                                                                                                                    ·                                           ·
+·                        vectorized           true                                                                                                                    ·                                           ·
+project                  ·                    ·                                                                                                                       (pid1, pa1, cid2, cid3, gcid2, gca2)        ·
+ │                       estimated row count  1000 (missing stats)                                                                                                    ·                                           ·
+ └── merge join (inner)  ·                    ·                                                                                                                       (pid1, pa1, pid1, cid2, cid3, gcid2, gca2)  ·
+      │                  estimated row count  1000 (missing stats)                                                                                                    ·                                           ·
+      │                  equality             (pid1) = (pid1)                                                                                                         ·                                           ·
+      │                  left cols are key    ·                                                                                                                       ·                                           ·
+      │                  merge ordering       +"(pid1=pid1)"                                                                                                          ·                                           ·
+      ├── filter         ·                    ·                                                                                                                       (pid1, pa1)                                 +pid1
+      │    │             estimated row count  333 (missing stats)                                                                                                     ·                                           ·
+      │    │             filter               ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)  ·                                           ·
+      │    └── scan      ·                    ·                                                                                                                       (pid1, pa1)                                 +pid1
+      │                  estimated row count  1000 (missing stats)                                                                                                    ·                                           ·
+      │                  table                parent1@primary                                                                                                         ·                                           ·
+      │                  spans                FULL SCAN                                                                                                               ·                                           ·
+      └── scan           ·                    ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2)             +pid1
+·                        estimated row count  1000 (missing stats)                                                                                                    ·                                           ·
+·                        table                grandchild2@primary                                                                                                     ·                                           ·
+·                        spans                FULL SCAN                                                                                                               ·                                           ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+  SELECT * FROM parent1 JOIN grandchild2 USING(pid1) WHERE
+    pid1 >= 11 AND pid1 <= 13
+    OR pid1 >= 19 AND pid1 <= 21
+    OR pid1 >= 31 AND pid1 <= 33
+    OR pa1 > 0
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl19v4kYUxd_7KUa3L9AdZI_HdsBSJK-6bMsqC1tI1UpbHrx4CpZY2x0bqaso370yhoQ4zlzPTtK88Gbj-5s_95wjXW6g-GcLASzGV-Ofr8lObsn7-ewj-Tz-89PV28mU9N5NFteL36765FDyU12QR1KkJSMfZpMpWcsojVebZBs75PfFZPoL6eVJzPrkj1_H8zHp9Xr7d_LXzra5uCSM9cnb6Tty8uvqkjDe75PZnDSLR23FDuu3VvPWpTk_VufRsZbY_SVQSLNYTKOvooDgMzCg4AAFDhRcoODBkkIus5UoikxWJTd7YBL_C4FNIUnzXVn9vKSwyqSA4AbKpNwKCOA6-rIVcxHFQlo2UIhFGSXb_TaH5oW5TL5G8htQWORRWgRkYDnWj5bnW8xynfp5aDHLIVEaE06yciNkARTeJ9tSyGDf2fC0r0EQTKbXw0MPwtPmHj8dunaKjZ7EnLsVWzj-9HacN7jQuWv78Qssbylku_LQwvvOfflGNlGxedizkMHydkmhKKO1gIDd0u-Twnu47Il1v1cOk2s4T17jfp1MxkKKuLnOm2rjTlUtHfko5Fp8yJJUSIs13LkVf5e9kL3pX8pkvakfgcJsVwYkZDR0aOjS0KOhT8OLxu3vb8Y73GyXtp269cDTbJDlFvMale17uw_2Zt3NwTrm9AlfDCy3evaq391zZtWZ1ZDF18isvjTPl1_2OvllL59fp7tYTtcMnQgysPw71fz6uVLNP2dInSENWS50MqQtzfNlyHmdDDkvnyHeXSzeNUPt2gys4Tk56uRoiDHUSU5HQZ4vL_x18sJfPi9ud4ncrnkZDixmHyXy7MNLpRGzz5FRR0ZDj5FOZLpr8nypcV8nNe7_-0-r5ThzUeRZWohO_6Ps6kIiXou6TUW2kyvxSWar_Tb162zP7WffWBRl_dWpXyZp_ak6YHfYN4FHJjAzOjfz1DTTaJmjB_sm8MgEZkbnbrTsEe00afuU5up-cyXMHvbMbtKuicHVMGJwNYwYXA1jBkdoxOCeicHVMGJwNYwYXA1jBkdoxOC-icEvTCyqhhGLqmHEomoYsyhCIxYdmlhUDSMWVcOIRdUwZlGERiw6MrEoM5oTEBoxKUIjLkVozKYYjs0KZsOC2bRgNi4YzgtmAwMzmhjYo5FBy61qGnOrmsbcqqZRtyI45ladYemxZjrTki6NuVVrXtLGMbc-Gh6Ubl3e_vBfAAAA__8sedd5
+
+query TTTTT
+EXPLAIN (VERBOSE)
+  SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
+    pid1 >= 11 AND pid1 <= 13
+    OR pid1 >= 19 AND pid1 <= 21
+    OR pid1 >= 31 AND pid1 <= 33
+    OR pa1 > 0
+----
+·                        distribution         full                                                                                                                    ·                                           ·
+·                        vectorized           true                                                                                                                    ·                                           ·
+project                  ·                    ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2, pa1)        ·
+ │                       estimated row count  1000 (missing stats)                                                                                                    ·                                           ·
+ └── merge join (inner)  ·                    ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2, pid1, pa1)  ·
+      │                  estimated row count  1000 (missing stats)                                                                                                    ·                                           ·
+      │                  equality             (pid1) = (pid1)                                                                                                         ·                                           ·
+      │                  right cols are key   ·                                                                                                                       ·                                           ·
+      │                  merge ordering       +"(pid1=pid1)"                                                                                                          ·                                           ·
+      ├── scan           ·                    ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2)             +pid1
+      │                  estimated row count  1000 (missing stats)                                                                                                    ·                                           ·
+      │                  table                grandchild2@primary                                                                                                     ·                                           ·
+      │                  spans                FULL SCAN                                                                                                               ·                                           ·
+      └── filter         ·                    ·                                                                                                                       (pid1, pa1)                                 +pid1
+           │             estimated row count  333 (missing stats)                                                                                                     ·                                           ·
+           │             filter               ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)  ·                                           ·
+           └── scan      ·                    ·                                                                                                                       (pid1, pa1)                                 +pid1
+·                        estimated row count  1000 (missing stats)                                                                                                    ·                                           ·
+·                        table                parent1@primary                                                                                                         ·                                           ·
+·                        spans                FULL SCAN                                                                                                               ·                                           ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+  SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
+    pid1 >= 11 AND pid1 <= 13
+    OR pid1 >= 19 AND pid1 <= 21
+    OR pid1 >= 31 AND pid1 <= 33
+    OR pa1 > 0
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl0Fv2zYUx-_7FMTbxV5pSCQlxxYQQMWabi5Su7MzbEDng2pxtgBX0igZWBHkuw-y7MRRFD6xhJdLbpLFH8lH_v7A8y0U_2whgMXV9dXPN2SntuT9fPaRfL7689P128mU9N5NFjeL36775DDkp3rAWkVpvNok25iTD7PJlOSRkmnJyO-LyfQX0suTmPXJH79eza9Ir9fbv5O_dq4r5CVhrE_eTt-Rk19Xl4SJfp_M5qQ5eNw2mLN-62jROrUQx9F5dBxL3P4SKKRZLKfRV1lA8BkYUOBAQQAFDyj4sKSQq2wliyJT1ZDbPTCJ_4XApZCk-a6sfl5SWGVKQnALZVJuJQRwE33ZyrmMYqkcFyjEsoyS7X6Zk8MLc5V8jdQ3oLDIo7QIyMDhzo-OP3SY4_H6eeQwh5MojYkgWbmRqoDlHYVsVx6Wf1j1yzeyiYrN4_VCBsu7JYWijNYSAnZHv68M__G0hyv_3hIovE-2pVTBXpDwVI8gCCbTm9HhKsNTR46fDpd_io2fxfj9jC2ceH45IRpcyO_tOX6xugr-7FU8zJOpWCoZN-d5Uy3caVTLrX6Uai0_ZEkqlcMadm7l32UvZG_6lypZb-pHoDDblQEJGQ05DQUNPRr6NLxoVP9QmehQ2S5t23XrhqfZIMsd5jdGtq_tPVqbdRecGeT0GccHjlc9-9Xv3rkya1DSsGNmzct5zW8zv-xl8svOn1_eXThukqETuQbO8N7AYf1cGTg8V4YMSrromiHjcl4z1MwQf5kM8fNnSHQXTphkqN2zgTM6V3IMChl1TU7HIl7z0syLeJm8iPPnxeuumWeSl9HAYe5RN989vFS-MfdckTGoZdw1Mt3reE1NMzXey6TG-3__abVsZy6LPEsL2el_lFsVJOO1rI-pyHZqJT-pbLVfpn6d7bl97xvLoqy_8vplktafqg12h4c28NgGZlb7Zr6eZgZHxs3goQ08toGZ1b4bR_aE5k3aPaWF_ryFFmaPz8xt0p6N4HoYEVwPI4LrYUxwhEYE920E18OI4HoYEVwPY4IjNCL40EbwCxtF9TCiqB5GFNXDmKIIjSg6slFUDyOK6mFEUT2MKYrQiKJjG0WZVZ-A0IikCI1YitCYphiO9Qp2zYJdt2DXLlj2C3YNA7PqGNiTlsHIVj2N2aqnMVv1NGorgmO2mjRLT-_MpFsypTFbjfolYxyz9UnzoLV1effDfwEAAP__sfHXag==
+
+query TTT
+EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
+  pid1 >= 11 AND pid1 <= 13
+  OR pid1 >= 19 AND pid1 <= 21
+  OR pid1 >= 31 AND pid1 <= 33
+  OR pa1 > 0
+----
+·               distribution        full
+·               vectorized          true
+merge join      ·                   ·
+ │              equality            (pid1) = (pid1)
+ │              right cols are key  ·
+ ├── scan       ·                   ·
+ │              missing stats       ·
+ │              table               grandchild2@primary
+ │              spans               FULL SCAN
+ └── filter     ·                   ·
+      │         filter              ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
+      └── scan  ·                   ·
+·               missing stats       ·
+·               table               parent1@primary
+·               spans               FULL SCAN
+
+# Join on multiple interleaved columns with an overarching ancestor (parent1).
+# Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14
+# creates a giant parent span which requires reading from all rows.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+  SELECT * FROM child2 JOIN grandchild2 ON
+    child2.pid1=grandchild2.pid1
+    AND child2.cid2=grandchild2.cid2
+    AND child2.cid3=grandchild2.cid3
+  WHERE
+    child2.pid1 >= 5 AND child2.pid1 <= 7
+    OR child2.cid2 >= 12 AND child2.cid2 <= 14
+    OR gcid2 >= 49 AND gcid2 <= 51
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzkl9-O4jYUh-_7FNbpDemYJs6_gUgjZdVlVVazsGVGaqUtF1niQiQ2oU6QuhrNu1chMCSB9YnXOxqkuQuOv9jH_n7S4QHyf9cQwN3odvTbPdmKNXk3m34gn0Z_fbx9M56Q3tvx3f3dH7cG2U_5pZqwWCXr2Cbvp-MJWYoojfcD0wnp9arnXzdJzMhN_fVuyCBvJm_JYdIiie3WpHLIOJnlnM5yDPLn76PZiPSaa_69tSyH3xCv-ZHju8UNuTYMMp0dN7vbxwFk9plNHkjmGgd22aDc4Z5aNuZ7zDDmQCHNYj6JvvAcgk_AgIINFByg4AIFD-YUNiJb8DzPRDnlYQeM4_8gsCgk6WZblMNzCotMcAgeoEiKNYcA7qPPaz7jUcyFaQGFmBdRst4tU-0_3IjkSyS-AoW7TZTmAembtvmz6fkmM127eh6YzLRJlMbEIVmx4iKH-SOFbFvsVz4u-PkrWUX5qrlUyGho09CB-eOcQl5ESw4Be6TfV4fX_Hjt4r-3GArvknXBRVDaEtYkCYJgPLkf7O8urClyeLO_7bAuSIuq6_GEHTi3pkiLc2uaPHE_4ODtbx788WuZiLngcftrVzS0r2joXJXbUJp95k4_cLHk77Mk5cJkLTnX_J-iV_uCcSOS5ao5BBSm2yIghyJp6NLQo6FPw2saDmg4bB3W8QicDkewTc-VdbaSSdbPNibzWjPPr-021mbdvWfd8vsN4_umWz575bj7vFlWqMlXyLJ6Ya851-wycs1eMNd2dw_tjtmqqdY3_Scf_eq59NF_3mwp1HStki3lwl5ztuzLyJb9gtlyunvodMzWeev65uB5E6VQyUAlUR3Lec05ci4jR84L5sjtbp_bMUeDvsmsg3yetf9R2ses542SQjFDlSh1r-g1p8m9jDS5F_JP7sw-ZzzfZGnOO_1Ps8pKebzk1Xnm2VYs-EeRLXbLVD-nO27XbMc8L6q3dvVjnFavyg12h30deKgDM619M09OM4Ujs9VgXwce6sBMa9-tIzuh7TZt1WlHft6OFGbNM7PatKsjuBxGBJfDiOByGBMcoRHBPR3B5TAiuBxGBJfDmOAIjQju6wh-raOoHEYUlcOIonIYUxShEUUHOorKYURROYwoKocxRREaUXSooyjT6hMQGpEUoRFLERrTFMOxXkGvWdDrFvTaBc1-Qa9hYFodAztpGZRsldOYrXIas1VOo7YiOGarSrN0emcq3ZIqjdmq1C8p45itJ82D1Nb540__BwAA__-TjQ6E
+
+query TTT
+EXPLAIN
+  SELECT * FROM child2 JOIN grandchild2 ON
+    child2.pid1=grandchild2.pid1
+    AND child2.cid2=grandchild2.cid2
+    AND child2.cid3=grandchild2.cid3
+  WHERE
+    child2.pid1 >= 5 AND child2.pid1 <= 7
+    OR child2.cid2 >= 12 AND child2.cid2 <= 14
+    OR gcid2 >= 49 AND gcid2 <= 51
+----
+·               distribution       full
+·               vectorized         true
+merge join      ·                  ·
+ │              equality           (pid1, cid2, cid3) = (pid1, cid2, cid3)
+ │              left cols are key  ·
+ ├── scan       ·                  ·
+ │              missing stats      ·
+ │              table              child2@primary
+ │              spans              FULL SCAN
+ └── filter     ·                  ·
+      │         filter             (((pid1 >= 5) AND (pid1 <= 7)) OR ((cid2 >= 12) AND (cid2 <= 14))) OR ((gcid2 >= 49) AND (gcid2 <= 51))
+      └── scan  ·                  ·
+·               missing stats      ·
+·               table              grandchild2@primary
+·               spans              FULL SCAN
+
+# Aggregation over parent and child keys.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+  SELECT sum(parent1.pid1), sum(child1.cid1) FROM parent1 JOIN child1 USING(pid1) WHERE
+    pid1 >= 10 AND pid1 <= 39
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl1Fvo0YQgN_7K1bTF1uHD3YBGyNFctRzW58S5xrn1EpXP3BmayM54C4g9RTlv1eAlWBwdtgA8psX-HZndr_xwBPE_-7BhdX8Zv7LA0nFnvx6f3dLvs3_-nJzvViSwafF6mH1x82QHB-J08fBwRM8TOjHQ-DToZZf2uyCvU8_brIrxRTHh8jnu8WSFLfJ19Vi-RsZ5Bz58_f5_bwYkL9TwzD5FaHGkFwvP5Wvbq6IOR2uQYMw8vnSe-QxuN-AggYMNDBBAws0sGGtwUFEGx7HkcgeecqBhf8fuIYGQXhIk-zyWoNNJDi4T5AEyZ6DCw_e9z2_557PhZ7N6_PEC_b5MscsZgcRPHriB2iwOnhh7BKdGvrPuj3WqW4bx4GjU50aI52ybGRntxjxQp8wEiU7LmLQ4C5NXDKjsH7WIEqTY1CvsXz_QXZevDuNIn9-rUGceFsOLn3W3pfc-HTa4lQ6z02bsVbpsTfTe50nEj4X3K_O8yFbuNFTZ3bqlost_xwFYaZBxYM9_ycZzOiH4ZUItrviZzljs5LxazamymFdb7eCb70kEjqtHNbq6-1gRrNF819s-OaKVoP9S8Nze3N2W0oxMeO9MdknMdHmyrLG9VgSc6RT68Vg6zjIDbb6r0eF5CZN67FVbt3WI71MPbJ-6hE5rHI9TrqpR9ZcD7Ox-28ZMdLpuH_jFVJymhr_joy69ZxdxnOzH8-RIyp77nTjudlcCqux5-ORTp0XM5zjIDfD6d9zhZSmTT1_R0bdem5exnOrH8-RIyp7Pu3Gc6u5FEbzb4vR2-_guRVmn54rpGQrfVHYOlVPrFvdrcvobvSjO3JSZd3t7j8nzqx4z-NDFMa88llxfmYj2zbub3lxGHGUig3_IqJNvkwxvMu5_EXN53FS3KXTYrQIi3tZhM1p1gaetIEpbUXbcpqq7BlTo1kbeNIGruyZKm3LaValjTJtnsBGFTalsCU_LUsKMypf2m5VH3IaqQ85jNQHEjdSHwiN1Me4VX3IaaQ-5DBSH0jcSH0gNFIfE6mljlxSp019TFsZLqcRw-UwYjgSN2I4QmMdQKlt1v9KVfqmKo01AaXOqYwjmtNaFzlRlTK56FTeRhDTaa2PKKmO4IjrCI3IjoWO2I7hmO61HqqmuxzHdJfTmO5I6JjuCI7pXmukp7qPEd1rPUVJ91pPUdNdjmO6y2lMdyR0THcEx3Sv9VM13eU4prucxnRHQsd0R3BM91pXPX3XNuS6s1pvkeq-fv7p_wAAAP__5IILNw==
+
+###############
+# Outer joins #
+###############
+
+# The schema/values for each table are as follows:
+# Table:        pkey:                     pkey values (same):   values:
+# outer_p1      (pid1)                    {1, 2, 3, ... 20}     100 + pkey
+# outer_c1      (pid1, cid1, cid2)        {2, 4, 6, ... 28}     200 + pkey
+# outer_gc1     (pid1, cid1, cid2, gcid1) {4, 8, 12, ... 36}    300 + pkey
+
+# Split between 4 nodes based on pkey value (p):
+# node 1:       p - 1 mod 20 ∈ [1...5)
+# node 2:       p - 1 mod 20 ∈ [5...10)
+# node 3:       p - 1 mod 20 ∈ [10...15)
+# node 4:       p - 1 mod 20 ∈ [15...20)
+
+statement ok
+CREATE TABLE outer_p1 (
+  pid1 INT PRIMARY KEY,
+  pa1 INT,
+  FAMILY (pid1, pa1)
+)
+
+statement ok
+CREATE TABLE outer_c1 (
+  pid1 INT,
+  cid1 INT,
+  cid2 INT,
+  ca1 INT,
+  PRIMARY KEY (pid1, cid1, cid2),
+  FAMILY (pid1, cid1, cid2)
+) INTERLEAVE IN PARENT outer_p1 (pid1)
+
+statement ok
+CREATE TABLE outer_gc1 (
+  pid1 INT,
+  cid1 INT,
+  cid2 INT,
+  gcid1 INT,
+  gca1 INT,
+  PRIMARY KEY (pid1, cid1, cid2, gcid1),
+  FAMILY (pid1, cid1, cid2)
+) INTERLEAVE IN PARENT outer_c1 (pid1, cid1, cid2)
+
+statement ok
+ALTER TABLE outer_p1 SPLIT AT
+  SELECT i FROM generate_series(0, 40, 5) AS g(i)
+
+statement ok
+ALTER TABLE outer_p1 EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE outer_p1]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /0       {5}       5
+/0         /5       {1}       1
+/5         /10      {2}       2
+/10        /15      {3}       3
+/15        /20      {4}       4
+/20        /25      {1}       1
+/25        /30      {2}       2
+/30        /35      {3}       3
+/35        /40      {4}       4
+/40        NULL     {5}       5
+
+### Begin OUTER queries
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)
+----
+·                             distribution         full                  ·                                   ·
+·                             vectorized           true                  ·                                   ·
+render                        ·                    ·                     (pid1, pa1, cid1, cid2, ca1)        ·
+ │                            estimated row count  1000 (missing stats)  ·                                   ·
+ │                            render 0             COALESCE(pid1, pid1)  ·                                   ·
+ │                            render 1             pa1                   ·                                   ·
+ │                            render 2             cid1                  ·                                   ·
+ │                            render 3             cid2                  ·                                   ·
+ │                            render 4             ca1                   ·                                   ·
+ └── merge join (full outer)  ·                    ·                     (pid1, pa1, pid1, cid1, cid2, ca1)  ·
+      │                       estimated row count  1000 (missing stats)  ·                                   ·
+      │                       equality             (pid1) = (pid1)       ·                                   ·
+      │                       left cols are key    ·                     ·                                   ·
+      │                       merge ordering       +"(pid1=pid1)"        ·                                   ·
+      ├── scan                ·                    ·                     (pid1, pa1)                         +pid1
+      │                       estimated row count  1000 (missing stats)  ·                                   ·
+      │                       table                outer_p1@primary      ·                                   ·
+      │                       spans                FULL SCAN             ·                                   ·
+      └── scan                ·                    ·                     (pid1, cid1, cid2, ca1)             +pid1
+·                             estimated row count  1000 (missing stats)  ·                                   ·
+·                             table                outer_c1@primary      ·                                   ·
+·                             spans                FULL SCAN             ·                                   ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMllFr4kwUhu-_XzGcK_06kszE2BpYSOnaxWK1qxYWiiypmdWATbKTCFuK_32J6dKt1TmTHRXvajLPzHvmPKTnBbKfC_Bg1Ol1rsZkKRfkeji4JQ-db3e9y26f1D53R-PR116dvC75v1yQLHMhv6eMXN_3euRm0O2_Ppoycj_q9r-QWhqFrD4BCnESin7wJDLwHoABBQ4UHKDQBAouTCikMpmKLEtkseRlDXTDX-DZFKI4XebF4wmFaSIFeC-QR_lCgAfj4HEhhiIIhbSKfUORB9FifcyffH4qo6dAPgOFURrEmUcsu2G5JIhDwkiSz4WEyYoW61_Pedv-8ZnMg2z-fmOfwWQ1oZDlwUyAx1b03_K2tuWdHjwv35n3bZ9EhkKKcHOfs-JgrVVbSr8VciZukiguWrXRq_FzKrxSpMH9uDNc6wQUFuJHXvPZWf2TjGbz8k-gMBRxKKRHrgaXvc7oqlPzGfWdOiU-p8RvUuK7lPitjWt6uwJH4wqW8bbytlbWTxpJajF3Y-X2s5vvzmb6unBtvd2GxewD-V0h8Lm23_sNzHcGPqLg_IQE5_o9c7QlY3bDYof6ilZIfKFt2Z4T852Jj6iZc0KaOfpNa-pr5jYsfqiPWYXEbX3N9puY70x8RM2aJ6RZU79ptq5mDetQilVI6-oqts-0fGfaI-pln5BeyAA_FFmaxJnQmvXsonIRzkR5n1mylFNxJ5Pp-pjy52DNreeUUGR5-Za55a9uXL4rEurT3ARumcBtE5ghuVmVK-PVaG4Ct0zgtgnMkNx8k7b_ph31fTtKmL2v2t6km0aCq2lEFDWMCK6GEcGRopHcrpHgahoRRQ0jgqthRHCkaCR3y0TwcyNF1TTSajWMKKqGEUWRopHcF0aKqmmk1WoYUVQNI4oiRSO52yaKMrM5AcGxf7hGkwJCI5pihWPRDYcFs2nBbFwwmxfMBgZmNDGwDyNDNVvVONZyNY3ZqqYxW5HCseiVhqWPTasyLVWlMVurzEtVadTWD8OD0tbJ6r_fAQAA__8cdcZP
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)
+----
+·                             distribution         full                                          ·                                                       ·
+·                             vectorized           true                                          ·                                                       ·
+render                        ·                    ·                                             (pid1, cid1, cid2, gcid1, gca1, ca1)                    ·
+ │                            estimated row count  1999 (missing stats)                          ·                                                       ·
+ │                            render 0             COALESCE(pid1, pid1)                          ·                                                       ·
+ │                            render 1             COALESCE(cid1, cid1)                          ·                                                       ·
+ │                            render 2             COALESCE(cid2, cid2)                          ·                                                       ·
+ │                            render 3             gcid1                                         ·                                                       ·
+ │                            render 4             gca1                                          ·                                                       ·
+ │                            render 5             ca1                                           ·                                                       ·
+ └── merge join (full outer)  ·                    ·                                             (pid1, cid1, cid2, gcid1, gca1, pid1, cid1, cid2, ca1)  ·
+      │                       estimated row count  1999 (missing stats)                          ·                                                       ·
+      │                       equality             (pid1, cid1, cid2) = (pid1, cid1, cid2)       ·                                                       ·
+      │                       right cols are key   ·                                             ·                                                       ·
+      │                       merge ordering       +"(pid1=pid1)",+"(cid1=cid1)",+"(cid2=cid2)"  ·                                                       ·
+      ├── scan                ·                    ·                                             (pid1, cid1, cid2, gcid1, gca1)                         +pid1,+cid1,+cid2
+      │                       estimated row count  1000 (missing stats)                          ·                                                       ·
+      │                       table                outer_gc1@primary                             ·                                                       ·
+      │                       spans                FULL SCAN                                     ·                                                       ·
+      └── scan                ·                    ·                                             (pid1, cid1, cid2, ca1)                                 +pid1,+cid1,+cid2
+·                             estimated row count  1000 (missing stats)                          ·                                                       ·
+·                             table                outer_c1@primary                              ·                                                       ·
+·                             spans                FULL SCAN                                     ·                                                       ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl1Fv2joUx9_vp7DOE9waJXYILZGulKqXXlFR6AUqTarQlBIPkGiSOUFaVfHdp0C3Fgo-9jyGeJlEyM_--5yf2ekL5F_nEMCg1WldDclCzsl1v3dLHlqf7jqX7S6p_NseDAf_d6rk9ZW_1y-ki0LIz5MxI9f3nQ656bW7r8_GjNwP2t3_SCWbxYyS8Y9_eXUEFJI0Ft3oSeQQPAADChwoeEChDhR8GFHIZDoWeZ7K8pWXFdCOv0HgUpgl2aIoH48ojFMpIHiBYlbMBQQwjB7noi-iWEinXDcWRTSbr7b5GTbM5Owpks9AYZBFSR4Qx605PomSmDCSFlMhYbSkJfC60dv6j89kGuXTzZVDRkNOQw9GyxGFvIgmAgK2pL8Wu7Er9p9KzfemflstlbGQIt5e7YyG_IyG3lkZw-jtHQW5FXIibtJZUvZxq5HD50wEa-N698NWf-UdUJiLL0Xl3crVf-RsMt18BBT6IomFDMhV77LTGly1KmUhGlX67gGn4fnGA4-GF1VKwjoloU9J2Nwq9VsBPY0CLpJdRdlZh25aSzOH-Vtv7t67vrE301eO698Uv-Yw96BXxSD3ufZVOURsvjf2Ee8KP9m7wvX77un7ytyaww77224Q_EJb2IPk5ntzH9FY72SN9fQbXzcw1q85_LA_sQbBm_rGHiI335v7iMbWT9bYun7jXW1ja85hbTUI7eva-vsz872Zj2iqe7KmIn8w9UWepUkutOZit6yTiCdi3Y08XcixuJPpeLXN-mNvxa3GuFjkxfpb5q8_tZP1d2VCfZrbwA0buGkDMyQ3MykZN6O5DdywgZs2MENy823afU976np7SphtntrdputWgqtpRBQ1jAiuhhHBkUMjuX0rwdU0IooaRgRXw4jgyKGR3A0bwc-tFFXTSKvVMKKoGkYURQ6N5L6wUlRNI61Ww4iiahhRFDk0krtpoyizmxMQHPsP12pSQGhEU-zgWHTLYcFuWrAbF-zmBbuBgVlNDOzDyGBmqxrHWq6mMVvVNGYrcnAsutGw9LFpJtOSKY3ZajIvmdKorR-GB6Wto-Vf3wMAAP__mJcbjw==
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40
+----
+·                             distribution         full                  ·                                   ·
+·                             vectorized           true                  ·                                   ·
+project                       ·                    ·                     (pid1, cid1, cid2, ca1, pa1)        ·
+ │                            estimated row count  400 (missing stats)   ·                                   ·
+ └── merge join (left outer)  ·                    ·                     (pid1, cid1, cid2, ca1, pid1, pa1)  ·
+      │                       estimated row count  400 (missing stats)   ·                                   ·
+      │                       equality             (pid1) = (pid1)       ·                                   ·
+      │                       right cols are key   ·                     ·                                   ·
+      │                       merge ordering       +"(pid1=pid1)"        ·                                   ·
+      ├── scan                ·                    ·                     (pid1, cid1, cid2, ca1)             +pid1
+      │                       estimated row count  400 (missing stats)   ·                                   ·
+      │                       table                outer_c1@primary      ·                                   ·
+      │                       spans                /0/#/60/1-/39/#/60/2  ·                                   ·
+      └── scan                ·                    ·                     (pid1, pa1)                         +pid1
+·                             estimated row count  40 (missing stats)    ·                                   ·
+·                             table                outer_p1@primary      ·                                   ·
+·                             spans                /0-/39/#              ·                                   ·
+·                             parallel             ·                     ·                                   ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFv2jAQx9_3KazbS1mNYidAS6RKqVa6UVHogGqTumhKyQ0i0SRzEmlVxXefIJ1aULDNTNu9kdg_3__MT7kHyH7NwYVRp9f5OCaFmJPz4eCS3HS-XfVOu31ycNYdjUdfejXyuOVDuSEpchQ_Jpz0OudjcjHo9h9fpZxcj7r9T-QgjUJeI18_d4ad8oF8Lxhz8ISwGjntnz1_OSENVvOBQpyE2A_uMAP3BjhQsIGCAxQa4FNIRTLBLEvEcvlhtbkb_gaXUYjitMiXr30Kk0QguA-QR_kcwYVxcDvHIQYhCosBhRDzIJqvSvztw0tFdBeIe6AwSoM4c4nFrPdWi1m8bjVJEIeEkySfoQB_QZfYY7mnKrf3ZBZks_XzPQ7-wqeQ5cEUweUL-m-xG1Wx08rY-8xrb837dE4iQhQYbp5zuCystaui9UsUU7xIohiFdbzOjO9TdEvtBtfjznAlH1CY48_8wOOHtRMRTWflT6AwKHKXeJx6NvUc6jWo19q4kaduHY1ui7iqk8om-kk9SS1ub-ysrt1Yq831zeDaQjfrFmcvpPIOgZvaKu83sL018Ou53H4jl239v8fW9omzusVf6tu4Q-KWtlB7TmxvTfx6RnH2Rko5-n-Qo69Us27ZL_WN2iHxkb5S-01sb038ikrx_2DiVmQcYpYmcYZa85Qtu8RwiuXdZUkhJnglksmqTPk4WHGrWRBilperdvnQjculZUB9uGUCt01grsjNd2ja3g1umcBtE5grctubNHtOO_Ibc6QwX6fZJt0wkUwOKySTwwrJ5LBKsqaJZHJYIZkcVkgmh1WStUwkOzLRRA4rNJHDCk3ksEqTYxNN5LBCEzms0EQOqzRpm2jCjWaWglaIoqAVpiho5dgym1tmg8tscpmNLr7b7PIX7_4EAAD__yaJcIw=
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
+----
+·                             distribution         full                  ·                                           ·
+·                             vectorized           true                  ·                                           ·
+project                       ·                    ·                     (pid1, pa1, cid1, cid2, gcid1, gca1)        ·
+ │                            estimated row count  200 (missing stats)   ·                                           ·
+ └── merge join (left outer)  ·                    ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, pa1)  ·
+      │                       estimated row count  200 (missing stats)   ·                                           ·
+      │                       equality             (pid1) = (pid1)       ·                                           ·
+      │                       right cols are key   ·                     ·                                           ·
+      │                       merge ordering       +"(pid1=pid1)"        ·                                           ·
+      ├── scan                ·                    ·                     (pid1, cid1, cid2, gcid1, gca1)             +pid1
+      │                       estimated row count  200 (missing stats)   ·                                           ·
+      │                       table                outer_gc1@primary     ·                                           ·
+      │                       spans                /1/#/60/1-/20/#/60/2  ·                                           ·
+      └── scan                ·                    ·                     (pid1, pa1)                                 +pid1
+·                             estimated row count  20 (missing stats)    ·                                           ·
+·                             table                outer_p1@primary      ·                                           ·
+·                             spans                /1-/20/#              ·                                           ·
+·                             parallel             ·                     ·                                           ·
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMldFO2zAUhu_3FNbZDR2uEjttoZGQgkaAoNKyNmiTWDSFxmsjlThzEmkI9d2nNmjQKrWTGZXdNbG_nv84n3yeIPu1ABsm7sD97KNCLND5eHSN7txvN4NTb4gOzryJP_kyaKHnLZ_KDbzImfiREjT2Li59dDXyhs_vZlOCbife8AIdpHFEWujrpTt2ywf0vTBNi50g0kKnw7PXL6cniJqtADAkPGLD8IFlYN8BAQwUMFiAoQMBhlTwKcsyLlbLT-vNXvQbbBNDnKRFvnodYJhywcB-gjzOFwxs8MP7BRuzMGLCMAFDxPIwXqxL_I3tpCJ-CMUjYJikYZLZyCDGR6NnGqRtdFGYRIggns-ZgGCJV9xzvZcy949oHmbzzQIOgWAZYMjycMbAJkv8b7k7VbnTythvmZfuzPvyP1xETLBo-38OV4Vr7apo_ZqJGbviccKEcbzJ-I8ps9HAPffR6NZ3x2v_AMOC_cwPHHLYOhHxbF7-BAyjIreRQ7BzhB2KHQs7Hex0tw7lpWGrRsNFUtVMZR9D3uapQejWzuranY3apL4cpL7U3bZBzDdUuEHKbm2F9UPSnSH3523__byl9b8KbXAhmm2DbEfQkadBzF79-08_Jd2Zcn_2EPP99LHqfxergT7dtkHf8u5pEPOovj76KenOlHvUh_wfU7Mi5phlKU8yVmsmmqtGWTRj5fFlvBBTdiP4dF2mfBytufU1H7EsL1dp-eAl5dIqYH24pwP3dWCiyE0aNE2bwT0duK8DE0Vuuk2br2lLfmKWFCabtLlNd3Qkk8MKyeSwQjI5rJKsqyOZHFZIJocVkslhlWQ9HcmOdDSRwwpN5LBCEzms0uRYRxM5rNBEDis0kcMqTfo6mhCtmaWgFaIoaIUpClo5tvTmlt7g0ptceqOLNJtdwfLDnwAAAP__9zxeRA==
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN child2 USING(pid1)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll1r2zAUhu_3K8TZTbsqyJI_mhgGHls3UtqkazoYlFy4sZYYUjuTHVgp-e_Dcbe2-dCRJ-LdybYeH706z8V5hOLnHEIYnV2cfbwhSzUnn6-Hl-T27PvVxYf-gBx96o9uRl8vjsnTlnf1hsksnSecnA_7g3otyLdRf_CFHC3ShB-PgUKWJ3IQ38sCwlvgQEEABRcoeEDBhzGFhconsihyVW15XAP95BeEDoU0WyzL6vWYwiRXEsJHKNNyLiGEm_huLq9lnEjFHKCQyDJO5-sy9bGihUrvY_UAFEaLOCtC0mGCvWV-wDjzRL3uMs4EibOEuCQvZ1IVMF5RyJflU-XngncPZBYXs9elIg7j1ZhCUcZTCSFf0X9L4O9IIP5HArE3wfN_cpVIJZPN_5xUhY127biMS6mm8jxPM6kY3-jnXP4ojyJ-cvxepdNZvQQKw2UZkojTSNDIpZFPo4BGpxvpn5O5BsmW2a5T7zzwIO_kC8b9jZ27a3uvanNzL7iZ2Xu06DCvWvvVe-9QljdIE5hZ3m4asTdNi8bzwxsvzPskDK170Y8OC_42LajXVdOCQ1nXIM2poXWtphF707RonTi8da55n1xD63a3psO6h3KtQYauoWstZBB7M7RomHt4wzzz7niGhnU7jDt_OuQ7Tw9Vi7hzKMkaxOgZStZODLE3Roueee1OjDuOcy2LRZ4V0mgedKpAMpnK-pqKfKkm8krlk3WZ-nG45tYTSSKLsv4q6od-Vn-qDmgOBzZwzwbmVufmvp7mDa5MNIMDG7hnA3Orc29c2RYtNmnnJe3q79vVwvz1nTmbtGcjuB5GBNfDiOB6GBMcoRHBfRvB9TAiuB5GBNfDmOAIjQge2Ah-aqOoHkYU1cOIonoYUxShEUW7NorqYURRPYwoqocxRREaUbRnoyi3mhMQGpEUoRFLERrTFMOxWcFuWLCbFuzGBct5wW5g4FYTA98aGRrZqqcxW_U0ZqueRm1FcMzWJsPSds-aTEtNaczWRvNSYxyzdWt40No6Xr35HQAA__-ki7aF
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN parent2 ON pid1=pid2]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVFr2z4Uxd__n0Lc_0u7KsiSHdc1FDy2DlLapGv6MCh-cOO7xJBanuzASsl3H46zpQmJ5CCcp0i2fr4651xy36H8NYcQxjd3N1-eyELNybfH0T15vvnxcPd5MCRnXwfjp_H3u3OyPvKpOVAkCvOKk9vRYLjeCDIakiJLObmuf0QMFHKZ4jB5xRLCZ-BAQQAFFyh4QKEPMYVCyQmWpVT1kfcVMEh_Q-hQyPJiUdWPYwoTqRDCd6iyao4QwlPyMsdHTFJUzAEKKVZJNl-VWV8tKlT2mqg3oDAukrwMSY8J9j_r-4wzTzTrgHEmSJKnxCWymqEqIV5SkItqXXpT8eWNzJJytl0r4hAvYwpllUwRQr6kByRsviNVigrT3e9c1IU3pxb5vnOrWrtW3KOa4q3MclTM3_7sHH9WZxG_OL9W2XTWLIHCaFGFJOI0EjRyaeTtaN7ocVvoOeKmQ9mTBeN85-T-2t5Wbd6-HXjLdjjQDT3m1et-_dzrqjX46VvjssvWEO3jEW3j-RBDj_n_svKbdZ2V31U84vTxBF3G47aPx20bz_5EeizoKhT39KFcdRmK1z4Ur20oQY9x528wfWe9qZPhTle5HKGjv0-H2DOpra4nDl7vRG3DnVON4T0XecSykHmJrYasU0vBdIqNO6VcqAk-KDlZlWm2oxW3mlkpllXzdr0Z5M2r-oLtYc8G9m3gwAbmBtF8l3Y-0kIPCy3Mt2lnl3ZtwtLDhrD0sCEsPWwIy6DZINqzCatvY7ceNtithw1262GD3QbNBtG-jd2XNnbrYYPdethgtx422G3QbBAd2Nh9ZWO3HjbYrYcNduthg90GzaZ__mOGpTiS9qxo34oOrGhuEn7cxIyX__0JAAD__-2HEUg=
+
+# Join on non-interleaved column uses hash joiner.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON pa1 = ca1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1r2zAUhu_3K8TZTTsUZMkfTQwFj61jKV3SNb0YFF-4sdYEUtuTHVgp-e_DcbY2H9WRJ5w7O9Fj6dV5Lt5nKH8tIITJxdXFp1uyVAvy5Wb8jdxd_Li--jgckZPPw8nt5PvVKdks-dAsKBIls4qTy_FwRKaz-SLlZDwiRcLJOZkmPAYKWZ7KUfIoSwjvgAMFARRcoOABBR9iCoXKp7Isc1UveV4Dw_Q3hA6FeVYsq_rnmMI0VxLCZ6jm1UJCCLfJ_ULeyCSVijlAIZVVMl-st9mcKyrU_DFRT0BhUiRZGZIeE-w98wPGmSea5z7jTJAkS4lL8momVQnxikK-rDZbv-x4_0RmSTnb3isSEK9iCmWVPEgI-Yr-XwR_-7PNbR4ngbuVQLyZ4OU7yyxXqVQy3fpSXJPYkgPX8DUpZ5f5PJOK8Z1JLuTP6iQSp-dq_jCrTiL3FCiMl1VIIk4jQSOXRh6N_J3EL2lcizQHjjrKe3nBuL-b--De3tbe3NwFbqjzGy70mFc_-_XvXldqt4gTmKnddRqd5vzImvNONRfmsxGmqr0aQo8F_yYVNM_1pIKuVGsR58xQtY7T6FQTR1ZNdKqaaz4b11S1w_PosX5XgrUI0TcUrJMMOq3cI2vldqqVZz4Rz1Srfo9x5-9YfGfzUs-FO12Z1SLHwNCsrmLo5PKOLJd3tBZ44CA3sizyrJRGHc-po8j0QTZXU-ZLNZXXKp-ut2lex2tuXTJSWVbNv6J5GWbNX_UBzeHABh7YwNzq3NzX07zFlYl2cGADD2xgbnXunSvbo8Uu7bymXf19u1qYb9-Zs0t7NoLrYURwPYwIrocxwREaEdy3EVwPI4LrYURwPYwJjtCI4IGN4Gc2iuphRFE9jCiqhzFFERpRtG-jqB5GFNXDiKJ6GFMUoRFFBzaKcquegNCIpAiNWIrQmKYYjnUFu7Jg1xbs6oJlX7ArDNyqMfC9ytDKVj2N2aqnMVv1NGorgmO2tilL-zNr05ba0pitrfpSaxyzda88aG2NV-_-BAAA___aKbKo
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid2)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll1r2zwUx--fTyHOc9OuCrbklyaGgcfWjZQ26ZoOBiUXbqwlhtTOZAdWSr77cJwtzZuONRHnzi_6Wfqf8zOcV8h_TiGAwdXN1ccHMpdT8vm-f0ser77f3Xzo9sjZp-7gYfD15pyslryrFowmyTTm5Lrf7ZGxjNJ49eDboNv7Qs5mScwoGSUxPx8ChTSLRS96FjkEj8CAAgcKDlBwgYIHQwozmY1EnmeyXPK6BLrxLwhsCkk6mxfl4yGFUSYFBK9QJMVUQAAP0dNU3IsoFtKygUIsiiiZLrepDhTOZPIcyRegMJhFaR6QlsWt_y3Pt5jl8uq6bTGLkyiNiUOyYiJkDsMFhWxerHZeb_j0QiZRPtncKmQ05DBcDCnkRTQWELAF_bcQ3uaX35T2REn4wSTrT2UyFlLE25-6oCG_KPevvXJPcW6FHIvrLEmFtNhWi6fiR3G2os_fy2Q8Wd8Chf68CMgyEQ0dGro0vKRhm4adrZqswzo1ws7TfSH2nr2XtbKZxbytlfv3djf2ZvWVYfW8PyBLy3LLa6987h7xH9AI5Gv8A42n4gdTneB_YI3-D7x-C3lNJ990qWX5f1vpV9dlK_0jOqkR6FLHyaZT8YOpTuAkb9RJp34LnZpO7m9Yy2of0USNGG0dE5vJwg9mOYF_TqP-ufUb59b0r92ymP2nb569uikbx-wjKqiRpKOjYGNx-ME4J7DQPdmkuudk9yKfZWkuas2hdplNxGNRVS7P5nIk7mQ2Wm5T3faX3HL8iUVeVG95ddNNq1flAevDvgncMYGZ0bmZp6aZRsm4HuybwB0TmBmde6tkOzTfpu23tKOut6OE2WbN7G3aNRFcDSOCq2FEcDWMCY7QiOCeieBqGBFcDSOCq2FMcIRGBPdNBL80UVQNI4qqYURRNYwpitCIom0TRdUwoqgaRhRVw5iiCI0o2jFRlBnNCQiNSIrQiKUIjWmK4disYDYsmE0LZuOC4bxgNjAwo4mB7YwMWraqacxWNY3ZqqZRWxEcs1VnWNrtmc60pEtjtmrNS9o4ZuvO8KC0dbj473cAAAD__40N3Z8=
+
+# Subset join on interleaved columns uses hash joiner.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid3)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll1r2zAUhu_3K8TZTTsUbMkfTQwDj63bUrqkazoYFF-4sZYYUjuTHVgp-e_Dcbo2XzrWRNw7y9Zj6T3nuTiPUPyeQQCj88vzjzdkIWfk8_XwG7k9_3l1-aE_ICef-qOb0ffLU7Le8q7eMJ6ms4STi2F_QCYyzpL1ix-j_uALOZmnCaNknCbOaQQUsjwRg_heFBDcAgMKHCg4QMEFCh5EFOYyH4uiyGW15XEF9JM_ENgU0my-KKvXEYVxLgUEj1Cm5UxAADfx3UxcizgR0rKBQiLKOJ2tjqkvFM5leh_LB6AwmsdZEZCOxa23ludbzHJ5_dy1mMVJnCXEIXk5FbKAaEkhX5Trk58PvHsg07iYbh4VMho6EC0jCkUZTwQEbEn_L4S3-ecXpX2lJPxgkudfLbJcJkKKZONnUUViW_aU42tcTC_yNBPSYls9nYlf5cnqjqfvZTqZPi2AwnBRBmS1oiGnoUtDn4ZdGva2CvCczDFItufag7yTzy3mbddg79nuxtmsuR-smeQHzOhYbvXsVe_dIwqvEcjXEL71VPxgqjbkZ63Jz5v3izcU8EVLOpb_r29-_Vz1zT-igBqBznQEbDsVP5iqDQF5awI6zfvlNBRwf3c6VveI2mnE6Opo104WfjBLG7I5rcnmNu-S21C2bsdi9lOTPHu9qLrE7CP6ppGkp-Nba3H4wThtKOe-ynS551LXopjnWSEazY52FUskE1GXqcgXciyuZD5eHVMvhytuNbIkoijrr7xe9LP6U3XB5rBvAvdMYGZ0b-apaaZRMq4H-yZwzwRmRvfeKtkOzbdp-yXtqOvtKGG2WTN7m3ZNBFfDiOBqGBFcDWOCIzQiuGciuBpGBFfDiOBqGBMcoRHBfRPBz0wUVcOIomoYUVQNY4oiNKJo10RRNYwoqoYRRdUwpihCI4r2TBRlRnMCQiOSIjRiKUJjmmI4NiuYDQtm04LZuGA4L5gNDMxoYmA7I4OWrWoas1VNY7aqadRWBMds1RmWdnumMy3p0pitWvOSNo7ZujM8KG2Nlm_-BgAA__9mJ9B7
+
+# Multi-table staggered join uses merge joiner on the bottom join
+# and a lookup join on the higher join.
+query T
+SELECT url FROM[EXPLAIN (DISTSQL)
+  SELECT * FROM grandchild1
+  JOIN child1 USING (pid1, cid1)
+  JOIN parent1 USING (pid1)
+ORDER BY pid1
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl12P2kYUhu_7K6Znb7LNoPGMP_iQKrltthURgRQ2UquICwdPwS2x3bGRGq32v1cG2rUxnuOpC9zFGT_MnDnvsweeIPtzCyNYPEwefngkO7UlP85n78jHh1_eT74bT8mrN-PF4-LnyT05vvLN4YW1CuJwtYm2ISdvZ-MpOf77w2I8_Ym8SqOQU7KKQn5_WE4DJeO8sn5PZvM3D3Py_a-keFwChTgJ5TT4LDMYfQQOFARQsIGCAxRcWFJIVbKSWZao4pWnPTAO_4KRRSGK011e_PeSwipREkZPkEf5VsIIHoNPWzmXQSgVs4BCKPMg2u63KVXipyr6HKgvQGGRBnE2Ij0m2B1zPcaZI5hgX08_TCbMHTDOBAnikNgkyTdSZbB8ppDs8uMRXnb-9IVsgmxT3dPn1BewfF5SyPJgLWHEn-l_q8atfnLbQu4uUYRoLOLloxIVSiXD0496TX3xuti_9Ztn7uWdVGv5NoliqRg_afNW_pa_OtL336povXl5BAqzXT4i-4qob1Pfob5LfY_6_ZM7eSnWNulYcahjw_hJx45mlFo2SZI_din5PYliksTFsc4esE_9YePpnA6tOH-506SXpExUr7Vpe7eyPW8fZ24gp8bNHnOKNbdYcy4oqkFlXjtRGzy9XEGisaAbSMuvKi3SvbK03vWlFe2zJUysKQWpx7x_0-Yxr6yQd0FrDCrrt7RGU9TdJQoSjQXdwBpxVWuQ7pWt6V_fGrt9tmwTa5pF6bHBBV0xqGfQ0pXzevzfZYjGMm5giH1VQ5CelQ0ZXN8Qp32iHBNDBj3GrX-i5VrFQ0kTbl1QEoOShi0lOVPN3UUqEY2V3MAT56qeIG0rezK87Y-mM6ebyyxN4ky2-j1kFTcvw7U89DVLdmol36tktd_m8Djbc_tvpaHM8sOqODyM48NSccD2cL8LzHkn2u1ED_U0N7gzYQb3u8And2ZKu53ooZ4Wp7RVpu0KbJ3CthZ29N1ytLDg-q3dLn7oYcQPPYz5gdCIHwiN-OF18UMPI37oYcwPhEb8QGjEj742pQN9SAdd_Bh2SbgeRhKuh7GEIzSScITGJoDJ2Kz_JTWZm6Y0OgSMJqcxjsSc16ZIJapc6IPO9WMESTqvzRGTqCM0knWExsKO4UjaMRyLe22GGsVdT2Nx19No3BEcizuCY3GvDdJq3D0k7rWZYhT32kwxiruexuKup9G4IzgWdwTH4l6bp0Zx19NY3PU0GncEx-KO4Fjca1O1-l3b0sdd1GaLNu7L56_-DgAA__-EQFI5
+
+# Multi-table join with parent1 and child1 at the bottom uses merge
+# joiner but induces a hash joiner on the higher join.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+  SELECT * FROM parent1
+  JOIN child1 USING (pid1)
+  JOIN grandchild1 USING (pid1, cid1)
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl11vo0YUhu_7K6anN0l3LJjhwx9SJao2rbzyOts4K1Va-YI1U5vWy9ABS11F-e8V4G4w2HOYEtt3JvAwc-a8T479BNnfW5jA4m5299Mj2akt-eXh_h35ePf7-9mP0zm5-Xm6eFz8Nrsl-0e-rx5IQyWSnJG399M5WW3ibcTIh8V0_iu5SeOI3VY31ipMovZdSlbFM0ugkMhIzMPPIoPJR2BAgQMFByi4QMGDJYVUyZXIMqmKR55KYBr9AxObQpyku7z485LCSioBkyfI43wrYAKP4aeteBBhJJRlA4VI5GG8LZepNhSkKv4cqi9AYZGGSTYhA4tb31mebzHL5dXnkcUsTsIkIg6R-UaoDJbPFOQu36_8suCnL2QTZpvDpQJGAw7L5yWFLA_XAibsmf6_IrzDN9eOFq_k2_mH2ewc1fCT1by8SqpIKBE1X_WGBvxNsX7nJ48c0Duh1uKtjBOhLNZo81b8kd_s6dsfVLzevFwChftdPiFlRTRwaODSwKOBT4Nh40xeinVMWldsat851mjd3p1a22ZS_rVLyZ8yTohMim193eCo3OC43KN2d26HVuySY0d89GTnciBTi9uNJ4-v7R2szbqHmnUz84SYA8stPnvF390zWmpQkG9gqUbS81XGT1Z2BWPZRY1F2lg31r-8sbx7yHhHa2oZGlj-17D51eciaP4ZrTEoaGhijaaqmkKvWxk_WdkVrOEXtQZpY92a4eWtcbqHzOlozXFRBtbojK4YlDEyceW0Hq9dDz9ZzxUMcS5qCNK8uiGjyxvido-W29GQ0cBi9n_J8uz9RRErZp9REoNKxiaSHCmnZsorl8RPlnQFT9yLeoL0r-7J-Lq_mI7s7kFkqUwy0en3kF2cvIjWouprJndqJd4ruSqXqS7vS678VhqJLK_u8upimlS3ig12h4d9YMZ60V4veqynmcGZcTN42AdunJkp7fWix3qaN2m7TjsHsN2EHS3s6rvlamHO9Et7ffzQw4gfehjzA6ERPxAa8cPv44ceRvzQw5gfCI34gdCIH0NtSkf6kI76-DHuk3A9jCRcD2MJR2gk4QiNTQCTsdn-T2oyN01pdAgYTU5jHIk5a02Rg6gyrg86048RJOmsNUdMoo7QSNYRGgs7hiNpx3As7q0ZahR3PY3FXU-jcUdwLO4IjsW9NUgP4-4jcW_NFKO4t2aKUdz1NBZ3PY3GHcGxuCM4FvfWPDWKu57G4q6n0bgjOBZ3BMfi3pqqh9-1bX3ceWu2aOO-fP7m3wAAAP__QBdOhA==
+
+statement ok
+DROP TABLE grandchild2, grandchild1, child1, child2, parent1, parent2

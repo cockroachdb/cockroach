@@ -441,17 +441,21 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		b.WriteString(fmt.Sprintf("%d", t.InvertedColumn))
 		n := tp.Childf("inverted expression: %s", b.String())
 		t.InvertedExpression.Format(n, false /* includeSpansToRead */)
+		if t.PreFiltererState != nil {
+			n := tp.Childf("pre-filterer expression")
+			f.formatExpr(t.PreFiltererState.Expr, n)
+		}
 
 	case *LookupJoinExpr:
 		if !t.Flags.Empty() {
 			tp.Childf("flags: %s", t.Flags.String())
 		}
-		idxCols := make(opt.ColList, len(t.KeyCols))
-		idx := md.Table(t.Table).Index(t.Index)
-		for i := range idxCols {
-			idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal())
-		}
 		if !f.HasFlags(ExprFmtHideColumns) {
+			idxCols := make(opt.ColList, len(t.KeyCols))
+			idx := md.Table(t.Table).Index(t.Index)
+			for i := range idxCols {
+				idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal())
+			}
 			tp.Childf("key columns: %v = %v", t.KeyCols, idxCols)
 		}
 		if t.LookupColsAreTableKey {
@@ -1286,7 +1290,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		if t.Index == cat.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, " %s", tab.Name())
 		} else {
-			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name(), tab.Index(t.Index).Name())
+			partialStr := ""
+			if _, isPartial := tab.Index(t.Index).Predicate(); isPartial {
+				partialStr = ",partial"
+			}
+			fmt.Fprintf(f.Buffer, " %s@%s%s", tab.Name(), tab.Index(t.Index).Name(), partialStr)
 		}
 
 	case *InvertedJoinPrivate:

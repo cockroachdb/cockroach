@@ -152,6 +152,12 @@ var (
 	errJobCanceled = errors.New("job canceled by user")
 )
 
+// HasErrJobCanceled returns true if the error contains the error set as the
+// job's FinalResumError when it has been canceled.
+func HasErrJobCanceled(err error) bool {
+	return errors.Is(err, errJobCanceled)
+}
+
 // deprecatedIsOldSchemaChangeJob returns whether the provided payload is for a
 // job that is a 19.2-style schema change, and therefore cannot be run or
 // updated in 20.1 (without first having undergone a migration).

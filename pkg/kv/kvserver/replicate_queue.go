@@ -460,7 +460,8 @@ func (rq *replicateQueue) addOrReplace(
 		}
 		// See about transferring the lease away if we're about to remove the
 		// leaseholder.
-		done, err := rq.maybeTransferLeaseAway(ctx, repl, existingReplicas[removeIdx].StoreID, dryRun)
+		done, err := rq.maybeTransferLeaseAway(
+			ctx, repl, existingReplicas[removeIdx].StoreID, dryRun, nil /* canTransferLease */)
 		if err != nil {
 			return false, err
 		}
@@ -642,12 +643,20 @@ func (rq *replicateQueue) findRemoveTarget(
 // true to indicate to the caller that it should not pursue the current
 // replication change further because it is no longer the leaseholder. When the
 // returned bool is false, it should continue. On error, the caller should also
-// stop.
+// stop. If canTransferLease is non-nil, it is consulted and an error is
+// returned if it returns false.
 func (rq *replicateQueue) maybeTransferLeaseAway(
-	ctx context.Context, repl *Replica, removeStoreID roachpb.StoreID, dryRun bool,
+	ctx context.Context,
+	repl *Replica,
+	removeStoreID roachpb.StoreID,
+	dryRun bool,
+	canTransferLease func() bool,
 ) (done bool, _ error) {
 	if removeStoreID != repl.store.StoreID() {
 		return false, nil
+	}
+	if canTransferLease != nil && !canTransferLease() {
+		return false, errors.Errorf("cannot transfer lease")
 	}
 	desc, zone := repl.DescAndZone()
 	// The local replica was selected as the removal target, but that replica
@@ -678,7 +687,8 @@ func (rq *replicateQueue) remove(
 	if err != nil {
 		return false, err
 	}
-	done, err := rq.maybeTransferLeaseAway(ctx, repl, removeReplica.StoreID, dryRun)
+	done, err := rq.maybeTransferLeaseAway(
+		ctx, repl, removeReplica.StoreID, dryRun, nil /* canTransferLease */)
 	if err != nil {
 		return false, err
 	}
@@ -722,7 +732,8 @@ func (rq *replicateQueue) removeDecommissioning(
 		return true, nil
 	}
 	decommissioningReplica := decommissioningReplicas[0]
-	done, err := rq.maybeTransferLeaseAway(ctx, repl, decommissioningReplica.StoreID, dryRun)
+	done, err := rq.maybeTransferLeaseAway(
+		ctx, repl, decommissioningReplica.StoreID, dryRun, nil /* canTransferLease */)
 	if err != nil {
 		return false, err
 	}
@@ -836,7 +847,9 @@ func (rq *replicateQueue) considerRebalance(
 			storeFilterThrottled)
 		if !ok {
 			log.VEventf(ctx, 1, "no suitable rebalance target")
-		} else if done, err := rq.maybeTransferLeaseAway(ctx, repl, removeTarget.StoreID, dryRun); err != nil {
+		} else if done, err := rq.maybeTransferLeaseAway(
+			ctx, repl, removeTarget.StoreID, dryRun, canTransferLease,
+		); err != nil {
 			log.VEventf(ctx, 1, "want to remove self, but failed to transfer lease away: %s", err)
 		} else if done {
 			// Lease is now elsewhere, so we're not in charge any more.

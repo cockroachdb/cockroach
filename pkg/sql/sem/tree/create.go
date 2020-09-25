@@ -35,12 +35,13 @@ import (
 
 // CreateDatabase represents a CREATE DATABASE statement.
 type CreateDatabase struct {
-	IfNotExists bool
-	Name        Name
-	Template    string
-	Encoding    string
-	Collate     string
-	CType       string
+	IfNotExists     bool
+	Name            Name
+	Template        string
+	Encoding        string
+	Collate         string
+	CType           string
+	ConnectionLimit int32
 }
 
 // Format implements the NodeFormatter interface.
@@ -65,6 +66,10 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.CType != "" {
 		ctx.WriteString(" LC_CTYPE = ")
 		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.CType, ctx.flags.EncodeFlags())
+	}
+	if node.ConnectionLimit != -1 {
+		ctx.WriteString(" CONNECTION LIMIT = ")
+		ctx.WriteString(strconv.Itoa(int(node.ConnectionLimit)))
 	}
 }
 
@@ -174,8 +179,14 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString(")")
 	}
 	if node.Predicate != nil {
-		ctx.WriteString(" WHERE ")
-		ctx.FormatNode(node.Predicate)
+		if ctx.HasFlags(FmtPGCatalog) {
+			ctx.WriteString(" WHERE (")
+			ctx.FormatNode(node.Predicate)
+			ctx.WriteString(")")
+		} else {
+			ctx.WriteString(" WHERE ")
+			ctx.FormatNode(node.Predicate)
+		}
 	}
 }
 
@@ -1701,4 +1712,19 @@ func (o *CreateStatsOptions) CombineWith(other *CreateStatsOptions) error {
 		o.AsOf = other.AsOf
 	}
 	return nil
+}
+
+// CreateExtension represents a CREATE EXTENSION statement.
+type CreateExtension struct {
+	Name        string
+	IfNotExists bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateExtension) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE EXTENSION ")
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
+	ctx.WriteString(node.Name)
 }

@@ -116,7 +116,7 @@ opt expect-not=EliminateIndexJoinInsideProject
 SELECT j FROM a WHERE j @> '{"a": "b"}'
 ----
 index-join a
- ├── columns: j:5
+ ├── columns: j:5!null
  ├── immutable
  └── scan a@j
       ├── columns: k:1!null

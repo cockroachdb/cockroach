@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -642,7 +643,7 @@ func (c *conn) bufferParamStatus(param, value string) error {
 	return c.msgBuilder.finishMsg(&c.writerState.buf)
 }
 
-func (c *conn) bufferNotice(ctx context.Context, noticeErr error) error {
+func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoticeResponse)
 	return writeErrFields(ctx, c.sv, noticeErr, &c.msgBuilder, &c.writerState.buf)
 }
@@ -1252,13 +1253,18 @@ func writeErrFields(
 	msgBuilder.writeTerminatedString(pgErr.Code)
 
 	if pgErr.Detail != "" {
-		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFileldDetail)
+		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldDetail)
 		msgBuilder.writeTerminatedString(pgErr.Detail)
 	}
 
 	if pgErr.Hint != "" {
-		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFileldHint)
+		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldHint)
 		msgBuilder.writeTerminatedString(pgErr.Hint)
+	}
+
+	if pgErr.ConstraintName != "" {
+		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldConstraintName)
+		msgBuilder.writeTerminatedString(pgErr.ConstraintName)
 	}
 
 	if pgErr.Source != nil {

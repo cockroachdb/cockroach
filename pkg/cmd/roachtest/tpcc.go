@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -358,11 +359,12 @@ func registerTPCC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "tpcc/interleaved/nodes=3/cpu=16/w=500",
-		Owner:      OwnerKV,
+		Owner:      OwnerSQLExec,
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		MinVersion: "v20.1.0",
 		Timeout:    6 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			skip.WithIssue(t, 53886)
 			runTPCC(ctx, t, c, tpccOptions{
 				// Currently, we do not support import on interleaved tables which
 				// prohibits loading/importing a fixture. If/when this is supported the

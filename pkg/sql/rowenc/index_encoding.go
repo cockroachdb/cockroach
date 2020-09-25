@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
@@ -1225,6 +1227,7 @@ func writeColumnValues(
 // value (passed as a parameter so the caller can reuse between rows) and is
 // expected to be the same length as indexes.
 func EncodeSecondaryIndexes(
+	ctx context.Context,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexes []*descpb.IndexDescriptor,
@@ -1232,10 +1235,17 @@ func EncodeSecondaryIndexes(
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 	includeEmpty bool,
+	indexBoundAccount mon.BoundAccount,
 ) ([]IndexEntry, error) {
 	if len(secondaryIndexEntries) > 0 {
 		panic("Length of secondaryIndexEntries was non-zero")
 	}
+
+	if indexBoundAccount.Monitor() == nil {
+		panic("Memory monitor passed to EncodeSecondaryIndexes was nil")
+	}
+	const sizeOfIndexEntry = int64(unsafe.Sizeof(IndexEntry{}))
+
 	for i := range indexes {
 		entries, err := EncodeSecondaryIndex(codec, tableDesc, indexes[i], colMap, values, includeEmpty)
 		if err != nil {
@@ -1244,6 +1254,26 @@ func EncodeSecondaryIndexes(
 		// Normally, each index will have exactly one entry. However, inverted
 		// indexes can have 0 or >1 entries, as well as secondary indexes which
 		// store columns from multiple column families.
+		//
+		// The memory monitor has already accounted for cap(secondaryIndexEntries).
+		// If the number of index entries are going to cause the
+		// secondaryIndexEntries buffer to re-slice, then it will very likely double
+		// in capacity. Therefore, we must account for another
+		// cap(secondaryIndexEntries) in the index memory account.
+		if cap(secondaryIndexEntries)-len(secondaryIndexEntries) < len(entries) {
+			if err := indexBoundAccount.Grow(ctx, sizeOfIndexEntry*int64(cap(secondaryIndexEntries))); err != nil {
+				return nil, errors.Wrap(err, "failed to re-slice index entries buffer")
+			}
+		}
+
+		// The index keys can be large and so we must account for them in the index
+		// memory account.
+		for _, index := range entries {
+			if err := indexBoundAccount.Grow(ctx, int64(len(index.Key))); err != nil {
+				return nil, errors.Wrap(err, "failed to allocate space for index keys")
+			}
+		}
+
 		secondaryIndexEntries = append(secondaryIndexEntries, entries...)
 	}
 	return secondaryIndexEntries, nil

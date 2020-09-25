@@ -14,7 +14,10 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 )
 
 // runDecommissionMixedVersions runs through randomized
@@ -165,23 +168,31 @@ func fullyDecommissionStep(target, from int, binaryVersion string) versionStep {
 // decommissioning. This check can be run against both v20.1 and v20.2 servers.
 func checkOneDecommissioning(from int) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, from)
-		var count int
-		if err := db.QueryRow(
-			`select count(*) from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&count); err != nil {
+		// We use a retry block here (and elsewhere) because we're consulting
+		// crdb_internal.gossip_liveness, and need to make allowances for gossip
+		// propagation delays.
+		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+			db := u.conn(ctx, t, from)
+			var count int
+			if err := db.QueryRow(
+				`select count(*) from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+
+			if count != 1 {
+				return errors.Newf("expected to find 1 node with decommissioning=true, found %d", count)
+			}
+
+			var nodeID int
+			if err := db.QueryRow(
+				`select node_id from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&nodeID); err != nil {
+				t.Fatal(err)
+			}
+			t.l.Printf("n%d decommissioning=true", nodeID)
+			return nil
+		}); err != nil {
 			t.Fatal(err)
 		}
-
-		if count != 1 {
-			t.Fatalf("expected to find 1 node with decommissioning=true, found %d", count)
-		}
-
-		var nodeID int
-		if err := db.QueryRow(
-			`select node_id from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&nodeID); err != nil {
-			t.Fatal(err)
-		}
-		t.l.Printf("n%d decommissioning=true", nodeID)
 	}
 }
 
@@ -190,15 +201,20 @@ func checkOneDecommissioning(from int) versionStep {
 // decommissioning. This check can be run against both v20.1 and v20.2 servers.
 func checkNoDecommissioning(from int) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, from)
-		var count int
-		if err := db.QueryRow(
-			`select count(*) from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&count); err != nil {
-			t.Fatal(err)
-		}
+		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+			db := u.conn(ctx, t, from)
+			var count int
+			if err := db.QueryRow(
+				`select count(*) from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
 
-		if count != 0 {
-			t.Fatalf("expected to find 0 nodes with decommissioning=false, found %d", count)
+			if count != 0 {
+				return errors.Newf("expected to find 0 nodes with decommissioning=false, found %d", count)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -209,23 +225,28 @@ func checkNoDecommissioning(from int) versionStep {
 // servers running v20.2 and beyond.
 func checkOneMembership(from int, membership string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, from)
-		var count int
-		if err := db.QueryRow(
-			`select count(*) from crdb_internal.gossip_liveness where membership = $1;`, membership).Scan(&count); err != nil {
+		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+			db := u.conn(ctx, t, from)
+			var count int
+			if err := db.QueryRow(
+				`select count(*) from crdb_internal.gossip_liveness where membership = $1;`, membership).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+
+			if count != 1 {
+				return errors.Newf("expected to find 1 node with membership=%s, found %d", membership, count)
+			}
+
+			var nodeID int
+			if err := db.QueryRow(
+				`select node_id from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&nodeID); err != nil {
+				t.Fatal(err)
+			}
+			t.l.Printf("n%d membership=%s", nodeID, membership)
+			return nil
+		}); err != nil {
 			t.Fatal(err)
 		}
-
-		if count != 1 {
-			t.Fatalf("expected to find 1 node with membership=%s, found %d", membership, count)
-		}
-
-		var nodeID int
-		if err := db.QueryRow(
-			`select node_id from crdb_internal.gossip_liveness where decommissioning = true;`).Scan(&nodeID); err != nil {
-			t.Fatal(err)
-		}
-		t.l.Printf("n%d membership=%s", nodeID, membership)
 	}
 }
 
@@ -235,15 +256,20 @@ func checkOneMembership(from int, membership string) versionStep {
 // servers running v20.2 and beyond.
 func checkAllMembership(from int, membership string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, from)
-		var count int
-		if err := db.QueryRow(
-			`select count(*) from crdb_internal.gossip_liveness where membership != $1;`, membership).Scan(&count); err != nil {
-			t.Fatal(err)
-		}
+		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+			db := u.conn(ctx, t, from)
+			var count int
+			if err := db.QueryRow(
+				`select count(*) from crdb_internal.gossip_liveness where membership != $1;`, membership).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
 
-		if count != 0 {
-			t.Fatalf("expected to find 0 nodes with membership!=%s, found %d", membership, count)
+			if count != 0 {
+				return errors.Newf("expected to find 0 nodes with membership!=%s, found %d", membership, count)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

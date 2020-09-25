@@ -145,7 +145,6 @@ func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.Eval
 	im.f = f
 	im.md = md
 	im.evalCtx = evalCtx
-	im.constraintCache = make(map[opt.ScalarExpr]constraintCacheItem)
 }
 
 // FiltersImplyPredicate attempts to prove that a partial index predicate is
@@ -514,6 +513,19 @@ func (im *Implicator) atomImpliesAtom(
 		im.cacheConstraint(pred, predSet, predTight)
 	}
 
+	// If e is a contradiction, it represents an empty set of rows. The empty
+	// set is contained by all sets, so a contradiction implies all predicates.
+	if eSet == constraint.Contradiction {
+		return true
+	}
+
+	// If pred is a contradiction, it represents an empty set of rows. The only
+	// set contained by the empty set is itself (handled in the conditional
+	// above). No other filters imply a contradiction.
+	if predSet == constraint.Contradiction {
+		return false
+	}
+
 	// If either set has more than one constraint, then constraints cannot be
 	// used to prove containment. This happens when an expression has more than
 	// one variable. For example:
@@ -647,9 +659,18 @@ func (im *Implicator) twoVarComparisonImpliesTwoVarComparison(
 	return false, true
 }
 
+// initConstraintCache initializes the constraintCache field if it has not yet
+// been initialized.
+func (im *Implicator) initConstraintCache() {
+	if im.constraintCache == nil {
+		im.constraintCache = make(map[opt.ScalarExpr]constraintCacheItem)
+	}
+}
+
 // cacheConstraint caches a constraint set and a tight boolean for the given
 // scalar expression.
 func (im *Implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight bool) {
+	im.initConstraintCache()
 	if _, ok := im.constraintCache[e]; !ok {
 		im.constraintCache[e] = constraintCacheItem{
 			c:     c,
@@ -662,6 +683,7 @@ func (im *Implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight
 // cache contains an entry for the given scalar expression. It returns
 // ok = false if the scalar expression does not exist in the cache.
 func (im *Implicator) fetchConstraint(e opt.ScalarExpr) (_ *constraint.Set, tight bool, ok bool) {
+	im.initConstraintCache()
 	if res, ok := im.constraintCache[e]; ok {
 		return res.c, res.tight, true
 	}

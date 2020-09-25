@@ -73,13 +73,6 @@ func TestDebugLogSpyOptions(t *testing.T) {
 				Duration: logSpyDefaultDuration,
 			},
 		},
-		{
-			// Can't stream out too much at once.
-			vals: map[string][]string{
-				"Count": {strconv.Itoa(2 * logSpyMaxCount)},
-			},
-			expErr: (`count .* is too large .limit is .*.`),
-		},
 		// Various parse errors.
 		{
 			vals: map[string][]string{

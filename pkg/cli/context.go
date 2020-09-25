@@ -154,6 +154,14 @@ type cliContext struct {
 	// extraConnURLOptions contains any additional query URL options
 	// specified in --url that do not have discrete equivalents.
 	extraConnURLOptions url.Values
+
+	// allowUnencryptedClientPassword enables the CLI commands to use
+	// password authentication over non-TLS TCP connections. This is
+	// disallowed by default: the user must opt-in and understand that
+	// CockroachDB does not guarantee confidentiality of a password
+	// provided this way.
+	// TODO(knz): Relax this when SCRAM is implemented.
+	allowUnencryptedClientPassword bool
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
@@ -184,6 +192,7 @@ func setCliContextDefaults() {
 	cliCtx.sqlConnPasswd = ""
 	cliCtx.sqlConnDBName = ""
 	cliCtx.extraConnURLOptions = nil
+	cliCtx.allowUnencryptedClientPassword = false
 }
 
 // sqlCtx captures the command-line parameters of the `sql` command.
@@ -195,7 +204,13 @@ var sqlCtx = struct {
 	setStmts statementsValue
 
 	// execStmts is a list of statements to execute.
+	// Only valid if inputFile is empty.
 	execStmts statementsValue
+
+	// inputFile is the file to read from.
+	// If empty, os.Stdin is used.
+	// Only valid if execStmts is empty.
+	inputFile string
 
 	// repeatDelay indicates that the execStmts should be "watched"
 	// at the specified time interval. Zero disables
@@ -220,6 +235,9 @@ var sqlCtx = struct {
 
 	// Determines whether to display server execution timings in the CLI.
 	enableServerExecutionTimings bool
+
+	// Determine whether to show raw durations.
+	verboseTimings bool
 }{cliContext: &cliCtx}
 
 // setSQLContextDefaults set the default values in sqlCtx.  This
@@ -228,12 +246,14 @@ var sqlCtx = struct {
 func setSQLContextDefaults() {
 	sqlCtx.setStmts = nil
 	sqlCtx.execStmts = nil
+	sqlCtx.inputFile = ""
 	sqlCtx.repeatDelay = 0
 	sqlCtx.safeUpdates = false
 	sqlCtx.showTimes = false
 	sqlCtx.debugMode = false
 	sqlCtx.echo = false
 	sqlCtx.enableServerExecutionTimings = false
+	sqlCtx.verboseTimings = false
 }
 
 // zipCtx captures the command-line parameters of the `zip` command.

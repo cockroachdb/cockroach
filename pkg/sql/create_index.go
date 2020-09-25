@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -28,138 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
 type createIndexNode struct {
 	n         *tree.CreateIndex
 	tableDesc *tabledesc.Mutable
-}
-
-type indexStorageParamObserver struct {
-	indexDesc *descpb.IndexDescriptor
-}
-
-var _ storageParamObserver = (*indexStorageParamObserver)(nil)
-
-func getS2ConfigFromIndex(indexDesc *descpb.IndexDescriptor) *geoindex.S2Config {
-	var s2Config *geoindex.S2Config
-	if indexDesc.GeoConfig.S2Geometry != nil {
-		s2Config = indexDesc.GeoConfig.S2Geometry.S2Config
-	}
-	if indexDesc.GeoConfig.S2Geography != nil {
-		s2Config = indexDesc.GeoConfig.S2Geography.S2Config
-	}
-	return s2Config
-}
-
-func (a *indexStorageParamObserver) applyS2ConfigSetting(
-	evalCtx *tree.EvalContext, key string, expr tree.Datum, min int64, max int64,
-) error {
-	s2Config := getS2ConfigFromIndex(a.indexDesc)
-	if s2Config == nil {
-		return errors.Newf("index setting %q can only be set on GEOMETRY or GEOGRAPHY spatial indexes", key)
-	}
-
-	val, err := datumAsInt(evalCtx, key, expr)
-	if err != nil {
-		return errors.Wrapf(err, "error decoding %q", key)
-	}
-	if val < min || val > max {
-		return errors.Newf("%q value must be between %d and %d inclusive", key, min, max)
-	}
-	switch key {
-	case `s2_max_level`:
-		s2Config.MaxLevel = int32(val)
-	case `s2_level_mod`:
-		s2Config.LevelMod = int32(val)
-	case `s2_max_cells`:
-		s2Config.MaxCells = int32(val)
-	}
-
-	return nil
-}
-
-func (a *indexStorageParamObserver) applyGeometryIndexSetting(
-	evalCtx *tree.EvalContext, key string, expr tree.Datum,
-) error {
-	if a.indexDesc.GeoConfig.S2Geometry == nil {
-		return errors.Newf("%q can only be applied to GEOMETRY spatial indexes", key)
-	}
-	val, err := datumAsFloat(evalCtx, key, expr)
-	if err != nil {
-		return errors.Wrapf(err, "error decoding %q", key)
-	}
-	switch key {
-	case `geometry_min_x`:
-		a.indexDesc.GeoConfig.S2Geometry.MinX = val
-	case `geometry_max_x`:
-		a.indexDesc.GeoConfig.S2Geometry.MaxX = val
-	case `geometry_min_y`:
-		a.indexDesc.GeoConfig.S2Geometry.MinY = val
-	case `geometry_max_y`:
-		a.indexDesc.GeoConfig.S2Geometry.MaxY = val
-	default:
-		return errors.Newf("unknown key: %q", key)
-	}
-	return nil
-}
-
-func (a *indexStorageParamObserver) apply(
-	evalCtx *tree.EvalContext, key string, expr tree.Datum,
-) error {
-	switch key {
-	case `fillfactor`:
-		return applyFillFactorStorageParam(evalCtx, key, expr)
-	case `s2_max_level`:
-		return a.applyS2ConfigSetting(evalCtx, key, expr, 0, 30)
-	case `s2_level_mod`:
-		return a.applyS2ConfigSetting(evalCtx, key, expr, 1, 3)
-	case `s2_max_cells`:
-		return a.applyS2ConfigSetting(evalCtx, key, expr, 1, 32)
-	case `geometry_min_x`, `geometry_max_x`, `geometry_min_y`, `geometry_max_y`:
-		return a.applyGeometryIndexSetting(evalCtx, key, expr)
-	case `vacuum_cleanup_index_scale_factor`,
-		`buffering`,
-		`fastupdate`,
-		`gin_pending_list_limit`,
-		`pages_per_range`,
-		`autosummarize`:
-		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
-	}
-	return errors.Errorf("invalid storage parameter %q", key)
-}
-
-func (a *indexStorageParamObserver) runPostChecks() error {
-	s2Config := getS2ConfigFromIndex(a.indexDesc)
-	if s2Config != nil {
-		if (s2Config.MaxLevel)%s2Config.LevelMod != 0 {
-			return errors.Newf(
-				"s2_max_level (%d) must be divisible by s2_level_mod (%d)",
-				s2Config.MaxLevel,
-				s2Config.LevelMod,
-			)
-		}
-	}
-
-	if cfg := a.indexDesc.GeoConfig.S2Geometry; cfg != nil {
-		if cfg.MaxX <= cfg.MinX {
-			return errors.Newf(
-				"geometry_max_x (%f) must be greater than geometry_min_x (%f)",
-				cfg.MaxX,
-				cfg.MinX,
-			)
-		}
-		if cfg.MaxY <= cfg.MinY {
-			return errors.Newf(
-				"geometry_max_y (%f) must be greater than geometry_min_y (%f)",
-				cfg.MaxY,
-				cfg.MinY,
-			)
-		}
-	}
-	return nil
 }
 
 // CreateIndex creates an index.
@@ -219,7 +94,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	}
 	// Assign an ID to the newly-added shard column, which is needed for the creation
 	// of a valid check constraint.
-	if err := tableDesc.AllocateIDs(); err != nil {
+	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err
 	}
 
@@ -349,28 +224,25 @@ func MakeIndexDescriptor(
 	}
 
 	if n.Predicate != nil {
-		if n.Inverted {
-			return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
-		}
-
 		idxValidator := schemaexpr.MakeIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
 		expr, err := idxValidator.Validate(n.Predicate)
 		if err != nil {
 			return nil, err
 		}
 		indexDesc.Predicate = expr
+		telemetry.Inc(sqltelemetry.PartialIndexCounter)
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
 		return nil, err
 	}
 
-	if err := applyStorageParameters(
+	if err := paramparse.ApplyStorageParameters(
 		params.ctx,
 		params.p.SemaCtx(),
 		params.EvalContext(),
 		n.StorageParams,
-		&indexStorageParamObserver{indexDesc: &indexDesc},
+		&paramparse.IndexStorageParamObserver{IndexDesc: &indexDesc},
 	); err != nil {
 		return nil, err
 	}
@@ -501,7 +373,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	if n.n.Concurrently {
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are created concurrently"),
 		)
@@ -510,7 +382,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
 	if n.n.PartitionBy == nil && n.tableDesc.PrimaryIndex.Partitioning.NumColumns > 0 {
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			errors.WithHint(
 				pgnotice.Newf("creating non-partitioned index on partitioned table may not be performant"),
@@ -550,7 +422,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if err := n.tableDesc.AddIndexMutation(indexDesc, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := n.tableDesc.AllocateIDs(); err != nil {
+	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
 		return err
 	}
 	// The index name may have changed as a result of

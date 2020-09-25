@@ -66,7 +66,7 @@ type MVCCMetadata struct {
 func (m *MVCCMetadata) Reset()      { *m = MVCCMetadata{} }
 func (*MVCCMetadata) ProtoMessage() {}
 func (*MVCCMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_c6139249dd196b26, []int{0}
+	return fileDescriptor_mvcc_a52f79ae78284316, []int{0}
 }
 func (m *MVCCMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -106,7 +106,7 @@ type MVCCMetadata_SequencedIntent struct {
 func (m *MVCCMetadata_SequencedIntent) Reset()      { *m = MVCCMetadata_SequencedIntent{} }
 func (*MVCCMetadata_SequencedIntent) ProtoMessage() {}
 func (*MVCCMetadata_SequencedIntent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_c6139249dd196b26, []int{0, 0}
+	return fileDescriptor_mvcc_a52f79ae78284316, []int{0, 0}
 }
 func (m *MVCCMetadata_SequencedIntent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -150,7 +150,7 @@ func (m *MVCCMetadataSubsetForMergeSerialization) Reset() {
 }
 func (*MVCCMetadataSubsetForMergeSerialization) ProtoMessage() {}
 func (*MVCCMetadataSubsetForMergeSerialization) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_c6139249dd196b26, []int{1}
+	return fileDescriptor_mvcc_a52f79ae78284316, []int{1}
 }
 func (m *MVCCMetadataSubsetForMergeSerialization) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -268,7 +268,7 @@ func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
 func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
 func (*MVCCStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_c6139249dd196b26, []int{2}
+	return fileDescriptor_mvcc_a52f79ae78284316, []int{2}
 }
 func (m *MVCCStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -322,7 +322,7 @@ func (m *MVCCStatsLegacyRepresentation) Reset()         { *m = MVCCStatsLegacyRe
 func (m *MVCCStatsLegacyRepresentation) String() string { return proto.CompactTextString(m) }
 func (*MVCCStatsLegacyRepresentation) ProtoMessage()    {}
 func (*MVCCStatsLegacyRepresentation) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_c6139249dd196b26, []int{3}
+	return fileDescriptor_mvcc_a52f79ae78284316, []int{3}
 }
 func (m *MVCCStatsLegacyRepresentation) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2277,9 +2277,9 @@ var (
 	ErrIntOverflowMvcc   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/enginepb/mvcc.proto", fileDescriptor_mvcc_c6139249dd196b26) }
+func init() { proto.RegisterFile("storage/enginepb/mvcc.proto", fileDescriptor_mvcc_a52f79ae78284316) }
 
-var fileDescriptor_mvcc_c6139249dd196b26 = []byte{
+var fileDescriptor_mvcc_a52f79ae78284316 = []byte{
 	// 743 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x95, 0xbf, 0x4e, 0x1b, 0x4b,
 	0x14, 0xc6, 0xbd, 0xd7, 0x06, 0xd6, 0x63, 0x63, 0xc3, 0x8a, 0xc2, 0x32, 0xf7, 0xae, 0x7d, 0xa1,

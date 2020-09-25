@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"path"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -551,7 +552,8 @@ func getLocalityInfo(
 				origLocalityKV := desc.LocalityKV
 				kv := roachpb.Tier{}
 				if err := kv.FromString(origLocalityKV); err != nil {
-					return info, errors.Wrapf(err, "reading backup manifest from %s", uris[i])
+					return info, errors.Wrapf(err, "reading backup manifest from %s",
+						RedactURIForErrorMessage(uris[i]))
 				}
 				if _, ok := urisByOrigLocality[origLocalityKV]; ok {
 					return info, errors.Errorf("duplicate locality %s found in backup", origLocalityKV)
@@ -569,11 +571,13 @@ func getLocalityInfo(
 	return info, nil
 }
 
+const incBackupSubdirGlob = "[0-9]*/[0-9]*.[0-9][0-9]/"
+
 // findPriorBackupNames finds "appended" incremental backups, as done by
 // findPriorBackupLocations and appends the backup manifest file name to
 // the URI.
 func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	prev, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/"+backupManifestName)
+	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestName)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
@@ -587,9 +591,24 @@ func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]s
 // layers to be manually moved/removed/etc without needing to update/maintain
 // said list.
 func findPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	prev, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/")
+	backupManifestSuffix := backupManifestName
+	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
+	}
+
+	if len(prev) == 0 {
+		// 20.1 nodes and earlier will have an oldBackupManifestName so we check for
+		// that too.
+		backupManifestSuffix = backupOldManifestName
+		prev, err = store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
+		if err != nil {
+			return nil, errors.Wrap(err, "reading previous backup layers")
+		}
+	}
+
+	for i := range prev {
+		prev[i] = strings.TrimSuffix(prev[i], "/"+backupManifestSuffix)
 	}
 	sort.Strings(prev)
 	return prev, nil
@@ -954,25 +973,36 @@ func createCheckpointIfNotExists(
 	return nil
 }
 
+// RedactURIForErrorMessage redacts any storage secrets before returning a URI which is safe to
+// return to the client in an error message.
+func RedactURIForErrorMessage(uri string) string {
+	redactedURI, err := cloudimpl.SanitizeExternalStorageURI(uri, []string{})
+	if err != nil {
+		return "<uri_failed_to_redact>"
+	}
+	return redactedURI
+}
+
 // checkForPreviousBackup ensures that the target location does not already
 // contain a BACKUP or checkpoint, locking out accidental concurrent operations
 // on that location. Note that the checkpoint file should be written as soon as
 // the job actually starts.
 func checkForPreviousBackup(
-	ctx context.Context, exportStore cloud.ExternalStorage, readable string,
+	ctx context.Context, exportStore cloud.ExternalStorage, defaultURI string,
 ) error {
+	redactedURI := RedactURIForErrorMessage(defaultURI)
 	r, err := exportStore.ReadFile(ctx, backupManifestName)
 	if err == nil {
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
-			readable, backupManifestName)
+			redactedURI, backupManifestName)
 	}
 
 	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
-			readable, backupManifestName)
+			redactedURI, backupManifestName)
 	}
 
 	r, err = exportStore.ReadFile(ctx, backupManifestCheckpointName)
@@ -980,13 +1010,13 @@ func checkForPreviousBackup(
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file (is another operation already in progress?)",
-			readable, backupManifestCheckpointName)
+			redactedURI, backupManifestCheckpointName)
 	}
 
 	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
-			readable, backupManifestCheckpointName)
+			redactedURI, backupManifestCheckpointName)
 	}
 
 	return nil
@@ -1011,8 +1041,9 @@ func verifyWriteableDestination(
 	// Write arbitrary bytes to a sentinel file in the backup directory to ensure
 	// that we're able to write to this directory.
 	arbitraryBytes := bytes.NewReader([]byte("✇"))
+	redactedURI := RedactURIForErrorMessage(baseURI)
 	if err := baseStore.WriteFile(ctx, backupSentinelWriteFile, arbitraryBytes); err != nil {
-		return errors.Wrapf(err, "writing sentinel file to %s", baseURI)
+		return errors.Wrapf(err, "writing sentinel file to %s", redactedURI)
 	}
 
 	if err := baseStore.Delete(ctx, backupSentinelWriteFile); err != nil {
@@ -1021,7 +1052,7 @@ func verifyWriteableDestination(
 		// Let's still log if we can't clean up.
 		log.Warningf(ctx,
 			"could not clean up sentinel backup %s file in %s: %+v",
-			backupSentinelWriteFile, baseURI, err)
+			backupSentinelWriteFile, redactedURI, err)
 	}
 
 	return nil

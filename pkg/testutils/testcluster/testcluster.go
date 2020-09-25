@@ -44,18 +44,19 @@ import (
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
-// analoguous to TestServer, but with control over range replication.
+// analogous to TestServer, but with control over range replication and join
+// flags.
 type TestCluster struct {
 	Servers         []*server.TestServer
 	Conns           []*gosql.DB
 	stopper         *stop.Stopper
-	replicationMode base.TestClusterReplicationMode
 	scratchRangeKey roachpb.Key
 	mu              struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
 	}
-	serverArgs []base.TestServerArgs
+	serverArgs  []base.TestServerArgs
+	clusterArgs base.TestClusterArgs
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
@@ -126,61 +127,54 @@ func (tc *TestCluster) StopServer(idx int) {
 // The cluster should be stopped using TestCluster.Stopper().Stop().
 func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
 	cluster := NewTestCluster(t, nodes, args)
-	cluster.Start(t, args)
+	cluster.Start(t)
 	return cluster
 }
 
 // NewTestCluster initializes a TestCluster made up of `nodes` in-memory testing
 // servers. It needs to be started separately using the return type.
-func NewTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
+func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *TestCluster {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
 
 	if err := checkServerArgsForCluster(
-		args.ServerArgs, args.ReplicationMode, disallowJoinAddr,
+		clusterArgs.ServerArgs, clusterArgs.ReplicationMode, disallowJoinAddr,
 	); err != nil {
 		t.Fatal(err)
 	}
-	for _, sargs := range args.ServerArgsPerNode {
+	for _, sargs := range clusterArgs.ServerArgsPerNode {
 		if err := checkServerArgsForCluster(
-			sargs, args.ReplicationMode, disallowJoinAddr,
+			sargs, clusterArgs.ReplicationMode, allowJoinAddr,
 		); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	tc := &TestCluster{
-		stopper:         stop.NewStopper(),
-		replicationMode: args.ReplicationMode,
+		stopper:     stop.NewStopper(),
+		clusterArgs: clusterArgs,
 	}
 
 	// Check if any of the args have a locality set.
 	noLocalities := true
-	for _, arg := range args.ServerArgsPerNode {
+	for _, arg := range tc.clusterArgs.ServerArgsPerNode {
 		if len(arg.Locality.Tiers) > 0 {
 			noLocalities = false
 			break
 		}
 	}
-	if len(args.ServerArgs.Locality.Tiers) > 0 {
+	if len(tc.clusterArgs.ServerArgs.Locality.Tiers) > 0 {
 		noLocalities = false
 	}
 
-	// Pre-bind a listener for node zero so the kernel can go ahead and
-	// assign its address for use in the other nodes' join flags.
-	// The Server becomes responsible for closing this.
-	firstListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {
 		var serverArgs base.TestServerArgs
-		if perNodeServerArgs, ok := args.ServerArgsPerNode[i]; ok {
+		if perNodeServerArgs, ok := tc.clusterArgs.ServerArgsPerNode[i]; ok {
 			serverArgs = perNodeServerArgs
 		} else {
-			serverArgs = args.ServerArgs
+			serverArgs = tc.clusterArgs.ServerArgs
 		}
 
 		// If no localities are specified in the args, we'll generate some
@@ -194,18 +188,25 @@ func NewTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestClu
 		}
 
 		if i == 0 {
-			if serverArgs.Knobs.Server == nil {
-				serverArgs.Knobs.Server = &server.TestingKnobs{}
+			if serverArgs.Listener != nil {
+				// If the test installed a listener for us, use that.
+				firstListener = serverArgs.Listener
 			} else {
-				// Copy the knobs so the struct with the listener is not
-				// reused for other nodes.
-				knobs := *serverArgs.Knobs.Server.(*server.TestingKnobs)
-				serverArgs.Knobs.Server = &knobs
+				// Pre-bind a listener for node zero so the kernel can go ahead and
+				// assign its address for use in the other nodes' join flags.
+				// The Server becomes responsible for closing this.
+				listener, err := net.Listen("tcp", "127.0.0.1:0")
+				if err != nil {
+					t.Fatal(err)
+				}
+				firstListener = listener
+				serverArgs.Listener = listener
 			}
-			serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = firstListener
-			serverArgs.Addr = firstListener.Addr().String()
 		} else {
-			serverArgs.JoinAddr = firstListener.Addr().String()
+			if serverArgs.JoinAddr == "" {
+				// Point to the first listener unless told explicitly otherwise.
+				serverArgs.JoinAddr = firstListener.Addr().String()
+			}
 			serverArgs.NoAutoInitializeCluster = true
 		}
 
@@ -224,10 +225,10 @@ func NewTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestClu
 // If looking to test initialization/bootstrap behavior, Start should be invoked
 // in a separate thread and with ParallelStart enabled (otherwise it'll block
 // on waiting for init for the first server).
-func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
+func (tc *TestCluster) Start(t testing.TB) {
 	nodes := len(tc.Servers)
 	var errCh chan error
-	if args.ParallelStart {
+	if tc.clusterArgs.ParallelStart {
 		errCh = make(chan error, nodes)
 	}
 
@@ -238,7 +239,7 @@ func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
 			disableLBS = true
 		}
 
-		if args.ParallelStart {
+		if tc.clusterArgs.ParallelStart {
 			go func(i int) {
 				errCh <- tc.StartServer(t, tc.Server(i), tc.serverArgs[i])
 			}(i)
@@ -253,7 +254,7 @@ func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
 		}
 	}
 
-	if args.ParallelStart {
+	if tc.clusterArgs.ParallelStart {
 		for i := 0; i < nodes; i++ {
 			if err := <-errCh; err != nil {
 				t.Fatal(err)
@@ -263,7 +264,7 @@ func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
 		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].Gossip())
 	}
 
-	if tc.replicationMode == base.ReplicationManual {
+	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
 		// We've already disabled the merge queue via testing knobs above, but ALTER
 		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
 		// the cluster setting.
@@ -285,7 +286,7 @@ func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
 	// cluster stopper is stopped.
 	tc.stopper.AddCloser(stop.CloserFn(tc.stopServers))
 
-	if tc.replicationMode == base.ReplicationAuto {
+	if tc.clusterArgs.ReplicationMode == base.ReplicationAuto {
 		if err := tc.WaitForFullReplication(); err != nil {
 			t.Fatal(err)
 		}
@@ -359,7 +360,7 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 	// started, in which case the check has not been performed.
 	if err := checkServerArgsForCluster(
 		serverArgs,
-		tc.replicationMode,
+		tc.clusterArgs.ReplicationMode,
 		// Allow JoinAddr here; servers being added after the TestCluster has been
 		// started should have a JoinAddr filled in at this point.
 		allowJoinAddr,
@@ -367,7 +368,7 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 		return nil, err
 	}
 	serverArgs.Stopper = stop.NewStopper()
-	if tc.replicationMode == base.ReplicationManual {
+	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
 		var stkCopy kvserver.StoreTestingKnobs
 		if stk := serverArgs.Knobs.Store; stk != nil {
 			stkCopy = *stk.(*kvserver.StoreTestingKnobs)
@@ -376,6 +377,23 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 		stkCopy.DisableMergeQueue = true
 		stkCopy.DisableReplicateQueue = true
 		serverArgs.Knobs.Store = &stkCopy
+	}
+
+	// Install listener, if non-empty.
+	if serverArgs.Listener != nil {
+		// Instantiate the server testing knobs if non-empty.
+		if serverArgs.Knobs.Server == nil {
+			serverArgs.Knobs.Server = &server.TestingKnobs{}
+		} else {
+			// Copy the knobs so the struct with the listener is not
+			// reused for other nodes.
+			knobs := *serverArgs.Knobs.Server.(*server.TestingKnobs)
+			serverArgs.Knobs.Server = &knobs
+		}
+
+		// Install the provided listener.
+		serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
+		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
 	s := serverutils.NewServer(serverArgs).(*server.TestServer)
@@ -917,7 +935,7 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 
 // ReplicationMode implements TestClusterInterface.
 func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
-	return tc.replicationMode
+	return tc.clusterArgs.ReplicationMode
 }
 
 // ToggleReplicateQueues activates or deactivates the replication queues on all

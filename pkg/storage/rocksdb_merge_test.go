@@ -241,7 +241,7 @@ func mergeValuesPebble(reverse bool, srcBytes [][]byte) ([]byte, error) {
 				return nil, err
 			}
 		}
-		val, _, err := valueMerger.Finish()
+		val, _, err := valueMerger.Finish(false)
 		return val, err
 	}
 	valueMerger, err := MVCCMerger.Merge(nil /* key */, srcBytes[0])
@@ -254,7 +254,7 @@ func mergeValuesPebble(reverse bool, srcBytes [][]byte) ([]byte, error) {
 			return nil, err
 		}
 	}
-	val, _, err := valueMerger.Finish()
+	val, _, err := valueMerger.Finish(false)
 	return val, err
 }
 

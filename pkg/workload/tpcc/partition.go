@@ -14,6 +14,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/rand"
@@ -313,15 +314,12 @@ func partitionTable(
 func partitionIndex(
 	db *gosql.DB, cfg zoneConfig, p *partitioner, table, index, col string, idx int,
 ) error {
+	indexStr := fmt.Sprintf("%s@%s", table, index)
 	if exists, err := indexExists(db, table, index); err != nil {
 		return err
 	} else if !exists {
-		// If the index doesn't exist then there's nothing to do. This is the
-		// case for a few of the indexes that are only needed for foreign keys
-		// when foreign keys are disabled.
-		return nil
+		return errors.Errorf("could not find index %q", indexStr)
 	}
-	indexStr := fmt.Sprintf("%s@%s", table, index)
 	return partitionObject(db, cfg, p, "INDEX", indexStr, col, table, idx)
 }
 
@@ -345,10 +343,7 @@ func partitionOrder(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
 }
 
 func partitionOrderLine(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
-	if err := partitionTable(db, cfg, wPart, "order_line", "ol_w_id", 0); err != nil {
-		return err
-	}
-	return partitionIndex(db, cfg, wPart, "order_line", "order_line_stock_fk_idx", "ol_supply_w_id", 1)
+	return partitionTable(db, cfg, wPart, "order_line", "ol_w_id", 0)
 }
 
 func partitionStock(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
@@ -366,13 +361,7 @@ func partitionCustomer(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
 }
 
 func partitionHistory(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
-	if err := partitionTable(db, cfg, wPart, "history", "h_w_id", 0); err != nil {
-		return err
-	}
-	if err := partitionIndex(db, cfg, wPart, "history", "history_customer_fk_idx", "h_c_w_id", 1); err != nil {
-		return err
-	}
-	return partitionIndex(db, cfg, wPart, "history", "history_district_fk_idx", "h_w_id", 2)
+	return partitionTable(db, cfg, wPart, "history", "h_w_id", 0)
 }
 
 // replicateItem creates a covering "replicated index" for the item table for
@@ -458,6 +447,9 @@ func partitionCount(db *gosql.DB) (int, error) {
 }
 
 func indexExists(db *gosql.DB, table, index string) (bool, error) {
+	// Strip any quotes around the table name.
+	table = strings.ReplaceAll(table, `"`, ``)
+
 	var exists bool
 	if err := db.QueryRow(`
 		SELECT count(*) > 0

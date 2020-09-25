@@ -1199,10 +1199,6 @@ func (txn *Txn) ManualRestart(ctx context.Context, ts hlc.Timestamp) {
 // operation (usually, but not exclusively, by a high-priority txn with
 // conflicting writes).
 func (txn *Txn) IsSerializablePushAndRefreshNotPossible() bool {
-	if txn.typ != RootTxn {
-		panic(
-			errors.AssertionFailedf("IsSerializablePushAndRefreshNotPossible() called on leaf txn"))
-	}
 	return txn.mu.sender.IsSerializablePushAndRefreshNotPossible()
 }
 
@@ -1246,10 +1242,6 @@ func (txn *Txn) Active() bool {
 // In step-wise execution, reads operate at a snapshot established at
 // the last step, instead of the latest write if not yet enabled.
 func (txn *Txn) Step(ctx context.Context) error {
-	if txn.typ != RootTxn {
-		return errors.WithContextTags(
-			errors.AssertionFailedf("txn.Step() only allowed in RootTxn"), ctx)
-	}
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.Step(ctx)
@@ -1258,10 +1250,6 @@ func (txn *Txn) Step(ctx context.Context) error {
 // ConfigureStepping configures step-wise execution in the
 // transaction.
 func (txn *Txn) ConfigureStepping(ctx context.Context, mode SteppingMode) (prevMode SteppingMode) {
-	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(
-			errors.AssertionFailedf("txn.ConfigureStepping() only allowed in RootTxn"), ctx))
-	}
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.ConfigureStepping(ctx, mode)

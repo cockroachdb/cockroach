@@ -14,6 +14,7 @@ import (
 	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -565,9 +566,15 @@ func backupPlanHook(
 			return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 		}
 
+		if backupStmt.Coverage() == tree.AllDescriptors && len(targetDescs) == 0 {
+			return errors.New("no descriptors available to backup at selected time")
+		}
+
 		var tables []catalog.TableDescriptor
 		statsFiles := make(map[descpb.ID]string)
-		// TODO(pbardea): Let's check the privs for UDTs and UDSs here.
+		// N.B.: These privilege checks currently do nothing since we require the
+		// user running the backup to be an admin. If the user is an Admin, they
+		// should have ALL privileges on these descriptors anyway.
 		for _, desc := range targetDescs {
 			switch desc := desc.(type) {
 			case catalog.DatabaseDescriptor:
@@ -583,6 +590,10 @@ func backupPlanHook(
 				// TODO (anzo): look into the tradeoffs of having all objects in the array to be in the same file,
 				// vs having each object in a separate file, or somewhere in between.
 				statsFiles[desc.GetID()] = backupStatisticsFileName
+			case catalog.TypeDescriptor, catalog.SchemaDescriptor:
+				if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -620,12 +631,12 @@ func backupPlanHook(
 		// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
 		// backupDestination struct.
 		collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-			resolveDest(ctx, p, backupStmt, defaultURI, urisByLocalityKV, makeCloudStorage, endTime,
-				to, incrementalFrom, subdir)
+			resolveDest(ctx, p.User(), backupStmt.Nested, backupStmt.AppendToLatest, defaultURI,
+				urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom, subdir)
 		if err != nil {
 			return err
 		}
-		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p, makeCloudStorage, prevs,
+		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p.User(), makeCloudStorage, prevs,
 			encryptionParams)
 		if err != nil {
 			return err
@@ -748,6 +759,11 @@ func backupPlanHook(
 
 			if backupStmt.Coverage() != tree.AllDescriptors {
 				if err := checkForNewTables(ctx, p.ExecCfg().DB, targetDescs, tablesInPrev, dbsInPrev, priorIDs, startTime, endTime); err != nil {
+					return err
+				}
+				// Let's check that we're not widening the scope of this backup to an
+				// entire database, even if no tables were created in the meantime.
+				if err := checkForNewCompleteDatabases(targetDescs, completeDBs, dbsInPrev); err != nil {
 					return err
 				}
 			}
@@ -969,6 +985,7 @@ func backupPlanHook(
 					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 				}
 			}
+			return err
 		}
 
 		collectTelemetry()
@@ -1117,6 +1134,28 @@ func getEncryptedDataKeyByKMSMasterKeyID(
 	}
 
 	return encryptedDataKeyByKMSMasterKeyID, kmsInfo, nil
+}
+
+// checkForNewDatabases returns an error if any new complete databases were
+// introduced.
+func checkForNewCompleteDatabases(
+	targetDescs []catalog.Descriptor, curDBs []descpb.ID, prevDBs map[descpb.ID]struct{},
+) error {
+	for _, dbID := range curDBs {
+		if _, inPrevious := prevDBs[dbID]; !inPrevious {
+			// Search for the name for a nicer error message.
+			violatingDatabase := strconv.Itoa(int(dbID))
+			for _, desc := range targetDescs {
+				if desc.GetID() == dbID {
+					violatingDatabase = desc.GetName()
+					break
+				}
+			}
+			return errors.Errorf("previous backup does not contain the complete database %q",
+				violatingDatabase)
+		}
+	}
+	return nil
 }
 
 // checkForNewTables returns an error if any new tables were introduced with the

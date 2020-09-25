@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -52,6 +51,9 @@ type transientCluster struct {
 	stopper    *stop.Stopper
 	s          *server.TestServer
 	servers    []*server.TestServer
+
+	adminPassword string
+	adminUser     string
 }
 
 func (c *transientCluster) checkConfigAndSetupLogging(
@@ -265,20 +267,19 @@ func (c *transientCluster) start(
 		}
 	}
 
-	// Create the root password if running in secure mode. We'll
-	// need that for the URL.
-	if !demoCtx.insecure {
-		if err := c.setupUserAuth(ctx); err != nil {
-			return err
-		}
+	// Run the SQL initialization. This takes care of setting up the
+	// initial replication factor for small clusters and creating the
+	// admin user.
+	const demoUsername = "demo"
+	demoPassword, err := runInitialSQL(ctx, c.s.Server, demoCtx.nodes < 3, demoUsername)
+	if err != nil {
+		return err
 	}
-
-	if demoCtx.nodes < 3 {
-		// Set up the default zone configuration. We are using an in-memory store
-		// so we really want to disable replication.
-		if err := cliDisableReplication(ctx, c.s.Server); err != nil {
-			return err
-		}
+	c.adminUser = demoUsername
+	c.adminPassword = demoPassword
+	if demoCtx.insecure {
+		c.adminUser = security.RootUser
+		c.adminPassword = "unused"
 	}
 
 	// Prepare the URL for use by the SQL shell.
@@ -573,21 +574,11 @@ func (c *transientCluster) getNetworkURLForServer(
 		sqlURL.User = url.User(security.RootUser)
 		options.Add("sslmode", "disable")
 	} else {
-		sqlURL.User = url.UserPassword(security.RootUser, defaultRootPassword)
+		sqlURL.User = url.UserPassword(c.adminUser, c.adminPassword)
 		options.Add("sslmode", "require")
 	}
 	sqlURL.RawQuery = options.Encode()
 	return sqlURL.String(), nil
-}
-
-func (c *transientCluster) setupUserAuth(ctx context.Context) error {
-	ie := c.s.InternalExecutor().(*sql.InternalExecutor)
-	_, err := ie.Exec(ctx, "set-root-password", nil, /* txn*/
-		`ALTER USER $1 WITH PASSWORD $2`,
-		security.RootUser,
-		defaultRootPassword,
-	)
-	return err
 }
 
 func (c *transientCluster) setupWorkload(
@@ -759,12 +750,16 @@ func (c *transientCluster) sockForServer(nodeID roachpb.NodeID) unixSocketDetail
 	return unixSocketDetails{
 		socketDir:  c.demoDir,
 		portNumber: defaultPort + int(nodeID) - 1,
+		username:   c.adminUser,
+		password:   c.adminPassword,
 	}
 }
 
 type unixSocketDetails struct {
 	socketDir  string
 	portNumber int
+	username   string
+	password   string
 }
 
 func (s unixSocketDetails) exists() bool {
@@ -789,7 +784,7 @@ func (s unixSocketDetails) String() string {
 	// mode the password is not checked on the server.
 	sqlURL := url.URL{
 		Scheme:   "postgres",
-		User:     url.UserPassword(security.RootUser, defaultRootPassword),
+		User:     url.UserPassword(s.username, s.password),
 		RawQuery: options.Encode(),
 	}
 	return sqlURL.String()

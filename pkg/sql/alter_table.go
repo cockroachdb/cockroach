@@ -265,12 +265,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// If there are any FKs, we will need to update the table descriptor of the
 				// depended-on table (to register this table against its DependedOnBy field).
 				// This descriptor must be looked up uncached, and we'll allow FK dependencies
-				// on tables that were just added. See the comment at the start of
-				// the global-scope resolveFK().
+				// on tables that were just added. See the comment at the start of ResolveFK().
 				// TODO(vivek): check if the cache can be used.
 				var err error
 				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					// Check whether the table is empty, and pass the result to resolveFK(). If
+					// Check whether the table is empty, and pass the result to ResolveFK(). If
 					// the table is empty, then resolveFK will automatically add the necessary
 					// index for a fk constraint if the index does not exist.
 					span := n.tableDesc.PrimaryIndexSpan(params.ExecCfg().Codec)
@@ -285,7 +284,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 					} else {
 						tableState = NonEmptyTable
 					}
-					err = params.p.resolveFK(params.ctx, n.tableDesc, d, affected, tableState, t.ValidationBehavior)
+					err = ResolveFK(
+						params.ctx,
+						params.p.txn,
+						params.p,
+						n.tableDesc,
+						d,
+						affected,
+						tableState,
+						t.ValidationBehavior,
+						params.p.EvalContext(),
+					)
 				})
 				if err != nil {
 					return err
@@ -403,6 +412,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.Name)
 			}
+			var idxNamesToDelete []string
 			for _, idx := range n.tableDesc.AllNonDropIndexes() {
 				// We automatically drop indexes that reference the column
 				// being dropped.
@@ -466,15 +476,19 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// Perform the DROP.
 				if containsThisColumn {
-					jobDesc := fmt.Sprintf("removing index %q dependent on column %q which is being"+
-						" dropped; full details: %s", idx.Name, colToDrop.ColName(),
-						tree.AsStringWithFQNames(n.n, params.Ann()))
-					if err := params.p.dropIndexByName(
-						params.ctx, tn, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
-						t.DropBehavior, ignoreIdxConstraint, jobDesc,
-					); err != nil {
-						return err
-					}
+					idxNamesToDelete = append(idxNamesToDelete, idx.Name)
+				}
+			}
+
+			for _, idxName := range idxNamesToDelete {
+				jobDesc := fmt.Sprintf("removing index %q dependent on column %q which is being"+
+					" dropped; full details: %s", idxName, colToDrop.ColName(),
+					tree.AsStringWithFQNames(n.n, params.Ann()))
+				if err := params.p.dropIndexByName(
+					params.ctx, tn, tree.UnrestrictedName(idxName), n.tableDesc, false,
+					t.DropBehavior, ignoreIdxConstraint, jobDesc,
+				); err != nil {
+					return err
 				}
 			}
 
@@ -606,7 +620,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				if err := validateCheckInTxn(
-					params.ctx, params.p.LeaseMgr(), &params.p.semaCtx, params.EvalContext(), n.tableDesc, params.EvalContext().Txn, name,
+					params.ctx, params.p.LeaseMgr(), &params.p.semaCtx, params.EvalContext(), n.tableDesc, params.EvalContext().Txn, ck.Expr,
 				); err != nil {
 					return err
 				}
@@ -725,6 +739,23 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", tree.ErrString(&t.NewName))
 			}
+			// If this is a unique or primary constraint, renames of the constraint
+			// lead to renames of the underlying index. Ensure that no index with this
+			// new name exists. This is what postgres does.
+			switch details.Kind {
+			case descpb.ConstraintTypeUnique, descpb.ConstraintTypePK:
+				if err := n.tableDesc.ForeachNonDropIndex(func(
+					descriptor *descpb.IndexDescriptor,
+				) error {
+					if descriptor.Name == string(t.NewName) {
+						return pgerror.Newf(pgcode.DuplicateRelation,
+							"relation %v already exists", t.NewName)
+					}
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
 
 			if err := params.p.CheckPrivilege(params.ctx, n.tableDesc, privilege.CREATE); err != nil {
 				return err
@@ -755,7 +786,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		}
 
 		// Allocate IDs now, so new IDs are available to subsequent commands
-		if err := n.tableDesc.AllocateIDs(); err != nil {
+		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
 			return err
 		}
 	}
@@ -832,14 +863,17 @@ func (n *alterTableNode) Close(context.Context)        {}
 // addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given table descriptor, but sets up
 // the index with ExtraColumnIDs from the given index, rather than the table's primary key.
 func addIndexMutationWithSpecificPrimaryKey(
-	table *tabledesc.Mutable, toAdd *descpb.IndexDescriptor, primary *descpb.IndexDescriptor,
+	ctx context.Context,
+	table *tabledesc.Mutable,
+	toAdd *descpb.IndexDescriptor,
+	primary *descpb.IndexDescriptor,
 ) error {
 	// Reset the ID so that a call to AllocateIDs will set up the index.
 	toAdd.ID = 0
 	if err := table.AddIndexMutation(toAdd, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := table.AllocateIDs(); err != nil {
+	if err := table.AllocateIDs(ctx); err != nil {
 		return err
 	}
 	// Use the columns in the given primary index to construct this indexes ExtraColumnIDs list.

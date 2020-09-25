@@ -133,10 +133,12 @@ const (
 // sqlTimestamp: The timestamp to report for current_timestamp(), now() etc.
 // historicalTimestamp: If non-nil indicates that the transaction is historical
 //   and should be fixed to this timestamp.
-// priority: The transaction's priority.
+// priority: The transaction's priority. Pass roachpb.UnspecifiedUserPriority if the txn arg is
+//   not nil.
 // readOnly: The read-only character of the new txn.
 // txn: If not nil, this txn will be used instead of creating a new txn. If so,
-//      all the other arguments need to correspond to the attributes of this txn.
+//   all the other arguments need to correspond to the attributes of this txn
+//   (unless otherwise specified).
 // tranCtx: A bag of extra execution context.
 func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
@@ -206,16 +208,19 @@ func (ts *txnState) resetForNewSQLTxn(
 	if txn == nil {
 		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero)
 		ts.mu.txn.SetDebugName(opName)
+		if err := ts.setPriorityLocked(priority); err != nil {
+			panic(err)
+		}
 	} else {
+		if priority != roachpb.UnspecifiedUserPriority {
+			panic(errors.AssertionFailedf("unexpected priority when using an existing txn: %s", priority))
+		}
 		ts.mu.txn = txn
 	}
 	ts.mu.txnStart = timeutil.Now()
 	ts.mu.Unlock()
 	if historicalTimestamp != nil {
 		ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp)
-	}
-	if err := ts.setPriority(priority); err != nil {
-		panic(err)
 	}
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
@@ -299,9 +304,12 @@ func (ts *txnState) getReadTimestamp() hlc.Timestamp {
 
 func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
 	ts.mu.Lock()
-	err := ts.mu.txn.SetUserPriority(userPriority)
-	ts.mu.Unlock()
-	if err != nil {
+	defer ts.mu.Unlock()
+	return ts.setPriorityLocked(userPriority)
+}
+
+func (ts *txnState) setPriorityLocked(userPriority roachpb.UserPriority) error {
+	if err := ts.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}
 	ts.priority = userPriority

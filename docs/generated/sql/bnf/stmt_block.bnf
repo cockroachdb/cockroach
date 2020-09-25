@@ -14,6 +14,7 @@ stmt ::=
 	| prepare_stmt
 	| revoke_stmt
 	| savepoint_stmt
+	| reassign_owned_stmt
 	| release_stmt
 	| refresh_stmt
 	| nonpreparable_set_stmt
@@ -49,7 +50,7 @@ analyze_stmt ::=
 	| 'ANALYSE' analyze_target
 
 copy_from_stmt ::=
-	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options
+	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options opt_where_clause
 
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
@@ -89,6 +90,9 @@ revoke_stmt ::=
 savepoint_stmt ::=
 	'SAVEPOINT' name
 
+reassign_owned_stmt ::=
+	'REASSIGN' 'OWNED' 'BY' role_spec_list 'TO' role_spec
+
 release_stmt ::=
 	'RELEASE' savepoint_name
 
@@ -127,6 +131,7 @@ create_stmt ::=
 	| create_ddl_stmt
 	| create_stats_stmt
 	| create_schedule_for_backup_stmt
+	| create_extension_stmt
 
 delete_stmt ::=
 	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -242,6 +247,10 @@ opt_with_copy_options ::=
 	opt_with copy_options_list
 	| 
 
+opt_where_clause ::=
+	where_clause
+	| 
+
 database_name ::=
 	name
 
@@ -298,6 +307,14 @@ schema_name_list ::=
 prep_type_clause ::=
 	'(' type_list ')'
 	| 
+
+role_spec_list ::=
+	( role_spec ) ( ( ',' role_spec ) )*
+
+role_spec ::=
+	non_reserved_word_or_sconst
+	| 'CURRENT_USER'
+	| 'SESSION_USER'
 
 savepoint_name ::=
 	'SAVEPOINT' name
@@ -411,6 +428,10 @@ create_stats_stmt ::=
 create_schedule_for_backup_stmt ::=
 	'CREATE' 'SCHEDULE' opt_description 'FOR' 'BACKUP' opt_backup_targets 'INTO' string_or_placeholder_opt_list opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
 
+create_extension_stmt ::=
+	'CREATE' 'EXTENSION' 'IF' 'NOT' 'EXISTS' name
+	| 'CREATE' 'EXTENSION' name
+
 opt_with_clause ::=
 	with_clause
 	| 
@@ -419,10 +440,6 @@ table_expr_opt_alias_idx ::=
 	table_name_opt_idx
 	| table_name_opt_idx table_alias_name
 	| table_name_opt_idx 'AS' table_alias_name
-
-opt_where_clause ::=
-	where_clause
-	| 
 
 opt_sort_clause ::=
 	sort_clause
@@ -713,6 +730,9 @@ opt_with ::=
 copy_options_list ::=
 	( copy_options ) ( ( copy_options ) )*
 
+where_clause ::=
+	'WHERE' a_expr
+
 prefixed_column_path ::=
 	db_object_name_component '.' unrestricted_name
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
@@ -730,6 +750,7 @@ expr_list ::=
 unreserved_keyword ::=
 	'ABORT'
 	| 'ACTION'
+	| 'ACCESS'
 	| 'ADD'
 	| 'ADMIN'
 	| 'AFTER'
@@ -765,6 +786,7 @@ unreserved_keyword ::=
 	| 'CONFIGURATION'
 	| 'CONFIGURATIONS'
 	| 'CONFIGURE'
+	| 'CONNECTION'
 	| 'CONSTRAINTS'
 	| 'CONTROLCHANGEFEED'
 	| 'CONTROLJOB'
@@ -872,6 +894,7 @@ unreserved_keyword ::=
 	| 'MATERIALIZED'
 	| 'MAXVALUE'
 	| 'MERGE'
+	| 'METHOD'
 	| 'MINUTE'
 	| 'MINVALUE'
 	| 'MODIFYCLUSTERSETTING'
@@ -946,6 +969,7 @@ unreserved_keyword ::=
 	| 'RANGE'
 	| 'RANGES'
 	| 'READ'
+	| 'REASSIGN'
 	| 'RECURRING'
 	| 'RECURSIVE'
 	| 'REF'
@@ -988,6 +1012,7 @@ unreserved_keyword ::=
 	| 'SESSION'
 	| 'SESSIONS'
 	| 'SET'
+	| 'SETS'
 	| 'SHARE'
 	| 'SHOW'
 	| 'SIMPLE'
@@ -1134,6 +1159,10 @@ schema_name ::=
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
 
+non_reserved_word_or_sconst ::=
+	non_reserved_word
+	| 'SCONST'
+
 transaction_mode_list ::=
 	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
 
@@ -1225,12 +1254,12 @@ create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
 
 create_database_stmt ::=
-	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
-	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
 
 create_index_stmt ::=
-	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
-	| 'CREATE' opt_unique 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+	| 'CREATE' opt_unique 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
 
@@ -1298,10 +1327,7 @@ with_clause ::=
 	| 'WITH' 'RECURSIVE' cte_list
 
 table_name_opt_idx ::=
-	table_name opt_index_flags
-
-where_clause ::=
-	'WHERE' a_expr
+	opt_only table_name opt_index_flags opt_descendant
 
 sort_clause ::=
 	'ORDER' 'BY' sortby_list
@@ -1347,10 +1373,6 @@ drop_type_stmt ::=
 
 explain_option_name ::=
 	non_reserved_word
-
-non_reserved_word_or_sconst ::=
-	non_reserved_word
-	| 'SCONST'
 
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
@@ -1503,6 +1525,12 @@ typename ::=
 	simple_typename opt_array_bounds
 	| simple_typename 'ARRAY'
 
+non_reserved_word ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
+
 transaction_mode ::=
 	transaction_user_priority
 	| transaction_read_mode
@@ -1607,11 +1635,6 @@ alter_zone_partition_stmt ::=
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
 
-role_spec ::=
-	non_reserved_word_or_sconst
-	| 'CURRENT_USER'
-	| 'SESSION_USER'
-
 opt_add_val_placement ::=
 	'BEFORE' 'SCONST'
 	| 'AFTER' 'SCONST'
@@ -1684,6 +1707,10 @@ opt_lc_ctype_clause ::=
 	'LC_CTYPE' opt_equal non_reserved_word_or_sconst
 	| 
 
+opt_connection_limit ::=
+	'CONNECTION' 'LIMIT' opt_equal signed_iconst
+	| 
+
 opt_unique ::=
 	'UNIQUE'
 	| 
@@ -1691,7 +1718,7 @@ opt_unique ::=
 opt_index_name ::=
 	opt_name
 
-opt_using_gin_btree ::=
+opt_index_access_method ::=
 	'USING' name
 	| 
 
@@ -1752,10 +1779,18 @@ opt_sequence_option_list ::=
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*
 
+opt_only ::=
+	'ONLY'
+	| 
+
 opt_index_flags ::=
 	'@' index_name
 	| '@' '[' iconst64 ']'
 	| '@' '{' index_flags_param_list '}'
+	| 
+
+opt_descendant ::=
+	'*'
 	| 
 
 sortby_list ::=
@@ -1785,12 +1820,6 @@ table_index_name_list ::=
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
-
-non_reserved_word ::=
-	'identifier'
-	| unreserved_keyword
-	| col_name_keyword
-	| type_func_name_keyword
 
 kv_option ::=
 	name '=' string_or_placeholder
@@ -1867,6 +1896,8 @@ extra_var_value ::=
 
 targets_roles ::=
 	'ROLE' name_list
+	| 'SCHEMA' name_list
+	| 'TYPE' type_name_list
 	| targets
 
 partition ::=
@@ -2100,12 +2131,18 @@ opt_equal ::=
 	'='
 	| 
 
+signed_iconst ::=
+	'ICONST'
+	| only_signed_iconst
+
 opt_name ::=
 	name
 	| 
 
 index_elem ::=
-	a_expr opt_asc_desc opt_nulls_order
+	func_expr_windowless index_elem_options
+	| '(' a_expr ')' index_elem_options
+	| name index_elem_options
 
 storing ::=
 	'COVERING'
@@ -2184,7 +2221,7 @@ from_clause ::=
 	| 
 
 group_clause ::=
-	'GROUP' 'BY' expr_list
+	'GROUP' 'BY' group_by_list
 	| 
 
 having_clause ::=
@@ -2400,15 +2437,12 @@ tuple1_ambiguous_values ::=
 	| a_expr ','
 	| a_expr ',' expr_list
 
-opt_asc_desc ::=
-	'ASC'
-	| 'DESC'
-	| 
+func_expr_windowless ::=
+	func_application
+	| func_expr_common_subexpr
 
-opt_nulls_order ::=
-	'NULLS' 'FIRST'
-	| 'NULLS' 'LAST'
-	| 
+index_elem_options ::=
+	opt_class opt_asc_desc opt_nulls_order
 
 list_partitions ::=
 	( list_partition ) ( ( ',' list_partition ) )*
@@ -2430,6 +2464,16 @@ index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
 
+opt_asc_desc ::=
+	'ASC'
+	| 'DESC'
+	| 
+
+opt_nulls_order ::=
+	'NULLS' 'FIRST'
+	| 'NULLS' 'LAST'
+	| 
+
 col_qualification ::=
 	'CONSTRAINT' constraint_name col_qualification_elem
 	| col_qualification_elem
@@ -2450,6 +2494,9 @@ reference_actions ::=
 	| reference_on_update reference_on_delete
 	| reference_on_delete reference_on_update
 	| 
+
+group_by_list ::=
+	( group_by_item ) ( ( ',' group_by_item ) )*
 
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
@@ -2482,10 +2529,6 @@ join_type ::=
 join_qual ::=
 	'USING' '(' name_list ')'
 	| 'ON' a_expr
-
-func_expr_windowless ::=
-	func_application
-	| func_expr_common_subexpr
 
 rowsfrom_list ::=
 	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
@@ -2663,6 +2706,10 @@ opt_slice_bound ::=
 when_clause ::=
 	'WHEN' a_expr 'THEN' a_expr
 
+opt_class ::=
+	name
+	| 
+
 list_partition ::=
 	partition 'VALUES' 'IN' '(' expr_list ')' opt_partition_by
 
@@ -2695,6 +2742,9 @@ reference_on_update ::=
 
 reference_on_delete ::=
 	'ON' 'DELETE' reference_action
+
+group_by_item ::=
+	a_expr
 
 window_definition ::=
 	window_name 'AS' window_specification
@@ -2729,10 +2779,6 @@ geo_shape_type ::=
 	| 'MULTIPOLYGON'
 	| 'GEOMETRYCOLLECTION'
 	| 'GEOMETRY'
-
-signed_iconst ::=
-	'ICONST'
-	| only_signed_iconst
 
 char_aliases ::=
 	'CHAR'

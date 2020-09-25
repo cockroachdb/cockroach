@@ -331,7 +331,11 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 
 // ConstructInvertedFilter is part of the exec.Factory interface.
 func (e *distSQLSpecExecFactory) ConstructInvertedFilter(
-	n exec.Node, invFilter *invertedexpr.SpanExpression, invColumn exec.NodeColumnOrdinal,
+	n exec.Node,
+	invFilter *invertedexpr.SpanExpression,
+	preFiltererExpr tree.TypedExpr,
+	preFiltererType *types.T,
+	invColumn exec.NodeColumnOrdinal,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(
 		47473, "experimental opt-driven distsql planning: inverted filter")
@@ -428,24 +432,6 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 		joinType, left, right, onCond, leftEqCols, rightEqCols,
 		leftEqColsAreKey, rightEqColsAreKey, mergeJoinOrdering, reqOrdering,
 	)
-}
-
-// ConstructInterleavedJoin is part of the exec.Factory interface.
-func (e *distSQLSpecExecFactory) ConstructInterleavedJoin(
-	joinType descpb.JoinType,
-	leftTable cat.Table,
-	leftIndex cat.Index,
-	leftParams exec.ScanParams,
-	leftFilter tree.TypedExpr,
-	rightTable cat.Table,
-	rightIndex cat.Index,
-	rightParams exec.ScanParams,
-	rightFilter tree.TypedExpr,
-	leftIsAncestor bool,
-	onCond tree.TypedExpr,
-	reqOrdering exec.OutputOrdering,
-) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: interleaved join")
 }
 
 func populateAggFuncSpec(

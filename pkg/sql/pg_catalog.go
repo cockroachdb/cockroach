@@ -969,8 +969,7 @@ func populateTableConstraints(
 				if err != nil {
 					return err
 				}
-				f.WriteString(" WHERE ")
-				f.WriteString(pred)
+				f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
 			}
 			condef = tree.NewDString(f.CloseAndGetString())
 
@@ -1114,7 +1113,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					// they're virtual, dropped tables, or ones that the user can't see.
 					if (!table.IsVirtualTable() && table.GetParentID() != db.GetID()) ||
 						table.Dropped() ||
-						!userCanSeeTable(ctx, p, table, true /*allowAdding*/) {
+						!userCanSeeDescriptor(ctx, p, table, true /*allowAdding*/) {
 						return false, nil
 					}
 					h := makeOidHasher()

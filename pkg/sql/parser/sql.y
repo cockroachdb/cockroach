@@ -571,7 +571,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACTION ADD ADMIN AFTER AGGREGATE
+%token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
 
@@ -583,7 +583,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
+%token <str> CONFLICT CONNECTION CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
 %token <str> CONVERSION CONVERT COPY COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
@@ -625,7 +625,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> LIST LOCAL LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MODIFYCLUSTERSETTING MONTH
+%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
@@ -644,14 +644,14 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 
 %token <str> QUERIES QUERY
 
-%token <str> RANGE RANGES READ REAL RECURSIVE RECURRING REF REFERENCES REFRESH
+%token <str> RANGE RANGES READ REAL REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
-%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
+%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
@@ -685,7 +685,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 // needed to make the grammar LALR(1). GENERATED_ALWAYS is needed to support
 // the Postgres syntax for computed columns along with our family related
 // extensions (CREATE FAMILY/CREATE FAMILY family_name).
-%token NOT_LA WITH_LA AS_LA GENERATED_ALWAYS
+%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS
 
 %union {
   id    int32
@@ -776,6 +776,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.Statement> create_changefeed_stmt
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
+%type <tree.Statement> create_extension_stmt
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
@@ -818,6 +819,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.Statement> import_stmt
 %type <tree.Statement> pause_stmt pause_jobs_stmt pause_schedules_stmt
 %type <*tree.Select>   for_schedules_clause
+%type <tree.Statement> reassign_owned_stmt
 %type <tree.Statement> release_stmt
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt
@@ -922,6 +924,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.ValidationBehavior> opt_validate_behavior
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+%type <int32> opt_connection_limit
 
 %type <tree.IsolationLevel> transaction_iso_level
 %type <tree.UserPriority> transaction_user_priority
@@ -933,7 +936,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.KVOption> role_option password_clause valid_until_clause
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name func_name_no_crdb_extra
-%type <str> opt_collate
+%type <str> opt_class opt_collate
 
 %type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
@@ -986,6 +989,8 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <*tree.UpdateExpr> set_clause multiple_set_clause
 %type <tree.ArraySubscripts> array_subscripts
 %type <tree.GroupBy> group_clause
+%type <tree.Exprs> group_by_list
+%type <tree.Expr> group_by_item
 %type <*tree.Limit> select_limit opt_select_limit
 %type <tree.TableNames> relation_expr_list
 %type <tree.ReturningClause> returning_clause
@@ -1012,7 +1017,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.Expr> overlay_placing
 
 %type <bool> opt_unique opt_concurrently opt_cluster
-%type <bool> opt_using_gin_btree
+%type <bool> opt_index_access_method
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
 %type <tree.Expr> select_fetch_first_value
@@ -1053,13 +1058,14 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.AliasClause> alias_clause opt_alias_clause
 %type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
-%type <tree.IndexElem> index_elem create_as_param
+%type <tree.IndexElem> index_elem index_elem_options create_as_param
 %type <tree.TableExpr> table_ref numeric_table_ref func_table
 %type <tree.Exprs> rowsfrom_list
 %type <tree.Expr> rowsfrom_item
 %type <tree.TableExpr> joined_table
 %type <*tree.UnresolvedObjectName> relation_expr
 %type <tree.TableExpr> table_expr_opt_alias_idx table_name_opt_idx
+%type <bool> opt_only opt_descendant
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
@@ -1095,6 +1101,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <str> non_reserved_word
 %type <str> non_reserved_word_or_sconst
 %type <str> role_spec
+%type <[]string> role_spec_list
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
@@ -1244,6 +1251,7 @@ stmt:
 | prepare_stmt      // EXTEND WITH HELP: PREPARE
 | revoke_stmt       // EXTEND WITH HELP: REVOKE
 | savepoint_stmt    // EXTEND WITH HELP: SAVEPOINT
+| reassign_owned_stmt // EXTEND WITH HELP: REASSIGN OWNED BY
 | release_stmt      // EXTEND WITH HELP: RELEASE
 | refresh_stmt      // EXTEND WITH HELP: REFRESH
 | nonpreparable_set_stmt // help texts in sub-rule
@@ -2073,6 +2081,15 @@ opt_add_val_placement:
     $$.val = (*tree.AlterTypeAddValuePlacement)(nil)
   }
 
+role_spec_list:
+	role_spec {
+		$$.val = []string{$1}
+	}
+| role_spec_list ',' role_spec
+	{
+		$$.val = append($1.strs(), $3)
+	}
+
 role_spec:
   non_reserved_word_or_sconst
 | CURRENT_USER
@@ -2711,9 +2728,13 @@ opt_with_options:
 // We currently support only the #2 format.
 // See the comment for CopyStmt in https://github.com/postgres/postgres/blob/master/src/backend/parser/gram.y.
 copy_from_stmt:
-  COPY table_name opt_column_list FROM STDIN opt_with_copy_options
+  COPY table_name opt_column_list FROM STDIN opt_with_copy_options opt_where_clause
   {
+    /* FORCE DOC */
     name := $2.unresolvedObjectName().ToTableName()
+    if $7.expr() != nil {
+      return unimplementedWithIssue(sqllex, 54580)
+    }
     $$.val = &tree.CopyFrom{
        Table: name,
        Columns: $3.nameList(),
@@ -2906,23 +2927,36 @@ comment_text:
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
 // CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS,
-// CREATE ROLE, CREATE TYPE
+// CREATE ROLE, CREATE TYPE, CREATE EXTENSION
 create_stmt:
   create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
+| create_extension_stmt // EXTEND WITH HELP: CREATE EXTENSION
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 
+// %Help: CREATE EXTENSION
+// %Category: Cfg
+// %Text: CREATE EXTENSION [IF NOT EXISTS] name
+create_extension_stmt:
+  CREATE EXTENSION IF NOT EXISTS name
+  {
+    $$.val = &tree.CreateExtension{IfNotExists: true, Name: $6}
+  }
+| CREATE EXTENSION name {
+    $$.val = &tree.CreateExtension{Name: $3}
+  }
+| CREATE EXTENSION error // SHOW HELP: CREATE EXTENSION
+
 create_unsupported:
-  CREATE AGGREGATE error { return unimplemented(sqllex, "create aggregate") }
+  CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
+| CREATE AGGREGATE error { return unimplemented(sqllex, "create aggregate") }
 | CREATE CAST error { return unimplemented(sqllex, "create cast") }
 | CREATE CONSTRAINT TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create constraint") }
 | CREATE CONVERSION error { return unimplemented(sqllex, "create conversion") }
 | CREATE DEFAULT CONVERSION error { return unimplemented(sqllex, "create def conv") }
-| CREATE EXTENSION IF NOT EXISTS name error { return unimplemented(sqllex, "create extension " + $6) }
-| CREATE EXTENSION name error { return unimplemented(sqllex, "create extension " + $3) }
 | CREATE FOREIGN TABLE error { return unimplemented(sqllex, "create foreign table") }
 | CREATE FOREIGN DATA error { return unimplemented(sqllex, "create fdw") }
 | CREATE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
@@ -2949,7 +2983,8 @@ opt_procedural:
 | /* EMPTY */ {}
 
 drop_unsupported:
-  DROP AGGREGATE error { return unimplemented(sqllex, "drop aggregate") }
+  DROP ACCESS METHOD error { return unimplemented(sqllex, "drop access method") }
+| DROP AGGREGATE error { return unimplemented(sqllex, "drop aggregate") }
 | DROP CAST error { return unimplemented(sqllex, "drop cast") }
 | DROP COLLATION error { return unimplemented(sqllex, "drop collation") }
 | DROP CONVERSION error { return unimplemented(sqllex, "drop conversion") }
@@ -4239,6 +4274,11 @@ reindex_stmt:
     /* SKIP DOC */
     return purposelyUnimplemented(sqllex, "reindex index", "CockroachDB does not require reindexing.")
   }
+| REINDEX SCHEMA error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex schema", "CockroachDB does not require reindexing.")
+  }
 | REINDEX DATABASE error
   {
     /* SKIP DOC */
@@ -5186,6 +5226,14 @@ targets_roles:
   ROLE name_list
   {
      $$.val = tree.TargetList{ForRoles: true, Roles: $2.nameList()}
+  }
+| SCHEMA name_list
+  {
+     $$.val = tree.TargetList{Schemas: $2.nameList().ToStrings()}
+  }
+| TYPE type_name_list
+  {
+    $$.val = tree.TargetList{Types: $2.unresolvedObjectNames()}
   }
 | targets
 
@@ -6596,7 +6644,7 @@ enum_val_list:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
+  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -6614,7 +6662,7 @@ create_index_stmt:
       Concurrently:  $4.bool(),
     }
   }
-| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
+| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     table := $10.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -6670,7 +6718,7 @@ create_index_stmt:
   }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
 
-opt_using_gin_btree:
+opt_index_access_method:
   USING name
   {
     /* FORCE DOC */
@@ -6725,12 +6773,36 @@ index_params:
 // expressions in parens. For backwards-compatibility reasons, we allow an
 // expression that is just a function call to be written without parens.
 index_elem:
-  a_expr opt_asc_desc opt_nulls_order
+  func_expr_windowless index_elem_options
   {
     /* FORCE DOC */
-    e := $1.expr()
+    return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", $1))
+  }
+| '(' a_expr ')' index_elem_options
+  {
+    /* FORCE DOC */
+    return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", $2))
+  }
+| name index_elem_options
+  {
+    e := $2.idxElem()
+    e.Column = tree.Name($1)
+    $$.val = e
+  }
+
+index_elem_options:
+  opt_class opt_asc_desc opt_nulls_order
+  {
+    /* FORCE DOC */
+    opClass := $1
     dir := $2.dir()
     nullsOrder := $3.nullsOrder()
+    if opClass != "" {
+      if opClass == "gin_trgm_ops" || opClass == "gist_trgm_ops" {
+        return unimplementedWithIssueDetail(sqllex, 41285, "index using " + opClass)
+      }
+      return unimplementedWithIssue(sqllex, 47420)
+    }
     // We currently only support the opposite of Postgres defaults.
     if nullsOrder != tree.DefaultNullsOrder {
       if dir == tree.Descending && nullsOrder == tree.NullsFirst {
@@ -6740,12 +6812,12 @@ index_elem:
         return unimplementedWithIssue(sqllex, 6224)
       }
     }
-    if colName, ok := e.(*tree.UnresolvedName); ok && colName.NumParts == 1 {
-      $$.val = tree.IndexElem{Column: tree.Name(colName.Parts[0]), Direction: dir, NullsOrder: nullsOrder}
-    } else {
-      return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", e))
-    }
+    $$.val = tree.IndexElem{Direction: dir, NullsOrder: nullsOrder}
   }
+
+opt_class:
+  name { $$ = $1 }
+| /* EMPTY */ { $$ = "" }
 
 opt_collate:
   COLLATE collation_name { $$ = $2 }
@@ -6996,7 +7068,7 @@ resume_schedules_stmt:
 // DROP SCHEDULES <selectclause>
 //  selectclause: select statement returning schedule IDs to resume.
 //
-// DROP SCHEDULES <jobid>
+// DROP SCHEDULE <jobid>
 //
 // %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, CANCEL JOBS
 drop_schedule_stmt:
@@ -7213,7 +7285,7 @@ transaction_deferrable_mode:
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
 // %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
-  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
   {
     $$.val = &tree.CreateDatabase{
       Name: tree.Name($3),
@@ -7221,9 +7293,10 @@ create_database_stmt:
       Encoding: $6,
       Collate: $7,
       CType: $8,
+      ConnectionLimit: $9.int32(),
     }
   }
-| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+| CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit
   {
     $$.val = &tree.CreateDatabase{
       IfNotExists: true,
@@ -7232,8 +7305,9 @@ create_database_stmt:
       Encoding: $9,
       Collate: $10,
       CType: $11,
+      ConnectionLimit: $12.int32(),
     }
-   }
+  }
 | CREATE DATABASE error // SHOW HELP: CREATE DATABASE
 
 opt_template_clause:
@@ -7274,6 +7348,20 @@ opt_lc_ctype_clause:
 | /* EMPTY */
   {
     $$ = ""
+  }
+
+opt_connection_limit:
+  CONNECTION LIMIT opt_equal signed_iconst
+  {
+    ret, err := $4.numVal().AsInt32()
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = ret
+  }
+| /* EMPTY */
+  {
+    $$.val = int32(-1)
   }
 
 opt_equal:
@@ -7495,6 +7583,20 @@ multiple_set_clause:
   {
     $$.val = &tree.UpdateExpr{Tuple: true, Names: $2.nameList(), Expr: $5.expr()}
   }
+
+// %Help: REASSIGN OWNED BY - change ownership of all objects
+// %Category: Priv
+// %Text: REASSIGN OWNED BY {<name> | CURRENT_USER | SESSION_USER}[,...]
+// TO {<name> | CURRENT_USER | SESSION_USER}
+reassign_owned_stmt:
+	REASSIGN OWNED BY role_spec_list TO role_spec
+{
+	$$.val = &tree.ReassignOwnedBy{
+      OldRoles: $4.strs(),
+      NewRole: $6,
+	}
+}
+| REASSIGN OWNED BY error // SHOW HELP: REASSIGN OWNED BY
 
 // A complete SELECT statement looks like this.
 //
@@ -7972,11 +8074,11 @@ sortby:
   }
 
 opt_nulls_order:
-  NULLS FIRST
+  NULLS_LA FIRST
   {
     $$.val = tree.NullsFirst
   }
-| NULLS LAST
+| NULLS_LA LAST
   {
     $$.val = tree.NullsLast
   }
@@ -8099,7 +8201,7 @@ first_or_next:
 // Each item in the group_clause list is either an expression tree or a
 // GroupingSet node of some type.
 group_clause:
-  GROUP BY expr_list
+  GROUP BY group_by_list
   {
     $$.val = tree.GroupBy($3.exprs())
   }
@@ -8107,6 +8209,19 @@ group_clause:
   {
     $$.val = tree.GroupBy(nil)
   }
+
+group_by_list:
+  group_by_item { $$.val = tree.Exprs{$1.expr()} }
+| group_by_list ',' group_by_item { $$.val = append($1.exprs(), $3.expr()) }
+
+// Note the '(' is required as CUBE and ROLLUP rely on setting precedence
+// of CUBE and ROLLUP below that of '(', so that they shift in these rules
+// rather than reducing the conflicting unreserved_keyword rule.
+group_by_item:
+  a_expr { $$.val = $1.expr() }
+| ROLLUP '(' error { return unimplementedWithIssueDetail(sqllex, 46280, "rollup") }
+| CUBE '(' error { return unimplementedWithIssueDetail(sqllex, 46280, "cube") }
+| GROUPING SETS error { return unimplementedWithIssueDetail(sqllex, 46280, "grouping sets") }
 
 having_clause:
   HAVING a_expr
@@ -8611,13 +8726,33 @@ table_expr_opt_alias_idx:
   }
 
 table_name_opt_idx:
-  table_name opt_index_flags
+  opt_only table_name opt_index_flags opt_descendant
   {
-    name := $1.unresolvedObjectName().ToTableName()
+    name := $2.unresolvedObjectName().ToTableName()
     $$.val = &tree.AliasedTableExpr{
       Expr: &name,
-      IndexFlags: $2.indexFlags(),
+      IndexFlags: $3.indexFlags(),
     }
+  }
+
+opt_only:
+	ONLY
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+opt_descendant:
+	'*'
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
   }
 
 where_clause:
@@ -11357,6 +11492,7 @@ unrestricted_name:
 unreserved_keyword:
   ABORT
 | ACTION
+| ACCESS
 | ADD
 | ADMIN
 | AFTER
@@ -11392,6 +11528,7 @@ unreserved_keyword:
 | CONFIGURATION
 | CONFIGURATIONS
 | CONFIGURE
+| CONNECTION
 | CONSTRAINTS
 | CONTROLCHANGEFEED
 | CONTROLJOB
@@ -11499,6 +11636,7 @@ unreserved_keyword:
 | MATERIALIZED
 | MAXVALUE
 | MERGE
+| METHOD
 | MINUTE
 | MINVALUE
 | MODIFYCLUSTERSETTING
@@ -11573,6 +11711,7 @@ unreserved_keyword:
 | RANGE
 | RANGES
 | READ
+| REASSIGN
 | RECURRING
 | RECURSIVE
 | REF
@@ -11615,6 +11754,7 @@ unreserved_keyword:
 | SESSION
 | SESSIONS
 | SET
+| SETS
 | SHARE
 | SHOW
 | SIMPLE

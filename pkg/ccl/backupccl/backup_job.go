@@ -422,16 +422,17 @@ func (b *backupResumer) Resume(
 
 	// EncryptionInfo is non-nil only when new encryption information has been
 	// generated during BACKUP planning.
+	redactedURI := RedactURIForErrorMessage(details.URI)
 	if details.EncryptionInfo != nil {
 		if err := writeEncryptionInfoIfNotExists(ctx, details.EncryptionInfo,
 			defaultStore); err != nil {
-			return errors.Wrapf(err, "creating encryption info file to %s", details.URI)
+			return errors.Wrapf(err, "creating encryption info file to %s", redactedURI)
 		}
 	}
 
 	if err := createCheckpointIfNotExists(ctx, p.ExecCfg().Settings, defaultStore,
 		details.EncryptionOptions); err != nil {
-		return errors.Wrapf(err, "creating checkpoint to %s", details.URI)
+		return errors.Wrapf(err, "creating checkpoint to %s", redactedURI)
 	}
 
 	ptsID := details.ProtectedTimestampRecord
@@ -597,6 +598,11 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 	ctx context.Context, jobStatus jobs.Status, exec *sql.ExecutorConfig,
 ) {
 	env := scheduledjobs.ProdJobSchedulerEnv
+	if knobs, ok := exec.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+		if knobs.JobSchedulerEnv != nil {
+			env = knobs.JobSchedulerEnv
+		}
+	}
 
 	if err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Do not rely on b.job containing created_by_id.  Query it directly.

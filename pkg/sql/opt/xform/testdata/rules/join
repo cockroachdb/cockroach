@@ -2151,6 +2151,18 @@ left-join (lookup abcd@secondary)
  │    └── columns: m:1 n:2
  └── filters (true)
 
+# Covering case, left-join, extra filter bound by index.
+opt
+SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>n
+----
+left-join (lookup abcd@secondary)
+ ├── columns: a:5 b:6 n:2 m:1
+ ├── key columns: [1] = [5]
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters
+      └── b:6 > n:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
 # Non-covering case.
 opt
 SELECT * FROM small JOIN abcd ON a=m
@@ -3014,6 +3026,292 @@ anti-join (hash)
       ├── m:1 = a:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── n:2 = c:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
+# --------------------------------------------------
+# GenerateLookupJoinsWithFilter + Partial Indexes
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE partial_tab (
+    k INT PRIMARY KEY,
+    i INT,
+    s STRING
+)
+----
+
+exec-ddl
+ALTER TABLE partial_tab INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 50
+  }
+]'
+----
+
+# Storing the index predicate column.
+
+exec-ddl
+CREATE INDEX partial_idx ON partial_tab (i) STORING (s) WHERE s IN ('foo', 'bar', 'baz')
+----
+
+# Lookup inner-join with no remaining filters.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s IN ('foo', 'bar', 'baz')
+----
+project
+ ├── columns: m:1
+ └── inner-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── key columns: [2] = [6]
+      ├── fd: (2)==(6), (6)==(2)
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# Lookup inner-join with remaining filters.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s = 'foo'
+----
+project
+ ├── columns: m:1
+ └── inner-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── key columns: [2] = [6]
+      ├── fd: ()-->(7), (2)==(6), (6)==(2)
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters
+           └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# Lookup semi-join.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
+----
+project
+ ├── columns: m:1
+ └── semi-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters
+           └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# Lookup anti-join.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
+----
+project
+ ├── columns: m:1
+ └── anti-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters
+           └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# Do not generate a lookup join when the predicate is not implied by the filter.
+opt
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s = 'not_implied'
+----
+project
+ ├── columns: m:1
+ └── inner-join (hash)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── fd: ()-->(7), (2)==(6), (6)==(2)
+      ├── select
+      │    ├── columns: i:6 s:7!null
+      │    ├── fd: ()-->(7)
+      │    ├── scan partial_tab
+      │    │    ├── columns: i:6 s:7
+      │    │    └── partial index predicates
+      │    │         └── partial_idx: filters
+      │    │              └── s:7 IN ('bar', 'baz', 'foo') [outer=(7), constraints=(/7: [/'bar' - /'bar'] [/'baz' - /'baz'] [/'foo' - /'foo']; tight)]
+      │    └── filters
+      │         └── s:7 = 'not_implied' [outer=(7), constraints=(/7: [/'not_implied' - /'not_implied']; tight), fd=()-->(7)]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters
+           └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+exec-ddl
+DROP INDEX partial_idx
+----
+
+# Not storing the index predicate column.
+
+exec-ddl
+CREATE INDEX partial_idx ON partial_tab (i) WHERE s IN ('foo', 'bar', 'baz')
+----
+
+# The remaining filters are empty when the query filters exactly match the
+# partial index predicate.
+#
+# TODO(mgartner): The outer inner-join is not necessary here and should be
+# eliminated, like in EliminateIndexJoinInsideProject.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s IN ('foo', 'bar', 'baz')
+----
+project
+ ├── columns: m:1
+ └── inner-join (lookup partial_tab)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── fd: (2)==(6), (6)==(2)
+      ├── inner-join (lookup partial_tab@partial_idx,partial)
+      │    ├── columns: m:1 n:2!null k:5!null i:6!null
+      │    ├── key columns: [2] = [6]
+      │    ├── fd: (5)-->(6), (2)==(6), (6)==(2)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── filters (true)
+      └── filters (true)
+
+# The remaining filters are not empty when the query filters imply but do not
+# exactly match the partial index predicate.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small JOIN partial_tab ON n = i WHERE s = 'foo'
+----
+project
+ ├── columns: m:1
+ └── inner-join (lookup partial_tab)
+      ├── columns: m:1 n:2!null i:6!null s:7!null
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── fd: ()-->(7), (2)==(6), (6)==(2)
+      ├── inner-join (lookup partial_tab@partial_idx,partial)
+      │    ├── columns: m:1 n:2!null k:5!null i:6!null
+      │    ├── key columns: [2] = [6]
+      │    ├── fd: (5)-->(6), (2)==(6), (6)==(2)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── filters (true)
+      └── filters
+           └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+
+# Generate a lookup semi-join when the index does not cover "s", but the
+# reference to "s" no longer exists in the filters.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', 'bar', 'baz') AND n = i)
+----
+project
+ ├── columns: m:1
+ └── semi-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# We should not generate a lookup semi-join when the index does not cover "s"
+# which is referenced in the remaining filter.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
+----
+project
+ ├── columns: m:1
+ └── semi-join (hash)
+      ├── columns: m:1 n:2
+      ├── scan small
+      │    └── columns: m:1 n:2
+      ├── select
+      │    ├── columns: i:6 s:7!null
+      │    ├── fd: ()-->(7)
+      │    ├── index-join partial_tab
+      │    │    ├── columns: i:6 s:7
+      │    │    └── scan partial_tab@partial_idx,partial
+      │    │         ├── columns: k:5!null i:6
+      │    │         ├── key: (5)
+      │    │         └── fd: (5)-->(6)
+      │    └── filters
+      │         └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+      └── filters
+           └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# Generate a lookup anti-join when the index does not cover "s", but the
+# reference to "s" no longer exists in the filters.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', 'bar', 'baz') AND n = i)
+----
+project
+ ├── columns: m:1
+ └── anti-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# We should not generate a lookup anti-join when the index does not cover "s"
+# which is referenced in the remaining filter.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
+----
+project
+ ├── columns: m:1
+ └── anti-join (hash)
+      ├── columns: m:1 n:2
+      ├── scan small
+      │    └── columns: m:1 n:2
+      ├── select
+      │    ├── columns: i:6 s:7!null
+      │    ├── fd: ()-->(7)
+      │    ├── index-join partial_tab
+      │    │    ├── columns: i:6 s:7
+      │    │    └── scan partial_tab@partial_idx,partial
+      │    │         ├── columns: k:5!null i:6
+      │    │         ├── key: (5)
+      │    │         └── fd: (5)-->(6)
+      │    └── filters
+      │         └── s:7 = 'foo' [outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
+      └── filters
+           └── n:2 = i:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# A lookup semi-join on a partial index should have the same cost as a lookup
+# semi-join on a non-partial index.
+exec-ddl
+CREATE INDEX full_idx ON partial_tab (i)
+----
+
+opt format=show-cost
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE n = i)
+----
+project
+ ├── columns: m:1
+ ├── cost: 234.836
+ └── semi-join (lookup partial_tab@full_idx)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── cost: 234.726
+      ├── scan small
+      │    ├── columns: m:1 n:2
+      │    └── cost: 14.52
+      └── filters (true)
+
+opt format=show-cost
+SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', 'bar', 'baz') AND n = i)
+----
+project
+ ├── columns: m:1
+ ├── cost: 234.836
+ └── semi-join (lookup partial_tab@partial_idx,partial)
+      ├── columns: m:1 n:2
+      ├── key columns: [2] = [6]
+      ├── cost: 234.726
+      ├── scan small
+      │    ├── columns: m:1 n:2
+      │    └── cost: 14.52
+      └── filters (true)
+
 # -------------------------------------------------------
 # GenerateInvertedJoins + GenerateInvertedJoinsFromSelect
 # -------------------------------------------------------
@@ -3101,13 +3399,13 @@ project
  ├── columns: name:15!null popn_per_sqkm:20
  ├── immutable
  ├── group-by
- │    ├── columns: name:15!null n.geom:16 sum:19
- │    ├── grouping columns: name:15!null n.geom:16
+ │    ├── columns: name:15!null n.geom:16!null sum:19
+ │    ├── grouping columns: name:15!null n.geom:16!null
  │    ├── immutable
  │    ├── key: (15,16)
  │    ├── fd: (15,16)-->(19)
  │    ├── inner-join (lookup nyc_census_blocks)
- │    │    ├── columns: popn_total:3 c.boroname:9!null c.geom:10 n.boroname:14!null name:15!null n.geom:16
+ │    │    ├── columns: popn_total:3 c.boroname:9!null c.geom:10!null n.boroname:14!null name:15!null n.geom:16!null
  │    │    ├── key columns: [1] = [1]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
@@ -3124,7 +3422,7 @@ project
  │    │    │    │         └── (name:15 = 'Upper West Side') OR (name:15 = 'Upper East Side') [outer=(15), constraints=(/15: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
  │    │    │    └── filters (true)
  │    │    └── filters
- │    │         ├── st_intersects(n.geom:16, c.geom:10) [outer=(10,16), immutable]
+ │    │         ├── st_intersects(n.geom:16, c.geom:10) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
  │    │         └── c.boroname:9 = n.boroname:14 [outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
  │    └── aggregations
  │         └── sum [as=sum:19, outer=(3)]
@@ -3147,11 +3445,11 @@ memo (optimized, ~28KB, required=[presentation: name:15,popn_per_sqkm:20])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:15,popn_per_sqkm:20]
  │         ├── best: (project G2 G3 name)
- │         └── cost: 7312.28
+ │         └── cost: 7312.15
  ├── G2: (group-by G4 G5 cols=(15,16))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(15,16))
- │         └── cost: 7312.23
+ │         └── cost: 7312.10
  ├── G3: (projections G6)
  ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G11 nyc_neighborhoods,keyCols=[13],outCols=(3,9,10,14-16)) (lookup-join G12 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,14-16))
  │    └── []
@@ -3215,7 +3513,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3227,7 +3525,7 @@ project
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_dwithin(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable]
+           └── st_dwithin(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 # Same test as above, but with arguments commuted.
 opt expect=GenerateInvertedJoins
@@ -3241,7 +3539,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3253,7 +3551,7 @@ project
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_dwithin(n.geom:16, c.geom:10, 50.0) [outer=(10,16), immutable]
+           └── st_dwithin(n.geom:16, c.geom:10, 50.0) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 opt expect=GenerateInvertedJoins
 SELECT
@@ -3266,7 +3564,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3278,7 +3576,7 @@ project
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+           └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 # Same test as above, but with arguments commuted.
 opt expect=GenerateInvertedJoins
@@ -3292,7 +3590,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3304,7 +3602,7 @@ project
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_covers(n.geom:16, c.geom:10) [outer=(10,16), immutable]
+           └── st_covers(n.geom:16, c.geom:10) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 # Case for ST_DWithinExclusive.
 opt expect=GenerateInvertedJoins
@@ -3318,7 +3616,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3330,7 +3628,7 @@ project
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_dwithinexclusive(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable]
+           └── st_dwithinexclusive(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 # Commuted version of previous test.
 opt expect=GenerateInvertedJoins
@@ -3344,7 +3642,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3356,7 +3654,7 @@ project
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_dwithinexclusive(n.geom:16, c.geom:10, 50.0) [outer=(10,16), immutable]
+           └── st_dwithinexclusive(n.geom:16, c.geom:10, 50.0) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 # Complex join filter.
 opt expect=GenerateInvertedJoins
@@ -3371,7 +3669,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3383,8 +3681,8 @@ project
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           ├── st_covers(n.geom:16, c.geom:10) [outer=(10,16), immutable]
-           └── st_dwithin(c.geom:10, n.geom:16, 50.0) OR st_intersects(n.geom:16, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(10,16), immutable]
+           ├── st_covers(n.geom:16, c.geom:10) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
+           └── st_dwithin(c.geom:10, n.geom:16, 50.0) OR st_intersects(n.geom:16, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(10,16), immutable, constraints=(/16: (/NULL - ])]
 
 opt expect=GenerateInvertedJoins
 SELECT
@@ -3397,7 +3695,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3409,7 +3707,7 @@ project
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_dfullywithin(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable]
+           └── st_dfullywithin(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 opt expect=GenerateInvertedJoins
 SELECT
@@ -3422,7 +3720,7 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3434,7 +3732,7 @@ project
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_dfullywithinexclusive(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable]
+           └── st_dfullywithinexclusive(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 opt expect=GenerateInvertedJoinsFromSelect
 SELECT
@@ -3449,17 +3747,17 @@ project
  ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_census_blocks)
-      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geo_idx)
-      │    ├── columns: c.gid:1!null name:15 n.geom:16
+      │    ├── columns: c.gid:1!null name:15 n.geom:16!null
       │    ├── inverted-expr
       │    │    └── st_coveredby(n.geom:16, c.geom:10) AND st_coveredby('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', c.geom:10)
       │    ├── immutable
       │    ├── select
-      │    │    ├── columns: name:15 n.geom:16
+      │    │    ├── columns: name:15 n.geom:16!null
       │    │    ├── immutable
       │    │    ├── index-join nyc_neighborhoods
       │    │    │    ├── columns: name:15 n.geom:16
@@ -3468,6 +3766,8 @@ project
       │    │    │         ├── inverted expression: /18
       │    │    │         │    ├── tight: false
       │    │    │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+      │    │    │         ├── pre-filterer expression
+      │    │    │         │    └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16)
       │    │    │         ├── key: (13)
       │    │    │         └── scan n@nyc_neighborhoods_geo_idx
       │    │    │              ├── columns: n.gid:13!null n.geom_inverted_key:18!null
@@ -3477,11 +3777,11 @@ project
       │    │    │              ├── key: (13)
       │    │    │              └── fd: (13)-->(18)
       │    │    └── filters
-      │    │         └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16) [outer=(16), immutable]
+      │    │         └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16) [outer=(16), immutable, constraints=(/16: (/NULL - ])]
       │    └── filters (true)
       └── filters
-           ├── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
-           └── st_covers(c.geom:10, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(10), immutable]
+           ├── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
+           └── st_covers(c.geom:10, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(10), immutable, constraints=(/10: (/NULL - ])]
 
 opt expect=GenerateInvertedJoinsFromSelect
 SELECT
@@ -3495,7 +3795,7 @@ project
  ├── immutable
  ├── fd: ()-->(9)
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9!null c.geom:10 name:15!null n.geom:16
+      ├── columns: c.boroname:9!null c.geom:10!null name:15!null n.geom:16!null
       ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
@@ -3514,7 +3814,7 @@ project
       │    │         └── c.boroname:9 = 'Manhattan' [outer=(9), constraints=(/9: [/'Manhattan' - /'Manhattan']; tight), fd=()-->(9)]
       │    └── filters (true)
       └── filters
-           ├── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+           ├── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
            └── name:15 LIKE 'Upper%' [outer=(15), constraints=(/15: [/'Upper' - /'Uppes'); tight)]
 
 # It's not possible to generate an inverted join when there is an OR with a
@@ -3555,14 +3855,14 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  └── distinct-on
-      ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
+      ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10!null
       ├── grouping columns: c.gid:1!null
       ├── internal-ordering: +1
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-10)
       ├── inner-join (lookup nyc_neighborhoods)
-      │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.geom:16
+      │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10!null n.geom:16!null
       │    ├── key columns: [13] = [13]
       │    ├── lookup columns are key
       │    ├── immutable
@@ -3582,7 +3882,7 @@ project
       │    │    │    └── ordering: +1
       │    │    └── filters (true)
       │    └── filters
-      │         └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+      │         └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
       └── aggregations
            ├── const-agg [as=blkid:2, outer=(2)]
            │    └── blkid:2
@@ -3603,28 +3903,194 @@ project
            └── const-agg [as=c.geom:10, outer=(10)]
                 └── c.geom:10
 
-# We don't yet support inverted joins with anti-joins.
-opt expect=GenerateInvertedJoins
+# Anti-joins are supported by converting them to a left join join wrapped in a
+# select. The left join is later converted to an inner join.
+
+# Anti-join in which the right-hand side is a Scan.
+# In this test, all columns from the subquery (right hand side of the anti-join)
+# are pruned during normalization, so ConvertAntiToLeftJoin has to add back a
+# not-null column (the primary key) using EnsureNotNullCol.
+opt expect=(ConvertAntiToLeftJoin,GenerateInvertedJoins)
 SELECT *
 FROM nyc_census_blocks AS c
 WHERE NOT EXISTS (
-  SELECT * FROM nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n WHERE ST_Covers(c.geom, n.geom)
+  SELECT * FROM nyc_neighborhoods AS n WHERE ST_Covers(c.geom, n.geom)
 )
 ----
-anti-join (cross)
+project
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
- ├── scan c
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
- │    ├── key: (1)
- │    └── fd: (1)-->(2-10)
- ├── scan n
- │    ├── columns: n.geom:16
- │    └── flags: force-index=nyc_neighborhoods_geo_idx
- └── filters
-      └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+ └── select
+      ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.geom:16
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(13,16), (1)-->(2-10)
+      ├── with &1
+      │    ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.geom:16
+      │    ├── immutable
+      │    ├── key: (1,13)
+      │    ├── fd: (1)-->(2-10), (13)-->(16)
+      │    ├── project
+      │    │    ├── columns: gid:19!null blkid:20 popn_total:21 popn_white:22 popn_black:23 popn_nativ:24 popn_asian:25 popn_other:26 boroname:27 geom:28
+      │    │    ├── key: (19)
+      │    │    ├── fd: (19)-->(20-28)
+      │    │    ├── scan c
+      │    │    │    ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2-10)
+      │    │    └── projections
+      │    │         ├── c.gid:1 [as=gid:19, outer=(1)]
+      │    │         ├── c.blkid:2 [as=blkid:20, outer=(2)]
+      │    │         ├── c.popn_total:3 [as=popn_total:21, outer=(3)]
+      │    │         ├── c.popn_white:4 [as=popn_white:22, outer=(4)]
+      │    │         ├── c.popn_black:5 [as=popn_black:23, outer=(5)]
+      │    │         ├── c.popn_nativ:6 [as=popn_nativ:24, outer=(6)]
+      │    │         ├── c.popn_asian:7 [as=popn_asian:25, outer=(7)]
+      │    │         ├── c.popn_other:8 [as=popn_other:26, outer=(8)]
+      │    │         ├── c.boroname:9 [as=boroname:27, outer=(9)]
+      │    │         └── c.geom:10 [as=geom:28, outer=(10)]
+      │    └── project
+      │         ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.geom:16
+      │         ├── immutable
+      │         ├── fd: (1)-->(2-10), (13)-->(16)
+      │         └── right-join (hash)
+      │              ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10 n.gid:13 n.geom:16 gid:29 geom:38
+      │              ├── immutable
+      │              ├── key: (1,13,29)
+      │              ├── fd: (1)-->(2-10), (29)-->(38), (13)-->(16)
+      │              ├── inner-join (lookup nyc_neighborhoods)
+      │              │    ├── columns: n.gid:13!null n.geom:16!null gid:29!null geom:38!null
+      │              │    ├── key columns: [13] = [13]
+      │              │    ├── lookup columns are key
+      │              │    ├── immutable
+      │              │    ├── key: (13,29)
+      │              │    ├── fd: (29)-->(38), (13)-->(16)
+      │              │    ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │              │    │    ├── columns: n.gid:13!null gid:29!null geom:38
+      │              │    │    ├── inverted-expr
+      │              │    │    │    └── st_covers(geom:38, n.geom:16)
+      │              │    │    ├── key: (13,29)
+      │              │    │    ├── fd: (29)-->(38)
+      │              │    │    ├── with-scan &1
+      │              │    │    │    ├── columns: gid:29!null geom:38
+      │              │    │    │    ├── mapping:
+      │              │    │    │    │    ├──  gid:19 => gid:29
+      │              │    │    │    │    └──  geom:28 => geom:38
+      │              │    │    │    ├── key: (29)
+      │              │    │    │    └── fd: (29)-->(38)
+      │              │    │    └── filters (true)
+      │              │    └── filters
+      │              │         └── st_covers(geom:38, n.geom:16) [outer=(16,38), immutable, constraints=(/16: (/NULL - ]; /38: (/NULL - ])]
+      │              ├── with-scan &1
+      │              │    ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10
+      │              │    ├── mapping:
+      │              │    │    ├──  gid:19 => c.gid:1
+      │              │    │    ├──  blkid:20 => c.blkid:2
+      │              │    │    ├──  popn_total:21 => c.popn_total:3
+      │              │    │    ├──  popn_white:22 => c.popn_white:4
+      │              │    │    ├──  popn_black:23 => c.popn_black:5
+      │              │    │    ├──  popn_nativ:24 => c.popn_nativ:6
+      │              │    │    ├──  popn_asian:25 => c.popn_asian:7
+      │              │    │    ├──  popn_other:26 => c.popn_other:8
+      │              │    │    ├──  boroname:27 => c.boroname:9
+      │              │    │    └──  geom:28 => c.geom:10
+      │              │    ├── key: (1)
+      │              │    └── fd: (1)-->(2-10)
+      │              └── filters
+      │                   └── c.gid:1 = gid:29 [outer=(1,29), constraints=(/1: (/NULL - ]; /29: (/NULL - ]), fd=(1)==(29), (29)==(1)]
+      └── filters
+           └── n.gid:13 IS NOT DISTINCT FROM CAST(NULL AS INT8) [outer=(13), constraints=(/13: [/NULL - /NULL]; tight), fd=()-->(13)]
+
+# Anti-join in which the right-hand side is a Scan wrapped in a Select.
+# In this test, the nyc_neighborhoods.name column is needed for the predicate.
+# Since n.name LIKE 'Upper%' is a null-rejecting predicate, there is no need to
+# add another not-null column to the right-hand side (so EnsureNotNullCol is a
+# no-op).
+opt expect=(ConvertAntiToLeftJoin,GenerateInvertedJoinsFromSelect)
+SELECT boroname
+FROM nyc_census_blocks AS c
+WHERE NOT EXISTS (
+  SELECT 1 FROM nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n WHERE ST_Covers(c.geom, n.geom)
+  AND c.boroname = 'Manhattan' AND n.name LIKE 'Upper%'
+)
+----
+project
+ ├── columns: boroname:9
+ ├── immutable
+ └── project
+      ├── columns: c.boroname:9 c.geom:10
+      ├── immutable
+      └── select
+           ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+           ├── immutable
+           ├── fd: ()-->(15)
+           ├── with &1
+           │    ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+           │    ├── immutable
+           │    ├── project
+           │    │    ├── columns: gid:20!null boroname:21 geom:22
+           │    │    ├── key: (20)
+           │    │    ├── fd: (20)-->(21,22)
+           │    │    ├── scan c
+           │    │    │    ├── columns: c.gid:1!null c.boroname:9 c.geom:10
+           │    │    │    ├── key: (1)
+           │    │    │    └── fd: (1)-->(9,10)
+           │    │    └── projections
+           │    │         ├── c.gid:1 [as=gid:20, outer=(1)]
+           │    │         ├── c.boroname:9 [as=boroname:21, outer=(9)]
+           │    │         └── c.geom:10 [as=geom:22, outer=(10)]
+           │    └── project
+           │         ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+           │         ├── immutable
+           │         └── left-join (hash)
+           │              ├── columns: c.gid:1!null c.boroname:9 c.geom:10 name:15 n.geom:16 gid:23 boroname:24 geom:25
+           │              ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+           │              ├── immutable
+           │              ├── fd: (1)-->(9,10), (23)-->(25)
+           │              ├── with-scan &1
+           │              │    ├── columns: c.gid:1!null c.boroname:9 c.geom:10
+           │              │    ├── mapping:
+           │              │    │    ├──  gid:20 => c.gid:1
+           │              │    │    ├──  boroname:21 => c.boroname:9
+           │              │    │    └──  geom:22 => c.geom:10
+           │              │    ├── key: (1)
+           │              │    └── fd: (1)-->(9,10)
+           │              ├── inner-join (lookup nyc_neighborhoods)
+           │              │    ├── columns: name:15!null n.geom:16!null gid:23!null boroname:24!null geom:25!null
+           │              │    ├── key columns: [13] = [13]
+           │              │    ├── lookup columns are key
+           │              │    ├── immutable
+           │              │    ├── fd: ()-->(24), (23)-->(25)
+           │              │    ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+           │              │    │    ├── columns: n.gid:13!null gid:23!null boroname:24!null geom:25
+           │              │    │    ├── inverted-expr
+           │              │    │    │    └── st_covers(geom:25, n.geom:16)
+           │              │    │    ├── key: (13,23)
+           │              │    │    ├── fd: ()-->(24), (23)-->(25)
+           │              │    │    ├── select
+           │              │    │    │    ├── columns: gid:23!null boroname:24!null geom:25
+           │              │    │    │    ├── key: (23)
+           │              │    │    │    ├── fd: ()-->(24), (23)-->(25)
+           │              │    │    │    ├── with-scan &1
+           │              │    │    │    │    ├── columns: gid:23!null boroname:24 geom:25
+           │              │    │    │    │    ├── mapping:
+           │              │    │    │    │    │    ├──  gid:20 => gid:23
+           │              │    │    │    │    │    ├──  boroname:21 => boroname:24
+           │              │    │    │    │    │    └──  geom:22 => geom:25
+           │              │    │    │    │    ├── key: (23)
+           │              │    │    │    │    └── fd: (23)-->(24,25)
+           │              │    │    │    └── filters
+           │              │    │    │         └── boroname:24 = 'Manhattan' [outer=(24), constraints=(/24: [/'Manhattan' - /'Manhattan']; tight), fd=()-->(24)]
+           │              │    │    └── filters (true)
+           │              │    └── filters
+           │              │         ├── st_covers(geom:25, n.geom:16) [outer=(16,25), immutable, constraints=(/16: (/NULL - ]; /25: (/NULL - ])]
+           │              │         └── name:15 LIKE 'Upper%' [outer=(15), constraints=(/15: [/'Upper' - /'Uppes'); tight)]
+           │              └── filters
+           │                   └── c.gid:1 = gid:23 [outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ]), fd=(1)==(23), (23)==(1)]
+           └── filters
+                └── name:15 IS NOT DISTINCT FROM CAST(NULL AS VARCHAR(64)) [outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
 
 # Left joins are supported by converting them to an inner join wrapped in a
 # left join.
@@ -3667,7 +4133,7 @@ with &1
            ├── key: (1,13,29)
            ├── fd: (1)-->(2-10), (29)-->(38), (13)-->(14-16)
            ├── inner-join (lookup nyc_neighborhoods)
-           │    ├── columns: n.gid:13!null n.boroname:14 name:15 n.geom:16 gid:29!null geom:38
+           │    ├── columns: n.gid:13!null n.boroname:14 name:15 n.geom:16!null gid:29!null geom:38!null
            │    ├── key columns: [13] = [13]
            │    ├── lookup columns are key
            │    ├── immutable
@@ -3688,7 +4154,7 @@ with &1
            │    │    │    └── fd: (29)-->(38)
            │    │    └── filters (true)
            │    └── filters
-           │         └── st_covers(geom:38, n.geom:16) [outer=(16,38), immutable]
+           │         └── st_covers(geom:38, n.geom:16) [outer=(16,38), immutable, constraints=(/16: (/NULL - ]; /38: (/NULL - ])]
            ├── with-scan &1
            │    ├── columns: c.gid:1!null c.blkid:2 c.popn_total:3 c.popn_white:4 c.popn_black:5 c.popn_nativ:6 c.popn_asian:7 c.popn_other:8 c.boroname:9 c.geom:10
            │    ├── mapping:
@@ -3768,7 +4234,7 @@ with &1 (q)
       │    │              ├── immutable
       │    │              ├── fd: (42)-->(22), (46)-->(45)
       │    │              ├── inner-join (lookup nyc_neighborhoods)
-      │    │              │    ├── columns: n.boroname:24 n.geom:26 geom:45 rownum:46!null
+      │    │              │    ├── columns: n.boroname:24 n.geom:26!null geom:45!null rownum:46!null
       │    │              │    ├── key columns: [23] = [23]
       │    │              │    ├── lookup columns are key
       │    │              │    ├── immutable
@@ -3788,7 +4254,7 @@ with &1 (q)
       │    │              │    │    │    └── fd: (46)-->(45)
       │    │              │    │    └── filters (true)
       │    │              │    └── filters
-      │    │              │         └── st_intersects(geom:45, n.geom:26) [outer=(26,45), immutable]
+      │    │              │         └── st_intersects(geom:45, n.geom:26) [outer=(26,45), immutable, constraints=(/26: (/NULL - ]; /45: (/NULL - ])]
       │    │              ├── with-scan &2
       │    │              │    ├── columns: geom:22 rownum:42!null
       │    │              │    ├── mapping:
@@ -3844,7 +4310,7 @@ project
       │    └── filters
       │         └── n1.boroname:14 LIKE n2.boroname:20 [outer=(14,20), constraints=(/14: (/NULL - ]; /20: (/NULL - ])]
       └── filters
-           └── st_covers(c.geom:10, n1.geom:16) [outer=(10,16), immutable]
+           └── st_covers(c.geom:10, n1.geom:16) [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
 
 # No-op due to lack of geospatial function in the ON condition.
 opt expect-not=(GenerateInvertedJoins,ConvertLeftToInnerJoin)
@@ -4484,7 +4950,7 @@ opt
 SELECT b,a FROM t5 WHERE b @> '{"a":1}'
 ----
 index-join t5
- ├── columns: b:2 a:1!null
+ ├── columns: b:2!null a:1!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -4497,7 +4963,7 @@ opt
 SELECT b,a FROM t5 WHERE b @> '{"a":[[{"b":{"c":[{"d":"e"}]}}]]}'
 ----
 index-join t5
- ├── columns: b:2 a:1!null
+ ├── columns: b:2!null a:1!null
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -4511,7 +4977,7 @@ opt
 SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}'
 ----
 inner-join (lookup t5)
- ├── columns: b:2 a:1!null
+ ├── columns: b:2!null a:1!null
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
@@ -4524,7 +4990,7 @@ inner-join (lookup t5)
  │    ├── right fixed columns: [2] = ['{"c": 2}']
  │    └── filters (true)
  └── filters
-      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable]
+      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 memo
 SELECT a FROM t5 WHERE b @> '{"a":1, "c":2}'
@@ -4566,7 +5032,7 @@ opt
 SELECT b,a FROM t5 WHERE b @> '{"a":[{"b":"c", "d":3}, 5]}'
 ----
 inner-join (lookup t5)
- ├── columns: b:2 a:1!null
+ ├── columns: b:2!null a:1!null
  ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
@@ -4579,7 +5045,7 @@ inner-join (lookup t5)
  │    ├── right fixed columns: [2] = ['{"a": [{"d": 3}]}']
  │    └── filters (true)
  └── filters
-      └── b:2 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(2), immutable]
+      └── b:2 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 # Regression test for issue where zero-column expressions could exist multiple
 # times in the tree, causing collisions.
@@ -4869,7 +5335,7 @@ ALTER TABLE abc INJECT STATISTICS '[
     "distinct_count": 100
   },
   {
-    "columns": ["a"],
+    "columns": ["b"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 100,
     "distinct_count": 100
@@ -5080,7 +5546,7 @@ opt
 SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}' FOR UPDATE
 ----
 select
- ├── columns: b:2 a:1!null
+ ├── columns: b:2!null a:1!null
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -5096,7 +5562,7 @@ select
  │         ├── volatile
  │         └── key: (1)
  └── filters
-      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable]
+      └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
 # -----------------------------------------------------
 # ConvertSemiToInnerJoin

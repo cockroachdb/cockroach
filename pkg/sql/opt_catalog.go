@@ -174,7 +174,7 @@ func (oc *optCatalog) ResolveSchema(
 	if !found {
 		if !name.ExplicitSchema && !name.ExplicitCatalog {
 			return nil, cat.SchemaName{}, pgerror.New(
-				pgcode.InvalidName, "no database specified",
+				pgcode.InvalidName, "no database or schema specified",
 			)
 		}
 		return nil, cat.SchemaName{}, pgerror.Newf(
@@ -250,6 +250,13 @@ func (oc *optCatalog) ResolveDataSourceByID(
 // ResolveTypeByOID is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
 	return oc.planner.ResolveTypeByOID(ctx, oid)
+}
+
+// ResolveType is part of the cat.Catalog interface.
+func (oc *optCatalog) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	return oc.planner.ResolveType(ctx, name)
 }
 
 func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, error) {

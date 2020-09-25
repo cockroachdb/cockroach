@@ -1,0 +1,36 @@
+# This file contains telemetry tests for sql.schema partial index creation
+# counters.
+
+feature-allowlist
+sql.schema.partial_index
+sql.schema.partial_inverted_index_error
+----
+
+feature-usage
+CREATE TABLE a (i INT, INDEX (i) WHERE i > 0)
+----
+sql.schema.partial_index
+
+feature-usage
+CREATE TABLE b (i INT, UNIQUE INDEX (i) WHERE i > 0)
+----
+sql.schema.partial_index
+
+feature-usage
+CREATE INDEX i ON b (i) WHERE i < 0
+----
+sql.schema.partial_index
+
+feature-usage
+CREATE TABLE c (i INT, j JSON, INVERTED INDEX (j) WHERE i > 0)
+----
+sql.schema.partial_index
+
+exec
+CREATE TABLE d (i INT, j JSON)
+----
+
+feature-usage
+CREATE INVERTED INDEX i ON d (j) WHERE i > 0
+----
+sql.schema.partial_index

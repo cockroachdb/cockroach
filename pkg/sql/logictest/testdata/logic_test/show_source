@@ -43,7 +43,6 @@ distsql                                        off
 enable_experimental_alter_column_type_general  off
 enable_implicit_select_for_update              on
 enable_insert_fast_path                        on
-enable_interleaved_joins                       on
 enable_seqscan                                 on
 enable_zigzag_join                             on
 experimental_distsql_planning                  off
@@ -68,7 +67,7 @@ reorder_joins_limit                            8
 require_explicit_primary_keys                  off
 results_buffer_size                            16384
 row_security                                   off
-search_path                                    public
+search_path                                    $user,public
 serial_normalization                           rowid
 server_encoding                                UTF8
 server_version                                 9.5.0
@@ -330,7 +329,6 @@ system.public.descriptor  CREATE TABLE public.descriptor (
                           FAMILY "primary" (id),
                           FAMILY fam_2_descriptor (descriptor)
 )
-
 
 query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]

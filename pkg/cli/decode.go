@@ -26,13 +26,13 @@ import (
 )
 
 func runDebugDecodeProto(_ *cobra.Command, _ []string) error {
-	if isatty.IsTerminal(stdin.Fd()) {
+	if isatty.IsTerminal(os.Stdin.Fd()) {
 		fmt.Fprintln(stderr,
 			`# Reading proto-encoded pieces of data from stdin.
 # Press Ctrl+C or Ctrl+D to terminate.`,
 		)
 	}
-	return streamMap(os.Stdout, stdin,
+	return streamMap(os.Stdout, os.Stdin,
 		func(s string) (bool, string, error) { return tryDecodeValue(s, debugDecodeProtoName) })
 }
 
@@ -40,7 +40,9 @@ func runDebugDecodeProto(_ *cobra.Command, _ []string) error {
 // the result of `fn` on `out`.
 // Errors returned by `fn` are emitted on `out` with a "warning" prefix.
 func streamMap(out io.Writer, in io.Reader, fn func(string) (bool, string, error)) error {
-	for sc := bufio.NewScanner(in); sc.Scan(); {
+	sc := bufio.NewScanner(in)
+	sc.Buffer(nil, 128<<20 /* 128 MiB */)
+	for sc.Scan() {
 		for _, field := range strings.Fields(sc.Text()) {
 			ok, value, err := fn(field)
 			if err != nil {
@@ -56,7 +58,7 @@ func streamMap(out io.Writer, in io.Reader, fn func(string) (bool, string, error
 		}
 		fmt.Fprintln(out, "")
 	}
-	return nil
+	return sc.Err()
 }
 
 // tryDecodeValue tries to decode the given string with the given proto name

@@ -112,6 +112,7 @@ var informationSchema = virtualSchema{
 		"transforms",
 		"triggered_update_columns",
 		"triggers",
+		"type_privileges",
 		"udt_privileges",
 		"usage_privileges",
 		"user_defined_types",
@@ -130,6 +131,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaColumnsTableID:                    informationSchemaColumnsTable,
 		catconstants.InformationSchemaColumnUDTUsageID:                  informationSchemaColumnUDTUsage,
 		catconstants.InformationSchemaConstraintColumnUsageTableID:      informationSchemaConstraintColumnUsageTable,
+		catconstants.InformationSchemaTypePrivilegesID:                  informationSchemaTypePrivilegesTable,
 		catconstants.InformationSchemaEnabledRolesID:                    informationSchemaEnabledRoles,
 		catconstants.InformationSchemaKeyColumnUsageTableID:             informationSchemaKeyColumnUsageTable,
 		catconstants.InformationSchemaParametersTableID:                 informationSchemaParametersTable,
@@ -1032,6 +1034,76 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	},
 }
 
+// Custom; PostgreSQL has data_type_privileges, which only shows one row per type,
+// which may result in confusing semantics for the user compared to this table
+// which has one row for each grantee.
+var informationSchemaTypePrivilegesTable = virtualSchemaTable{
+	comment: `type privileges (incomplete; may contain excess users or roles)
+` + base.DocsURL("information-schema.html#type_privileges"),
+	schema: `
+CREATE TABLE information_schema.type_privileges (
+	GRANTEE         STRING NOT NULL,
+	TYPE_CATALOG    STRING NOT NULL,
+	TYPE_SCHEMA     STRING NOT NULL,
+	TYPE_NAME       STRING NOT NULL,
+	PRIVILEGE_TYPE  STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+			func(db *dbdesc.Immutable) error {
+				dbNameStr := tree.NewDString(db.GetName())
+				pgCatalogStr := tree.NewDString("pg_catalog")
+
+				// Generate one for each existing type.
+				for _, typ := range types.OidToType {
+					for _, it := range []struct {
+						grantee   *tree.DString
+						privilege *tree.DString
+					}{
+						{tree.NewDString(security.RootUser), tree.NewDString(privilege.ALL.String())},
+						{tree.NewDString(security.AdminRole), tree.NewDString(privilege.ALL.String())},
+						{tree.NewDString(security.PublicRole), tree.NewDString(privilege.USAGE.String())},
+					} {
+						typeNameStr := tree.NewDString(typ.Name())
+						if err := addRow(
+							it.grantee,
+							dbNameStr,
+							pgCatalogStr,
+							typeNameStr,
+							it.privilege,
+						); err != nil {
+							return err
+						}
+					}
+				}
+
+				// And for all user defined types.
+				return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc *typedesc.Immutable) error {
+					scNameStr := tree.NewDString(sc)
+					typeNameStr := tree.NewDString(typeDesc.Name)
+					// TODO(knz): This should filter for the current user, see
+					// https://github.com/cockroachdb/cockroach/issues/35572
+					privs := typeDesc.TypeDescriptor.GetPrivileges().Show(privilege.Type)
+					for _, u := range privs {
+						userNameStr := tree.NewDString(u.User)
+						for _, priv := range u.Privileges {
+							if err := addRow(
+								userNameStr,           // grantee
+								dbNameStr,             // type_catalog
+								scNameStr,             // type_schema
+								typeNameStr,           // type_name
+								tree.NewDString(priv), // privilege_type
+							); err != nil {
+								return err
+							}
+						}
+					}
+					return nil
+				})
+			})
+	},
+}
+
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schema-privileges-table.html
 var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	comment: `schema privileges (incomplete; may contain excess users or roles)
@@ -1568,6 +1640,9 @@ func forEachSchema(
 	}
 	for i := range userDefinedSchemas {
 		desc := userDefinedSchemas[i]
+		if !userCanSeeDescriptor(ctx, p, desc, false /* allowAdding */) {
+			continue
+		}
 		schemas = append(schemas, catalog.ResolvedSchema{
 			Name: desc.GetName(),
 			ID:   desc.GetID(),
@@ -1629,7 +1704,7 @@ func forEachDatabaseDesc(
 
 	// Ignore databases that the user cannot see.
 	for _, dbDesc := range dbDescs {
-		if !requiresPrivileges || userCanSeeDatabase(ctx, p, dbDesc) {
+		if !requiresPrivileges || userCanSeeDescriptor(ctx, p, dbDesc, false /* allowAdding */) {
 			if err := fn(dbDesc); err != nil {
 				return err
 			}
@@ -1666,6 +1741,9 @@ func forEachTypeDesc(
 		scName, ok := schemaNames[typ.GetParentSchemaID()]
 		if !ok {
 			return errors.AssertionFailedf("schema id %d not found", typ.GetParentSchemaID())
+		}
+		if !userCanSeeDescriptor(ctx, p, typ, false /* allowAdding */) {
+			continue
 		}
 		if err := fn(dbDesc, scName, typ); err != nil {
 			return err
@@ -1853,7 +1931,7 @@ func forEachTableDescWithTableLookupInternal(
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
 		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
-		if table.Dropped() || !userCanSeeTable(ctx, p, table, allowAdding) || !parentExists {
+		if table.Dropped() || !userCanSeeDescriptor(ctx, p, table, allowAdding) || !parentExists {
 			continue
 		}
 		scName, ok := schemaNames[table.GetParentSchemaID()]
@@ -1948,17 +2026,12 @@ func forEachRoleMembership(
 	return nil
 }
 
-func userCanSeeDatabase(ctx context.Context, p *planner, db *dbdesc.Immutable) bool {
-	return p.CheckAnyPrivilege(ctx, db) == nil
-}
-
-func userCanSeeTable(
-	ctx context.Context, p *planner, table catalog.TableDescriptor, allowAdding bool,
+func userCanSeeDescriptor(
+	ctx context.Context, p *planner, desc catalog.Descriptor, allowAdding bool,
 ) bool {
-	return tableIsVisible(table, allowAdding) && p.CheckAnyPrivilege(ctx, table) == nil
+	return descriptorIsVisible(desc, allowAdding) && p.CheckAnyPrivilege(ctx, desc) == nil
 }
 
-func tableIsVisible(table catalog.TableDescriptor, allowAdding bool) bool {
-	return table.GetState() == descpb.DescriptorState_PUBLIC ||
-		(allowAdding && table.GetState() == descpb.DescriptorState_ADD)
+func descriptorIsVisible(desc catalog.Descriptor, allowAdding bool) bool {
+	return desc.Public() || (allowAdding && desc.Adding())
 }

@@ -118,4 +118,4 @@ insert xyz
            │    ├── key: (8)
            │    └── fd: (8)-->(5-7,9)
            └── filters
-                └── false [type=bool]
+                └── false [type=bool, constraints=(contradiction; tight)]

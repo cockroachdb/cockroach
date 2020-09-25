@@ -226,9 +226,9 @@ CREATE UNIQUE INDEX t11_b_key ON t11 (b) WHERE a > 0
 query TTTTB colnames
 SHOW CONSTRAINTS FROM t11
 ----
-table_name  constraint_name  constraint_type  details                     validated
-t11         t11_a_key        UNIQUE           UNIQUE (a ASC) WHERE b > 0  true
-t11         t11_b_key        UNIQUE           UNIQUE (b ASC) WHERE a > 0  true
+table_name  constraint_name  constraint_type  details                       validated
+t11         t11_a_key        UNIQUE           UNIQUE (a ASC) WHERE (b > 0)  true
+t11         t11_b_key        UNIQUE           UNIQUE (b ASC) WHERE (a > 0)  true
 
 # Update a non-indexed column referenced by the predicate.
 
@@ -253,6 +253,9 @@ query III rowsort
 SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1
 ----
 1  2  1
+
+statement error index "idx_c_b_gt_1" is a partial index that does not contain all the rows needed to execute this query
+SELECT * FROM a@idx_c_b_gt_1 WHERE b = 0
 
 # Return error if evaluating the predicate errs and do not insert or update the
 # row.
@@ -559,29 +562,26 @@ SELECT * FROM h@a_b_foo_idx WHERE b = 'foo'
 
 # Backfill a partial index with a user defined type when a new table is created
 # in the same transaction.
-# TODO(mgartner): Uncomment this test. This test is fails sporadically with
-# "cannot publish new versions for descriptors ... old versions still in use".
-# This appears unrelated to partial indexes. See issue #52539.
-#
-# statement ok
-# BEGIN
-#
-# statement ok
-# CREATE TABLE i (a INT, b enum)
-#
-# statement ok
-# INSERT INTO i VALUES (1, 'foo'), (2, 'bar')
-#
-# statement ok
-# CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
-#
-# statement ok
-# COMMIT
-#
-# query IT rowsort
-# SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
-# ----
-# 1  foo
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE i (a INT, b enum)
+
+statement ok
+INSERT INTO i VALUES (1, 'foo'), (2, 'bar')
+
+statement ok
+CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
+
+statement ok
+COMMIT
+
+query IT rowsort
+SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
+----
+1  foo
 
 # Add a primary key to a table with a partial index.
 
@@ -996,6 +996,64 @@ DROP INDEX i2
 statement ok
 DELETE from u
 
+# Test partial indexes with lookup joins.
+subtest join
+
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+CREATE TABLE join_small (m INT, n INT);
+CREATE TABLE join_large (i INT, s STRING, INDEX (i) WHERE s IN ('foo', 'bar', 'baz'));
+ALTER TABLE join_small INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 20,
+    "distinct_count": 20
+  }
+]';
+ALTER TABLE join_large INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 50
+  }
+]';
+INSERT INTO join_small VALUES (1, 1), (2, 2), (3, 3);
+INSERT INTO join_large VALUES (1, 'foo'), (2, 'not'), (3, 'bar'), (4, 'not');
+
+query I rowsort
+SELECT m FROM join_small JOIN join_large ON n = i AND s IN ('foo', 'bar', 'baz')
+----
+1
+3
+
+query I rowsort
+SELECT m FROM join_small JOIN join_large ON n = i AND s = 'foo'
+----
+1
+
+# A lookup semi-join is used when an expression in the semi-join filter exactly
+# matches the partial index predicate.
+query I rowsort
+SELECT m FROM join_small WHERE EXISTS (SELECT 1 FROM join_large WHERE n = i AND s IN ('foo', 'bar', 'baz'))
+----
+1
+3
+
+# A lookup anti-join is used when an expression in the anti-join filter exactly
+# matches the partial index predicate.
+query I rowsort
+SELECT m FROM join_small WHERE NOT EXISTS (SELECT 1 FROM join_large WHERE n = i AND s IN ('foo', 'bar', 'baz'))
+----
+2
+
 # Test partial indexes with an ENUM in the predicate.
 subtest enum
 
@@ -1070,15 +1128,140 @@ enum_table_show  CREATE TABLE public.enum_table_show (
 )
 
 # Inverted partial indexes.
-
-statement error pgcode 0A000 unimplemented: partial inverted indexes not supported
-CREATE TABLE inv (j JSON, i INT, INVERTED INDEX (j) WHERE i > 0)
+subtest inverted
 
 statement ok
-CREATE TABLE inv (j JSON, i INT)
+CREATE TABLE inv (j JSON, i INT, INVERTED INDEX (j) WHERE i > 0);
+DROP TABLE inv;
 
-statement error pgcode 0A000 unimplemented: partial inverted indexes not supported
-CREATE INVERTED INDEX ON inv (j) WHERE i > 0
+statement ok
+CREATE TABLE inv (k INT PRIMARY KEY, j JSON, s STRING);
+CREATE INVERTED INDEX i ON inv (j) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO inv VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s = 'foo'
+----
+1  {"num": 1, "x": "y"}  foo
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 1}' AND s IN ('foo', 'bar')
+----
+1  {"num": 1, "x": "y"}  foo
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
+
+statement ok
+DELETE FROM inv WHERE k = 3
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+1  {"num": 1, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET j = '{"x": "y", "num": 10}' WHERE k = 1
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 10}' AND s = 'foo'
+----
+1  {"num": 10, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET k = 10 WHERE k = 1
+
+statement ok
+UPDATE inv SET s = 'bar' WHERE k = 2
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+2   {"num": 2, "x": "y"}   bar
+10  {"num": 10, "x": "y"}  foo
+
+statement ok
+UPDATE inv SET s = 'baz' WHERE k = 10
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar')
+----
+2  {"num": 2, "x": "y"}  bar
+
+statement ok
+UPSERT INTO inv VALUES (3, '{"x": "y", "num": 3}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s = 'bar' ORDER BY k
+----
+2  {"num": 2, "x": "y"}  bar
+3  {"num": 3, "x": "y"}  bar
+
+statement ok
+UPSERT INTO inv VALUES (3, '{"x": "y", "num": 4}', 'bar')
+
+query ITT
+SELECT * FROM inv@i WHERE j @> '{"num": 4}' AND s = 'bar'
+----
+3  {"num": 4, "x": "y"}  bar
+
+statement error index "i" is a partial inverted index and cannot be used for this query
+SELECT * FROM inv@i WHERE j @> '{"num": 2}' AND s = 'baz'
+
+# Backfill a partial inverted index.
+
+statement ok
+CREATE TABLE inv_b (k INT PRIMARY KEY, j JSON, s STRING)
+
+statement ok
+INSERT INTO inv_b VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+statement ok
+CREATE INVERTED INDEX i ON inv_b (j) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM inv_b@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
+
+# Backfill a partial inverted index when a new table is created in the same
+# transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE inv_c (k INT PRIMARY KEY, j JSON, s STRING)
+
+statement ok
+INSERT INTO inv_c VALUES
+    (1, '{"x": "y", "num": 1}', 'foo'),
+    (2, '{"x": "y", "num": 2}', 'baz'),
+    (3, '{"x": "y", "num": 3}', 'bar')
+
+statement ok
+CREATE INVERTED INDEX i ON inv_c (j) WHERE s IN ('foo', 'bar')
+
+statement ok
+COMMIT
+
+query ITT
+SELECT * FROM inv_c@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
+----
+1  {"num": 1, "x": "y"}  foo
+3  {"num": 3, "x": "y"}  bar
 
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.
@@ -1162,3 +1345,28 @@ SELECT distinct(a) FROM t53922
 1
 2
 3
+
+# Regression tests for #54649. Do not panic with NULL atoms in filter and
+# predicate expressions.
+subtest regression_54649
+
+statement ok
+CREATE TABLE t54649_a (
+  i INT,
+  b BOOL,
+  INDEX (i) WHERE b
+)
+
+statement ok
+SELECT i FROM t54649_a WHERE (NULL OR b) OR b
+
+statement ok
+CREATE TABLE t54649_b (
+  i INT,
+  b BOOL,
+  c BOOL,
+  INDEX (i) WHERE (b OR NULL) OR b
+)
+
+statement ok
+SELECT i FROM t54649_b WHERE c

@@ -20,6 +20,8 @@ pkg/sql/catalog/descpb/structured.go | `ColumnID`
 pkg/sql/catalog/descpb/structured.go | `MutationID`
 pkg/sql/sem/tree/table_ref.go | `ID`
 pkg/sql/sem/tree/table_ref.go | `ColumnID`
+pkg/storage/enginepb/mvcc3.go | `MVCCStatsDelta`
+pkg/storage/enginepb/mvcc3.go | `*MVCCStats`
 pkg/util/hlc/timestamp.go | `Timestamp`
 pkg/util/log/redact.go | `reflect.TypeOf(true)`
 pkg/util/log/redact.go | `reflect.TypeOf(123)`

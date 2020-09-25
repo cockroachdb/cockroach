@@ -111,28 +111,6 @@ var (
 	)
 )
 
-// TODO(peter): Until go1.11, ServeMux.ServeHTTP was not safe to call
-// concurrently with ServeMux.Handle. So we provide our own wrapper with proper
-// locking. Slightly less efficient because it locks unnecessarily, but
-// safe. See TestServeMuxConcurrency. Should remove once we've upgraded to
-// go1.11.
-type safeServeMux struct {
-	mu  syncutil.RWMutex
-	mux http.ServeMux
-}
-
-func (mux *safeServeMux) Handle(pattern string, handler http.Handler) {
-	mux.mu.Lock()
-	mux.mux.Handle(pattern, handler)
-	mux.mu.Unlock()
-}
-
-func (mux *safeServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	mux.mu.RLock()
-	mux.mux.ServeHTTP(w, r)
-	mux.mu.RUnlock()
-}
-
 // Server is the cockroach server node.
 type Server struct {
 	// The following fields are populated in NewServer.
@@ -140,7 +118,7 @@ type Server struct {
 	nodeIDContainer *base.NodeIDContainer
 	cfg             Config
 	st              *cluster.Settings
-	mux             safeServeMux
+	mux             http.ServeMux
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
@@ -160,6 +138,7 @@ type Server struct {
 	admin          *adminServer
 	status         *statusServer
 	authentication *authenticationServer
+	oidc           OIDC
 	tsDB           *ts.DB
 	tsServer       *ts.Server
 	raftTransport  *kvserver.RaftTransport
@@ -986,6 +965,13 @@ func (s *Server) startPersistingHLCUpperBound(
 	return nil
 }
 
+// getServerEndpointCounter returns a telemetry Counter corresponding to the
+// given grpc method.
+func getServerEndpointCounter(method string) telemetry.Counter {
+	const counterPrefix = "http.grpc-gateway"
+	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -1225,8 +1211,21 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
+
+	callCountInterceptor := func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		telemetry.Inc(getServerEndpointCounter(method))
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(append(
 		dialOpts,
+		grpc.WithUnaryInterceptor(callCountInterceptor)),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return loopback.Connect(ctx)
 		}),
@@ -1402,11 +1401,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// one, make sure it's the clusterID we already know (and are guaranteed to
 	// know) at this point. If it's not the same, explode.
 	//
-	// TODO(tbg): remove this when we have changed ServeAndWait() to join an
-	// existing cluster via a one-off RPC, at which point we can create gossip
-	// (and thus the RPC layer) only after the clusterID is already known. We
-	// can then rely on the RPC layer's protection against cross-cluster
-	// communication.
+	// TODO(irfansharif): The above is no longer applicable; in 21.1 we can
+	// always assume that the RPC layer will always get set up after having
+	// found out what the cluster ID is. The checks below can be removed then.
 	{
 		// We populated this above, so it should still be set. This is just to
 		// demonstrate that we're not doing anything functional here (and to
@@ -1593,6 +1590,14 @@ func (s *Server) Start(ctx context.Context) error {
 	// something associated to SQL tenants.
 	s.startSystemLogsGC(ctx)
 
+	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
+	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
+	oidc, err := ConfigureOIDC(ctx, s.ClusterSettings(), &s.mux, s.authentication.UserLoginFromSSO, s.cfg.AmbientCtx, s.ClusterID(), s.nodeDialer, s.NodeID())
+	if err != nil {
+		return err
+	}
+	s.oidc = oidc
+
 	// Serve UI assets.
 	//
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI
@@ -1605,6 +1610,7 @@ func (s *Server) Start(ctx context.Context) error {
 			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
 			LoginEnabled:         s.cfg.RequireWebSession(),
 			NodeID:               s.nodeIDContainer,
+			OIDC:                 oidc,
 			GetUser: func(ctx context.Context) *string {
 				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
 					return &u
@@ -2297,4 +2303,9 @@ func (s *Server) RunLocalSQL(
 	ctx context.Context, fn func(ctx context.Context, sqlExec *sql.InternalExecutor) error,
 ) error {
 	return fn(ctx, s.sqlServer.internalExecutor)
+}
+
+// Insecure returns true iff the server has security disabled.
+func (s *Server) Insecure() bool {
+	return s.cfg.Insecure
 }

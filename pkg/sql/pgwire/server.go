@@ -512,12 +512,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	if version == versionCancel {
 		// The cancel message is rather peculiar: it is sent without
 		// authentication, always over an unencrypted channel.
-		//
-		// Since we don't support this, close the door in the client's
-		// face. Make a note of that use in telemetry.
-		telemetry.Inc(sqltelemetry.CancelRequestCounter)
-		_ = conn.Close()
-		return nil
+		return handleCancel(conn)
 	}
 
 	// If the server is shutting down, terminate the connection early.
@@ -546,6 +541,14 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	switch version {
 	case version30:
 		// Normal SQL connection. Proceed normally below.
+
+	case versionCancel:
+		// The PostgreSQL protocol definition says that cancel payloads
+		// must be sent *prior to upgrading the connection to use TLS*.
+		// Yet, we've found clients in the wild that send the cancel
+		// after the TLS handshake, for example at
+		// https://github.com/cockroachlabs/support/issues/600.
+		return handleCancel(conn)
 
 	default:
 		// We don't know this protocol.
@@ -587,6 +590,14 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 			auth:            s.GetAuthenticationConfiguration(),
 			testingAuthHook: testingAuthHook,
 		})
+	return nil
+}
+
+func handleCancel(conn net.Conn) error {
+	// Since we don't support this, close the door in the client's
+	// face. Make a note of that use in telemetry.
+	telemetry.Inc(sqltelemetry.CancelRequestCounter)
+	_ = conn.Close()
 	return nil
 }
 
@@ -691,17 +702,18 @@ func (s *Server) maybeUpgradeToSecureConn(
 	if version != versionSSL {
 		// The client did not require a SSL connection.
 
-		if !s.cfg.Insecure && connType != hba.ConnLocal {
-			// Currently non-SSL connections are not allowed in secure
-			// mode. Ideally, we want to allow this and subject it to HBA
-			// rules ('hostssl' vs 'hostnossl').
-			//
-			// TODO(knz): revisit this when needed.
-			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
+		// Insecure mode: nothing to say, nothing to do.
+		// TODO(knz): Remove this condition - see
+		// https://github.com/cockroachdb/cockroach/issues/53404
+		if s.cfg.Insecure {
 			return
 		}
 
-		// Non-SSL in non-secure mode, all is well: no-op.
+		// Secure mode: disallow if TCP and the user did not opt into
+		// non-TLS SQL conns.
+		if !s.cfg.AcceptSQLWithoutTLS && connType != hba.ConnLocal {
+			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
+		}
 		return
 	}
 

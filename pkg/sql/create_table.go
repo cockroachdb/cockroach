@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -75,96 +76,6 @@ type createTableRun struct {
 	// whether or not a row_id was synthesized as part of the planning stage, if a
 	// user defined PK is not specified.
 	fromHeuristicPlanner bool
-}
-
-// storageParamObserver applies a storage parameter to an underlying item.
-type storageParamObserver interface {
-	apply(evalCtx *tree.EvalContext, key string, datum tree.Datum) error
-	runPostChecks() error
-}
-
-type tableStorageParamObserver struct{}
-
-var _ storageParamObserver = (*tableStorageParamObserver)(nil)
-
-func applyFillFactorStorageParam(evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-	val, err := datumAsFloat(evalCtx, key, datum)
-	if err != nil {
-		return err
-	}
-	if val < 0 || val > 100 {
-		return errors.Newf("%q must be between 0 and 100", key)
-	}
-	if evalCtx != nil {
-		evalCtx.ClientNoticeSender.SendClientNotice(
-			evalCtx.Context,
-			pgnotice.Newf("storage parameter %q is ignored", key),
-		)
-	}
-	return nil
-}
-
-func (a *tableStorageParamObserver) runPostChecks() error {
-	return nil
-}
-
-func (a *tableStorageParamObserver) apply(
-	evalCtx *tree.EvalContext, key string, datum tree.Datum,
-) error {
-	switch key {
-	case `fillfactor`:
-		return applyFillFactorStorageParam(evalCtx, key, datum)
-	case `autovacuum_enabled`:
-		var boolVal bool
-		if stringVal, err := datumAsString(evalCtx, key, datum); err == nil {
-			boolVal, err = parseBoolVar(key, stringVal)
-			if err != nil {
-				return err
-			}
-		} else {
-			s, err := getSingleBool(key, datum)
-			if err != nil {
-				return err
-			}
-			boolVal = bool(*s)
-		}
-		if !boolVal && evalCtx != nil {
-			evalCtx.ClientNoticeSender.SendClientNotice(
-				evalCtx.Context,
-				pgnotice.Newf(`storage parameter "%s = %s" is ignored`, key, datum.String()),
-			)
-		}
-		return nil
-	case `toast_tuple_target`,
-		`parallel_workers`,
-		`toast.autovacuum_enabled`,
-		`autovacuum_vacuum_threshold`,
-		`toast.autovacuum_vacuum_threshold`,
-		`autovacuum_vacuum_scale_factor`,
-		`toast.autovacuum_vacuum_scale_factor`,
-		`autovacuum_analyze_threshold`,
-		`autovacuum_analyze_scale_factor`,
-		`autovacuum_vacuum_cost_delay`,
-		`toast.autovacuum_vacuum_cost_delay`,
-		`autovacuum_vacuum_cost_limit`,
-		`autovacuum_freeze_min_age`,
-		`toast.autovacuum_freeze_min_age`,
-		`autovacuum_freeze_max_age`,
-		`toast.autovacuum_freeze_max_age`,
-		`autovacuum_freeze_table_age`,
-		`toast.autovacuum_freeze_table_age`,
-		`autovacuum_multixact_freeze_min_age`,
-		`toast.autovacuum_multixact_freeze_min_age`,
-		`autovacuum_multixact_freeze_max_age`,
-		`toast.autovacuum_multixact_freeze_max_age`,
-		`autovacuum_multixact_freeze_table_age`,
-		`toast.autovacuum_multixact_freeze_table_age`,
-		`log_autovacuum_min_duration`,
-		`toast.log_autovacuum_min_duration`,
-		`user_catalog_table`:
-		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
-	}
-	return errors.Errorf("invalid storage parameter %q", key)
 }
 
 // minimumTypeUsageVersions defines the minimum version needed for a new
@@ -285,7 +196,7 @@ func getTableCreateParams(
 
 	if persistence.IsUnlogged() {
 		telemetry.Inc(sqltelemetry.CreateUnloggedTableCounter)
-		params.p.SendClientNotice(
+		params.p.BufferClientNotice(
 			params.ctx,
 			pgnotice.Newf("UNLOGGED TABLE will behave as a regular table in CockroachDB"),
 		)
@@ -351,7 +262,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		for _, def := range n.n.Defs {
 			if d, ok := def.(*tree.IndexTableDef); ok {
 				if d.PartitionBy == nil {
-					params.p.SendClientNotice(
+					params.p.BufferClientNotice(
 						params.ctx,
 						errors.WithHint(
 							pgnotice.Newf("creating non-partitioned index on partitioned table may not be performant"),
@@ -368,7 +279,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
+	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
 	var asCols colinfo.ResultColumns
 	var desc *tabledesc.Mutable
@@ -602,21 +513,6 @@ func (n *createTableNode) Close(ctx context.Context) {
 	}
 }
 
-// resolveFK on the planner calls resolveFK() on the current txn.
-//
-// The caller must make sure the planner is configured to look up
-// descriptors without caching. See the comment on resolveFK().
-func (p *planner) resolveFK(
-	ctx context.Context,
-	tbl *tabledesc.Mutable,
-	d *tree.ForeignKeyConstraintTableDef,
-	backrefs map[descpb.ID]*tabledesc.Mutable,
-	ts FKTableState,
-	validationBehavior tree.ValidationBehavior,
-) error {
-	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts, validationBehavior, p.EvalContext())
-}
-
 func qualifyFKColErrorWithDB(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, tbl *tabledesc.Mutable, col string,
 ) string {
@@ -636,7 +532,7 @@ func qualifyFKColErrorWithDB(
 	return tree.ErrString(tree.NewUnresolvedName(db.GetName(), schema, tbl.Name, col))
 }
 
-// FKTableState is the state of the referencing table resolveFK() is called on.
+// FKTableState is the state of the referencing table ResolveFK() is called on.
 type FKTableState int
 
 const (
@@ -750,6 +646,14 @@ func ResolveFK(
 	target, err := resolver.ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return err
+	}
+	if target.ParentID != tbl.ParentID {
+		if !allowCrossDatabaseFKs.Get(&evalCtx.Settings.SV) {
+			return pgerror.Newf(pgcode.InvalidForeignKey,
+				"foreign references between databases are not allowed (see the '%s' cluster setting)",
+				allowCrossDatabaseFKsSetting,
+			)
+		}
 	}
 	if tbl.Temporary != target.Temporary {
 		persistenceType := "permanent"
@@ -903,7 +807,7 @@ func ResolveFK(
 				return pgerror.Newf(pgcode.ForeignKeyViolation,
 					"foreign key requires an existing index on columns %s", colNames.String())
 			}
-			_, err := addIndexForFK(tbl, originCols, constraintName, ts)
+			_, err := addIndexForFK(ctx, tbl, originCols, constraintName, ts)
 			if err != nil {
 				return err
 			}
@@ -950,6 +854,7 @@ func ResolveFK(
 // Adds an index to a table descriptor (that is in the process of being created)
 // that will support using `srcCols` as the referencing (src) side of an FK.
 func addIndexForFK(
+	ctx context.Context,
 	tbl *tabledesc.Mutable,
 	srcCols []*descpb.ColumnDescriptor,
 	constraintName string,
@@ -976,7 +881,7 @@ func addIndexForFK(
 		if err := tbl.AddIndex(idx, false); err != nil {
 			return 0, err
 		}
-		if err := tbl.AllocateIDs(); err != nil {
+		if err := tbl.AllocateIDs(ctx); err != nil {
 			return 0, err
 		}
 		added := tbl.Indexes[len(tbl.Indexes)-1]
@@ -990,7 +895,7 @@ func addIndexForFK(
 	if err := tbl.AddIndexMutation(&idx, descpb.DescriptorMutation_ADD); err != nil {
 		return 0, err
 	}
-	if err := tbl.AllocateIDs(); err != nil {
+	if err := tbl.AllocateIDs(ctx); err != nil {
 		return 0, err
 	}
 	id := tbl.Mutations[len(tbl.Mutations)-1].GetIndex().ID
@@ -1294,7 +1199,7 @@ func newTableDescIfAs(
 // The caller must also ensure that the SchemaResolver is configured
 // to bypass caching and enable visibility of just-added descriptors.
 // This is used to resolve sequence and FK dependencies. Also see the
-// comment at the start of the global scope resolveFK().
+// comment at the start of ResolveFK().
 //
 // If the table definition *may* use the SERIAL type, the caller is
 // also responsible for processing serial types using
@@ -1323,12 +1228,12 @@ func NewTableDesc(
 		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, persistence,
 	)
 
-	if err := applyStorageParameters(
+	if err := paramparse.ApplyStorageParameters(
 		ctx,
 		semaCtx,
 		evalCtx,
 		n.StorageParams,
-		&tableStorageParamObserver{},
+		&paramparse.TableStorageParamObserver{},
 	); err != nil {
 		return nil, err
 	}
@@ -1554,22 +1459,19 @@ func NewTableDesc(
 				idx.Partitioning = partitioning
 			}
 			if d.Predicate != nil {
-				if d.Inverted {
-					return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
-				}
-
 				expr, err := idxValidator.Validate(d.Predicate)
 				if err != nil {
 					return nil, err
 				}
 				idx.Predicate = expr
+				telemetry.Inc(sqltelemetry.PartialIndexCounter)
 			}
-			if err := applyStorageParameters(
+			if err := paramparse.ApplyStorageParameters(
 				ctx,
 				semaCtx,
 				evalCtx,
 				d.StorageParams,
-				&indexStorageParamObserver{indexDesc: &idx},
+				&paramparse.IndexStorageParamObserver{IndexDesc: &idx},
 			); err != nil {
 				return nil, err
 			}
@@ -1611,6 +1513,7 @@ func NewTableDesc(
 					return nil, err
 				}
 				idx.Predicate = expr
+				telemetry.Inc(sqltelemetry.PartialIndexCounter)
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return nil, err
@@ -1687,7 +1590,7 @@ func NewTableDesc(
 		}
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1818,7 +1721,7 @@ func NewTableDesc(
 	// happens to work in gc, but does not work in gccgo.
 	//
 	// See https://github.com/golang/go/issues/23188.
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1843,43 +1746,6 @@ func NewTableDesc(
 	}
 
 	return &desc, nil
-}
-
-func applyStorageParameters(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-	params tree.StorageParams,
-	paramObserver storageParamObserver,
-) error {
-	for _, sp := range params {
-		key := string(sp.Key)
-		if sp.Value == nil {
-			return errors.Errorf("storage parameter %q requires a value", key)
-		}
-		// Expressions may be an unresolved name.
-		// Cast these as strings.
-		expr := unresolvedNameToStrVal(sp.Value)
-
-		// Convert the expressions to a datum.
-		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
-		if err != nil {
-			return err
-		}
-		if typedExpr, err = evalCtx.NormalizeExpr(typedExpr); err != nil {
-			return err
-		}
-		datum, err := typedExpr.Eval(evalCtx)
-		if err != nil {
-			return err
-		}
-
-		// Apply the param.
-		if err := paramObserver.apply(evalCtx, key, datum); err != nil {
-			return err
-		}
-	}
-	return paramObserver.runPostChecks()
 }
 
 // newTableDesc creates a table descriptor from a CreateTable statement.
@@ -1946,7 +1812,7 @@ func newTableDesc(
 	// We need to run NewTableDesc with caching disabled, because
 	// it needs to pull in descriptors from FK depended-on tables
 	// and interleaved parents using their current state in KV.
-	// See the comment at the start of NewTableDesc() and resolveFK().
+	// See the comment at the start of NewTableDesc() and ResolveFK().
 	params.p.runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: parentID}, func() {
 		ret, err = NewTableDesc(
 			params.ctx,
@@ -2230,7 +2096,9 @@ func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescr
 	}
 }
 
-func createInheritedPrivilegesFromDBDesc(
+// CreateInheritedPrivilegesFromDBDesc creates privileges with the appropriate
+// owner (node for system, the restoring user otherwise.)
+func CreateInheritedPrivilegesFromDBDesc(
 	dbDesc catalog.DatabaseDescriptor, user string,
 ) *descpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by

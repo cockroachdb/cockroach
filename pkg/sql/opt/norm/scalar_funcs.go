@@ -307,8 +307,7 @@ func (c *CustomFuncs) InlineValues(v memo.RelExpr) *memo.TupleExpr {
 
 // IsTupleOfVars returns true if the given tuple contains Variables
 // corresponding to the given columns (in the same order).
-func (c *CustomFuncs) IsTupleOfVars(tuple opt.ScalarExpr, cols opt.ColList) bool {
-	t := tuple.(*memo.TupleExpr)
+func (c *CustomFuncs) IsTupleOfVars(t *memo.TupleExpr, cols opt.ColList) bool {
 	if len(t.Elems) != len(cols) {
 		return false
 	}
@@ -322,8 +321,6 @@ func (c *CustomFuncs) IsTupleOfVars(tuple opt.ScalarExpr, cols opt.ColList) bool
 }
 
 // VarsAreSame returns true if the two variables are the same.
-func (c *CustomFuncs) VarsAreSame(left, right opt.ScalarExpr) bool {
-	lv := left.(*memo.VariableExpr)
-	rv := right.(*memo.VariableExpr)
-	return lv.Col == rv.Col
+func (c *CustomFuncs) VarsAreSame(left, right *memo.VariableExpr) bool {
+	return left.Col == right.Col
 }

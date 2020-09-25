@@ -71,7 +71,6 @@ select '''
 			f.Close()
 		}
 		_ = os.Remove(fname)
-		stdin = os.Stdin
 	}()
 
 	for _, test := range tests {
@@ -90,10 +89,7 @@ select '''
 			fmt.Fprintln(stderr, err)
 			return
 		}
-		// Override the standard input for runInteractive().
-		stdin = f
-
-		err := runInteractive(conn)
+		err := runInteractive(conn, f)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 		}

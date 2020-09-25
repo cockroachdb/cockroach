@@ -69,6 +69,7 @@ func TestParse(t *testing.T) {
 		{`CREATE DATABASE a LC_CTYPE = 'C.UTF-8'`},
 		{`CREATE DATABASE a LC_CTYPE = 'INVALID'`},
 		{`CREATE DATABASE a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID'`},
+		{`CREATE DATABASE a CONNECTION LIMIT = 13`},
 		{`CREATE DATABASE IF NOT EXISTS a`},
 		{`CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0'`},
 		{`CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'invalid'`},
@@ -350,6 +351,9 @@ func TestParse(t *testing.T) {
 		{`CREATE SEQUENCE a OWNED BY b`},
 		{`CREATE SEQUENCE a OWNED BY NONE`},
 
+		{`CREATE EXTENSION bob`},
+		{`CREATE EXTENSION IF NOT EXISTS bob`},
+
 		{`CREATE STATISTICS a ON col1 FROM t`},
 		{`EXPLAIN CREATE STATISTICS a ON col1 FROM t`},
 		{`CREATE STATISTICS a FROM t`},
@@ -615,7 +619,14 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS`},
 		{`EXPLAIN SHOW GRANTS`},
 		{`SHOW GRANTS ON TABLE foo`},
+		{`SHOW GRANTS ON SCHEMA foo`},
+		{`SHOW GRANTS ON SCHEMA foo, bar`},
+		{`SHOW GRANTS ON TYPE typ1`},
+		{`SHOW GRANTS ON TYPE typ1, schema2.typ2, db.schema.typ`},
 		{`SHOW GRANTS ON TABLE foo, db.foo`},
+		{`SHOW GRANTS ON TYPE foo`},
+		{`SHOW GRANTS ON TYPE foo, bar`},
+		{`SHOW GRANTS ON TYPE foo, bar FOR baz`},
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
@@ -1042,6 +1053,7 @@ func TestParse(t *testing.T) {
 
 		{`SELECT 1 FROM t GROUP BY a`},
 		{`SELECT 1 FROM t GROUP BY a, b`},
+		{`SELECT 1 FROM t GROUP BY ()`},
 		{`SELECT sum(x ORDER BY y) FROM t`},
 		{`SELECT sum(x ORDER BY y, z) FROM t`},
 
@@ -1504,6 +1516,9 @@ func TestParse(t *testing.T) {
 		{`ALTER TYPE t SET SCHEMA newschema`},
 		{`ALTER TYPE t OWNER TO foo`},
 
+		{`REASSIGN OWNED BY foo TO bar`},
+		{`REASSIGN OWNED BY foo, bar TO third`},
+
 		{`COMMENT ON COLUMN a.b IS 'a'`},
 		{`COMMENT ON COLUMN a.b IS NULL`},
 		{`COMMENT ON COLUMN a.b.c IS 'a'`},
@@ -1675,6 +1690,14 @@ func TestParse2(t *testing.T) {
 			`CREATE DATABASE a TEMPLATE = 'template0'`},
 		{`CREATE DATABASE a TEMPLATE = invalid`,
 			`CREATE DATABASE a TEMPLATE = 'invalid'`},
+		{
+			`CREATE DATABASE a WITH CONNECTION LIMIT = 13`,
+			`CREATE DATABASE a CONNECTION LIMIT = 13`,
+		},
+		{
+			`CREATE DATABASE a WITH CONNECTION LIMIT -1`,
+			`CREATE DATABASE a`,
+		},
 		{`CREATE TABLE a (b INT) WITH (fillfactor=100)`,
 			`CREATE TABLE a (b INT8)`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
@@ -2076,6 +2099,14 @@ $function$`,
 			`SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE`},
 		// FOR READ ONLY is ignored, like in Postgres.
 		{`SELECT 1 FOR READ ONLY`, `SELECT 1`},
+
+		{`UPDATE ONLY a SET b = 3`, `UPDATE a SET b = 3`},
+		{`UPDATE ONLY a * SET b = 3`, `UPDATE a SET b = 3`},
+		{`UPDATE a * SET b = 3`, `UPDATE a SET b = 3`},
+
+		{`DELETE FROM ONLY a WHERE a = b`, `DELETE FROM a WHERE a = b`},
+		{`DELETE FROM a * WHERE a = b`, `DELETE FROM a WHERE a = b`},
+		{`DELETE FROM ONLY a * WHERE a = b`, `DELETE FROM a WHERE a = b`},
 
 		{`SHOW CREATE TABLE t`,
 			`SHOW CREATE t`},
@@ -2576,8 +2607,11 @@ SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS,
 		{`SELECT 1::db.int4.typ array`, `SELECT 1::db.int4.typ[]`},
 		{`CREATE TABLE t (x int4.type array [1])`, `CREATE TABLE t (x int4.type[])`},
 
-		{`ALTER TYPE t OWNER TO CURRENT_USER`, "ALTER TYPE t OWNER TO \"current_user\""},
-		{`ALTER TYPE t OWNER TO SESSION_USER`, "ALTER TYPE t OWNER TO \"session_user\""},
+		{`ALTER TYPE t OWNER TO CURRENT_USER`, `ALTER TYPE t OWNER TO "current_user"`},
+		{`ALTER TYPE t OWNER TO SESSION_USER`, `ALTER TYPE t OWNER TO "session_user"`},
+
+		{`REASSIGN OWNED BY CURRENT_USER TO foo`, `REASSIGN OWNED BY "current_user" TO foo`},
+		{`REASSIGN OWNED BY SESSION_USER TO foo`, `REASSIGN OWNED BY "session_user" TO foo`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
@@ -2921,12 +2955,15 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`, ``},
 		{`ALTER TABLE a ADD CONSTRAINT foo EXCLUDE USING gist (bar WITH =)`, 46657, `add constraint exclude using`, ``},
 
+		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
+
+		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
+
 		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
 		{`CREATE CONVERSION a`, 0, `create conversion`, ``},
 		{`CREATE DEFAULT CONVERSION a`, 0, `create def conv`, ``},
-		{`CREATE EXTENSION a`, 0, `create extension a`, ``},
 		{`CREATE FOREIGN DATA WRAPPER a`, 0, `create fdw`, ``},
 		{`CREATE FOREIGN TABLE a`, 0, `create foreign table`, ``},
 		{`CREATE FUNCTION a`, 17511, `create`, ``},
@@ -2940,6 +2977,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TEXT SEARCH a`, 7821, `create text`, ``},
 		{`CREATE TRIGGER a`, 28296, `create`, ``},
 
+		{`DROP ACCESS METHOD a`, 0, `drop access method`, ``},
 		{`DROP AGGREGATE a`, 0, `drop aggregate`, ``},
 		{`DROP CAST a`, 0, `drop cast`, ``},
 		{`DROP COLLATION a`, 0, `drop collation`, ``},
@@ -3029,9 +3067,12 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`, ``},
 		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`, ``},
 
-		{`CREATE INDEX a ON b(c + d)`, 9682, ``, ``},
-		{`CREATE INDEX a ON b(c[d])`, 9682, ``, ``},
+		{`CREATE INDEX a ON b((c + d))`, 9682, ``, ``},
+		{`CREATE INDEX a ON b((c[d]))`, 9682, ``, ``},
 		{`CREATE INDEX a ON b(foo(c))`, 9682, ``, ``},
+		{`CREATE INDEX a ON b(c gin_trgm_ops)`, 41285, `index using gin_trgm_ops`, ``},
+		{`CREATE INDEX a ON b(c gist_trgm_ops)`, 41285, `index using gist_trgm_ops`, ``},
+		{`CREATE INDEX a ON b(c bobby)`, 47420, ``, ``},
 		{`CREATE INDEX a ON b(a NULLS LAST)`, 6224, ``, ``},
 		{`CREATE INDEX a ON b(a ASC NULLS LAST)`, 6224, ``, ``},
 		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``},
@@ -3049,6 +3090,11 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`, ``},
 
+		{`SELECT 1 FROM t GROUP BY ROLLUP (b)`, 46280, `rollup`, ``},
+		{`SELECT 1 FROM t GROUP BY a, ROLLUP (b)`, 46280, `rollup`, ``},
+		{`SELECT 1 FROM t GROUP BY CUBE (b)`, 46280, `cube`, ``},
+		{`SELECT 1 FROM t GROUP BY GROUPING SETS (b)`, 46280, `grouping sets`, ``},
+
 		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``},
 		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``},
 		{`SELECT a FROM t ORDER BY a DESC NULLS FIRST`, 6224, ``, ``},
@@ -3056,6 +3102,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b BOX)`, 21286, `box`, ``},
 		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`, ``},
 		{`CREATE TABLE a(b CIRCLE)`, 21286, `circle`, ``},
+		{`CREATE TABLE a(b JSONPATH)`, 22513, `jsonpath`, ``},
 		{`CREATE TABLE a(b LINE)`, 21286, `line`, ``},
 		{`CREATE TABLE a(b LSEG)`, 21286, `lseg`, ``},
 		{`CREATE TABLE a(b MACADDR)`, 0, `macaddr`, ``},
@@ -3075,7 +3122,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`UPDATE Foo SET x.y = z`, 27792, ``, ``},
 
 		{`REINDEX INDEX a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
+		{`REINDEX INDEX CONCURRENTLY a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
 		{`REINDEX TABLE a`, 0, `reindex table`, `CockroachDB does not require reindexing.`},
+		{`REINDEX SCHEMA a`, 0, `reindex schema`, `CockroachDB does not require reindexing.`},
 		{`REINDEX DATABASE a`, 0, `reindex database`, `CockroachDB does not require reindexing.`},
 		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`},
 

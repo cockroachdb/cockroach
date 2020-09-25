@@ -10397,6 +10397,7 @@ const int EndTxnRequest::kInFlightWritesFieldNumber;
 const int EndTxnRequest::kRequire1PcFieldNumber;
 const int EndTxnRequest::kDeprecatedCanCommitAtHigherTimestampFieldNumber;
 const int EndTxnRequest::kPoisonFieldNumber;
+const int EndTxnRequest::kTxnHeartbeatingFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 EndTxnRequest::EndTxnRequest()
@@ -10428,15 +10429,15 @@ EndTxnRequest::EndTxnRequest(const EndTxnRequest& from)
     internal_commit_trigger_ = NULL;
   }
   ::memcpy(&commit_, &from.commit_,
-    static_cast<size_t>(reinterpret_cast<char*>(&poison_) -
-    reinterpret_cast<char*>(&commit_)) + sizeof(poison_));
+    static_cast<size_t>(reinterpret_cast<char*>(&txn_heartbeating_) -
+    reinterpret_cast<char*>(&commit_)) + sizeof(txn_heartbeating_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.EndTxnRequest)
 }
 
 void EndTxnRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&poison_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(poison_));
+      reinterpret_cast<char*>(&txn_heartbeating_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(txn_heartbeating_));
 }
 
 EndTxnRequest::~EndTxnRequest() {
@@ -10480,8 +10481,8 @@ void EndTxnRequest::Clear() {
   }
   internal_commit_trigger_ = NULL;
   ::memset(&commit_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&poison_) -
-      reinterpret_cast<char*>(&commit_)) + sizeof(poison_));
+      reinterpret_cast<char*>(&txn_heartbeating_) -
+      reinterpret_cast<char*>(&commit_)) + sizeof(txn_heartbeating_));
   _internal_metadata_.Clear();
 }
 
@@ -10602,6 +10603,20 @@ bool EndTxnRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // bool txn_heartbeating = 10;
+      case 10: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(80u /* 80 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &txn_heartbeating_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       case 17: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(138u /* 138 & 0xFF */)) {
@@ -10683,6 +10698,11 @@ void EndTxnRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(9, this->poison(), output);
   }
 
+  // bool txn_heartbeating = 10;
+  if (this->txn_heartbeating() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(10, this->txn_heartbeating(), output);
+  }
+
   for (unsigned int i = 0,
       n = static_cast<unsigned int>(this->in_flight_writes_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
@@ -10761,6 +10781,11 @@ size_t EndTxnRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // bool txn_heartbeating = 10;
+  if (this->txn_heartbeating() != 0) {
+    total_size += 1 + 1;
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -10801,6 +10826,9 @@ void EndTxnRequest::MergeFrom(const EndTxnRequest& from) {
   if (from.poison() != 0) {
     set_poison(from.poison());
   }
+  if (from.txn_heartbeating() != 0) {
+    set_txn_heartbeating(from.txn_heartbeating());
+  }
 }
 
 void EndTxnRequest::CopyFrom(const EndTxnRequest& from) {
@@ -10829,6 +10857,7 @@ void EndTxnRequest::InternalSwap(EndTxnRequest* other) {
   swap(require_1pc_, other->require_1pc_);
   swap(deprecated_can_commit_at_higher_timestamp_, other->deprecated_can_commit_at_higher_timestamp_);
   swap(poison_, other->poison_);
+  swap(txn_heartbeating_, other->txn_heartbeating_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

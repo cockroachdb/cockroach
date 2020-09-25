@@ -284,11 +284,10 @@ func doLookup(
 	return doLookupWithToken(ctx, rc, key, EvictionToken{}, false)
 }
 
-func evict(ctx context.Context, rc *RangeDescriptorCache, entry *rangeCacheEntry) bool {
+func evict(ctx context.Context, rc *RangeDescriptorCache, desc *roachpb.RangeDescriptor) bool {
 	rc.rangeCache.Lock()
 	defer rc.rangeCache.Unlock()
-	ok, _ /* updatedEntry */ := rc.evictLocked(ctx, entry)
-	return ok
+	return rc.evictDescLocked(ctx, desc)
 }
 
 func clearOlderOverlapping(
@@ -438,7 +437,7 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 1, "vu")
 
 	// Evicts [d,e).
-	require.True(t, evict(ctx, db.cache, deTok.entry))
+	require.True(t, evict(ctx, db.cache, deTok.Desc()))
 	// Evicts [meta(min),meta(g)).
 	require.True(t, db.cache.EvictByKey(ctx, keys.RangeMetaKey(roachpb.RKey("da"))))
 	doLookup(ctx, db.cache, "fa")
@@ -457,7 +456,9 @@ func TestRangeCache(t *testing.T) {
 	// Attempt to compare-and-evict with a cache entry that is not equal to the
 	// cached one; it should not alter the cache.
 	desc, _ := doLookup(ctx, db.cache, "cz")
-	require.False(t, evict(ctx, db.cache, &rangeCacheEntry{desc: *desc}))
+	descCopy := *desc
+	descCopy.Generation--
+	require.False(t, evict(ctx, db.cache, &descCopy))
 
 	_, evictToken := doLookup(ctx, db.cache, "cz")
 	db.assertLookupCountEq(t, 0, "cz")
@@ -628,25 +629,22 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	db := initTestDescriptorDB(t)
 	ctx := context.Background()
 
-	pauseLookupResumeAndAssert := func(key string, expected int64, evictToken EvictionToken) {
+	pauseLookupResumeAndAssert := func(key string, evictToken EvictionToken) {
 		var wg sync.WaitGroup
+		log.Infof(ctx, "test pausing lookups; token: %s", evictToken)
 		db.pauseRangeLookups()
 
-		// We're going to perform 3 lookups on the same key, in parallel, while
-		// lookups are paused. Either they're all expected to get cache hits (in the
-		// case where expected == 0), or there will be one request actually blocked
-		// in the db and the other two will get coalesced onto it.
-		var coalesced chan struct{}
-		if expected > 0 {
-			coalesced = make(chan struct{})
-			db.cache.coalesced = coalesced
-		}
+		// We're going to perform 3 lookups on the close-by keys, in parallel, while
+		// lookups are paused. We're expecting one request to be actually blocked in
+		// the db and the other two will get coalesced onto it.
+		coalesced := make(chan struct{})
+		db.cache.coalesced = coalesced
 
 		for i := 0; i < 3; i++ {
 			wg.Add(1)
 			go func(id int) {
 				// Each request goes to a different key.
-				doLookupWithToken(ctx, db.cache, fmt.Sprintf("%s%d", key, id), evictToken, false)
+				doLookupWithToken(ctx, db.cache, fmt.Sprintf("%s%d", key, id), evictToken, false /* useReverseScan */)
 				wg.Done()
 			}(i)
 		}
@@ -657,9 +655,10 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 			}
 		}
 
+		log.Infof(ctx, "test resuming lookups")
 		db.resumeRangeLookups()
 		wg.Wait()
-		db.assertLookupCountEq(t, expected, key)
+		db.assertLookupCountEq(t, 1, key)
 	}
 
 	// A request initially looks up the range descriptor ["a"-"b").
@@ -680,8 +679,9 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	mismatchErrRange := ranges[0]
 	// The stale descriptor is evicted, the new descriptor from the error is
 	// replaced, and a new lookup is initialized.
+	oldToken := evictToken
 	evictToken.EvictAndReplace(ctx, roachpb.RangeInfo{Desc: mismatchErrRange})
-	pauseLookupResumeAndAssert("az", 1, evictToken)
+	pauseLookupResumeAndAssert("az", oldToken)
 
 	// Both sides of the split are now correctly cached.
 	doLookup(ctx, db.cache, "aa")
@@ -849,6 +849,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 			mismatchErrRange := ranges[0]
 			// The stale descriptor is evicted, the new descriptor from the error is
 			// replaced, and a new lookup is initialized.
+			oldToken := evictToken
 			evictToken.EvictAndReplace(ctx, roachpb.RangeInfo{Desc: mismatchErrRange})
 
 			// wg will be used to wait for all the lookups to complete.
@@ -884,7 +885,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 					ctx, getRecording, cancel := tracing.ContextWithRecordingSpan(ctx, "test")
 					defer cancel()
 					tok, err := db.cache.lookupInternal(
-						ctx, key, evictToken,
+						ctx, key, oldToken,
 						tc.reverseScan)
 					require.NoError(t, err)
 					desc = tok.Desc()
@@ -1492,33 +1493,34 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		Sequence: 1,
 	}
 	oldTok := tok
-	tok, ok := tok.UpdateLease(ctx, l)
+	ok := tok.UpdateLease(ctx, l)
 	require.True(t, ok)
 	require.Equal(t, oldTok.Desc(), tok.Desc())
+	require.Equal(t, &l.Replica, tok.Leaseholder())
 	ri := cache.GetCached(ctx, startKey, false /* inverted */)
 	require.NotNil(t, ri)
 	require.Equal(t, rep1, ri.Lease().Replica)
 
-	tok = tok.ClearLease(ctx)
+	tok.EvictLease(ctx)
 	ri = cache.GetCached(ctx, startKey, false /* inverted */)
 	require.NotNil(t, ri)
 	require.True(t, ri.(*rangeCacheEntry).lease.Empty())
 	require.NotNil(t, tok)
 
 	// Check that trying to update the lease to a non-member replica results
-	// in a nil return and the entry's eviction.
+	// in the entry's eviction and the token's invalidation.
 	l = &roachpb.Lease{
 		Replica:  repNonMember,
 		Sequence: 2,
 	}
-	tok, ok = tok.UpdateLease(ctx, l)
+	ok = tok.UpdateLease(ctx, l)
 	require.False(t, ok)
-	require.True(t, tok.Empty())
+	require.False(t, tok.Valid())
 	ri = cache.GetCached(ctx, startKey, false /* inverted */)
 	require.Nil(t, ri)
 
 	// Check that updating the lease while the cache has a newer descriptor
-	// returns the newer descriptor.
+	// updates the token to the newer descriptor.
 
 	cache.Insert(ctx, roachpb.RangeInfo{
 		Desc:  desc1,
@@ -1533,14 +1535,15 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		Desc:  desc2,
 		Lease: roachpb.Lease{},
 	})
-	tok, ok = tok.UpdateLease(ctx,
+	ok = tok.UpdateLease(ctx,
 		// Specify a lease compatible with desc2.
 		&roachpb.Lease{Replica: rep2, Sequence: 3},
 	)
 	require.True(t, ok)
 	require.NotNil(t, tok)
-	require.Equal(t, tok.Desc(), &desc2)
-	require.Equal(t, tok.entry.lease.Replica, rep2)
+	require.Equal(t, &desc2, tok.Desc())
+	require.Equal(t, &rep2, tok.Leaseholder())
+	require.Equal(t, tok.lease.Replica, rep2)
 
 	// Update the cache again.
 	cache.Insert(ctx, roachpb.RangeInfo{
@@ -1549,9 +1552,9 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	})
 	// This time try to specify a lease that's not compatible with the desc. The
 	// entry should end up evicted from the cache.
-	tok, ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep3, Sequence: 4})
+	ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep3, Sequence: 4})
 	require.False(t, ok)
-	require.True(t, tok.Empty())
+	require.False(t, tok.Valid())
 	ri = cache.GetCached(ctx, startKey, false /* inverted */)
 	require.Nil(t, ri)
 }

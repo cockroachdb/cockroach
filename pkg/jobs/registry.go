@@ -775,7 +775,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, s sqlliveness.Session) {
 func (r *Registry) maybeCancelJobsDeprecated(
 	ctx context.Context, nlw optionalnodeliveness.Container,
 ) {
-	nl, ok := nlw.Optional(47892)
+	nl, ok := nlw.Optional(54251)
 	if !ok {
 		// At most one container is running on behalf of a SQL tenant, so it must be
 		// this one, and there's no point canceling anything.
@@ -1068,6 +1068,11 @@ func (r *Registry) stepThroughStateMachine(
 				"job %d: resuming with non-nil error", *job.ID())
 		}
 		resumeCtx := logtags.AddTag(ctx, "job", *job.ID())
+		if payload.StartedMicros == 0 {
+			if err := job.started(ctx); err != nil {
+				return err
+			}
+		}
 		err := resumer.Resume(resumeCtx, phs, resultsCh)
 		if err == nil {
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusSucceeded, nil)
@@ -1134,7 +1139,7 @@ func (r *Registry) stepThroughStateMachine(
 			// If the job has failed with any error different than canceled we
 			// mark it as Failed.
 			nextStatus := StatusFailed
-			if errors.Is(jobErr, errJobCanceled) {
+			if HasErrJobCanceled(jobErr) {
 				nextStatus = StatusCanceled
 			}
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, nextStatus, jobErr)

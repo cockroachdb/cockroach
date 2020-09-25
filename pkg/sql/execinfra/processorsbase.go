@@ -598,7 +598,10 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 		// However, calling it with an error in states other than StateRunning is
 		// not permitted.
 		if err != nil {
-			log.Fatalf(pb.Ctx, "MoveToDraining called in state %s with err: %s",
+			log.ReportOrPanic(
+				pb.Ctx,
+				&pb.FlowCtx.Cfg.Settings.SV,
+				"MoveToDraining called in state %s with err: %+v",
 				pb.State, err)
 		}
 		return
@@ -625,7 +628,11 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 // also moves from StateDraining to StateTrailingMeta when appropriate.
 func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 	if pb.State == StateRunning {
-		log.Fatal(pb.Ctx, "drain helper called in StateRunning")
+		log.ReportOrPanic(
+			pb.Ctx,
+			&pb.FlowCtx.Cfg.Settings.SV,
+			"drain helper called in StateRunning",
+		)
 	}
 
 	// trailingMeta always has priority; it seems like a good idea because it
@@ -696,7 +703,12 @@ func (pb *ProcessorBase) popTrailingMeta() *execinfrapb.ProducerMetadata {
 // draining its inputs (if it wants to drain them).
 func (pb *ProcessorBase) moveToTrailingMeta() {
 	if pb.State == StateTrailingMeta || pb.State == StateExhausted {
-		log.Fatalf(pb.Ctx, "moveToTrailingMeta called in state: %s", pb.State)
+		log.ReportOrPanic(
+			pb.Ctx,
+			&pb.FlowCtx.Cfg.Settings.SV,
+			"moveToTrailingMeta called in state: %s",
+			pb.State,
+		)
 	}
 
 	if pb.FinishTrace != nil {

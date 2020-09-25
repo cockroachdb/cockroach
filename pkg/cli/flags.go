@@ -349,6 +349,10 @@ func init() {
 		stringFlag(f, &serverSocketDir, cliflags.SocketDir)
 		boolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
 
+		// The following flag is planned to become non-experimental in 21.1.
+		boolFlag(f, &serverCfg.AcceptSQLWithoutTLS, cliflags.AcceptSQLWithoutTLS)
+		_ = f.MarkHidden(cliflags.AcceptSQLWithoutTLS.Name)
+
 		// Backward-compatibility flags.
 
 		// These are deprecated but until we have qualitatively new
@@ -652,6 +656,7 @@ func init() {
 		f := cmd.Flags()
 		varFlag(f, &sqlCtx.setStmts, cliflags.Set)
 		varFlag(f, &sqlCtx.execStmts, cliflags.Execute)
+		stringFlag(f, &sqlCtx.inputFile, cliflags.File)
 		durationFlag(f, &sqlCtx.repeatDelay, cliflags.Watch)
 		boolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates)
 		boolFlag(f, &sqlCtx.debugMode, cliflags.CliDebugMode)
@@ -688,7 +693,6 @@ func init() {
 			_ = f.MarkHidden(cliflags.ClientHost.Name)
 			stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
 			_ = f.MarkHidden(cliflags.ClientPort.Name)
-
 		}
 
 		if cmd == sqlShellCmd {

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -469,17 +470,31 @@ func (b *Builder) scanParams(
 	// index in the memo.
 	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index {
 		idx := tab.Index(scan.Flags.Index)
+		isInverted := idx.IsInverted()
+		_, isPartial := idx.Predicate()
+
 		var err error
-		if idx.IsInverted() {
-			err = fmt.Errorf("index \"%s\" is inverted and cannot be used for this query", idx.Name())
-		} else if _, isPartial := idx.Predicate(); isPartial {
+		switch {
+		case isInverted && isPartial:
+			err = fmt.Errorf(
+				"index \"%s\" is a partial inverted index and cannot be used for this query",
+				idx.Name(),
+			)
+		case isInverted:
+			err = fmt.Errorf(
+				"index \"%s\" is inverted and cannot be used for this query",
+				idx.Name(),
+			)
+		case isPartial:
 			err = fmt.Errorf(
 				"index \"%s\" is a partial index that does not contain all the rows needed to execute this query",
-				idx.Name())
-		} else {
+				idx.Name(),
+			)
+		default:
 			// This should never happen.
 			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
 		}
+
 		return exec.ScanParams{}, opt.ColMap{}, err
 	}
 
@@ -546,6 +561,11 @@ func (b *Builder) scanParams(
 func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
+
+	if !b.disableTelemetry && scan.UsesPartialIndex(md) {
+		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
+	}
+
 	params, outputCols, err := b.scanParams(tab, scan)
 	if err != nil {
 		return execPlan{}, err
@@ -602,9 +622,25 @@ func (b *Builder) buildInvertedFilter(invFilter *memo.InvertedFilterExpr) (execP
 	// A filtering node does not modify the schema.
 	res := execPlan{outputCols: input.outputCols}
 	invertedCol := input.getNodeColumnOrdinal(invFilter.InvertedColumn)
+	var typedPreFilterExpr tree.TypedExpr
+	var typ *types.T
+	if invFilter.PreFiltererState.Expr != nil {
+		// The expression has a single variable, corresponding to the indexed
+		// column. We assign it an ordinal of 0.
+		var colMap opt.ColMap
+		colMap.Set(int(invFilter.PreFiltererState.Col), 0)
+		ctx := buildScalarCtx{
+			ivh:     tree.MakeIndexedVarHelper(nil /* container */, colMap.Len()),
+			ivarMap: colMap,
+		}
+		typedPreFilterExpr, err = b.buildScalar(&ctx, invFilter.PreFiltererState.Expr)
+		if err != nil {
+			return execPlan{}, err
+		}
+		typ = invFilter.PreFiltererState.Typ
+	}
 	res.root, err = b.factory.ConstructInvertedFilter(
-		input.root, invFilter.InvertedExpression, invertedCol,
-	)
+		input.root, invFilter.InvertedExpression, typedPreFilterExpr, typ, invertedCol)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -919,12 +955,6 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
 	}
 
-	if plan, ok, err := b.tryBuildInterleavedJoin(join); err != nil {
-		return execPlan{}, err
-	} else if ok {
-		return plan, nil
-	}
-
 	joinType := joinOpToJoinType(join.JoinType)
 
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
@@ -950,140 +980,6 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return ep, nil
-}
-
-// tryBuildInterleavedJoin attempts to build the merge-sort as an interleaved
-// join.
-//
-// We can use an interleaved join when all following conditions are satisfied:
-//  1. Both sides of the join are Scans or Filter->Scan complexes.
-//  2. The scans have the same direction.
-//  3. The scans don't have limits.
-//  4. The tables are interleaved and one is the ancestor of the other.
-//  5. The merge join equality columns map exactly to the ancestor index key
-//     columns and the corresponding prefix of the descendant index.
-//
-// TODO(radu): this matching belongs in a rule (but for that we need to design
-// a proper optimizer operator).
-func (b *Builder) tryBuildInterleavedJoin(join *memo.MergeJoinExpr) (_ execPlan, ok bool, _ error) {
-	if !b.allowInterleavedJoins {
-		return execPlan{}, false, nil
-	}
-
-	getScanAndFilters := func(input memo.RelExpr) (scan *memo.ScanExpr, filters memo.FiltersExpr) {
-		if sel, isSelect := input.(*memo.SelectExpr); isSelect {
-			filters = sel.Filters
-			input = sel.Input
-		}
-		if scan, isScan := input.(*memo.ScanExpr); isScan {
-			return scan, filters
-		}
-		return nil, nil
-	}
-	leftScan, leftFilters := getScanAndFilters(join.Left)
-	if leftScan == nil {
-		// Condition 1 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	rightScan, rightFilters := getScanAndFilters(join.Right)
-	if rightScan == nil {
-		// Condition 1 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	reverse := ordering.ScanIsReverse(leftScan, &leftScan.RequiredPhysical().Ordering)
-	rightReverse := ordering.ScanIsReverse(rightScan, &rightScan.RequiredPhysical().Ordering)
-	if rightReverse != reverse {
-		// Condition 2 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	if leftScan.HardLimit != 0 || rightScan.HardLimit != 0 {
-		// Condition 3 is not satisfied.
-		return execPlan{}, false, nil
-	}
-
-	md := b.mem.Metadata()
-	leftTab := md.Table(leftScan.Table)
-	leftIdx := leftTab.Index(leftScan.Index)
-	rightTab := md.Table(rightScan.Table)
-	rightIdx := rightTab.Index(rightScan.Index)
-
-	ok, leftIsAncestor := cat.InterleaveAncestorDescendant(leftIdx, rightIdx)
-	if !ok {
-		// Condition 4 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	ancestorIdx := leftIdx
-	if !leftIsAncestor {
-		ancestorIdx = rightIdx
-	}
-	if ancestorIdx.LaxKeyColumnCount() != len(join.LeftEq) {
-		// Condition 5 is not satisfied.
-		return execPlan{}, false, nil
-	}
-	for i := range join.LeftEq {
-		if join.LeftEq[i].ID() != leftScan.Table.ColumnID(leftIdx.Column(i).Ordinal()) {
-			// Condition 5 is not satisfied.
-			return execPlan{}, false, nil
-		}
-		if join.RightEq[i].ID() != rightScan.Table.ColumnID(rightIdx.Column(i).Ordinal()) {
-			// Condition 5 is not satisfied.
-			return execPlan{}, false, nil
-		}
-	}
-
-	// All conditions are satisfied; start the build.
-	var leftFilterExpr, rightFilterExpr, onExpr tree.TypedExpr
-
-	leftScanParams, leftScanColMap, err := b.scanParams(leftTab, leftScan)
-	if err != nil {
-		return execPlan{}, false, err
-	}
-
-	if len(leftFilters) > 0 {
-		leftFilterExpr, err = b.buildScalarWithMap(leftScanColMap, &leftFilters)
-		if err != nil {
-			return execPlan{}, false, err
-		}
-	}
-	rightScanParams, rightScanColMap, err := b.scanParams(rightTab, rightScan)
-	if err != nil {
-		return execPlan{}, false, err
-	}
-	if len(rightFilters) > 0 {
-		rightFilterExpr, err = b.buildScalarWithMap(rightScanColMap, &rightFilters)
-		if err != nil {
-			return execPlan{}, false, err
-		}
-	}
-
-	joinType := joinOpToJoinType(join.JoinType)
-
-	joinCols := joinOutputMap(leftScanColMap, rightScanColMap)
-	if len(join.On) > 0 {
-		onExpr, err = b.buildScalarWithMap(joinCols, &join.On)
-		if err != nil {
-			return execPlan{}, false, err
-		}
-	}
-	if !joinType.ShouldIncludeRightColsInOutput() {
-		// For semi and anti join, only the left columns are output.
-		joinCols = leftScanColMap
-	}
-
-	ep := execPlan{outputCols: joinCols}
-
-	ep.root, err = b.factory.ConstructInterleavedJoin(
-		joinType,
-		leftTab, leftIdx, leftScanParams, leftFilterExpr,
-		rightTab, rightIdx, rightScanParams, rightFilterExpr,
-		leftIsAncestor,
-		onExpr,
-		ep.reqOrdering(join),
-	)
-	if err != nil {
-		return execPlan{}, false, err
-	}
-	return ep, true, nil
 }
 
 // initJoinBuild builds the inputs to the join as well as the ON expression.
@@ -1515,17 +1411,21 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
+	md := b.mem.Metadata()
+
 	if !b.disableTelemetry {
 		telemetry.Inc(sqltelemetry.JoinAlgoLookupUseCounter)
 		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
+
+		if join.UsesPartialIndex(md) {
+			telemetry.Inc(sqltelemetry.PartialIndexLookupJoinUseCounter)
+		}
 	}
 
 	input, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
-
-	md := b.mem.Metadata()
 
 	keyCols := make([]exec.NodeColumnOrdinal, len(join.KeyCols))
 	for i, c := range join.KeyCols {

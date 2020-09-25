@@ -256,7 +256,20 @@ Execute the SQL statement(s) on the command line, then exit. This flag may be
 specified multiple times and each value may contain multiple semicolon
 separated statements. If an error occurs in any statement, the command exits
 with a non-zero status code and further statements are not executed. The
-results of each SQL statement are printed on the standard output.`,
+results of each SQL statement are printed on the standard output.
+
+This flag is incompatible with --file / -f.`,
+	}
+
+	File = FlagInfo{
+		Name:      "file",
+		Shorthand: "f",
+		Description: `
+Read and execute the SQL statement(s) from the specified file.
+The file is processed as if it has been redirected on the standard
+input of the shell.
+
+This flag is incompatible with --execute / -e.`,
 	}
 
 	Watch = FlagInfo{
@@ -535,6 +548,16 @@ When specified, restricts HTTP connections to localhost-only and disables
 TLS for the HTTP interface. The hostname part of --http-addr, if specified,
 is then ignored. This flag is intended for use to facilitate
 local testing without requiring certificate setups in web browsers.`,
+	}
+
+	AcceptSQLWithoutTLS = FlagInfo{
+		Name: "accept-sql-without-tls",
+		Description: `
+When specified, this node will accept SQL client connections that do not wish
+to negotiate a TLS handshake. Authentication is still otherwise required
+as per the HBA configuration and all other security mechanisms continue to
+apply. This flag is experimental.
+`,
 	}
 
 	LocalityAdvertiseAddr = FlagInfo{

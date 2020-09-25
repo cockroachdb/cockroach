@@ -415,6 +415,7 @@ func mysqlTableToCockroach(
 			}
 			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
 			seqDesc, err = sql.NewSequenceTableDesc(
+				ctx,
 				seqName,
 				opts,
 				parentID,
@@ -428,6 +429,7 @@ func mysqlTableToCockroach(
 		} else {
 			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
 			seqDesc, err = sql.NewSequenceTableDesc(
+				ctx,
 				seqName,
 				opts,
 				parentID,
@@ -491,7 +493,7 @@ func mysqlTableToCockroach(
 	if p != nil {
 		semaCtxPtr = p.SemaCtx()
 	}
-	desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, evalCtx.Settings, stmt, parentID, keys.PublicSchemaID, id, fks, time.WallTime)
+	desc, err := MakeSimpleTableDescriptor(ctx, semaCtxPtr, evalCtx.Settings, stmt, parentID, keys.PublicSchemaID, id, fks, time.WallTime)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -567,7 +569,7 @@ func addDelayedFKs(
 		if err := fixDescriptorFKState(def.tbl); err != nil {
 			return err
 		}
-		if err := def.tbl.AllocateIDs(); err != nil {
+		if err := def.tbl.AllocateIDs(ctx); err != nil {
 			return err
 		}
 	}

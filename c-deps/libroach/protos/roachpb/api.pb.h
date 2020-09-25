@@ -4441,6 +4441,12 @@ class EndTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   bool poison() const;
   void set_poison(bool value);
 
+  // bool txn_heartbeating = 10;
+  void clear_txn_heartbeating();
+  static const int kTxnHeartbeatingFieldNumber = 10;
+  bool txn_heartbeating() const;
+  void set_txn_heartbeating(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.EndTxnRequest)
  private:
 
@@ -4454,6 +4460,7 @@ class EndTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   bool require_1pc_;
   bool deprecated_can_commit_at_higher_timestamp_;
   bool poison_;
+  bool txn_heartbeating_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -21101,6 +21108,20 @@ inline void EndTxnRequest::set_poison(bool value) {
   
   poison_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.EndTxnRequest.poison)
+}
+
+// bool txn_heartbeating = 10;
+inline void EndTxnRequest::clear_txn_heartbeating() {
+  txn_heartbeating_ = false;
+}
+inline bool EndTxnRequest::txn_heartbeating() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTxnRequest.txn_heartbeating)
+  return txn_heartbeating_;
+}
+inline void EndTxnRequest::set_txn_heartbeating(bool value) {
+  
+  txn_heartbeating_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.EndTxnRequest.txn_heartbeating)
 }
 
 // -------------------------------------------------------------------

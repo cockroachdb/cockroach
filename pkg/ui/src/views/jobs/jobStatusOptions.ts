@@ -17,6 +17,7 @@ export enum JobStatusVisual {
   BadgeWithDuration,
   ProgressBarWithDuration,
   BadgeWithMessage,
+  BadgeWithErrorMessage,
 }
 
 export function jobToVisual(job: Job): JobStatusVisual {
@@ -27,7 +28,7 @@ export function jobToVisual(job: Job): JobStatusVisual {
     case JOB_STATUS_SUCCEEDED:
       return JobStatusVisual.BadgeWithDuration;
     case JOB_STATUS_FAILED:
-      return JobStatusVisual.BadgeOnly;
+      return JobStatusVisual.BadgeWithErrorMessage;
     case JOB_STATUS_CANCELED:
       return JobStatusVisual.BadgeOnly;
     case JOB_STATUS_PAUSED:

@@ -18,15 +18,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -41,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -279,11 +277,34 @@ func (ex *connExecutor) execStmtInOpenState(
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
 		if res != nil && ctx.Err() != nil && res.Err() != nil {
-			if queryTimedOut {
-				res.SetError(sqlerrors.QueryTimeoutError)
-			} else {
-				res.SetError(cancelchecker.QueryCanceledError)
+			// Even in the cases where the error is a retryable error, we want to
+			// intercept the event and payload returned here to ensure that the query
+			// is not retried.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(stmt.AST)),
 			}
+			res.SetError(cancelchecker.QueryCanceledError)
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
+		}
+
+		// If the query timed out, we intercept the error, payload, and event here
+		// for the same reasons we intercept them for canceled queries above.
+		// Overriding queries with a QueryTimedOut error needs to happen after
+		// we've checked for canceled queries as some queries may be canceled
+		// because of a timeout, in which case the appropriate error to return to
+		// the client is one that indicates the timeout, rather than the more general
+		// query canceled error. It's important to note that a timed out query may
+		// not have been canceled (eg. We never even start executing a query
+		// because the timeout has already expired), and therefore this check needs
+		// to happen outside the canceled query check above.
+		if queryTimedOut {
+			// A timed out query should never produce retryable errors/events/payloads
+			// so we intercept and overwrite them all here.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(stmt.AST)),
+			}
+			res.SetError(sqlerrors.QueryTimeoutError)
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 		}
 	}
 	// Generally we want to unregister after the auto-commit below. However, in
@@ -345,9 +366,10 @@ func (ex *connExecutor) execStmtInOpenState(
 			sp.Finish()
 			trace := tracing.GetRecording(sp)
 			ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
+			placeholders := p.extendedEvalCtx.Placeholders
 			if finishCollectionDiagnostics != nil {
 				bundle, collectionErr := buildStatementBundle(
-					origCtx, ex.server.cfg.DB, ie, &p.curPlan, trace,
+					origCtx, ex.server.cfg.DB, ie, &p.curPlan, trace, placeholders,
 				)
 				finishCollectionDiagnostics(origCtx, bundle.trace, bundle.zip, collectionErr)
 			} else {
@@ -355,7 +377,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				// If there was a communication error, no point in setting any results.
 				if retErr == nil {
 					retErr = setExplainBundleResult(
-						origCtx, res, stmt.AST, trace, &p.curPlan, ie, ex.server.cfg,
+						origCtx, res, stmt.AST, trace, &p.curPlan, placeholders, ie, ex.server.cfg,
 					)
 				}
 			}
@@ -374,9 +396,22 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
-	if ex.sessionData.StmtTimeout > 0 {
+	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
+		ev, payload := ex.makeErrEvent(err, stmt.AST)
+		return ev, payload, nil
+	}
+
+	// We exempt `SET` statements from the statement timeout, particularly so as
+	// not to block the `SET statement_timeout` command itself.
+	if ex.sessionData.StmtTimeout > 0 && stmt.AST.StatementTag() != "SET" {
+		timerDuration := ex.sessionData.StmtTimeout - timeutil.Since(ex.phaseTimes[sessionQueryReceived])
+		// There's no need to proceed with execution if the timer has already expired.
+		if timerDuration < 0 {
+			queryTimedOut = true
+			return makeErrEvent(sqlerrors.QueryTimeoutError)
+		}
 		timeoutTicker = time.AfterFunc(
-			ex.sessionData.StmtTimeout-timeutil.Since(ex.phaseTimes[sessionQueryReceived]),
+			timerDuration,
 			func() {
 				ex.cancelQuery(stmt.queryID)
 				queryTimedOut = true
@@ -402,11 +437,6 @@ func (ex *connExecutor) execStmtInOpenState(
 			return
 		}
 	}()
-
-	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, stmt.AST)
-		return ev, payload, nil
-	}
 
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
@@ -635,121 +665,35 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 			return ev, payload, nil
 		}
+		log.VEventf(ctx, 2, "push detected for non-refreshable txn but auto-retry not possible")
 	}
 	// No event was generated.
 	return nil, nil, nil
 }
 
-// checkDescriptorTwoVersionInvariant checks whether any new schema being
-// modified written at a version V has only valid leases at version = V - 1.
-// A transaction retry error is returned whenever the invariant is violated.
-// Before returning the retry error the current transaction is
-// rolled-back and the function waits until there are only outstanding
-// leases on the current version. This affords the retry to succeed in the
-// event that there are no other schema changes simultaneously contending with
-// this txn.
-//
-// checkDescriptorTwoVersionInvariant blocks until it's legal for the modified
-// descriptors (if any) to be committed.
-// Reminder: a descriptor version v can only be written at a timestamp
-// that's not covered by a lease on version v-2. So, if the current
-// txn wants to write some updated descriptors, it needs
-// to wait until all incompatible leases are revoked or expire. If
-// incompatible leases exist, we'll block waiting for these leases to
-// go away. Then, the transaction is restarted by generating a retriable error.
-// Note that we're relying on the fact that the number of conflicting
-// leases will only go down over time: no new conflicting leases can be
-// created as of the time of this call because v-2 can't be leased once
-// v-1 exists.
-//
-// If this method succeeds it is the caller's responsibility to release the
-// executor's leases after the txn commits so that schema changes can
-// proceed.
 func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) error {
-	descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion()
-	if descs == nil {
-		return nil
+	var inRetryBackoff func()
+	if knobs := ex.server.cfg.SchemaChangerTestingKnobs; knobs != nil {
+		inRetryBackoff = knobs.TwoVersionLeaseViolation
 	}
-	txn := ex.state.mu.txn
-	if txn.IsCommitted() {
-		panic("transaction has already committed")
-	}
-
-	// We potentially hold leases for descriptors which we've modified which
-	// we need to drop. Say we're updating descriptors at version V. All leases
-	// for version V-2 need to be dropped immediately, otherwise the check
-	// below that nobody holds leases for version V-2 will fail. Worse yet,
-	// the code below loops waiting for nobody to hold leases on V-2. We also
-	// may hold leases for version V-1 of modified descriptors that are good to drop
-	// but not as vital for correctness. It's good to drop them because as soon
-	// as this transaction commits jobs may start and will need to wait until
-	// the lease expires. It is safe because V-1 must remain valid until this
-	// transaction commits; if we commit then nobody else could have written
-	// a new V beneath us because we've already laid down an intent.
-	//
-	// All this being said, we must retain our leases on descriptors which we have
-	// not modified to ensure that our writes to those other descriptors in this
-	// transaction remain valid.
-	ex.extraTxnState.descCollection.ReleaseSpecifiedLeases(ctx, descs)
-
-	// We know that so long as there are no leases on the updated descriptors as of
-	// the current provisional commit timestamp for this transaction then if this
-	// transaction ends up committing then there won't have been any created
-	// in the meantime.
-	count, err := lease.CountLeases(ctx, ex.server.cfg.InternalExecutor, descs, txn.ProvisionalCommitTimestamp())
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return nil
-	}
-
-	// Restart the transaction so that it is able to replay itself at a newer timestamp
-	// with the hope that the next time around there will be leases only at the current
-	// version.
-	retryErr := txn.PrepareRetryableError(ctx,
-		fmt.Sprintf(
-			`cannot publish new versions for descriptors: %v, old versions still in use`,
-			descs))
-	// We cleanup the transaction and create a new transaction after
-	// waiting for the invariant to be satisfied because the wait time
-	// might be extensive and intents can block out leases being created
-	// on a descriptor.
-	//
-	// TODO(vivek): Change this to restart a txn while fixing #20526 . All the
-	// descriptor intents can be laid down here after the invariant
-	// has been checked.
-	userPriority := txn.UserPriority()
-	// We cleanup the transaction and create a new transaction wait time
-	// might be extensive and so we'd better get rid of all the intents.
-	txn.CleanupOnError(ctx, retryErr)
-	// Release the rest of our leases on unmodified descriptors so we don't hold up
-	// schema changes there and potentially create a deadlock.
-	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
-
-	// Wait until all older version leases have been released or expired.
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		// Use the current clock time.
-		now := ex.server.cfg.Clock.Now()
-		count, err := lease.CountLeases(ctx, ex.server.cfg.InternalExecutor, descs, now)
-		if err != nil {
+	retryErr, err := descs.CheckTwoVersionInvariant(
+		ctx,
+		ex.server.cfg.Clock,
+		ex.server.cfg.InternalExecutor,
+		&ex.extraTxnState.descCollection,
+		ex.state.mu.txn,
+		inRetryBackoff,
+	)
+	if retryErr {
+		// Create a new transaction to retry with a higher timestamp than the
+		// timestamps used in the retry loop above.
+		userPriority := ex.state.mu.txn.UserPriority()
+		ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
+		if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
 			return err
 		}
-		if count == 0 {
-			break
-		}
-		if ex.server.cfg.SchemaChangerTestingKnobs.TwoVersionLeaseViolation != nil {
-			ex.server.cfg.SchemaChangerTestingKnobs.TwoVersionLeaseViolation()
-		}
 	}
-
-	// Create a new transaction to retry with a higher timestamp than the
-	// timestamps used in the retry loop above.
-	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
-	if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
-		return err
-	}
-	return retryErr
+	return err
 }
 
 // commitSQLTransaction executes a commit after the execution of a
@@ -1328,7 +1272,7 @@ func (ex *connExecutor) runSetTracing(
 
 	modes := make([]string, len(n.Values))
 	for i, v := range n.Values {
-		v = unresolvedNameToStrVal(v)
+		v = paramparse.UnresolvedNameToStrVal(v)
 		var strMode string
 		switch val := v.(type) {
 		case *tree.StrVal:

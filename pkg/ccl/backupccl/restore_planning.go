@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -723,6 +724,9 @@ func rewriteDatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites DescRe
 		}
 		db.ID = rewrite.ID
 
+		db.Version = 1
+		db.ModificationTime = hlc.Timestamp{}
+
 		// Rewrite the name-to-ID mapping for the database's child schemas.
 		newSchemas := make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 		for schemaName, schemaInfo := range db.Schemas {
@@ -771,6 +775,10 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 		if !ok {
 			return errors.Errorf("missing rewrite for type %d", typ.ID)
 		}
+		// Reset the version and modification time on this new descriptor.
+		typ.Version = 1
+		typ.ModificationTime = hlc.Timestamp{}
+
 		typ.ID = rewrite.ID
 		typ.ParentSchemaID = maybeRewriteSchemaID(typ.ParentSchemaID, descriptorRewrites)
 		typ.ParentID = rewrite.ParentID
@@ -803,6 +811,10 @@ func rewriteSchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites DescRe
 		if !ok {
 			return errors.Errorf("missing rewrite for schema %d", sc.ID)
 		}
+		// Reset the version and modification time on this new descriptor.
+		sc.Version = 1
+		sc.ModificationTime = hlc.Timestamp{}
+
 		sc.ID = rewrite.ID
 		sc.ParentID = rewrite.ParentID
 	}
@@ -824,15 +836,29 @@ func maybeRewriteSchemaID(curSchemaID descpb.ID, descriptorRewrites DescRewriteM
 
 // RewriteTableDescs mutates tables to match the ID and privilege specified
 // in descriptorRewrites, as well as adjusting cross-table references to use the
-// new IDs. overrideDB can be specified to set database names in views.
+// new IDs. overrideDB can be specified to set database names in views. The
+// canResetModTime parameter is set based on the cluster version. It is unsafe
+// to reset the mod time in a mixed version state as 20.1 nodes expect the mod
+// time to be set on all descriptors which are deserialized, even at version 1.
+//
+// TODO(ajwerner): Remove canResetModTime in 21.1.
 func RewriteTableDescs(
-	tables []*tabledesc.Mutable, descriptorRewrites DescRewriteMap, overrideDB string,
+	tables []*tabledesc.Mutable,
+	descriptorRewrites DescRewriteMap,
+	overrideDB string,
+	canResetModTime bool,
 ) error {
 	for _, table := range tables {
 		tableRewrite, ok := descriptorRewrites[table.ID]
 		if !ok {
 			return errors.Errorf("missing table rewrite for table %d", table.ID)
 		}
+		// Reset the version and modification time on this new descriptor.
+		table.Version = 1
+		if canResetModTime {
+			table.ModificationTime = hlc.Timestamp{}
+		}
+
 		if table.IsView() && overrideDB != "" {
 			// restore checks that all dependencies are also being restored, but if
 			// the restore is overriding the destination database, qualifiers in the
@@ -1481,7 +1507,13 @@ func doRestorePlan(
 
 	// We attempt to rewrite ID's in the collected type and table descriptors
 	// to catch errors during this process here, rather than in the job itself.
-	if err := RewriteTableDescs(tables, descriptorRewrites, intoDB); err != nil {
+	//
+	// TODO(ajwerner): Remove this version check in 21.1.
+	canResetModTime := p.ExecCfg().Settings.Version.IsActive(
+		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
+	if err := RewriteTableDescs(
+		tables, descriptorRewrites, intoDB, canResetModTime,
+	); err != nil {
 		return err
 	}
 	if err := rewriteDatabaseDescs(databases, descriptorRewrites); err != nil {
@@ -1555,6 +1587,7 @@ func doRestorePlan(
 				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
+		return err
 	}
 
 	collectTelemetry()

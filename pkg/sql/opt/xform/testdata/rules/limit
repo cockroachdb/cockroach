@@ -1204,7 +1204,7 @@ opt expect-not=SplitScanIntoUnionScans
 SELECT geom FROM index_tab WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
 select
- ├── columns: geom:8
+ ├── columns: geom:8!null
  ├── immutable
  ├── index-join index_tab
  │    ├── columns: geom:8
@@ -1216,6 +1216,8 @@ select
  │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │         │         ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x16\x00\x00\x00\x00\x00\x00\x00")
+ │         ├── pre-filterer expression
+ │         │    └── st_intersects('010100000000000000000008400000000000000840', geom:8)
  │         ├── key: (1)
  │         └── scan index_tab@geomidx
  │              ├── columns: id:1!null geom_inverted_key:10!null
@@ -1227,7 +1229,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(10)
  └── filters
-      └── st_intersects('010100000000000000000008400000000000000840', geom:8) [outer=(8), immutable]
+      └── st_intersects('010100000000000000000008400000000000000840', geom:8) [outer=(8), immutable, constraints=(/8: (/NULL - ])]
 
 # No-op case because the multi-key span isn't countable.
 opt expect-not=SplitScanIntoUnionScans
