@@ -338,6 +338,8 @@ func NewMergeJoinOp(
 		mergeJoinerOp = &mergeJoinIntersectAllOp{base}
 	case descpb.ExceptAllJoin:
 		mergeJoinerOp = &mergeJoinExceptAllOp{base}
+	case descpb.RightSemiJoin, descpb.RightAntiJoin:
+		return nil, errors.New("merge join of right semi/anti type is not supported yet")
 	default:
 		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
 	}

@@ -277,6 +277,9 @@ func newZigzagJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*zigzagJoiner, error) {
+	if spec.Type != descpb.InnerJoin {
+		return nil, errors.AssertionFailedf("only inner zigzag joins are supported, %s requested", spec.Type)
+	}
 	z := &zigzagJoiner{}
 
 	// TODO(ajwerner): Utilize a cached copy of these tables.

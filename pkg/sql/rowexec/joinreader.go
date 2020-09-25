@@ -124,6 +124,16 @@ func newJoinReader(
 	if spec.IndexIdx != 0 && readerType == indexJoinReaderType {
 		return nil, errors.AssertionFailedf("index join must be against primary index")
 	}
+	switch readerType {
+	case lookupJoinReaderType:
+		if spec.Type == descpb.InnerJoin || spec.Type == descpb.LeftOuterJoin {
+			return nil, errors.AssertionFailedf("only inner and left outer lookup joins are supported, %s requested", spec.Type)
+		}
+	case indexJoinReaderType:
+		if spec.Type == descpb.InnerJoin {
+			return nil, errors.AssertionFailedf("only inner index joins are supported, %s requested", spec.Type)
+		}
+	}
 
 	var lookupCols []uint32
 	switch readerType {

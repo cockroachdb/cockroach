@@ -1928,6 +1928,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Table:             *n.table.desc.TableDesc(),
 		IndexIdx:          0,
+		Type:              descpb.InnerJoin,
 		Visibility:        n.table.colCfg.visibility,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
@@ -2020,12 +2021,6 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		}
 	}
 
-	if n.joinType == descpb.LeftSemiJoin || n.joinType == descpb.LeftAntiJoin {
-		// For anti/semi join, we only produce the input columns.
-		planToStreamColMap, post.OutputColumns, types = truncateToInputForLookupJoins(
-			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
-	}
-
 	// Instantiate one join reader for every stream.
 	plan.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
@@ -2096,15 +2091,6 @@ func makeIndexVarMapForLookupJoins(
 	return indexVarMap
 }
 
-func truncateToInputForLookupJoins(
-	numInputNodeCols int, planToStreamColMap []int, outputColumns []uint32, outTypes []*types.T,
-) ([]int, []uint32, []*types.T) {
-	planToStreamColMap = planToStreamColMap[:numInputNodeCols]
-	outputColumns = outputColumns[:numInputNodeCols]
-	outTypes = outTypes[:numInputNodeCols]
-	return planToStreamColMap, outputColumns, outTypes
-}
-
 func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	planCtx *PlanningCtx, n *invertedJoinNode,
 ) (*PhysicalPlan, error) {
@@ -2141,10 +2127,11 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		}
 	}
 
-	if n.joinType == descpb.LeftSemiJoin || n.joinType == descpb.LeftAntiJoin {
+	if !n.joinType.ShouldIncludeRightColsInOutput() {
 		// For anti/semi join, we only produce the input columns.
-		planToStreamColMap, post.OutputColumns, types = truncateToInputForLookupJoins(
-			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
+		planToStreamColMap = planToStreamColMap[:numInputNodeCols]
+		post.OutputColumns = post.OutputColumns[:numInputNodeCols]
+		types = types[:numInputNodeCols]
 	}
 
 	// Instantiate one inverted joiner for every stream.

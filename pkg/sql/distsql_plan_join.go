@@ -108,8 +108,10 @@ func (h *joinPlanningHelper) joinOutColumns(
 	// The join columns are in two groups:
 	//  - the columns on the left side (numLeftOutCols)
 	//  - the columns on the right side (numRightOutCols)
-	for i := 0; i < h.numLeftOutCols; i++ {
-		joinToStreamColMap[i] = addOutCol(uint32(h.leftPlanToStreamColMap[i]))
+	if joinType.ShouldIncludeLeftColsInOutput() {
+		for i := 0; i < h.numLeftOutCols; i++ {
+			joinToStreamColMap[i] = addOutCol(uint32(h.leftPlanToStreamColMap[i]))
+		}
 	}
 
 	if joinType.ShouldIncludeRightColsInOutput() {
