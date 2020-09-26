@@ -77,3 +77,15 @@ func (j JoinType) ShouldIncludeRightColsInOutput() bool {
 		return true
 	}
 }
+
+// IsEmptyOutputWhenRightIsEmpty returns whether this join type will always
+// produce an empty output when the right relation is empty.
+func (j JoinType) IsEmptyOutputWhenRightIsEmpty() bool {
+	switch j {
+	case InnerJoin, RightOuterJoin, LeftSemiJoin,
+		RightSemiJoin, IntersectAllJoin, RightAntiJoin:
+		return true
+	default:
+		return false
+	}
+}
