@@ -142,9 +142,6 @@ func newHashJoiner(
 	output execinfra.RowReceiver,
 	disableTempStorage bool,
 ) (*hashJoiner, error) {
-	if spec.Type == descpb.RightSemiJoin || spec.Type == descpb.RightAntiJoin {
-		return nil, errors.New("right semi/anti hash join is not yet supported")
-	}
 	h := &hashJoiner{
 		initialBufferSize: hashJoinerInitialBufferSize,
 		leftSource:        leftSource,
@@ -208,7 +205,7 @@ func newHashJoiner(
 		nil /* ordering */, h.rightSource.OutputTypes(), h.EvalCtx, h.MemMonitor,
 	)
 
-	if h.joinType == descpb.IntersectAllJoin || h.joinType == descpb.ExceptAllJoin {
+	if h.joinType.IsSetOpJoin() {
 		h.nullEquality = true
 	}
 
@@ -530,7 +527,11 @@ func (h *hashJoiner) probeRow() (
 	}
 
 	h.probingRowState.matched = true
-	shouldEmit := h.joinType != descpb.LeftAntiJoin && h.joinType != descpb.ExceptAllJoin
+	shouldEmit := true
+	switch h.joinType {
+	case descpb.LeftAntiJoin, descpb.ExceptAllJoin, descpb.RightAntiJoin:
+		shouldEmit = false
+	}
 	if shouldMark(h.storedSide, h.joinType) {
 		// Matched rows are marked on the stored side for 2 reasons.
 		// 1: For outer joins, anti joins, and EXCEPT ALL to iterate through
@@ -544,7 +545,7 @@ func (h *hashJoiner) probeRow() (
 		// TODO(peter): figure out a way to reduce this special casing below.
 		if i.IsMarked(h.Ctx) {
 			switch h.joinType {
-			case descpb.LeftSemiJoin:
+			case descpb.LeftSemiJoin, descpb.RightSemiJoin:
 				shouldEmit = false
 			case descpb.IntersectAllJoin:
 				shouldEmit = false
@@ -825,7 +826,11 @@ func shouldMark(storedSide joinSide, joinType descpb.JoinType) bool {
 	switch {
 	case joinType == descpb.LeftSemiJoin && storedSide == leftSide:
 		return true
+	case joinType == descpb.RightSemiJoin && storedSide == rightSide:
+		return true
 	case joinType == descpb.LeftAntiJoin && storedSide == leftSide:
+		return true
+	case joinType == descpb.RightAntiJoin && storedSide == rightSide:
 		return true
 	case joinType == descpb.ExceptAllJoin:
 		return true
@@ -845,6 +850,8 @@ func shouldShortCircuit(storedSide joinSide, joinType descpb.JoinType) bool {
 	switch joinType {
 	case descpb.LeftSemiJoin:
 		return storedSide == rightSide
+	case descpb.RightSemiJoin:
+		return storedSide == leftSide
 	case descpb.ExceptAllJoin:
 		return true
 	default:

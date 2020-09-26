@@ -130,8 +130,8 @@ func (j joinSide) String() string {
 }
 
 // renderUnmatchedRow creates a result row given an unmatched row on either
-// side. Only used for outer joins. Note that if the join is outputting a
-// continuation column, the returned slice does not include the continuation
+// side. Only used for outer and anti joins. Note that if the join is outputting
+// a continuation column, the returned slice does not include the continuation
 // column, but has the capacity for it.
 func (jb *joinerBase) renderUnmatchedRow(row rowenc.EncDatumRow, side joinSide) rowenc.EncDatumRow {
 	lrow, rrow := jb.emptyLeft, jb.emptyRight
@@ -150,7 +150,7 @@ func (jb *joinerBase) renderUnmatchedRow(row rowenc.EncDatumRow, side joinSide) 
 // stored).
 func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 	switch joinType {
-	case descpb.LeftSemiJoin, descpb.InnerJoin, descpb.IntersectAllJoin, descpb.RightSemiJoin:
+	case descpb.InnerJoin, descpb.LeftSemiJoin, descpb.RightSemiJoin, descpb.IntersectAllJoin:
 		return false
 	case descpb.RightOuterJoin:
 		return side == rightSide
@@ -158,12 +158,12 @@ func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 		return side == leftSide
 	case descpb.LeftAntiJoin:
 		return side == leftSide
+	case descpb.RightAntiJoin:
+		return side == rightSide
 	case descpb.ExceptAllJoin:
 		return side == leftSide
 	case descpb.FullOuterJoin:
 		return true
-	case descpb.RightAntiJoin:
-		return side == rightSide
 	default:
 		panic(errors.AssertionFailedf("unexpected join type %s", joinType))
 	}
