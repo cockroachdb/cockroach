@@ -6,15 +6,15 @@ statement ok
 SET vectorize='201auto'; SET vectorize_row_count_threshold=0
 
 statement ok
-CREATE TABLE t (k INT NOT NULL)
-
-statement ok
-INSERT INTO t VALUES (1), (2), (3)
+CREATE TABLE t1 (k INT PRIMARY KEY);
+INSERT INTO t1 VALUES (1), (2), (3);
+CREATE TABLE t2 (k INT PRIMARY KEY);
+INSERT INTO t2 VALUES (1), (2), (3)
 
 query T
-SELECT url FROM [EXPLAIN ANALYZE SELECT t1.k FROM t AS t1, t AS t2 WHERE t1.k = t2.k]
+SELECT url FROM [EXPLAIN ANALYZE SELECT t1.k FROM t1, t2 WHERE t1.k = t2.k]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEkk9v00AQxe98itGcWmlpvc5tpUoJYNRASEociT-VD9vskK5qe83uWDSK8t2R10UlbgsqF267M783fm_WOwzfS1SYZ7Ps9QpaX8Lb5eIDXGafL2aT6Rwm88nsy9cMjt5M81X-cXYMdyjLk5ueZZjkwFLcHVL4dJ4tsx44A05PbgoUWDtDc11RQHWJEguBjXdrCsH5rrSLwNTcokoE2rppuSsXAtfOE6odsuWSUOFKX5W0JG3InyYo0BBrW8axPG68rbTfosC80XVQ8BIFLlpWMJYo0LsfATxpo2CEAgPrsgS2FSlIAgq82jL9AqSU8AqLvUDX8r2dwHpDqORe_Jtl-d8sp09avnfa1s4b8mQOXBad8m_II7nPdbh-52xN_jQ9jF3SNz4ay-MzbzfX8XQQumvDIHmsPYgf9UO0Lz5gAztPBoI1pCAyKLDSt1BR5fwW2kDdgATe26e3OHrOwy8pNK4ONNzmo5OTboVkNtQ_SXCtX9OFd-v4mf66iLpYMBS476b9ZVrHVvwzfxfLZ4jToTj9o3h0IE72xf7FzwAAAP__4EphfQ==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kl9r2zAUxd_3KcR9apnWWs6boJCwecwjTboksD_FD6p1l5o6knd1xTpCvvuwVWgT2m3dQ9-sc89PPufaWwg_WtCwLKbF25WI1Ir3i_m5uCy-XEwn5UxMZpPp12-FOHpXLlfLT9NjcWdldXKTvKyk4Fx8_lAsiiSfCc5PbiqQ4LzFmdlgAH0JCioJHfkaQ_DUS9vBUNpb0JmExnWRe7mSUHtC0FvghlsEDStz1eICjUU6zUCCRTZNO1zLatxRszH0CyQsO-OCFm9AwpXh-hqD8JG7yFr0GMeufSCNQEI5F9xsUIssgATyP4MgNLYfVjsJyXqXKrBZI2i1k_-XXB0kz186ef5k8vvA0XmySGj3wlY9-TfLI_XPkdb40TcO6TTfr9_idz4aq9fHZ9Ssr9MjSJj3_cbq3_eAt1hHbry7X8dT_UfP-XILDJ13AQ_38OjNWV8e7RrTMoOPVOMF-Xp4TTrOB24QLAZO0zwdSjeMhl_rIayeAeeHcP5HeLQHZ7tq9-p3AAAA__8Go0_1
 
 statement ok
 RESET vectorize; RESET vectorize_row_count_threshold
