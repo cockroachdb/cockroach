@@ -59,13 +59,13 @@ func setOpTestCaseToMergeJoinerTestCase(tc setOpTestCase) mergeJoinerTestCase {
 	}
 }
 
-func setOpTestCaseToJoinerTestCase(tc setOpTestCase) joinerTestCase {
+func setOpTestCaseToHashJoinerTestCase(tc setOpTestCase) hashJoinerTestCase {
 	outCols := make([]uint32, 0, len(tc.columnTypes))
 	for i := range tc.columnTypes {
 		outCols = append(outCols, uint32(i))
 	}
 
-	return joinerTestCase{
+	return hashJoinerTestCase{
 		leftEqCols:  outCols,
 		rightEqCols: outCols,
 		joinType:    tc.setOpType,
