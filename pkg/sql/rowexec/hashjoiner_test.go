@@ -853,7 +853,7 @@ func hashJoinerErrorTestCases() []hashJoinerErrorTestCase {
 
 	testCases := []hashJoinerErrorTestCase{
 		{
-			description: "Ensure that columns from the right input cannot be in semi-join output.",
+			description: "Ensure that columns from the right input cannot be in left semi-join output.",
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    descpb.LeftSemiJoin,
@@ -877,10 +877,58 @@ func hashJoinerErrorTestCases() []hashJoinerErrorTestCase {
 			expectedErr: errors.Errorf("invalid output column %d (only %d available)", 2, 2),
 		},
 		{
-			description: "Ensure that columns from the right input cannot be in anti-join output.",
+			description: "Ensure that columns from the right input cannot be in left anti-join output.",
 			leftEqCols:  []uint32{0},
 			rightEqCols: []uint32{0},
 			joinType:    descpb.LeftAntiJoin,
+			// Implicit @1 = @3 constraint.
+			outCols:   []uint32{0, 1, 2},
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
+				{v[0], v[0]},
+				{v[1], v[1]},
+				{v[2], v[1]},
+				{v[2], v[2]},
+			},
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[5]},
+				{v[2], v[6]},
+				{v[3], v[3]},
+			},
+			expectedErr: errors.Errorf("invalid output column %d (only %d available)", 2, 2),
+		},
+		{
+			description: "Ensure that columns from the left input cannot be in right semi-join output.",
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{0},
+			joinType:    descpb.RightSemiJoin,
+			// Implicit @1 = @3 constraint.
+			outCols:   []uint32{0, 1, 2},
+			leftTypes: rowenc.TwoIntCols,
+			leftInput: rowenc.EncDatumRows{
+				{v[0], v[0]},
+				{v[1], v[1]},
+				{v[2], v[1]},
+				{v[2], v[2]},
+			},
+			rightTypes: rowenc.TwoIntCols,
+			rightInput: rowenc.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[5]},
+				{v[2], v[6]},
+				{v[3], v[3]},
+			},
+			expectedErr: errors.Errorf("invalid output column %d (only %d available)", 2, 2),
+		},
+		{
+			description: "Ensure that columns from the left input cannot be in right anti-join output.",
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{0},
+			joinType:    descpb.RightAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 2},
 			leftTypes: rowenc.TwoIntCols,
@@ -908,6 +956,41 @@ func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := hashJoinerTestCases()
+
+	for _, c := range testCases {
+		if c.joinType == descpb.LeftSemiJoin || c.joinType == descpb.LeftAntiJoin {
+			// For every left semi and left anti join, we will automatically
+			// populate a "mirroring" test case with right semi or right anti
+			// join - all we need to do is to switch the inputs and change the
+			// join type accordingly.
+			mirroringCase := c
+			if c.joinType == descpb.LeftSemiJoin {
+				mirroringCase.joinType = descpb.RightSemiJoin
+			} else {
+				mirroringCase.joinType = descpb.RightAntiJoin
+			}
+			mirroringCase.leftEqCols, mirroringCase.rightEqCols = mirroringCase.rightEqCols, mirroringCase.leftEqCols
+			mirroringCase.leftTypes, mirroringCase.rightTypes = mirroringCase.rightTypes, mirroringCase.leftTypes
+			mirroringCase.leftInput, mirroringCase.rightInput = mirroringCase.rightInput, mirroringCase.leftInput
+			if !c.onExpr.Empty() {
+				// We also need to update the ON expression by switching the
+				// index variables (namely, if we have both inputs with two
+				// columns, we need to do the following replacement:
+				// @1 -> @3, @2 -> @4, @3 -> @1, and @4 -> @2).
+				onExpr := []byte(c.onExpr.Expr)
+				mirroringOnExpr := []byte(mirroringCase.onExpr.Expr)
+				for i := range onExpr {
+					if onExpr[i] == '@' {
+						oldIdxVar := onExpr[i+1] - '0'
+						newIdxVar := (oldIdxVar+1)%4 + 1
+						mirroringOnExpr[i+1] = newIdxVar + '0'
+					}
+				}
+				mirroringCase.onExpr.Expr = string(mirroringOnExpr)
+			}
+			testCases = append(testCases, mirroringCase)
+		}
+	}
 
 	// Add INTERSECT ALL cases with HashJoinerSpecs.
 	for _, tc := range intersectAllTestCases() {
