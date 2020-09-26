@@ -117,11 +117,6 @@ const (
 	rightSide joinSide = 1
 )
 
-// otherSide returns the opposite to s side.
-func otherSide(s joinSide) joinSide {
-	return joinSide(1 - uint8(s))
-}
-
 func (j joinSide) String() string {
 	if j == leftSide {
 		return "left"

@@ -13,7 +13,6 @@ package rowexec
 import (
 	"context"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"testing"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1012,16 +1010,7 @@ func TestHashJoiner(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	for _, c := range testCases {
@@ -1032,7 +1021,6 @@ func TestHashJoiner(t *testing.T) {
 		// optionally be provided to modify the hashJoiner after instantiation but
 		// before Run().
 		testFunc := func(t *testing.T, flowCtxSetup func(f *execinfra.FlowCtx), hjSetup func(h *hashJoiner)) error {
-			side := rightSide
 			for i := 0; i < 2; i++ {
 				leftInput := distsqlutils.NewRowBuffer(c.leftTypes, c.leftInput, distsqlutils.RowBufferArgs{})
 				rightInput := distsqlutils.NewRowBuffer(c.rightTypes, c.rightInput, distsqlutils.RowBufferArgs{})
@@ -1056,8 +1044,7 @@ func TestHashJoiner(t *testing.T) {
 					OnExpr:         c.onExpr,
 				}
 				h, err := newHashJoiner(
-					&flowCtx, 0 /* processorID */, spec, leftInput,
-					rightInput, &post, out, false, /* disableTempStorage */
+					&flowCtx, 0 /* processorID */, spec, leftInput, rightInput, &post, out,
 				)
 				if err != nil {
 					return err
@@ -1066,33 +1053,17 @@ func TestHashJoiner(t *testing.T) {
 				if hjSetup != nil {
 					hjSetup(h)
 				}
-				// Only force the other side after running the buffering logic once.
-				if i == 1 {
-					h.forcedStoredSide = &side
-				}
-				h.Run(context.Background())
-				side = otherSide(h.storedSide)
+				h.Run(ctx)
 
 				if !out.ProducerClosed() {
 					return errors.New("output RowReceiver not closed")
 				}
 
 				if err := checkExpectedRows(outTypes, c.expected, out); err != nil {
-					return err
+					return errors.Wrapf(err, "join type %s", c.joinType)
 				}
 			}
 			return nil
-		}
-
-		// Run test with a variety of initial buffer sizes.
-		for _, initialBuffer := range []int64{0, 32, 64, 128, 1024 * 1024} {
-			t.Run(fmt.Sprintf("InitialBuffer=%d", initialBuffer), func(t *testing.T) {
-				if err := testFunc(t, nil, func(h *hashJoiner) {
-					h.initialBufferSize = initialBuffer
-				}); err != nil {
-					t.Fatal(err)
-				}
-			})
 		}
 
 		// Run test with a variety of memory limits.
@@ -1128,22 +1099,13 @@ func TestHashJoinerError(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	for _, c := range testCases {
 		// testFunc is a helper function that runs a hashJoin with the current
 		// test case after running the provided setup function.
-		testFunc := func(t *testing.T, setup func(h *hashJoiner)) error {
+		testFunc := func(t *testing.T) error {
 			leftInput := distsqlutils.NewRowBuffer(c.leftTypes, c.leftInput, distsqlutils.RowBufferArgs{})
 			rightInput := distsqlutils.NewRowBuffer(c.rightTypes, c.rightInput, distsqlutils.RowBufferArgs{})
 			out := &distsqlutils.RowBuffer{}
@@ -1164,15 +1126,13 @@ func TestHashJoinerError(t *testing.T) {
 				OnExpr:         c.onExpr,
 			}
 			h, err := newHashJoiner(
-				&flowCtx, 0 /* processorID */, spec, leftInput, rightInput,
-				&post, out, false, /* disableTempStorage */
+				&flowCtx, 0 /* processorID */, spec, leftInput, rightInput, &post, out,
 			)
 			if err != nil {
 				return err
 			}
 			outTypes := h.OutputTypes()
-			setup(h)
-			h.Run(context.Background())
+			h.Run(ctx)
 
 			if !out.ProducerClosed() {
 				return errors.New("output RowReceiver not closed")
@@ -1182,9 +1142,7 @@ func TestHashJoinerError(t *testing.T) {
 		}
 
 		t.Run(c.description, func(t *testing.T) {
-			if err := testFunc(t, func(h *hashJoiner) {
-				h.initialBufferSize = 1024 * 32
-			}); err == nil {
+			if err := testFunc(t); err == nil {
 				t.Errorf("Expected an error:%s, but found nil", c.expectedErr)
 			} else if err.Error() != c.expectedErr.Error() {
 				t.Errorf("HashJoinerErrorTest: expected\n%s, but found\n%v", c.expectedErr, err)
@@ -1283,32 +1241,36 @@ func TestHashJoinerDrain(t *testing.T) {
 		distsqlutils.RowBufferArgs{AccumulateRowsWhileDraining: true},
 	)
 
-	settings := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(settings)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
-		Cfg:     &execinfra.ServerConfig{Settings: settings},
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			TempStorage: tempEngine,
+			DiskMonitor: diskMonitor,
+		},
 		EvalCtx: &evalCtx,
 	}
 
 	post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
-	// Since the use of external storage overrides h.initialBufferSize, disable
-	// it for this test.
 	h, err := newHashJoiner(
-		&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput,
-		&post, out, true, /* disableTempStorage */
+		&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Disable initial buffering. We always store the right stream in this case.
-	// If not disabled, both streams will be fully consumed before outputting
-	// any rows.
-	h.initialBufferSize = 0
 
 	out.ConsumerDone()
-	h.Run(context.Background())
+	h.Run(ctx)
 
 	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
@@ -1413,26 +1375,33 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(context.Background())
+	ctx := context.Background()
+	defer evalCtx.Stop(ctx)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
-		Cfg:     &execinfra.ServerConfig{Settings: st},
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			TempStorage: tempEngine,
+			DiskMonitor: diskMonitor,
+		},
 		EvalCtx: &evalCtx,
 	}
 
-	// Disable external storage for this test to avoid initializing temp storage
-	// infrastructure.
 	post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(
-		&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput,
-		&post, out, true, /* disableTempStorage */
+		&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Disable initial buffering. We always store the right stream in this case.
-	h.initialBufferSize = 0
 
-	h.Run(context.Background())
+	h.Run(ctx)
 
 	if !out.ProducerClosed() {
 		t.Fatalf("output RowReceiver not closed")
@@ -1511,13 +1480,12 @@ func BenchmarkHashJoiner(b *testing.B) {
 						// TODO(asubiotto): Get rid of uncleared state between
 						// hashJoiner Run()s to omit instantiation time from benchmarks.
 						h, err := newHashJoiner(
-							flowCtx, 0 /* processorID */, spec, leftInput, rightInput,
-							post, &rowDisposer{}, false, /* disableTempStorage */
+							flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, &rowDisposer{},
 						)
 						if err != nil {
 							b.Fatal(err)
 						}
-						h.Run(context.Background())
+						h.Run(ctx)
 						leftInput.Reset()
 						rightInput.Reset()
 					}

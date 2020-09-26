@@ -182,11 +182,6 @@ func (mc *MemRowContainer) InitWithMon(
 	mc.evalCtx = evalCtx
 }
 
-// Types returns the MemRowContainer's types.
-func (mc *MemRowContainer) Types() []*types.T {
-	return mc.types
-}
-
 // Less is part of heap.Interface and is only meant to be used internally.
 func (mc *MemRowContainer) Less(i, j int) bool {
 	cmp := colinfo.CompareDatums(mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
