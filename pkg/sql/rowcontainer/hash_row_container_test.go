@@ -70,7 +70,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	getRowContainer := func() *HashDiskBackedRowContainer {
-		rc := NewHashDiskBackedRowContainer(nil, &evalCtx, memoryMonitor, diskMonitor, tempEngine)
+		rc := NewHashDiskBackedRowContainer(&evalCtx, memoryMonitor, diskMonitor, tempEngine)
 		err = rc.Init(
 			ctx,
 			false, /* shouldMark */
@@ -356,7 +356,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	getRowContainer := func() *HashDiskBackedRowContainer {
-		rc := NewHashDiskBackedRowContainer(nil, &evalCtx, memoryMonitor, diskMonitor, tempEngine)
+		rc := NewHashDiskBackedRowContainer(&evalCtx, memoryMonitor, diskMonitor, tempEngine)
 		err = rc.Init(
 			ctx,
 			true, /* shouldMark */
@@ -463,7 +463,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 				} else if !ok {
 					break
 				}
-				if err := i.Mark(ctx, true); err != nil {
+				if err := i.Mark(ctx); err != nil {
 					t.Fatal(err)
 				}
 			}
