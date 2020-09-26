@@ -110,8 +110,6 @@ func createTestPebbleVarOpts(path string, seed int64) (storage.Engine, error) {
 	opts.MaxOpenFiles = int(rngIntRange(rng, 20, 2000))
 	opts.MemTableSize = 1 << rngIntRange(rng, 10, 28)
 	opts.MemTableStopWritesThreshold = int(rngIntRange(rng, 2, 7))
-	opts.MinCompactionRate = int(rngIntRange(rng, 1<<8, 8<<20))
-	opts.MinFlushRate = int(rngIntRange(rng, 1<<8, 4<<20))
 	opts.MaxConcurrentCompactions = int(rngIntRange(rng, 1, 4))
 
 	opts.Cache = pebble.NewCache(1 << rngIntRange(rng, 1, 30))
