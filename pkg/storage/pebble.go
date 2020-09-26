@@ -312,7 +312,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
-		MinFlushRate:                4 << 20, // 4 MB/sec
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 	}
 	opts.Experimental.L0SublevelCompactions = true
