@@ -1032,7 +1032,6 @@ func TestHashJoiner(t *testing.T) {
 		// optionally be provided to modify the hashJoiner after instantiation but
 		// before Run().
 		testFunc := func(t *testing.T, flowCtxSetup func(f *execinfra.FlowCtx), hjSetup func(h *hashJoiner)) error {
-			side := rightSide
 			for i := 0; i < 2; i++ {
 				leftInput := distsqlutils.NewRowBuffer(c.leftTypes, c.leftInput, distsqlutils.RowBufferArgs{})
 				rightInput := distsqlutils.NewRowBuffer(c.rightTypes, c.rightInput, distsqlutils.RowBufferArgs{})
@@ -1066,33 +1065,17 @@ func TestHashJoiner(t *testing.T) {
 				if hjSetup != nil {
 					hjSetup(h)
 				}
-				// Only force the other side after running the buffering logic once.
-				if i == 1 {
-					h.forcedStoredSide = &side
-				}
 				h.Run(context.Background())
-				side = otherSide(h.storedSide)
 
 				if !out.ProducerClosed() {
 					return errors.New("output RowReceiver not closed")
 				}
 
 				if err := checkExpectedRows(outTypes, c.expected, out); err != nil {
-					return err
+					return errors.Wrapf(err, "join type %s", c.joinType)
 				}
 			}
 			return nil
-		}
-
-		// Run test with a variety of initial buffer sizes.
-		for _, initialBuffer := range []int64{0, 32, 64, 128, 1024 * 1024} {
-			t.Run(fmt.Sprintf("InitialBuffer=%d", initialBuffer), func(t *testing.T) {
-				if err := testFunc(t, nil, func(h *hashJoiner) {
-					h.initialBufferSize = initialBuffer
-				}); err != nil {
-					t.Fatal(err)
-				}
-			})
 		}
 
 		// Run test with a variety of memory limits.
@@ -1143,7 +1126,7 @@ func TestHashJoinerError(t *testing.T) {
 	for _, c := range testCases {
 		// testFunc is a helper function that runs a hashJoin with the current
 		// test case after running the provided setup function.
-		testFunc := func(t *testing.T, setup func(h *hashJoiner)) error {
+		testFunc := func(t *testing.T) error {
 			leftInput := distsqlutils.NewRowBuffer(c.leftTypes, c.leftInput, distsqlutils.RowBufferArgs{})
 			rightInput := distsqlutils.NewRowBuffer(c.rightTypes, c.rightInput, distsqlutils.RowBufferArgs{})
 			out := &distsqlutils.RowBuffer{}
@@ -1171,7 +1154,6 @@ func TestHashJoinerError(t *testing.T) {
 				return err
 			}
 			outTypes := h.OutputTypes()
-			setup(h)
 			h.Run(context.Background())
 
 			if !out.ProducerClosed() {
@@ -1182,9 +1164,7 @@ func TestHashJoinerError(t *testing.T) {
 		}
 
 		t.Run(c.description, func(t *testing.T) {
-			if err := testFunc(t, func(h *hashJoiner) {
-				h.initialBufferSize = 1024 * 32
-			}); err == nil {
+			if err := testFunc(t); err == nil {
 				t.Errorf("Expected an error:%s, but found nil", c.expectedErr)
 			} else if err.Error() != c.expectedErr.Error() {
 				t.Errorf("HashJoinerErrorTest: expected\n%s, but found\n%v", c.expectedErr, err)
@@ -1302,10 +1282,6 @@ func TestHashJoinerDrain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Disable initial buffering. We always store the right stream in this case.
-	// If not disabled, both streams will be fully consumed before outputting
-	// any rows.
-	h.initialBufferSize = 0
 
 	out.ConsumerDone()
 	h.Run(context.Background())
@@ -1429,8 +1405,6 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Disable initial buffering. We always store the right stream in this case.
-	h.initialBufferSize = 0
 
 	h.Run(context.Background())
 
