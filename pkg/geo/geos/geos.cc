@@ -156,6 +156,7 @@ typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometr
 typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                   CR_GEOS_Geometry);
 
+
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
 }  // namespace

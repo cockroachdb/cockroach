@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/stretchr/testify/require"
+	"github.com/twpayne/go-geom"
 )
 
 var distanceTestCases = []struct {
@@ -886,6 +887,117 @@ func TestHausdorffDistanceDensify(t *testing.T) {
 
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
 		_, err := HausdorffDistanceDensify(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB, 0.5)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestClosestPoint(t *testing.T) {
+
+	testCases := []struct {
+		name     string
+		geomA    string
+		geomB    string
+		expected string
+	}{
+		{"Closest point between a POINT and LINESTRING",
+			"POINT(100 100)",
+			"LINESTRING(20 80, 98 190, 110 180, 50 75 )",
+			"POINT(100 100)",
+		},
+		{"Closest point between a LINESTRING and POINT",
+			"LINESTRING(20 80, 98 190, 110 180, 50 75 )",
+			"POINT(100 100)",
+			"POINT(73.0769230769231 115.384615384615)",
+		},
+		{"Closest point between 2 POLYGONS",
+			"POLYGON((175 150, 20 40, 50 60, 125 100, 175 150))",
+			"POLYGON((15 50, 2 4, 5 6, 12 10, 15 50))",
+			"POINT(20 40)",
+		},
+		{"Closest point between overlapping POLYGONS",
+			"POLYGON((175 150, 20 40, 50 60, 125 100, 175 150))",
+			"POLYGON((175 150, 20 40, 50 60, 125 100, 175 150))",
+			"POINT(175 150)",
+		},
+		{"Closest point between partially-overlapping POLYGONS",
+			"POLYGON((10 10, 14 14, 20 14, 20 10, 10 10))",
+			"POLYGON((12 12, 16 12, 16 8, 12 8, 12 12))",
+			"POINT(12 12)",
+		},
+		{"Closest point between MULTILINESTRING and POLYGON",
+			"MULTILINESTRING((0 0, 1 1, 2 2),(3 3, 4 4, 5 5))",
+			"POLYGON((10 10, 11 11, 14 11, 14 10, 10 10))",
+			"POINT(5 5)",
+		},
+		{"Closest point between MULTILINESTRING and MULTIPOINT",
+			"MULTILINESTRING((0 0, 1 1, 2 2),(3 3, 4 4, 5 5))",
+			"MULTIPOINT((2 1),(10 10))",
+			"POINT(1.5 1.5)",
+		},
+		{"Closest point between MULTIPOLYGON and MULTIPOINT",
+			"MULTIPOLYGON(((0 0,4 0,4 4,0 4,0 0),(1 1,2 1,2 2,1 2,1 1)), ((-1 -1,-1 -2,-2 -2,-2 -1,-1 -1)))",
+			"MULTIPOINT((20 10),(10 10))",
+			"POINT(4 4)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			gA, err := geo.ParseGeometry(tc.geomA)
+			require.NoError(t, err)
+			gB, err := geo.ParseGeometry(tc.geomB)
+			require.NoError(t, err)
+
+			ret, err := ClosestPoint(gA, gB)
+			require.NoError(t, err)
+			retAsGeomT, err := ret.AsGeomT()
+			require.NoError(t, err)
+
+			expected, err := geo.ParseGeometry(tc.expected)
+			require.NoError(t, err)
+			expectedAsGeomT, err := expected.AsGeomT()
+			require.NoError(t, err)
+
+			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).X(), retAsGeomT.(*geom.Point).X(), 2e-10)
+			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).Y(), retAsGeomT.(*geom.Point).Y(), 2e-10)
+		})
+	}
+
+	testCasesEmpty := []struct {
+		name  string
+		geomA string
+		geomB string
+	}{
+		{"Closest point when both geometries are empty",
+			"LINESTRING EMPTY",
+			"LINESTRING EMPTY",
+		},
+		{"Closest point when first geometry is empty",
+			"LINESTRING EMPTY",
+			"POINT(100 100)",
+		},
+		{"Closest point when second geometry is empty",
+			"POINT(100 100)",
+			"LINESTRING EMPTY",
+		},
+	}
+
+	t.Run("errors for EMPTY geometries", func(t *testing.T) {
+		for _, tc := range testCasesEmpty {
+			t.Run(tc.name, func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.geomA)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.geomB)
+				require.NoError(t, err)
+				_, err = ClosestPoint(a, b)
+				require.Error(t, err)
+				require.True(t, geo.IsEmptyGeometryError(err))
+			})
+		}
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := ClosestPoint(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
 		requireMismatchingSRIDError(t, err)
 	})
 }
