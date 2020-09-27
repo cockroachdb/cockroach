@@ -212,9 +212,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.HashJoiner != nil:
-		if spec.Core.HashJoiner.Type == descpb.RightSemiJoin || spec.Core.HashJoiner.Type == descpb.RightAntiJoin {
-			return errors.New("vectorized right semi/anti hash join is not supported yet")
-		}
 		if !spec.Core.HashJoiner.OnExpr.Empty() && spec.Core.HashJoiner.Type != descpb.InnerJoin {
 			return errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
