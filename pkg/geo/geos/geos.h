@@ -16,6 +16,7 @@ extern "C" {
 
 // Data Types adapted from `capi/geos_c.h.in` in GEOS.
 typedef void* CR_GEOS_Geometry;
+typedef void* CR_GEOS_CoordSequence;
 
 // NB: Both CR_GEOS_Slice and CR_GEOS_String can contain non-printable
 // data, so neither is necessarily compatible with a NUL character
@@ -138,6 +139,8 @@ CR_GEOS_Status CR_GEOS_HausdorffDistance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_
                                          double* ret);
 CR_GEOS_Status CR_GEOS_HausdorffDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
                                                 double densifyFrac, double* ret);
+CR_GEOS_Status CR_GEOS_NearestPoints(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                     CR_GEOS_String* ret);
 
 //
 // Binary predicates.

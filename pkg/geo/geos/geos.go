@@ -923,3 +923,16 @@ func SharedPaths(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
 	}
 	return cStringToSafeGoBytes(cEWKB), nil
 }
+
+// NearestPoints Returns a EWKB of a point on the shortest line between the 2 geometries.
+func NearestPoints(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEKWB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_NearestPoints(g, goToCSlice(a), goToCSlice(b), &cEKWB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEKWB), nil
+}

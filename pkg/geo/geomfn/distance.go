@@ -775,3 +775,22 @@ func HausdorffDistanceDensify(a, b geo.Geometry, densifyFrac float64) (*float64,
 	}
 	return &distance, nil
 }
+
+// NearestPoints returns the first point located on geomentry A on the shortest line between geometries.
+func NearestPoints(a, b geo.Geometry) (geo.Geometry, error) {
+	if a.SRID() != b.SRID() {
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	if a.Empty() || b.Empty() {
+		return geo.Geometry{}, nil
+	}
+	nearestPoint, err := geos.NearestPoints(a.EWKB(), b.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	gm, err := geo.ParseGeometryFromEWKB(nearestPoint)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return gm, nil
+}

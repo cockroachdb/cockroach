@@ -55,6 +55,7 @@ typedef void (*CR_GEOS_Free_r)(CR_GEOS_Handle, void* buffer);
 typedef void (*CR_GEOS_SetSRID_r)(CR_GEOS_Handle, CR_GEOS_Geometry, int);
 typedef int (*CR_GEOS_GetSRID_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef void (*CR_GEOS_GeomDestroy_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef void (*CR_GEOS_CoordSeqDestory_r)(CR_GEOS_Handle, CR_GEOS_CoordSequence);
 
 typedef char (*CR_GEOS_HasZ_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_IsEmpty_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
@@ -156,6 +157,12 @@ typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometr
 typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                   CR_GEOS_Geometry);
 
+typedef CR_GEOS_CoordSequence (*CR_GEOS_NearestPoints_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
+                                                         CR_GEOS_Geometry);
+typedef CR_GEOS_Geometry (*CR_GEOS_GEOM_CreatePointFromXY_r)(CR_GEOS_Handle, double, double);
+typedef int (*CR_GEOS_CoordSeqGetOrdinate_r)(CR_GEOS_Handle, CR_GEOS_CoordSequence, unsigned int,
+                                              unsigned int, double*);
+
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
 }  // namespace
@@ -186,6 +193,7 @@ struct CR_GEOS {
   CR_GEOS_SetSRID_r GEOSSetSRID_r;
   CR_GEOS_GetSRID_r GEOSGetSRID_r;
   CR_GEOS_GeomDestroy_r GEOSGeom_destroy_r;
+  CR_GEOS_CoordSeqDestory_r GEOSCoordSeq_destroy_r;
 
   CR_GEOS_WKTReader_create_r GEOSWKTReader_create_r;
   CR_GEOS_WKTReader_destroy_r GEOSWKTReader_destroy_r;
@@ -225,6 +233,9 @@ struct CR_GEOS {
   CR_GEOS_FrechetDistanceDensify_r GEOSFrechetDistanceDensify_r;
   CR_GEOS_HausdorffDistance_r GEOSHausdorffDistance_r;
   CR_GEOS_HausdorffDistanceDensify_r GEOSHausdorffDistanceDensify_r;
+  CR_GEOS_NearestPoints_r GEOSNearestPoints_r;
+  CR_GEOS_GEOM_CreatePointFromXY_r GEOSGeom_createPointFromXY_r;
+  CR_GEOS_CoordSeqGetOrdinate_r GEOSCoordSeq_getOrdinate_r;
 
   CR_GEOS_Covers_r GEOSCovers_r;
   CR_GEOS_CoveredBy_r GEOSCoveredBy_r;
@@ -278,6 +289,7 @@ struct CR_GEOS {
     INIT(GEOSFree_r);
     INIT(GEOSContext_setErrorMessageHandler_r);
     INIT(GEOSGeom_destroy_r);
+    INIT(GEOSCoordSeq_destroy_r);
     INIT(GEOSBufferParams_create_r);
     INIT(GEOSBufferParams_destroy_r);
     INIT(GEOSBufferParams_setEndCapStyle_r);
@@ -318,6 +330,9 @@ struct CR_GEOS {
     INIT(GEOSFrechetDistanceDensify_r);
     INIT(GEOSHausdorffDistance_r);
     INIT(GEOSHausdorffDistanceDensify_r);
+    INIT(GEOSNearestPoints_r);
+    INIT(GEOSCoordSeq_getOrdinate_r);
+    INIT(GEOSGeom_createPointFromXY_r);
     INIT(GEOSCovers_r);
     INIT(GEOSCoveredBy_r);
     INIT(GEOSContains_r);
@@ -1271,6 +1286,49 @@ CR_GEOS_Status CR_GEOS_SharedPaths(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice 
       auto srid = lib->GEOSGetSRID_r(handle, r);
       CR_GEOS_writeGeomToEWKB(lib, handle, r, ret, srid);
       lib->GEOSGeom_destroy_r(handle, r);
+    }
+  }
+  if (geomA != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_NearestPoints(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b,
+                                     CR_GEOS_String* ret) {
+
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geomA = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  auto geomB = lib->GEOSWKBReader_read_r(handle, wkbReader, b.data, b.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+
+  *ret = {.data = NULL, .len = 0};
+  if (geomA != nullptr && geomB != nullptr) {
+    auto rCoord = lib->GEOSNearestPoints_r(handle, geomA, geomB);
+    // 0 indicates an error
+    if (rCoord != 0) {
+      // Get the first point from rCoord as it belongs to the point on geomA
+      double xVal = 0.0;
+      double yVal = 0.0;
+      auto rXRet = lib->GEOSCoordSeq_getOrdinate_r(handle, rCoord, 0, 0, &xVal);
+      auto rYRet = lib->GEOSCoordSeq_getOrdinate_r(handle, rCoord, 0, 1, &yVal);
+      // 0 indicates an error
+      if(rXRet != 0 && rYRet != 0){
+        auto rGeom = lib->GEOSGeom_createPointFromXY_r(handle, xVal, yVal);
+        if (rGeom != NULL){
+          auto srid = lib->GEOSGetSRID_r(handle, rGeom);
+          CR_GEOS_writeGeomToEWKB(lib, handle, rGeom, ret, srid);
+          lib->GEOSGeom_destroy_r(handle, rGeom);
+        }
+      }
+      lib->GEOSCoordSeq_destroy_r(handle, rCoord);
     }
   }
   if (geomA != nullptr) {
