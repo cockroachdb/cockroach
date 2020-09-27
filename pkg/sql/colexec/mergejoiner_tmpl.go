@@ -334,6 +334,8 @@ func _PROBE_SWITCH(
 							}
 							// {{end}}
 							o.groups.addLeftSemiGroup(beginLIdx, leftSemiGroupLength)
+							// {{else if _JOIN_TYPE.IsRightSemi}}
+							o.groups.addRightSemiGroup(beginRIdx, rGroupLength)
 							// {{else if _JOIN_TYPE.IsLeftAnti}}
 							// {{if _JOIN_TYPE.IsSetOp}}
 							// For EXCEPT ALL join we add (lGroupLength - rGroupLength) number
@@ -346,6 +348,9 @@ func _PROBE_SWITCH(
 							// With LEFT ANTI join, we are only interested in unmatched tuples
 							// from the left, and all tuples in the current group have a match.
 							// {{end}}
+							// {{else if _JOIN_TYPE.IsRightAnti}}
+							// With RIGHT ANTI join, we are only interested in unmatched tuples
+							// from the right, and all tuples in the current group have a match.
 							// {{else}}
 							// Neither group ends with the batch, so add the group to the
 							// circular buffer.
@@ -397,11 +402,11 @@ func _PROBE_SWITCH(
 // This code snippet processes an unmatched group from the left.
 func _LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "leftUnmatchedGroupSwitch"}}
-	// {{if or $.JoinType.IsInner $.JoinType.IsLeftSemi}}
+	// {{if or $.JoinType.IsInner (or $.JoinType.IsLeftSemi $.JoinType.IsRightSemi)}}
 	// {{/*
-	// Unmatched groups are not possible with INNER, LEFT SEMI, and INTERSECT
-	// ALL joins (the latter has IsLeftSemi == true), so there is nothing to do
-	// here.
+	// Unmatched groups are not possible with INNER, LEFT SEMI, RIGHT SEMI, and
+	// INTERSECT ALL joins (the latter has IsLeftSemi == true), so there is
+	// nothing to do here.
 	// */}}
 	// {{end}}
 	// {{if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti}}
@@ -416,10 +421,10 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 		areGroupsProcessed = true
 	}
 	// {{end}}
-	// {{if $.JoinType.IsRightOuter}}
+	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
 	// {{/*
-	// Unmatched groups from the left are not possible with RIGHT OUTER join, so
-	// there is nothing to do here.
+	// Unmatched groups from the left are not possible with RIGHT OUTER and
+	// RIGHT ANTI joins, so there is nothing to do here.
 	// */}}
 	// {{end}}
 	// {{end}}
@@ -432,11 +437,11 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 // This code snippet processes an unmatched group from the right.
 func _RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "rightUnmatchedGroupSwitch"}}
-	// {{if or $.JoinType.IsInner $.JoinType.IsLeftSemi}}
+	// {{if or $.JoinType.IsInner (or $.JoinType.IsLeftSemi $.JoinType.IsRightSemi)}}
 	// {{/*
-	// Unmatched groups are not possible with INNER, LEFT SEMI, and INTERSECT
-	// ALL joins (the latter has IsLeftSemi == true), so there is nothing to do
-	// here.
+	// Unmatched groups are not possible with INNER, LEFT SEMI, RIGHT SEMI, and
+	// INTERSECT ALL joins (the latter has IsLeftSemi == true), so there is
+	// nothing to do here.
 	// */}}
 	// {{end}}
 	// {{if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti}}
@@ -446,14 +451,14 @@ func _RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// is nothing to do here.
 	// */}}
 	// {{end}}
-	// {{if $.JoinType.IsRightOuter}}
+	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
 	if rGroup.unmatched {
 		if curRIdx+1 != curREndIdx {
 			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly length %d of the right unmatched group is not 1", curREndIdx-curRIdx))
 		}
 		// The row already does not have a match, so we don't need to do any
 		// additional processing.
-		o.groups.addRightOuterGroup(curLIdx, curRIdx)
+		o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 		curRIdx++
 		areGroupsProcessed = true
 	}
@@ -470,18 +475,19 @@ func _RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 // checked separately.
 func _NULL_FROM_LEFT_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "nullFromLeftSwitch"}}
-	// {{if or $.JoinType.IsInner $.JoinType.IsLeftSemi}}
+	// {{if or $.JoinType.IsInner (or $.JoinType.IsLeftSemi $.JoinType.IsRightSemi)}}
 	// {{/*
-	// Nulls coming from the left input are ignored in INNER and LEFT SEMI
-	// joins.
+	// Nulls coming from the left input are ignored in INNER, LEFT SEMI, and
+	// RIGHT SEMI joins.
 	// */}}
 	// {{end}}
 	// {{if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti}}
 	o.groups.addLeftUnmatchedGroup(curLIdx, curRIdx)
 	// {{end}}
-	// {{if $.JoinType.IsRightOuter}}
+	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
 	// {{/*
-	// Nulls coming from the left input are ignored in RIGHT OUTER join.
+	// Nulls coming from the left input are ignored in RIGHT OUTER and RIGHT
+	// ANTI joins.
 	// */}}
 	// {{end}}
 	// {{end}}
@@ -496,10 +502,10 @@ func _NULL_FROM_LEFT_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 // checked separately.
 func _NULL_FROM_RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "nullFromRightSwitch"}}
-	// {{if or $.JoinType.IsInner $.JoinType.IsLeftSemi}}
+	// {{if or $.JoinType.IsInner (or $.JoinType.IsLeftSemi $.JoinType.IsRightSemi)}}
 	// {{/*
-	// Nulls coming from the right input are ignored in INNER and LEFT SEMI
-	// joins.
+	// Nulls coming from the right input are ignored in INNER, LEFT SEMI, and
+	// RIGHT SEMI joins.
 	// */}}
 	// {{end}}
 	// {{if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti}}
@@ -508,8 +514,8 @@ func _NULL_FROM_RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// ANTI joins.
 	// */}}
 	// {{end}}
-	// {{if $.JoinType.IsRightOuter}}
-	o.groups.addRightOuterGroup(curLIdx, curRIdx)
+	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
+	o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 	// {{end}}
 	// {{end}}
 	// {{/*
@@ -526,10 +532,11 @@ func _INCREMENT_LEFT_SWITCH(
 ) { // */}}
 	// {{define "incrementLeftSwitch"}}
 	// {{$sel := $.SelPermutation}}
-	// {{if or $.JoinType.IsInner $.JoinType.IsLeftSemi}}
+	// {{if or $.JoinType.IsInner (or $.JoinType.IsLeftSemi $.JoinType.IsRightSemi)}}
 	// {{/*
 	// Unmatched tuple from the left source is not outputted in INNER, LEFT
-	// SEMI, and INTERSECT ALL joins (the latter has IsLeftSemi == true).
+	// SEMI, RIGHT SEMI, and INTERSECT ALL joins (the latter has
+	// IsLeftSemi == true).
 	// */}}
 	// {{end}}
 	// {{if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti}}
@@ -583,9 +590,10 @@ func _INCREMENT_LEFT_SWITCH(
 		curLIdx++
 	}
 	// {{end}}
-	// {{if $.JoinType.IsRightOuter}}
+	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
 	// {{/*
-	// Unmatched tuple from the left source is not outputted in RIGHT OUTER join.
+	// Unmatched tuple from the left source is not outputted in RIGHT OUTER
+	// and RIGHT ANTI joins.
 	// */}}
 	// {{end}}
 	// {{end}}
@@ -603,10 +611,11 @@ func _INCREMENT_RIGHT_SWITCH(
 ) { // */}}
 	// {{define "incrementRightSwitch"}}
 	// {{$sel := $.SelPermutation}}
-	// {{if or $.JoinType.IsInner $.JoinType.IsLeftSemi}}
+	// {{if or $.JoinType.IsInner (or $.JoinType.IsLeftSemi $.JoinType.IsRightSemi)}}
 	// {{/*
 	// Unmatched tuple from the right source is not outputted in INNER, LEFT
-	// SEMI, and INTERSECT ALL joins (the latter has IsLeftSemi == true).
+	// SEMI, RIGHT SEMI, and INTERSECT ALL joins (the latter has
+	// IsLeftSemi == true).
 	// */}}
 	// {{end}}
 	// {{if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti}}
@@ -615,10 +624,10 @@ func _INCREMENT_RIGHT_SWITCH(
 	// LEFT ANTI, and EXCEPT ALL joins (the latter has IsLeftAnti == true).
 	// */}}
 	// {{end}}
-	// {{if $.JoinType.IsRightOuter}}
+	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
 	// All the rows on the right within the current group will not get a match on
-	// the left, so we're adding each of them as a right outer group.
-	o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+	// the left, so we're adding each of them as a right unmatched group.
+	o.groups.addRightUnmatchedGroup(curLIdx, curRIdx-1)
 	for curRIdx < curREndIdx {
 		// {{if _R_HAS_NULLS}}
 		if rVec.Nulls().NullAt(_R_SEL_IND) {
@@ -633,7 +642,7 @@ func _INCREMENT_RIGHT_SWITCH(
 		if !match {
 			break
 		}
-		o.groups.addRightOuterGroup(curLIdx, curRIdx)
+		o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 		curRIdx++
 	}
 	// {{end}}
@@ -648,7 +657,7 @@ func _INCREMENT_RIGHT_SWITCH(
 // reached the end of either the left or right group.
 func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "processNotLastGroupInColumnSwitch"}}
-	// {{if or $.JoinType.IsInner $.JoinType.IsLeftSemi}}
+	// {{if or $.JoinType.IsInner (or $.JoinType.IsLeftSemi $.JoinType.IsRightSemi)}}
 	// {{/*
 	// Nothing to do here since an unmatched tuple is omitted.
 	// */}}
@@ -665,14 +674,14 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 		}
 	}
 	// {{end}}
-	// {{if $.JoinType.IsRightOuter}}
+	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
 	if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
 		// The current group is not the last one within the column, so it cannot be
 		// extended into the next batch, and we need to process it right now. Any
 		// unprocessed row in the right group will not get a match, so each one of
 		// them becomes a new unmatched group with a corresponding null group.
 		for curRIdx < curREndIdx {
-			o.groups.addRightOuterGroup(curLIdx, curRIdx)
+			o.groups.addRightUnmatchedGroup(curLIdx, curRIdx)
 			curRIdx++
 		}
 	}
@@ -766,11 +775,11 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 						toAppend = o.output.Capacity() - outStartIdx
 					}
 
-					// {{if _JOIN_TYPE.IsRightOuter}}
+					// {{if or _JOIN_TYPE.IsRightOuter _JOIN_TYPE.IsRightAnti}}
 					// {{/*
 					// Null groups on the left can only occur with RIGHT OUTER and FULL
-					// OUTER joins for both of which IsRightOuter is true. For other joins,
-					// we're omitting this check.
+					// OUTER (for both of which IsRightOuter is true) and RIGHT ANTI joins.
+					// For other joins, we're omitting this check.
 					// */}}
 					if leftGroup.nullGroup {
 						out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
@@ -1365,9 +1374,14 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup(ctx conte
 	// All tuples in the buffered group have matches, so they are not output in
 	// case of LEFT ANTI join.
 	o.builderState.lGroups = o.builderState.lGroups[:0]
+	// {{else if _JOIN_TYPE.IsRightAnti}}
+	// All tuples in the buffered group have matches, so they are not output in
+	// case of RIGHT ANTI join.
+	o.builderState.rGroups = o.builderState.rGroups[:0]
 	// {{else}}
 	lGroupEndIdx := o.proberState.lBufferedGroup.numTuples
 	rGroupEndIdx := o.proberState.rBufferedGroup.numTuples
+	_, _ = lGroupEndIdx, rGroupEndIdx
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
@@ -1394,15 +1408,19 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup(ctx conte
 	if rGroupEndIdx < lGroupEndIdx {
 		numMatched = rGroupEndIdx
 	}
-	// {{else}}
-	// Remove unused warning.
-	_ = rGroupEndIdx
 	// {{end}}
 	o.builderState.lGroups[0] = group{
 		rowStartIdx: 0,
 		rowEndIdx:   numMatched,
 		numRepeats:  1,
 		toBuild:     numMatched,
+	}
+	// {{else if _JOIN_TYPE.IsRightSemi}}
+	o.builderState.rGroups[0] = group{
+		rowStartIdx: 0,
+		rowEndIdx:   rGroupEndIdx,
+		numRepeats:  1,
+		toBuild:     rGroupEndIdx,
 	}
 	// {{else}}
 	o.builderState.lGroups[0] = group{
@@ -1433,11 +1451,11 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup(ctx conte
 // the left source. It should only be called when the right source has been
 // exhausted.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource(ctx context.Context) {
-	// {{if or _JOIN_TYPE.IsInner _JOIN_TYPE.IsLeftSemi}}
+	// {{if or _JOIN_TYPE.IsInner (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsRightSemi)}}
 	// {{/*
 	// Remaining tuples from the left source do not have a match, so they are
-	// ignored in INNER, LEFT SEMI, and INTERSECT ALL joins (the latter has
-	// IsLeftSemi == true).
+	// ignored in INNER, LEFT SEMI, RIGHT SEMI, and INTERSECT ALL joins (the
+	// latter has IsLeftSemi == true).
 	// */}}
 	// {{end}}
 	// {{if or _JOIN_TYPE.IsLeftOuter _JOIN_TYPE.IsLeftAnti}}
@@ -1464,10 +1482,10 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource(ctx context.Context) {
 
 	o.proberState.lIdx = o.proberState.lLength
 	// {{end}}
-	// {{if _JOIN_TYPE.IsRightOuter}}
+	// {{if or _JOIN_TYPE.IsRightOuter _JOIN_TYPE.IsRightAnti}}
 	// {{/*
 	// Remaining tuples from the left source do not have a match, so they are
-	// ignored in RIGHT OUTER join.
+	// ignored in RIGHT OUTER and RIGHT ANTI joins.
 	// */}}
 	// {{end}}
 }
@@ -1476,9 +1494,10 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource(ctx context.Context) {
 // the right source. It should only be called when the left source has been
 // exhausted.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
-	// {{if _JOIN_TYPE.IsRightOuter}}
+	// {{if or _JOIN_TYPE.IsRightOuter _JOIN_TYPE.IsRightAnti}}
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
+	// {{if _JOIN_TYPE.IsRightOuter}}
 	o.builderState.lGroups = o.builderState.lGroups[:1]
 	o.builderState.lGroups[0] = group{
 		rowStartIdx: o.proberState.rIdx,
@@ -1487,6 +1506,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
 		toBuild:     o.proberState.rLength - o.proberState.rIdx,
 		nullGroup:   true,
 	}
+	// {{end}}
 	o.builderState.rGroups = o.builderState.rGroups[:1]
 	o.builderState.rGroups[0] = group{
 		rowStartIdx: o.proberState.rIdx,
@@ -1511,11 +1531,11 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) calculateOutputCount(groups []group) int 
 	count := o.builderState.outCount
 
 	for i := 0; i < len(groups); i++ {
-		// {{if _JOIN_TYPE.IsLeftAnti}}
+		// {{if or _JOIN_TYPE.IsLeftAnti _JOIN_TYPE.IsRightAnti}}
 		if !groups[i].unmatched {
-			// "Matched" groups are not outputted in LEFT ANTI and EXCEPT ALL
-			// joins (for the latter IsLeftAnti == true), so they do not
-			// contribute to the output count.
+			// "Matched" groups are not outputted in LEFT ANTI, RIGHT ANTI,
+			// and EXCEPT ALL joins (for the latter IsLeftAnti == true), so
+			// they do not contribute to the output count.
 			continue
 		}
 		// {{end}}
@@ -1534,22 +1554,35 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) calculateOutputCount(groups []group) int 
 // build creates the cross product, and writes it to the output member.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) build(ctx context.Context) {
 	outStartIdx := o.builderState.outCount
+	// {{if or _JOIN_TYPE.IsRightSemi _JOIN_TYPE.IsRightAnti}}
+	o.builderState.outCount = o.calculateOutputCount(o.builderState.rGroups)
+	// {{else}}
 	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
+	// {{end}}
 	if o.output.Width() != 0 && o.builderState.outCount > outStartIdx {
 		// We will be actually building the output if we have columns in the output
 		// batch (meaning that we're not doing query like 'SELECT count(*) ...')
 		// and when builderState.outCount has increased (meaning that we have
 		// something to build).
+		colOffsetForRightGroups := 0
 		switch o.builderState.buildFrom {
 		case mjBuildFromBatch:
+			// {{if not (or _JOIN_TYPE.IsRightSemi _JOIN_TYPE.IsRightAnti)}}
 			o.buildLeftGroupsFromBatch(o.builderState.lGroups, &o.left, o.proberState.lBatch, outStartIdx)
+			colOffsetForRightGroups = len(o.left.sourceTypes)
+			_ = colOffsetForRightGroups
+			// {{end}}
 			// {{if not (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsLeftAnti)}}
-			o.buildRightGroupsFromBatch(o.builderState.rGroups, len(o.left.sourceTypes), &o.right, o.proberState.rBatch, outStartIdx)
+			o.buildRightGroupsFromBatch(o.builderState.rGroups, colOffsetForRightGroups, &o.right, o.proberState.rBatch, outStartIdx)
 		// {{end}}
 		case mjBuildFromBufferedGroup:
+			// {{if not (or _JOIN_TYPE.IsRightSemi _JOIN_TYPE.IsRightAnti)}}
 			o.buildLeftBufferedGroup(ctx, o.builderState.lGroups[0], &o.left, o.proberState.lBufferedGroup, outStartIdx)
+			colOffsetForRightGroups = len(o.left.sourceTypes)
+			_ = colOffsetForRightGroups
+			// {{end}}
 			// {{if not (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsLeftAnti)}}
-			o.buildRightBufferedGroup(ctx, o.builderState.rGroups[0], len(o.left.sourceTypes), &o.right, o.proberState.rBufferedGroup, outStartIdx)
+			o.buildRightBufferedGroup(ctx, o.builderState.rGroups[0], colOffsetForRightGroups, &o.right, o.proberState.rBufferedGroup, outStartIdx)
 		// {{end}}
 
 		default:
@@ -1566,7 +1599,7 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "sourceFinishedSwitch"}}
 	o.outputReady = true
 	o.builderState.buildFrom = mjBuildFromBatch
-	// {{if or $.JoinType.IsInner $.JoinType.IsLeftSemi}}
+	// {{if or $.JoinType.IsInner (or $.JoinType.IsLeftSemi $.JoinType.IsRightSemi)}}
 	o.setBuilderSourceToBufferedGroup(ctx)
 	// {{else}}
 	// Next, we need to make sure that builder state is set up for a case when
@@ -1589,7 +1622,7 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 		o.outputReady = false
 	}
 	// {{end}}
-	// {{if $.JoinType.IsRightOuter}}
+	// {{if or $.JoinType.IsRightOuter $.JoinType.IsRightAnti}}
 	// At least one of the sources is finished. If it was the left one,
 	// then we need to emit remaining tuples from the right source with
 	// nulls corresponding to the left one. But if the right source is
