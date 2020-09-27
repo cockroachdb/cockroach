@@ -919,7 +919,9 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/mergejoiner_leftanti.eg.go \
   pkg/sql/colexec/mergejoiner_leftouter.eg.go \
   pkg/sql/colexec/mergejoiner_leftsemi.eg.go \
+  pkg/sql/colexec/mergejoiner_rightanti.eg.go \
   pkg/sql/colexec/mergejoiner_rightouter.eg.go \
+  pkg/sql/colexec/mergejoiner_rightsemi.eg.go \
   pkg/sql/colexec/ordered_any_not_null_agg.eg.go \
   pkg/sql/colexec/ordered_avg_agg.eg.go \
   pkg/sql/colexec/ordered_bool_and_or_agg.eg.go \
