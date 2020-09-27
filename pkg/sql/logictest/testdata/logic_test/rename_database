@@ -56,6 +56,9 @@ SELECT * FROM kv
 statement error target database or schema does not exist
 SHOW GRANTS ON DATABASE test
 
+statement ok
+SET DATABASE = u
+
 query TT
 SHOW DATABASES
 ----
@@ -78,9 +81,6 @@ u  pg_extension        admin  ALL
 u  pg_extension        root   ALL
 u  public              admin  ALL
 u  public              root   ALL
-
-statement ok
-SET DATABASE = u
 
 query II rowsort
 SELECT * FROM kv
@@ -113,10 +113,17 @@ user testuser
 statement error must be owner of database t
 ALTER DATABASE t RENAME TO v
 
+statement ok
+SET DATABASE = t
+
 query TT
 SHOW DATABASES
 ----
+defaultdb  root
+postgres   root
+system     node
 t          root
+u          root
 
 # Test that owners can rename databases as long as they have the CREATEDB
 # privilege.
@@ -157,7 +164,7 @@ CREATE VIEW t.v AS SELECT k,v FROM u.kv
 query TTTTI
 SHOW TABLES FROM u
 ----
-public  kv  table  0
+public  kv  table  root  0
 
 statement error cannot rename database because relation "t.public.v" depends on relation "u.public.kv"
 ALTER DATABASE u RENAME TO v
@@ -180,6 +187,9 @@ ALTER DATABASE defaultdb RENAME TO w;
   ALTER DATABASE postgres RENAME TO defaultdb;
   ALTER DATABASE w RENAME TO postgres
 
+statement ok
+SET DATABASE = t
+
 query TT
 SHOW DATABASES
 ----
@@ -200,12 +210,12 @@ rename database  ·             ·
 query TT colnames
 SHOW DATABASES
 ----
-database_name
-defaultdb  root
-postgres   root
-system     node
-t          root
-v          root
+database_name  owner
+defaultdb      root
+postgres       root
+system         node
+t              root
+v              root
 
 # Test dependent sequences on different databases upon renames
 # return the appropriate error message, as well as testing
