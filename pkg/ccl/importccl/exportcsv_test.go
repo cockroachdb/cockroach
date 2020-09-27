@@ -346,7 +346,7 @@ func TestExportShow(t *testing.T) {
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/show' FROM SELECT * FROM [SHOW DATABASES] ORDER BY database_name`)
 	content := readFileByGlob(t, filepath.Join(dir, "show", "export*-n1.0.csv"))
 
-	if expected, got := "defaultdb\npostgres\nsystem\n", string(content); expected != got {
+	if expected, got := "defaultdb,root\npostgres,root\nsystem,node\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}
 }
