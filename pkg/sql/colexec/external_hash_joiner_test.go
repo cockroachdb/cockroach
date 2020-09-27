@@ -61,8 +61,13 @@ func TestExternalHashJoiner(t *testing.T) {
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-		for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
+		for _, tcs := range [][]*joinTestCase{hjTestCases, getMJTestCases()} {
 			for _, tc := range tcs {
+				if tc.joinType == descpb.RightSemiJoin || tc.joinType == descpb.RightAntiJoin {
+					// Hash joiner currently doesn't support RIGHT SEMI and RIGHT
+					// ANTI joins.
+					continue
+				}
 				delegateFDAcquisitions := rng.Float64() < 0.5
 				log.Infof(ctx, "spillForced=%t/%s/delegateFDAcquisitions=%t", spillForced, tc.description, delegateFDAcquisitions)
 				var semsToCheck []semaphore.Semaphore

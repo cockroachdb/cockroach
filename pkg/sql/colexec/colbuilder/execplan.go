@@ -230,9 +230,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.MergeJoiner != nil:
-		if spec.Core.MergeJoiner.Type == descpb.RightSemiJoin || spec.Core.MergeJoiner.Type == descpb.RightAntiJoin {
-			return errors.New("vectorized right semi/anti merge join is not supported yet")
-		}
 		if !spec.Core.MergeJoiner.OnExpr.Empty() && spec.Core.MergeJoiner.Type != descpb.InnerJoin {
 			return errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
