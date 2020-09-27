@@ -993,8 +993,13 @@ func TestHashJoiner(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
 
-	for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
+	for _, tcs := range [][]*joinTestCase{hjTestCases, getMJTestCases()} {
 		for _, tc := range tcs {
+			if tc.joinType == descpb.RightSemiJoin || tc.joinType == descpb.RightAntiJoin {
+				// Hash joiner currently doesn't support RIGHT SEMI and RIGHT
+				// ANTI joins.
+				continue
+			}
 			for _, tc := range tc.mutateTypes() {
 				runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
 					spec := createSpecForHashJoiner(tc)

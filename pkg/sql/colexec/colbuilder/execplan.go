@@ -217,9 +217,6 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 		return nil
 
 	case core.MergeJoiner != nil:
-		if core.MergeJoiner.Type == descpb.RightSemiJoin || core.MergeJoiner.Type == descpb.RightAntiJoin {
-			return errors.New("vectorized right semi/anti merge join is not supported yet")
-		}
 		if !core.MergeJoiner.OnExpr.Empty() &&
 			core.MergeJoiner.Type != descpb.InnerJoin {
 			return errors.Errorf("can't plan non-inner merge join with ON expressions")
