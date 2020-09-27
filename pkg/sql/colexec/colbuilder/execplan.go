@@ -199,9 +199,6 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 		return nil
 
 	case core.HashJoiner != nil:
-		if core.HashJoiner.Type == descpb.RightSemiJoin || core.HashJoiner.Type == descpb.RightAntiJoin {
-			return errors.New("vectorized right semi/anti hash join is not supported yet")
-		}
 		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != descpb.InnerJoin {
 			return errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
