@@ -1492,6 +1492,17 @@ func (tc *joinTestCase) mirror() *joinTestCase {
 	return &mirroringCase
 }
 
+// withMirrors will add all "mirror" test cases.
+func withMirrors(testCases []*joinTestCase) []*joinTestCase {
+	numOrigTestCases := len(testCases)
+	for _, c := range testCases[:numOrigTestCases] {
+		if mirror := c.mirror(); mirror != nil {
+			testCases = append(testCases, mirror)
+		}
+	}
+	return testCases
+}
+
 // mutateTypes returns a slice of joinTestCases with varied types. Assumes
 // the input is made up of just int64s. Calling this
 func (tc *joinTestCase) mutateTypes() []*joinTestCase {

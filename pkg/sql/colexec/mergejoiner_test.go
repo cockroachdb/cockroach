@@ -1586,14 +1586,7 @@ func getMJTestCases() []*joinTestCase {
 			expected:    tuples{{1, int16(0)}, {1, int16(2)}},
 		},
 	}
-	// Attempt to create "mirror" test cases.
-	numOrigTestCases := len(mjTestCases)
-	for _, c := range mjTestCases[:numOrigTestCases] {
-		if mirror := c.mirror(); mirror != nil {
-			mjTestCases = append(mjTestCases, mirror)
-		}
-	}
-	return mjTestCases
+	return withMirrors(mjTestCases)
 }
 func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
