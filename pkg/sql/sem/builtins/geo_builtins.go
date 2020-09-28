@@ -3153,6 +3153,16 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			},
 		),
 	),
+	"st_orderingequals": makeBuiltin(
+		defProps(),
+		geometryOverload2BinaryPredicate(
+			geomfn.OrderingEquals,
+			infoBuilder{
+				info: "Returns true if geometry_a is exactly equal to geometry_b, having all coordinates " +
+					"in the same order, as well as the same type, SRID, bounding box, and so on.",
+			},
+		),
+	),
 	"st_normalize": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -4659,6 +4669,38 @@ Bottom Left.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_swapordinates": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{
+					Name: "geometry",
+					Typ:  types.Geometry,
+				},
+				{
+					Name: "swap_ordinate_string",
+					Typ:  types.String,
+				},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				cString := tree.MustBeDString(args[1])
+
+				ret, err := geomfn.SwapOrdinates(g.Geometry, string(cString))
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a version of the given geometry with given ordinates swapped.
+The swap_ordinate_string parameter is a 2-character string naming the ordinates to swap. Valid names are: x, y, z and m.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	"st_angle": makeBuiltin(
 		defProps(),
@@ -5232,7 +5274,6 @@ Bottom Left.`,
 	"st_minimumboundingcircle":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48987}),
 	"st_minimumboundingradius":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48988}),
 	"st_node":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48993}),
-	"st_orderingequals":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49002}),
 	"st_orientedenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49003}),
 	"st_pointinsidecircle":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49007}),
 	"st_polygonize":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
@@ -5243,7 +5284,6 @@ Bottom Left.`,
 	"st_snap":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49040}),
 	"st_split":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
 	"st_subdivide":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49048}),
-	"st_swapordinates":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49050}),
 	"st_tileenvelope":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
 	"st_transscale":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49061}),
 	"st_unaryunion":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49062}),
