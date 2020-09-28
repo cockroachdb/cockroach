@@ -81,6 +81,9 @@ func (b *BytesValue) Set(s string) error {
 	if err != nil {
 		return err
 	}
+	if b.val == nil {
+		b.val = new(int64)
+	}
 	atomic.StoreInt64(b.val, v)
 	b.isSet = true
 	return nil
@@ -93,12 +96,13 @@ func (b *BytesValue) Type() string {
 
 // String implements the flag.Value and pflag.Value interfaces.
 func (b *BytesValue) String() string {
-	// We need to be able to print the zero value in order for go's flags
-	// package to not choke when comparing values to the zero value,
-	// as it does in isZeroValue as of go1.8:
-	// https://github.com/golang/go/blob/release-branch.go1.8/src/flag/flag.go#L384
+	// When b.val is nil, the real value of the flag will only be known after a
+	// Resolve() call. We do not want our flag package to report an erroneous
+	// default value for this flag. So the value we return here must cause
+	// defaultIsZeroValue to return true:
+	// https://github.com/spf13/pflag/blob/v1.0.5/flag.go#L724
 	if b.val == nil {
-		return IBytes(0)
+		return "<nil>"
 	}
 	// This uses the MiB, GiB, etc suffixes. If we use humanize.Bytes() we get
 	// the MB, GB, etc suffixes, but the conversion is done in multiples of 1000

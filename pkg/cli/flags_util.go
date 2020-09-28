@@ -398,7 +398,6 @@ func (f *tableDisplayFormat) Set(s string) error {
 // known once other flags are parsed (e.g. --max-disk-temp-storage=10% depends
 // on --store).
 type bytesOrPercentageValue struct {
-	val  *int64
 	bval *humanizeutil.BytesValue
 
 	origVal string
@@ -447,11 +446,7 @@ func diskPercentResolverFactory(dir string) (percentResolverFunc, error) {
 func newBytesOrPercentageValue(
 	v *int64, percentResolver func(percent int) (int64, error),
 ) *bytesOrPercentageValue {
-	if v == nil {
-		v = new(int64)
-	}
 	return &bytesOrPercentageValue{
-		val:             v,
 		bval:            humanizeutil.NewBytesValue(v),
 		percentResolver: percentResolver,
 	}
@@ -502,7 +497,6 @@ func (b *bytesOrPercentageValue) Resolve(v *int64, percentResolver percentResolv
 		return nil
 	}
 	b.percentResolver = percentResolver
-	b.val = v
 	b.bval = humanizeutil.NewBytesValue(v)
 	return b.Set(b.origVal)
 }
