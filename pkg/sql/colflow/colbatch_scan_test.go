@@ -32,6 +32,75 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// TestColBatchScanMeta makes sure that the ColBatchScan propagates the leaf
+// txn final state metadata which is necessary to notify the kvCoordSender
+// about the spans that have been read.
+func TestColBatchScanMeta(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlutils.CreateTable(t, sqlDB, "t",
+		"num INT PRIMARY KEY",
+		3, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	st := s.ClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+	flowCtx := execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+		Txn:    leafTxn,
+		Local:  true,
+		NodeID: s.NodeID(),
+	}
+	spec := execinfrapb.ProcessorSpec{
+		Core: execinfrapb.ProcessorCoreUnion{
+			TableReader: &execinfrapb.TableReaderSpec{
+				Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+				Table: *td,
+			}},
+		Post: execinfrapb.PostProcessSpec{
+			Projection:    true,
+			OutputColumns: []uint32{0},
+		},
+	}
+
+	args := colexec.NewColOperatorArgs{
+		Spec:                &spec,
+		StreamingMemAccount: testMemAcc,
+	}
+	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+	res, err := colexec.NewColOperator(ctx, &flowCtx, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := res.Op
+	tr.Init()
+	meta := tr.(*colexec.CancelChecker).Input().(execinfrapb.MetadataSource).DrainMeta(ctx)
+	var txnFinalStateSeen bool
+	for _, m := range meta {
+		if m.LeafTxnFinalState != nil {
+			txnFinalStateSeen = true
+			break
+		}
+	}
+	if !txnFinalStateSeen {
+		t.Fatal("missing txn final state")
+	}
+}
+
 func BenchmarkColBatchScan(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	logScope := log.Scope(b)
