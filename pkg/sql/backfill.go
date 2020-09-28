@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -1897,10 +1899,17 @@ func columnBackfillInTxn(
 	if tableDesc.Adding() {
 		return nil
 	}
+	var columnBackfillerMon *mon.BytesMonitor
+	// This is the planner's memory monitor.
+	if evalCtx.Mon != nil {
+		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-column-backfill-mon")
+	}
+
 	var backfiller backfill.ColumnBackfiller
-	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc); err != nil {
+	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc, columnBackfillerMon); err != nil {
 		return err
 	}
+	defer backfiller.Close(ctx)
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error
@@ -1911,6 +1920,7 @@ func columnBackfillInTxn(
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -1927,10 +1937,17 @@ func indexBackfillInTxn(
 	tableDesc *tabledesc.Immutable,
 	traceKV bool,
 ) error {
+	var indexBackfillerMon *mon.BytesMonitor
+	// This is the planner's memory monitor.
+	if evalCtx.Mon != nil {
+		indexBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Mon, "local-index-backfill-mon")
+	}
+
 	var backfiller backfill.IndexBackfiller
-	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc); err != nil {
+	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc, indexBackfillerMon); err != nil {
 		return err
 	}
+	defer backfiller.Close(ctx)
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error
@@ -1940,6 +1957,7 @@ func indexBackfillInTxn(
 			return err
 		}
 	}
+
 	return nil
 }
 

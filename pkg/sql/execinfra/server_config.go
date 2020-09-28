@@ -97,6 +97,10 @@ type ServerConfig struct {
 	// BulkAdder is used by some processors to bulk-ingest data as SSTs.
 	BulkAdder kvserverbase.BulkAdderFactory
 
+	// Child monitor of the bulk monitor which will be used to monitor the memory
+	// used by the column and index backfillers.
+	BackfillerMonitor *mon.BytesMonitor
+
 	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
 	// space used will be a small multiple (~1.1) of this because of RocksDB
 	// space amplification.
