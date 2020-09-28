@@ -137,6 +137,10 @@ func setupTPCC(
 	c.Put(ctx, cockroach, "./cockroach", workloadNode)
 	c.Put(ctx, workload, "./workload", workloadNode)
 
+	extraArgs := opts.ExtraSetupArgs
+	if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+		extraArgs += " --deprecated-fk-indexes"
+	}
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
@@ -145,14 +149,13 @@ func setupTPCC(
 		switch opts.SetupType {
 		case usingFixture:
 			t.Status("loading fixture")
-			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, opts.ExtraSetupArgs))
+			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, extraArgs))
 		case usingInit:
 			t.Status("initializing tables")
-			cmd := fmt.Sprintf("./workload init tpcc --warehouses=%d %s {pgurl:1}",
-				opts.Warehouses, opts.ExtraSetupArgs)
-			if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
-				cmd += " --deprecated-fk-indexes"
-			}
+			cmd := fmt.Sprintf(
+				"./workload init tpcc --warehouses=%d %s {pgurl:1}",
+				opts.Warehouses, extraArgs,
+			)
 			c.Run(ctx, workloadNode, cmd)
 		default:
 			t.Fatal("unknown tpcc setup type")
