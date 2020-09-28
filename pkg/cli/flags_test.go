@@ -1030,3 +1030,39 @@ func TestHttpHostFlagValue(t *testing.T) {
 		}
 	}
 }
+
+func TestMaxDiskTempStorageFlagValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args     []string
+		expected string
+	}{
+		{nil, "<nil>"},
+		{[]string{"--max-disk-temp-storage", "1GiB"}, "1.0 GiB"},
+		{[]string{"--max-disk-temp-storage", "1GB"}, "954 MiB"},
+	}
+
+	for i, td := range testData {
+		initCLIDefaults()
+
+		if err := f.Parse(td.args); err != nil {
+			t.Fatal(err)
+		}
+		tempStorageFlag := f.Lookup("max-disk-temp-storage")
+		if tempStorageFlag == nil {
+			t.Fatalf("%d. max-disk-temp-storage flag was nil", i)
+		}
+		if tempStorageFlag.DefValue != "<nil>" {
+			t.Errorf("%d. tempStorageFlag.DefValue expected <nil>, got %s", i, tempStorageFlag.DefValue)
+		}
+		if td.expected != tempStorageFlag.Value.String() {
+			t.Errorf("%d. tempStorageFlag.Value expected %v, but got %v", i, td.expected, tempStorageFlag.Value)
+		}
+	}
+}
