@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -578,18 +580,49 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		testingAuthHook = k.AuthHook
 	}
 
+	authOpts := authOptions{
+		connType:        connType,
+		insecure:        s.cfg.Insecure,
+		ie:              s.execCfg.InternalExecutor,
+		auth:            s.GetAuthenticationConfiguration(),
+		testingAuthHook: testingAuthHook,
+	}
+
+	if s.cfg.MaxSQLConns != 0 {
+		authOpts.postAuthHook = func() error {
+			hasAdminRole, err := sql.HasAdminRole(ctx, s.execCfg.InternalExecutor, sArgs.User)
+			if err != nil {
+				return err
+			}
+			if hasAdminRole {
+				// This user is an admin and is therefore not affected by connection
+				// limits.
+				return nil
+			}
+
+			if s.metrics.Conns.Value() > int64(s.cfg.MaxSQLConns) {
+				return errors.WithHint(
+					pgerror.New(
+						pgcode.TooManyConnections, "sorry, too many clients already",
+					),
+					fmt.Sprintf(
+						"the maximum number of allowed connections is %d and can be modified using the %s flag",
+						s.cfg.MaxSQLConns,
+						cliflags.ListenMaxSQLConns.Name,
+					),
+				)
+			}
+			return nil
+		}
+	}
+
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
 	s.serveConn(
 		ctx, conn, sArgs,
 		reserved,
-		authOptions{
-			connType:        connType,
-			insecure:        s.cfg.Insecure,
-			ie:              s.execCfg.InternalExecutor,
-			auth:            s.GetAuthenticationConfiguration(),
-			testingAuthHook: testingAuthHook,
-		})
+		authOpts,
+	)
 	return nil
 }
 

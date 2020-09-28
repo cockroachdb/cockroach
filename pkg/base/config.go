@@ -231,6 +231,10 @@ type Config struct {
 	// The flag exists mostly for the benefit of tests, and for
 	// `cockroach start-single-node`.
 	AutoInitializeCluster bool
+
+	// MaxSQLConns specifies the maximum allowed number of open SQL connections to
+	// the server.
+	MaxSQLConns int
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time
@@ -270,6 +274,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
 	cfg.AcceptSQLWithoutTLS = false
+	cfg.MaxSQLConns = 0
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of

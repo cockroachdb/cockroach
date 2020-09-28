@@ -46,6 +46,8 @@ type authOptions struct {
 	// ie is the server-wide internal executor, used to
 	// retrieve entries from system.users.
 	ie *sql.InternalExecutor
+	// postAuthHook, if non-nil, is called after successful authentication.
+	postAuthHook func() error
 
 	// The following fields are only used by tests.
 
@@ -124,6 +126,12 @@ func (c *conn) handleAuthentication(
 	}
 
 	ac.Logf(ctx, "authentication succeeded")
+
+	if authOpt.postAuthHook != nil {
+		if err := authOpt.postAuthHook(); err != nil {
+			return connClose, sendError(err)
+		}
+	}
 
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)

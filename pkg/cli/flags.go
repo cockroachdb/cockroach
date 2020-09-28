@@ -377,6 +377,8 @@ func init() {
 
 		// More server flags.
 
+		intFlag(f, &baseCfg.MaxSQLConns, cliflags.ListenMaxSQLConns)
+
 		varFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
 
 		stringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
