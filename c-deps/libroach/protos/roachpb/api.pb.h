@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[126];
+  static const ::google::protobuf::internal::ParseTable schema[128];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -288,6 +288,12 @@ extern MergeRequestDefaultTypeInternal _MergeRequest_default_instance_;
 class MergeResponse;
 class MergeResponseDefaultTypeInternal;
 extern MergeResponseDefaultTypeInternal _MergeResponse_default_instance_;
+class MigrateRequest;
+class MigrateRequestDefaultTypeInternal;
+extern MigrateRequestDefaultTypeInternal _MigrateRequest_default_instance_;
+class MigrateResponse;
+class MigrateResponseDefaultTypeInternal;
+extern MigrateResponseDefaultTypeInternal _MigrateResponse_default_instance_;
 class PushTxnRequest;
 class PushTxnRequestDefaultTypeInternal;
 extern PushTxnRequestDefaultTypeInternal _PushTxnRequest_default_instance_;
@@ -516,6 +522,8 @@ template<> ::cockroach::roachpb::LeaseInfoRequest* Arena::CreateMaybeMessage<::c
 template<> ::cockroach::roachpb::LeaseInfoResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::LeaseInfoResponse>(Arena*);
 template<> ::cockroach::roachpb::MergeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeRequest>(Arena*);
 template<> ::cockroach::roachpb::MergeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeResponse>(Arena*);
+template<> ::cockroach::roachpb::MigrateRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::MigrateRequest>(Arena*);
+template<> ::cockroach::roachpb::MigrateResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::MigrateResponse>(Arena*);
 template<> ::cockroach::roachpb::PushTxnRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::PushTxnRequest>(Arena*);
 template<> ::cockroach::roachpb::PushTxnResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::PushTxnResponse>(Arena*);
 template<> ::cockroach::roachpb::PutRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::PutRequest>(Arena*);
@@ -12729,6 +12737,230 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
 };
 // -------------------------------------------------------------------
 
+class MigrateRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.MigrateRequest) */ {
+ public:
+  MigrateRequest();
+  virtual ~MigrateRequest();
+
+  MigrateRequest(const MigrateRequest& from);
+
+  inline MigrateRequest& operator=(const MigrateRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  MigrateRequest(MigrateRequest&& from) noexcept
+    : MigrateRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline MigrateRequest& operator=(MigrateRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const MigrateRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const MigrateRequest* internal_default_instance() {
+    return reinterpret_cast<const MigrateRequest*>(
+               &_MigrateRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    96;
+
+  void Swap(MigrateRequest* other);
+  friend void swap(MigrateRequest& a, MigrateRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline MigrateRequest* New() const final {
+    return CreateMaybeMessage<MigrateRequest>(NULL);
+  }
+
+  MigrateRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<MigrateRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const MigrateRequest& from);
+  void MergeFrom(const MigrateRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(MigrateRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::RequestHeader& _internal_header() const;
+  public:
+  const ::cockroach::roachpb::RequestHeader& header() const;
+  ::cockroach::roachpb::RequestHeader* release_header();
+  ::cockroach::roachpb::RequestHeader* mutable_header();
+  void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
+
+  bool has_targetversion() const;
+  void clear_targetversion();
+  static const int kTargetVersionFieldNumber = 2;
+  private:
+  const ::cockroach::roachpb::Version& _internal_targetversion() const;
+  public:
+  const ::cockroach::roachpb::Version& targetversion() const;
+  ::cockroach::roachpb::Version* release_targetversion();
+  ::cockroach::roachpb::Version* mutable_targetversion();
+  void set_allocated_targetversion(::cockroach::roachpb::Version* targetversion);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.MigrateRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::RequestHeader* header_;
+  ::cockroach::roachpb::Version* targetversion_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class MigrateResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.MigrateResponse) */ {
+ public:
+  MigrateResponse();
+  virtual ~MigrateResponse();
+
+  MigrateResponse(const MigrateResponse& from);
+
+  inline MigrateResponse& operator=(const MigrateResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  MigrateResponse(MigrateResponse&& from) noexcept
+    : MigrateResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline MigrateResponse& operator=(MigrateResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const MigrateResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const MigrateResponse* internal_default_instance() {
+    return reinterpret_cast<const MigrateResponse*>(
+               &_MigrateResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    97;
+
+  void Swap(MigrateResponse* other);
+  friend void swap(MigrateResponse& a, MigrateResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline MigrateResponse* New() const final {
+    return CreateMaybeMessage<MigrateResponse>(NULL);
+  }
+
+  MigrateResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<MigrateResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const MigrateResponse& from);
+  void MergeFrom(const MigrateResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(MigrateResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::ResponseHeader& _internal_header() const;
+  public:
+  const ::cockroach::roachpb::ResponseHeader& header() const;
+  ::cockroach::roachpb::ResponseHeader* release_header();
+  ::cockroach::roachpb::ResponseHeader* mutable_header();
+  void set_allocated_header(::cockroach::roachpb::ResponseHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.MigrateResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::ResponseHeader* header_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class AdminVerifyProtectedTimestampRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.AdminVerifyProtectedTimestampRequest) */ {
  public:
   AdminVerifyProtectedTimestampRequest();
@@ -12763,7 +12995,7 @@ class AdminVerifyProtectedTimestampRequest : public ::google::protobuf::MessageL
                &_AdminVerifyProtectedTimestampRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    96;
+    98;
 
   void Swap(AdminVerifyProtectedTimestampRequest* other);
   friend void swap(AdminVerifyProtectedTimestampRequest& a, AdminVerifyProtectedTimestampRequest& b) {
@@ -12907,7 +13139,7 @@ class AdminVerifyProtectedTimestampResponse : public ::google::protobuf::Message
                &_AdminVerifyProtectedTimestampResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    97;
+    99;
 
   void Swap(AdminVerifyProtectedTimestampResponse* other);
   friend void swap(AdminVerifyProtectedTimestampResponse& a, AdminVerifyProtectedTimestampResponse& b) {
@@ -13032,7 +13264,7 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_AddSSTableRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    98;
+    100;
 
   void Swap(AddSSTableRequest* other);
   friend void swap(AddSSTableRequest& a, AddSSTableRequest& b) {
@@ -13179,7 +13411,7 @@ class AddSSTableResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_AddSSTableResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    99;
+    101;
 
   void Swap(AddSSTableResponse* other);
   friend void swap(AddSSTableResponse& a, AddSSTableResponse& b) {
@@ -13285,7 +13517,7 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RefreshRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    100;
+    102;
 
   void Swap(RefreshRequest* other);
   friend void swap(RefreshRequest& a, RefreshRequest& b) {
@@ -13403,7 +13635,7 @@ class RefreshResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_RefreshResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    101;
+    103;
 
   void Swap(RefreshResponse* other);
   friend void swap(RefreshResponse& a, RefreshResponse& b) {
@@ -13509,7 +13741,7 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RefreshRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    102;
+    104;
 
   void Swap(RefreshRangeRequest* other);
   friend void swap(RefreshRangeRequest& a, RefreshRangeRequest& b) {
@@ -13627,7 +13859,7 @@ class RefreshRangeResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_RefreshRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    103;
+    105;
 
   void Swap(RefreshRangeResponse* other);
   friend void swap(RefreshRangeResponse& a, RefreshRangeResponse& b) {
@@ -13733,7 +13965,7 @@ class SubsumeRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SubsumeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    104;
+    106;
 
   void Swap(SubsumeRequest* other);
   friend void swap(SubsumeRequest& a, SubsumeRequest& b) {
@@ -13863,7 +14095,7 @@ class SubsumeResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_SubsumeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    105;
+    107;
 
   void Swap(SubsumeResponse* other);
   friend void swap(SubsumeResponse& a, SubsumeResponse& b) {
@@ -14000,7 +14232,7 @@ class RangeStatsRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RangeStatsRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    106;
+    108;
 
   void Swap(RangeStatsRequest* other);
   friend void swap(RangeStatsRequest& a, RangeStatsRequest& b) {
@@ -14106,7 +14338,7 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeStatsResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    107;
+    109;
 
   void Swap(RangeStatsResponse* other);
   friend void swap(RangeStatsResponse& a, RangeStatsResponse& b) {
@@ -14283,6 +14515,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
     kSubsume = 43,
     kRangeStats = 44,
     kAdminVerifyProtectedTimestamp = 49,
+    kMigrate = 50,
     VALUE_NOT_SET = 0,
   };
 
@@ -14292,7 +14525,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_RequestUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    108;
+    110;
 
   void Swap(RequestUnion* other);
   friend void swap(RequestUnion& a, RequestUnion& b) {
@@ -14871,6 +15104,18 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* mutable_admin_verify_protected_timestamp();
   void set_allocated_admin_verify_protected_timestamp(::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* admin_verify_protected_timestamp);
 
+  // .cockroach.roachpb.MigrateRequest migrate = 50;
+  bool has_migrate() const;
+  void clear_migrate();
+  static const int kMigrateFieldNumber = 50;
+  private:
+  const ::cockroach::roachpb::MigrateRequest& _internal_migrate() const;
+  public:
+  const ::cockroach::roachpb::MigrateRequest& migrate() const;
+  ::cockroach::roachpb::MigrateRequest* release_migrate();
+  ::cockroach::roachpb::MigrateRequest* mutable_migrate();
+  void set_allocated_migrate(::cockroach::roachpb::MigrateRequest* migrate);
+
   void clear_value();
   ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RequestUnion)
@@ -14919,6 +15164,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
   void set_has_subsume();
   void set_has_range_stats();
   void set_has_admin_verify_protected_timestamp();
+  void set_has_migrate();
 
   inline bool has_value() const;
   inline void clear_has_value();
@@ -14970,6 +15216,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
     ::cockroach::roachpb::SubsumeRequest* subsume_;
     ::cockroach::roachpb::RangeStatsRequest* range_stats_;
     ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* admin_verify_protected_timestamp_;
+    ::cockroach::roachpb::MigrateRequest* migrate_;
   } value_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   ::google::protobuf::uint32 _oneof_case_[1];
@@ -15050,6 +15297,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
     kSubsume = 43,
     kRangeStats = 44,
     kAdminVerifyProtectedTimestamp = 49,
+    kMigrate = 50,
     VALUE_NOT_SET = 0,
   };
 
@@ -15059,7 +15307,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ResponseUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    109;
+    111;
 
   void Swap(ResponseUnion* other);
   friend void swap(ResponseUnion& a, ResponseUnion& b) {
@@ -15626,6 +15874,18 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* mutable_admin_verify_protected_timestamp();
   void set_allocated_admin_verify_protected_timestamp(::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* admin_verify_protected_timestamp);
 
+  // .cockroach.roachpb.MigrateResponse migrate = 50;
+  bool has_migrate() const;
+  void clear_migrate();
+  static const int kMigrateFieldNumber = 50;
+  private:
+  const ::cockroach::roachpb::MigrateResponse& _internal_migrate() const;
+  public:
+  const ::cockroach::roachpb::MigrateResponse& migrate() const;
+  ::cockroach::roachpb::MigrateResponse* release_migrate();
+  ::cockroach::roachpb::MigrateResponse* mutable_migrate();
+  void set_allocated_migrate(::cockroach::roachpb::MigrateResponse* migrate);
+
   void clear_value();
   ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ResponseUnion)
@@ -15673,6 +15933,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
   void set_has_subsume();
   void set_has_range_stats();
   void set_has_admin_verify_protected_timestamp();
+  void set_has_migrate();
 
   inline bool has_value() const;
   inline void clear_has_value();
@@ -15723,6 +15984,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
     ::cockroach::roachpb::SubsumeResponse* subsume_;
     ::cockroach::roachpb::RangeStatsResponse* range_stats_;
     ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* admin_verify_protected_timestamp_;
+    ::cockroach::roachpb::MigrateResponse* migrate_;
   } value_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   ::google::protobuf::uint32 _oneof_case_[1];
@@ -15765,7 +16027,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    110;
+    112;
 
   void Swap(Header* other);
   friend void swap(Header& a, Header& b) {
@@ -15983,7 +16245,7 @@ class ClientRangeInfo : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_ClientRangeInfo_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    111;
+    113;
 
   void Swap(ClientRangeInfo* other);
   friend void swap(ClientRangeInfo& a, ClientRangeInfo& b) {
@@ -16089,7 +16351,7 @@ class BatchRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_BatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    112;
+    114;
 
   void Swap(BatchRequest* other);
   friend void swap(BatchRequest& a, BatchRequest& b) {
@@ -16207,7 +16469,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
                &_BatchResponse_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    113;
+    115;
 
   void Swap(BatchResponse_Header* other);
   friend void swap(BatchResponse_Header& a, BatchResponse_Header& b) {
@@ -16375,7 +16637,7 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    116;
 
   void Swap(BatchResponse* other);
   friend void swap(BatchResponse& a, BatchResponse& b) {
@@ -16495,7 +16757,7 @@ class RangeLookupRequest : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeLookupRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    117;
 
   void Swap(RangeLookupRequest* other);
   friend void swap(RangeLookupRequest& a, RangeLookupRequest& b) {
@@ -16624,7 +16886,7 @@ class RangeLookupResponse : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeLookupResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    118;
 
   void Swap(RangeLookupResponse* other);
   friend void swap(RangeLookupResponse& a, RangeLookupResponse& b) {
@@ -16755,7 +17017,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    119;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16880,7 +17142,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    118;
+    120;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -17012,7 +17274,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    119;
+    121;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -17130,7 +17392,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    120;
+    122;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -17236,7 +17498,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    121;
+    123;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -17369,7 +17631,7 @@ class GossipSubscriptionRequest : public ::google::protobuf::MessageLite /* @@pr
                &_GossipSubscriptionRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    122;
+    124;
 
   void Swap(GossipSubscriptionRequest* other);
   friend void swap(GossipSubscriptionRequest& a, GossipSubscriptionRequest& b) {
@@ -17486,7 +17748,7 @@ class GossipSubscriptionEvent : public ::google::protobuf::MessageLite /* @@prot
                &_GossipSubscriptionEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    123;
+    125;
 
   void Swap(GossipSubscriptionEvent* other);
   friend void swap(GossipSubscriptionEvent& a, GossipSubscriptionEvent& b) {
@@ -17635,7 +17897,7 @@ class JoinNodeRequest : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_JoinNodeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    124;
+    126;
 
   void Swap(JoinNodeRequest* other);
   friend void swap(JoinNodeRequest& a, JoinNodeRequest& b) {
@@ -17742,7 +18004,7 @@ class JoinNodeResponse : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_JoinNodeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    125;
+    127;
 
   void Swap(JoinNodeResponse* other);
   friend void swap(JoinNodeResponse& a, JoinNodeResponse& b) {
@@ -29286,6 +29548,167 @@ AdminScatterResponse::range_infos() const {
 
 // -------------------------------------------------------------------
 
+// MigrateRequest
+
+inline bool MigrateRequest::has_header() const {
+  return this != internal_default_instance() && header_ != NULL;
+}
+inline void MigrateRequest::clear_header() {
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+}
+inline const ::cockroach::roachpb::RequestHeader& MigrateRequest::_internal_header() const {
+  return *header_;
+}
+inline const ::cockroach::roachpb::RequestHeader& MigrateRequest::header() const {
+  const ::cockroach::roachpb::RequestHeader* p = header_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.MigrateRequest.header)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::RequestHeader*>(
+      &::cockroach::roachpb::_RequestHeader_default_instance_);
+}
+inline ::cockroach::roachpb::RequestHeader* MigrateRequest::release_header() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MigrateRequest.header)
+  
+  ::cockroach::roachpb::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::RequestHeader* MigrateRequest::mutable_header() {
+  
+  if (header_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::RequestHeader>(GetArenaNoVirtual());
+    header_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MigrateRequest.header)
+  return header_;
+}
+inline void MigrateRequest::set_allocated_header(::cockroach::roachpb::RequestHeader* header) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete header_;
+  }
+  if (header) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      header = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, header, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  header_ = header;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MigrateRequest.header)
+}
+
+inline bool MigrateRequest::has_targetversion() const {
+  return this != internal_default_instance() && targetversion_ != NULL;
+}
+inline const ::cockroach::roachpb::Version& MigrateRequest::_internal_targetversion() const {
+  return *targetversion_;
+}
+inline const ::cockroach::roachpb::Version& MigrateRequest::targetversion() const {
+  const ::cockroach::roachpb::Version* p = targetversion_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.MigrateRequest.TargetVersion)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Version*>(
+      &::cockroach::roachpb::_Version_default_instance_);
+}
+inline ::cockroach::roachpb::Version* MigrateRequest::release_targetversion() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MigrateRequest.TargetVersion)
+  
+  ::cockroach::roachpb::Version* temp = targetversion_;
+  targetversion_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::Version* MigrateRequest::mutable_targetversion() {
+  
+  if (targetversion_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::Version>(GetArenaNoVirtual());
+    targetversion_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MigrateRequest.TargetVersion)
+  return targetversion_;
+}
+inline void MigrateRequest::set_allocated_targetversion(::cockroach::roachpb::Version* targetversion) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(targetversion_);
+  }
+  if (targetversion) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      targetversion = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, targetversion, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  targetversion_ = targetversion;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MigrateRequest.TargetVersion)
+}
+
+// -------------------------------------------------------------------
+
+// MigrateResponse
+
+inline bool MigrateResponse::has_header() const {
+  return this != internal_default_instance() && header_ != NULL;
+}
+inline void MigrateResponse::clear_header() {
+  if (GetArenaNoVirtual() == NULL && header_ != NULL) {
+    delete header_;
+  }
+  header_ = NULL;
+}
+inline const ::cockroach::roachpb::ResponseHeader& MigrateResponse::_internal_header() const {
+  return *header_;
+}
+inline const ::cockroach::roachpb::ResponseHeader& MigrateResponse::header() const {
+  const ::cockroach::roachpb::ResponseHeader* p = header_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.MigrateResponse.header)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ResponseHeader*>(
+      &::cockroach::roachpb::_ResponseHeader_default_instance_);
+}
+inline ::cockroach::roachpb::ResponseHeader* MigrateResponse::release_header() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MigrateResponse.header)
+  
+  ::cockroach::roachpb::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::ResponseHeader* MigrateResponse::mutable_header() {
+  
+  if (header_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ResponseHeader>(GetArenaNoVirtual());
+    header_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MigrateResponse.header)
+  return header_;
+}
+inline void MigrateResponse::set_allocated_header(::cockroach::roachpb::ResponseHeader* header) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete header_;
+  }
+  if (header) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      header = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, header, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  header_ = header;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MigrateResponse.header)
+}
+
+// -------------------------------------------------------------------
+
 // AdminVerifyProtectedTimestampRequest
 
 inline bool AdminVerifyProtectedTimestampRequest::has_header() const {
@@ -32627,6 +33050,50 @@ inline ::cockroach::roachpb::AdminVerifyProtectedTimestampRequest* RequestUnion:
   return value_.admin_verify_protected_timestamp_;
 }
 
+// .cockroach.roachpb.MigrateRequest migrate = 50;
+inline bool RequestUnion::has_migrate() const {
+  return value_case() == kMigrate;
+}
+inline void RequestUnion::set_has_migrate() {
+  _oneof_case_[0] = kMigrate;
+}
+inline void RequestUnion::clear_migrate() {
+  if (has_migrate()) {
+    delete value_.migrate_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::roachpb::MigrateRequest& RequestUnion::_internal_migrate() const {
+  return *value_.migrate_;
+}
+inline ::cockroach::roachpb::MigrateRequest* RequestUnion::release_migrate() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RequestUnion.migrate)
+  if (has_migrate()) {
+    clear_has_value();
+      ::cockroach::roachpb::MigrateRequest* temp = value_.migrate_;
+    value_.migrate_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline const ::cockroach::roachpb::MigrateRequest& RequestUnion::migrate() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RequestUnion.migrate)
+  return has_migrate()
+      ? *value_.migrate_
+      : *reinterpret_cast< ::cockroach::roachpb::MigrateRequest*>(&::cockroach::roachpb::_MigrateRequest_default_instance_);
+}
+inline ::cockroach::roachpb::MigrateRequest* RequestUnion::mutable_migrate() {
+  if (!has_migrate()) {
+    clear_value();
+    set_has_migrate();
+    value_.migrate_ = CreateMaybeMessage< ::cockroach::roachpb::MigrateRequest >(
+        GetArenaNoVirtual());
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RequestUnion.migrate)
+  return value_.migrate_;
+}
+
 inline bool RequestUnion::has_value() const {
   return value_case() != VALUE_NOT_SET;
 }
@@ -34530,6 +34997,50 @@ inline ::cockroach::roachpb::AdminVerifyProtectedTimestampResponse* ResponseUnio
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.admin_verify_protected_timestamp)
   return value_.admin_verify_protected_timestamp_;
+}
+
+// .cockroach.roachpb.MigrateResponse migrate = 50;
+inline bool ResponseUnion::has_migrate() const {
+  return value_case() == kMigrate;
+}
+inline void ResponseUnion::set_has_migrate() {
+  _oneof_case_[0] = kMigrate;
+}
+inline void ResponseUnion::clear_migrate() {
+  if (has_migrate()) {
+    delete value_.migrate_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::roachpb::MigrateResponse& ResponseUnion::_internal_migrate() const {
+  return *value_.migrate_;
+}
+inline ::cockroach::roachpb::MigrateResponse* ResponseUnion::release_migrate() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ResponseUnion.migrate)
+  if (has_migrate()) {
+    clear_has_value();
+      ::cockroach::roachpb::MigrateResponse* temp = value_.migrate_;
+    value_.migrate_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline const ::cockroach::roachpb::MigrateResponse& ResponseUnion::migrate() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ResponseUnion.migrate)
+  return has_migrate()
+      ? *value_.migrate_
+      : *reinterpret_cast< ::cockroach::roachpb::MigrateResponse*>(&::cockroach::roachpb::_MigrateResponse_default_instance_);
+}
+inline ::cockroach::roachpb::MigrateResponse* ResponseUnion::mutable_migrate() {
+  if (!has_migrate()) {
+    clear_value();
+    set_has_migrate();
+    value_.migrate_ = CreateMaybeMessage< ::cockroach::roachpb::MigrateResponse >(
+        GetArenaNoVirtual());
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ResponseUnion.migrate)
+  return value_.migrate_;
 }
 
 inline bool ResponseUnion::has_value() const {
@@ -36588,6 +37099,10 @@ inline void JoinNodeResponse::set_allocated_active_version(::cockroach::roachpb:
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
