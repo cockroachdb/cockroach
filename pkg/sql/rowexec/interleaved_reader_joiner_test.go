@@ -621,37 +621,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		Type: descpb.InnerJoin,
 	}
 
-	out := &distsqlutils.RowBuffer{}
-	irj, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &innerJoinSpec, &execinfrapb.PostProcessSpec{}, out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	irj.Run(ctx)
-	if !out.ProducerClosed() {
-		t.Fatalf("output RowReceiver not closed")
-	}
-
-	// Check for trailing metadata.
-	var traceSeen, txnFinalStateSeen bool
-	for {
-		row, meta := out.Next()
-		if row != nil {
-			t.Fatalf("row was pushed unexpectedly: %s", row.String(rowenc.OneIntCol))
-		}
-		if meta == nil {
-			break
-		}
-		if meta.TraceData != nil {
-			traceSeen = true
-		}
-		if meta.LeafTxnFinalState != nil {
-			txnFinalStateSeen = true
-		}
-	}
-	if !traceSeen {
-		t.Fatal("missing tracing trailing metadata")
-	}
-	if !txnFinalStateSeen {
-		t.Fatal("missing txn final state")
-	}
+	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
+		return newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &innerJoinSpec, &execinfrapb.PostProcessSpec{}, out)
+	})
 }
