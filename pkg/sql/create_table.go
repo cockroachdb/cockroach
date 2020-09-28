@@ -279,7 +279,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
+	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
 	var asCols colinfo.ResultColumns
 	var desc *tabledesc.Mutable
@@ -2100,7 +2100,9 @@ func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescr
 	}
 }
 
-func createInheritedPrivilegesFromDBDesc(
+// CreateInheritedPrivilegesFromDBDesc creates privileges with the appropriate
+// owner (node for system, the restoring user otherwise.)
+func CreateInheritedPrivilegesFromDBDesc(
 	dbDesc catalog.DatabaseDescriptor, user string,
 ) *descpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by
