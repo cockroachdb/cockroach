@@ -104,10 +104,6 @@ func (ag *countAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMeta
 	return nil, ag.DrainHelper()
 }
 
-func (ag *countAggregator) ConsumerDone() {
-	ag.MoveToDraining(nil /* err */)
-}
-
 func (ag *countAggregator) ConsumerClosed() {
 	ag.InternalClose()
 }

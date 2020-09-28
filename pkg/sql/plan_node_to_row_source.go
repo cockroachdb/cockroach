@@ -80,12 +80,7 @@ func (p *planNodeToRowSource) InitWithOutput(
 		0, /* processorID */
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
-				p.InternalClose()
-				return nil
-			},
-		},
+		execinfra.ProcStateOpts{},
 	)
 }
 

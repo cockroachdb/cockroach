@@ -511,8 +511,6 @@ func (z *zigzagJoiner) producerMeta(err error) *execinfrapb.ProducerMetadata {
 	if z.InternalClose() {
 		if err != nil {
 			meta = &execinfrapb.ProducerMetadata{Err: err}
-		} else if trace := execinfra.GetTraceData(z.Ctx); trace != nil {
-			meta = &execinfrapb.ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().

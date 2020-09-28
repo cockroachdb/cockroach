@@ -393,11 +393,6 @@ func (ca *changeAggregator) tick() error {
 	return nil
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (ca *changeAggregator) ConsumerDone() {
-	ca.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
@@ -912,11 +907,6 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind boo
 		log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 	}
 	return true
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (cf *changeFrontier) ConsumerDone() {
-	cf.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

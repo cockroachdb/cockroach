@@ -70,10 +70,6 @@ func newRestoreDataProcessor(
 	if err := rd.Init(rd, post, restoreDataOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
-				rd.close()
-				return nil
-			},
 		}); err != nil {
 		return nil, err
 	}
@@ -168,10 +164,6 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 
 // ConsumerClosed is part of the RowSource interface.
 func (rd *restoreDataProcessor) ConsumerClosed() {
-	rd.close()
-}
-
-func (rd *restoreDataProcessor) close() {
 	rd.InternalClose()
 }
 
