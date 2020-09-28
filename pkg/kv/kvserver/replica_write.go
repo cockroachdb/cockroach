@@ -214,6 +214,30 @@ func (r *Replica) executeWriteBatch(
 					log.Warningf(ctx, "%v", err)
 				}
 			}
+			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
+				// Migrate is special since it wants commands to be durably
+				// applied on all peers, which we achieve via waitForApplication.
+				//
+				// TODO(tbg,irfansharif): Could a snapshot below maxLeaseIndex
+				// be in-flight to a follower that's not in `desc` (but will be
+				// in it soon)? This seems to be in the realm of what's possible
+				// in theory: we'll only ever proactively send a snap when the
+				// peer is a learner, but an old snapshot that precedes
+				// maxLeaseIndex may be in flight for no good reason and once
+				// that peer is added to desc (after this code has done its
+				// work) and receives said zombie snap, it'll be initialized
+				// without having caught up past the migration. What's the
+				// safeguard needed here? I'm not sure. If we force a log
+				// truncation right after this proposal, would that force all
+				// to-be replicas to first catch up? Does that provide the
+				// invariants we want?
+				desc := r.Desc()
+				// NB: waitForApplication already has a timeout.
+				applicationErr := waitForApplication(
+					ctx, r.store.cfg.NodeDialer, desc.RangeID, desc.Replicas().All(),
+					uint64(maxLeaseIndex))
+				propResult.Err = roachpb.NewError(applicationErr)
+			}
 			return propResult.Reply, nil, propResult.Err
 		case <-slowTimer.C:
 			slowTimer.Read = true

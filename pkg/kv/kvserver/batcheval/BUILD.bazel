@@ -20,6 +20,7 @@ go_library(
         "cmd_lease_request.go",
         "cmd_lease_transfer.go",
         "cmd_merge.go",
+        "cmd_migrate.go",
         "cmd_push_txn.go",
         "cmd_put.go",
         "cmd_query_intent.go",
