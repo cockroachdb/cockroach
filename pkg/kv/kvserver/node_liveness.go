@@ -1163,14 +1163,15 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 		oldRaw = l.raw
 	}
 
-	v := new(roachpb.Value)
+	var rawRecord []byte
 	if err := nl.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var v roachpb.Value
 		b := txn.NewBatch()
 		key := keys.NodeLivenessKey(update.newLiveness.NodeID)
 		if err := v.SetProto(&update.newLiveness); err != nil {
 			log.Fatalf(ctx, "failed to marshall proto: %s", err)
 		}
-		b.CPut(key, v, oldRaw)
+		b.CPut(key, &v, oldRaw)
 		// Use a trigger on EndTxn to indicate that node liveness should be
 		// re-gossiped. Further, require that this transaction complete as a one
 		// phase commit to eliminate the possibility of leaving write intents.
@@ -1186,7 +1187,11 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 				},
 			},
 		})
-		return txn.Run(ctx, b)
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+		rawRecord = v.TagAndDataBytes()
+		return nil
 	}); err != nil {
 		if tErr := (*roachpb.ConditionFailedError)(nil); errors.As(err, &tErr) {
 			if tErr.ActualValue == nil {
@@ -1210,7 +1215,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	if cb != nil {
 		cb(ctx)
 	}
-	return LivenessRecord{Liveness: update.newLiveness, raw: v.TagAndDataBytes()}, nil
+	return LivenessRecord{Liveness: update.newLiveness, raw: rawRecord}, nil
 }
 
 // maybeUpdate replaces the liveness (if it appears newer) and invokes the
