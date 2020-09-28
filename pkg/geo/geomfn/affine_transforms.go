@@ -11,9 +11,11 @@
 package geomfn
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -132,7 +134,8 @@ func Scale(g geo.Geometry, factors []float64) (geo.Geometry, error) {
 	)
 }
 
-// ScaleRelativeToOrigin returns a modified Geometry whose coordinates are multiplied by the factors relative to the origin
+// ScaleRelativeToOrigin returns a modified Geometry whose coordinates are multiplied by
+// the factors relative to the origin
 func ScaleRelativeToOrigin(
 	g geo.Geometry, factor geo.Geometry, origin geo.Geometry,
 ) (geo.Geometry, error) {
@@ -224,5 +227,37 @@ func Rotate(g geo.Geometry, rotRadians float64) (geo.Geometry, error) {
 			{0, 0, 1, 0},
 			{0, 0, 0, 1},
 		}),
+	)
+}
+
+// ErrPointOriginEmpty is an error to compare point origin is empty.
+var ErrPointOriginEmpty = fmt.Errorf("origin is an empty point")
+
+// RotateWithPointOrigin returns a modified Geometry whose coordinates are rotated
+// around the pointOrigin by a rotRadians.
+func RotateWithPointOrigin(
+	g geo.Geometry, rotRadians float64, pointOrigin geo.Geometry,
+) (geo.Geometry, error) {
+	if pointOrigin.ShapeType() != geopb.ShapeType_Point {
+		return g, errors.New("origin is not a POINT")
+	}
+	t, err := pointOrigin.AsGeomT()
+	if err != nil {
+		return g, err
+	}
+	if t.Empty() {
+		return g, ErrPointOriginEmpty
+	}
+
+	x, y := t.FlatCoords()[0], t.FlatCoords()[1]
+	cos, sin := math.Cos(rotRadians), math.Sin(rotRadians)
+	return Affine(
+		g,
+		AffineMatrix{
+			{cos, -sin, 0, x - x*cos + y*sin},
+			{sin, cos, 0, y - x*sin - y*cos},
+			{0, 0, 1, 0},
+			{0, 0, 0, 1},
+		},
 	)
 }
