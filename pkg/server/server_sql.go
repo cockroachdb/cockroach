@@ -544,6 +544,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	} else {
 		execCfg.TypeSchemaChangerTestingKnobs = new(sql.TypeSchemaChangerTestingKnobs)
 	}
+	execCfg.SchemaChangerMetrics = sql.NewSchemaChangerMetrics()
+	cfg.registry.AddMetricStruct(execCfg.SchemaChangerMetrics)
+
 	if gcJobTestingKnobs := cfg.TestingKnobs.GCJob; gcJobTestingKnobs != nil {
 		execCfg.GCJobTestingKnobs = gcJobTestingKnobs.(*sql.GCJobTestingKnobs)
 	} else {
