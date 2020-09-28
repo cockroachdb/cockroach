@@ -171,7 +171,7 @@ func NewMaterializer(
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{m.drainHelper},
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-				m.InternalClose()
+				m.close()
 				return nil
 			},
 		},
@@ -265,27 +265,16 @@ func (m *Materializer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 	return nil, m.DrainHelper()
 }
 
-// InternalClose helps implement the execinfra.RowSource interface.
-func (m *Materializer) InternalClose() bool {
+func (m *Materializer) close() {
 	if m.ProcessorBase.InternalClose() {
 		if m.cancelFlow != nil {
 			m.cancelFlow()()
 		}
 		m.closers.CloseAndLogOnErr(m.Ctx, "materializer")
-		return true
 	}
-	return false
-}
-
-// ConsumerDone is part of the execinfra.RowSource interface.
-func (m *Materializer) ConsumerDone() {
-	// Materializer will move into 'draining' state, and after all the metadata
-	// has been drained - as part of TrailingMetaCallback - InternalClose() will
-	// be called which will cancel the flow.
-	m.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the execinfra.RowSource interface.
 func (m *Materializer) ConsumerClosed() {
-	m.InternalClose()
+	m.close()
 }
