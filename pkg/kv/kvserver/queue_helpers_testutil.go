@@ -55,6 +55,12 @@ func (s *Store) ForceReplicationScanAndProcess() error {
 	return forceScanAndProcess(s, s.replicateQueue.baseQueue)
 }
 
+// ForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
+// may need to be GC'd.
+func (s *Store) ForceReplicaGCScanAndProcess() error {
+	return forceScanAndProcess(s, s.replicaGCQueue.baseQueue)
+}
+
 // MustForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
 // may need to be GC'd.
 func (s *Store) MustForceReplicaGCScanAndProcess() {

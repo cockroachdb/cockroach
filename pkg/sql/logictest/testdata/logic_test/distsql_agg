@@ -575,7 +575,7 @@ INSERT INTO statistics_agg_test SELECT y, y%10 FROM generate_series(1, 100) AS y
 query FFF
 SELECT corr(y, x)::decimal, covar_pop(y, x)::decimal, covar_samp(y, x)::decimal FROM statistics_agg_test
 ----
-0.045228963191363145 3.75 3.787878787878788
+0.04522896319136315  3.75  3.787878787878788
 
 query FFF
 SELECT regr_intercept(y, x), regr_r2(y, x), regr_slope(y, x) FROM statistics_agg_test

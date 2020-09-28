@@ -81,6 +81,9 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 func (m *migrationServer) BumpClusterVersion(
 	ctx context.Context, req *serverpb.BumpClusterVersionRequest,
 ) (*serverpb.BumpClusterVersionResponse, error) {
+	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "bump-cv")
+	defer span.Finish()
+
 	m.Lock()
 	defer m.Unlock()
 
@@ -132,5 +135,33 @@ func (m *migrationServer) BumpClusterVersion(
 	}
 
 	resp := &serverpb.BumpClusterVersionResponse{}
+	return resp, nil
+}
+
+// FlushAllEngines implements the MigrationServer interface.
+func (m *migrationServer) FlushAllEngines(
+	_ context.Context, _ *serverpb.FlushAllEnginesRequest,
+) (*serverpb.FlushAllEnginesResponse, error) {
+	for _, eng := range m.server.engines {
+		if err := eng.Flush(); err != nil {
+			return nil, err
+		}
+	}
+
+	resp := &serverpb.FlushAllEnginesResponse{}
+	return resp, nil
+}
+
+// GCReplicas implements the MigrationServer interface.
+func (m *migrationServer) GCReplicas(
+	_ context.Context, _ *serverpb.GCReplicasRequest,
+) (*serverpb.GCReplicasResponse, error) {
+	if err := m.server.node.stores.VisitStores(func(s *kvserver.Store) error {
+		return s.ForceReplicaGCScanAndProcess()
+	}); err != nil {
+		return nil, err
+	}
+
+	resp := &serverpb.GCReplicasResponse{}
 	return resp, nil
 }

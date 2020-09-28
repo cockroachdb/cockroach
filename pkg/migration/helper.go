@@ -1,0 +1,288 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package migration
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+)
+
+// Helper captures all the primitives required to fully specify a migration.
+type Helper struct {
+	m  *Manager
+	cv clusterversion.ClusterVersion
+}
+
+// IterateRangeDescriptors provides a handle on every range descriptor in the
+// system, which callers can then use to send out arbitrary KV requests to in
+// order to run arbitrary KV-level migrations. These requests will typically
+// just be the `Migrate` request, with code added within [1] to do the specific
+// things intended for the specified version.
+//
+// It's important to note that the closure is being executed in the context of a
+// distributed transaction that may be automatically retried. So something like
+// the following is an anti-pattern:
+//
+//     processed := 0
+//     _ = h.IterateRangeDescriptors(..., func(descriptors ...roachpb.RangeDescriptor) error {
+//         processed += len(descriptors) // we'll over count if retried
+//         log.Infof(ctx, "processed %d ranges", processed)
+//     })
+//
+// Instead we allow callers to pass in a callback to signal on every attempt
+// (including the first). This lets us salvage the example above:
+//
+//     var processed int
+//     init := func() { processed = 0 }
+//     _ = h.IterateRangeDescriptors(..., init, func(descriptors ...roachpb.RangeDescriptor) error {
+//         processed += len(descriptors)
+//         log.Infof(ctx, "processed %d ranges", processed)
+//     })
+//
+// [1]: pkg/kv/kvserver/batch_eval/cmd_migrate.go
+func (h *Helper) IterateRangeDescriptors(
+	ctx context.Context, blockSize int, init func(), fn func(...roachpb.RangeDescriptor) error,
+) error {
+	if err := h.m.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Inform the caller that we're starting a fresh attempt to page in range descriptors.
+		init()
+
+		// Iterate through the meta ranges to pull out all the range descriptors.
+		return txn.Iterate(ctx, keys.MetaMin, keys.MetaMax, blockSize,
+			func(rows []kv.KeyValue) error {
+				descriptors := make([]roachpb.RangeDescriptor, len(rows))
+				for i, row := range rows {
+					if err := row.ValueProto(&descriptors[i]); err != nil {
+						return errors.Wrapf(err, "unable to unmarshal range descriptor from %s", row.Key)
+					}
+				}
+
+				// Invoke fn with the current chunk (of size ~blockSize) of
+				// range descriptors.
+				if err := fn(descriptors...); err != nil {
+					return err
+				}
+
+				return nil
+			})
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// UpdateProgress is used to update the externally visible UpdateProgress is used to update the externally visible
+
+// UpdateProgress is used to update the externally visible
+// progress indicator (accessible using the `progress`
+// column in `system.migrations`) for the ongoing migration.
+func (h *Helper) UpdateProgress(ctx context.Context, progress string) error {
+	const recordProgressStmt = `
+UPDATE system.migrations SET "progress" = $1 WHERE "version" = $2
+`
+	args := []interface{}{progress, h.cv.String()}
+	_, err := h.m.executor.Exec(ctx, "update-progress", nil, recordProgressStmt, args...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ClusterVersion exposes the cluster version associated with the ongoing
+// migration.
+func (h *Helper) ClusterVersion() clusterversion.ClusterVersion {
+	return h.cv
+}
+
+// DB provides exposes the underlying *kv.DB instance.
+func (h *Helper) DB() *kv.DB {
+	return h.m.db
+}
+
+// EveryNode invokes the given closure (named by the informational parameter op)
+// across every node in the cluster[*]. The mechanism for ensuring that we've done
+// so, while accounting for the possibility of new nodes being added to the
+// cluster in the interim, is provided by the following structure:
+//   (a) We'll retrieve the list of node IDs for all nodes in the system
+//   (b) For each node, we'll invoke the closure
+//   (c) We'll retrieve the list of node IDs again to account for the
+//       possibility of a new node being added during (b)
+//   (d) If there any discrepancies between the list retrieved in (a)
+//       and (c), we'll invoke the closure each node again
+//   (e) We'll continue to loop around until the node ID list stabilizes
+//
+// [*]: We can be a bit more precise here. What EveryNode gives us is a strict
+// causal happened-before relation between running the given closure against
+// every node that's currently a member of the cluster, and the next node that
+// joins the cluster. Put another way: using EveryNode callers will have managed
+// to run something against all nodes without a new node joining half-way
+// through (which could have allowed it to pick up some state off one of the
+// existing nodes that hadn't heard from us yet).
+//
+// To consider one example of how this primitive is used, let's consider our use
+// of it to bump the cluster version. After we return, given all nodes in the
+// cluster will have their cluster versions bumped, and future node additions
+// will observe the latest version (through the join RPC). This lets us author
+// migrations that can assume that a certain version gate has been enabled on
+// all nodes in the cluster, and will always be enabled for any new nodes in the
+// system.
+//
+// Given that it'll always be possible for new nodes to join after an EveryNode
+// round, it means that some migrations may have to be split up into two version
+// bumps: one that phases out the old version (i.e. stops creation of stale data
+// or behavior) and a clean-up version, which removes any vestiges of the stale
+// data/behavior, and which, when active, ensures that the old data has vanished
+// from the system. This is similar in spirit to how schema changes are split up
+// into multiple smaller steps that are carried out sequentially.
+func (h *Helper) EveryNode(
+	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
+) error {
+	ns, err := h.requiredNodes(ctx)
+	if err != nil {
+		return err
+	}
+
+	for {
+		log.Infof(ctx, "executing %s on %s", op, ns)
+
+		grp := ctxgroup.WithContext(ctx)
+		for _, node := range ns {
+			grp.GoCtx(func(ctx context.Context) error {
+				conn, err := h.m.dialer.Dial(ctx, node.id, rpc.DefaultClass)
+				if err != nil {
+					return err
+				}
+				client := serverpb.NewMigrationClient(conn)
+				if err := fn(ctx, client); err != nil {
+					return err
+				}
+				return nil
+			})
+		}
+		if err := grp.Wait(); err != nil {
+			return err
+		}
+
+		curNodes, err := h.requiredNodes(ctx)
+		if err != nil {
+			return err
+		}
+
+		if !ns.identical(curNodes) {
+			ns = curNodes
+			continue
+		}
+
+		break
+	}
+
+	return nil
+}
+
+// requiredNodes returns the node IDs and epochs for all nodes that are
+// currently part of the cluster (i.e. they haven't been decommissioned away).
+// Migrations have the pre-requisite that all required nodes are up and running
+// so that we're able to execute all relevant node-level operations on them. If
+// any of the nodes are found to be unavailable, an error is returned.
+//
+// It's important to note that requiredNodes makes no guarantees about new
+// nodes being added to the cluster. It's entirely possible for new nodes to be
+// added to the cluster concurrently with the execution of this helper.
+// Appropriate usage of this entails wrapping it under a stabilizing loop, like
+// we do in EveryNode.
+func (h *Helper) requiredNodes(ctx context.Context) (nodes, error) {
+	var ns []node
+	ls, err := h.m.nl.GetLivenessesFromKV(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range ls {
+		if l.Membership.Decommissioned() {
+			continue
+		}
+		live, err := h.m.nl.IsLive(l.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		if !live {
+			return nil, errors.Newf("n%d required, but unavailable", l.NodeID)
+		}
+		ns = append(ns, node{id: l.NodeID, epoch: l.Epoch})
+	}
+	return ns, nil
+}
+
+// insertMigrationRecord creates a record in the `system.migrations` table for
+// the specific migration. This record provides external observability into the
+// state of the migration. It indicates whether the specific migration is
+// ongoing, whether it has succeeded or failed, what the most recent progress
+// update was, and error from the last failed attempt (if any).
+//
+// NB: This only intended user of this is the migration infrastructure itself,
+// not authored migrations.
+func (h *Helper) insertMigrationRecord(
+	ctx context.Context, desc string,
+) error {
+	// XXX: The ON CONFLICT clause is a stop gap for until I add real tests.
+	// Right now I'm allowing the infrastructure to re-do migrations over and
+	// over.
+	const insertMigrationRecordStmt = `
+INSERT into system.migrations ("version", "status", "description") VALUES ($1, $2, $3) ON CONFLICT ("version") DO UPDATE SET "start" = now()
+`
+	args := []interface{}{
+		h.ClusterVersion().String(),
+		StatusRunning,
+		desc,
+	}
+
+	_, err := h.m.executor.Exec(ctx, "insert-migration", nil, insertMigrationRecordStmt, args...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// updateStatus is used to update the externally visible status indicator
+// (accessible using the `status` column in `system.migrations`) for the
+// ongoing migration.
+//
+// NB: This only intended user of this is the migration infrastructure itself,
+// not authored migrations.
+func (h *Helper) updateStatus(ctx context.Context, status Status) error {
+	const updateStatusStmt = `
+UPDATE system.migrations SET ("status", "completed") = ($1, $2) WHERE "version" = $3
+`
+	args := []interface{}{
+		status,
+		nil, // completed
+		h.ClusterVersion().String(),
+	}
+
+	if status == StatusSucceeded {
+		args[1] = timeutil.Now()
+	}
+	_, err := h.m.executor.Exec(ctx, "update-status", nil, updateStatusStmt, args...)
+	if err != nil {
+		return err
+	}
+	return nil
+}

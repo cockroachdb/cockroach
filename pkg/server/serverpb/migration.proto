@@ -25,14 +25,28 @@ message ValidateTargetClusterVersionRequest {
 message ValidateTargetClusterVersionResponse {
 }
 
-// BumpClusterVersionRequest is used to inform a given node of a cluster version
-// bump.
+// BumpClusterVersionRequest is used to inform the tharget node of a cluster
+// version bump.
 message BumpClusterVersionRequest {
    clusterversion.ClusterVersion cluster_version = 1;
 }
 
 // BumpClusterVersionResponse is the response to an BumpClusterVersionRequest.
 message BumpClusterVersionResponse { }
+
+// GCReplicasRequest is used to instruct the target node to process all GC-able
+// replicas.
+message GCReplicasRequest{}
+
+// GCReplicasResponse is the response to a GCReplicasRequest.
+message GCReplicasResponse{}
+
+// FlushAllEnginesRequest is used to instruct the target node to flush all its
+// engines.
+message FlushAllEnginesRequest{}
+
+// FlushAllEnginesResponse is the response to a FlushAllEnginesRequest.
+message FlushAllEnginesResponse{}
 
 service Migration {
    // ValidateTargetClusterVersion is used to verify that the target node is
@@ -42,7 +56,7 @@ service Migration {
    //   node's minimum supported version <= version <= node's binary version
    rpc ValidateTargetClusterVersion(ValidateTargetClusterVersionRequest) returns (ValidateTargetClusterVersionResponse) { }
 
-   // BumpClusterVersion is used to inform a given node of a cluster version
+   // BumpClusterVersion is used to inform the target node of a cluster version
    // bump. The node is responsible for durably persisting the message and
    // enabling the corresponding version gates.
    //
@@ -50,4 +64,12 @@ service Migration {
    // which checks to see that all nodes in the cluster are running binaries
    // that would be able to support the intended version bump.
    rpc BumpClusterVersion(BumpClusterVersionRequest) returns (BumpClusterVersionResponse) { }
+
+   // FlushAllEngines is used to instruct the target node to flush all its
+   // engines.
+   rpc FlushAllEngines (FlushAllEnginesRequest) returns (FlushAllEnginesResponse) { }
+
+   // GCReplicas is used to instruct the target node to process all GC-able
+   // replicas.
+   rpc GCReplicas (GCReplicasRequest) returns (GCReplicasResponse) { }
 }

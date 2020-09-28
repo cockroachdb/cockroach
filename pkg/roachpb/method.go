@@ -158,6 +158,9 @@ const (
 	// VerifyProtectedTimestamp determines whether the specified protection record
 	// will be respected by this Range.
 	AdminVerifyProtectedTimestamp
+	// Migrate updates the range state to conform to a specified cluster
+	// version. It is our main mechanism for phasing out legacy code below Raft.
+	Migrate
 	// NumMethods represents the total number of API methods.
 	NumMethods
 )

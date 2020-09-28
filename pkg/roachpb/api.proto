@@ -1488,6 +1488,26 @@ message AdminScatterResponse {
   repeated RangeInfo range_infos = 3 [(gogoproto.nullable) = false];
 }
 
+// MigrateRequest is used instruct all ranges overlapping with it to exercise
+// any relevant (below-raft) migrations in order for its range state to conform
+// to what's needed by the specified version. It's a core primitive used in our
+// migrations infrastructure to phase out legacy code below raft.
+//
+// KV waits for this command to durably apply on all replicas before returning,
+// guaranteeing to the caller that all pre-migration state has been completely
+// purged from the system.
+message MigrateRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Version is used to select the specific migration to exercise.
+  Version version = 2 [(gogoproto.nullable) = false];
+}
+
+// MigrateResponse is the response to a Migrate operation.
+message MigrateResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // AdminVerifyProtectedTimestampRequest is the argument to the
 // AdminVerifyProtectedTimestamp method which ensures that the specified record
 // will be seen before data can be garbage collected at the timestamp.
@@ -1717,6 +1737,7 @@ message RequestUnion {
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
+    MigrateRequest migrate = 50;
   }
   reserved 8, 15, 23, 25, 27;
 }
@@ -1768,6 +1789,7 @@ message ResponseUnion {
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
+    MigrateResponse migrate = 50;
   }
   reserved 8, 15, 23, 25, 27, 28;
 }
