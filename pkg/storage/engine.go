@@ -350,8 +350,8 @@ type Engine interface {
 	// GetCompactionStats returns the internal RocksDB compaction stats. See
 	// https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#rocksdb-statistics.
 	GetCompactionStats() string
-	// GetStats retrieves stats from the engine.
-	GetStats() (*Stats, error)
+	// GetMetrics retrieves metrics from the engine.
+	GetMetrics() (*Metrics, error)
 	// GetEncryptionRegistries returns the file and key registries when encryption is enabled
 	// on the store.
 	GetEncryptionRegistries() (*EncryptionRegistries, error)
@@ -478,8 +478,8 @@ type Batch interface {
 	Repr() []byte
 }
 
-// Stats is a set of Engine stats. Most are described in RocksDB.
-// Some stats (eg, `IngestedBytes`) are only exposed by Pebble.
+// Metrics is a set of Engine metrics. Most are described in RocksDB.
+// Some metrics (eg, `IngestedBytes`) are only exposed by Pebble.
 //
 // Currently, we collect stats from the following sources:
 // 1. RocksDB's internal "tickers" (i.e. counters). They're defined in
@@ -489,7 +489,10 @@ type Batch interface {
 //
 // This is a good resource describing RocksDB's memory-related stats:
 // https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
-type Stats struct {
+//
+// TODO(jackson): Refactor to mirror or even expose pebble.Metrics when
+// RocksDB is removed.
+type Metrics struct {
 	BlockCacheHits                 int64
 	BlockCacheMisses               int64
 	BlockCacheUsage                int64
@@ -509,6 +512,8 @@ type Stats struct {
 	PendingCompactionBytesEstimate int64
 	L0FileCount                    int64
 	L0SublevelCount                int64
+	ReadAmplification              int64
+	NumSSTables                    int64
 }
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
@@ -723,17 +728,17 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	if settings == nil {
 		return
 	}
-	stats, err := eng.GetStats()
+	metrics, err := eng.GetMetrics()
 	if err != nil {
-		log.Warningf(ctx, "failed to read stats: %+v", err)
+		log.Warningf(ctx, "failed to read metrics: %+v", err)
 		return
 	}
-	targetDelay := calculatePreIngestDelay(settings, stats)
+	targetDelay := calculatePreIngestDelay(settings, metrics)
 
 	if targetDelay == 0 {
 		return
 	}
-	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels", targetDelay, stats.L0FileCount, stats.L0SublevelCount)
+	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels", targetDelay, metrics.L0FileCount, metrics.L0SublevelCount)
 
 	select {
 	case <-time.After(targetDelay):
@@ -741,14 +746,14 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	}
 }
 
-func calculatePreIngestDelay(settings *cluster.Settings, stats *Stats) time.Duration {
+func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.Duration {
 	maxDelay := ingestDelayTime.Get(&settings.SV)
 	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
 
 	const ramp = 10
-	l0ReadAmp := stats.L0FileCount
-	if stats.L0SublevelCount >= 0 {
-		l0ReadAmp = stats.L0SublevelCount
+	l0ReadAmp := metrics.L0FileCount
+	if metrics.L0SublevelCount >= 0 {
+		l0ReadAmp = metrics.L0SublevelCount
 	}
 	if l0ReadAmp > l0ReadAmpLimit {
 		delayPerFile := maxDelay / time.Duration(ramp)

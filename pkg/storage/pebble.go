@@ -787,19 +787,20 @@ func (p *Pebble) Flush() error {
 	return p.db.Flush()
 }
 
-// GetStats implements the Engine interface.
-func (p *Pebble) GetStats() (*Stats, error) {
+// GetMetrics implements the Engine interface.
+func (p *Pebble) GetMetrics() (*Metrics, error) {
 	m := p.db.Metrics()
 
 	// Aggregate compaction stats across levels.
-	var ingestedBytes, compactedBytesRead, compactedBytesWritten int64
+	var ingestedBytes, compactedBytesRead, compactedBytesWritten, numSSTables int64
 	for _, lm := range m.Levels {
 		ingestedBytes += int64(lm.BytesIngested)
 		compactedBytesRead += int64(lm.BytesRead)
 		compactedBytesWritten += int64(lm.BytesCompacted)
+		numSSTables += lm.NumFiles
 	}
 
-	return &Stats{
+	return &Metrics{
 		BlockCacheHits:                 m.BlockCache.Hits,
 		BlockCacheMisses:               m.BlockCache.Misses,
 		BlockCacheUsage:                m.BlockCache.Size,
@@ -819,6 +820,8 @@ func (p *Pebble) GetStats() (*Stats, error) {
 		PendingCompactionBytesEstimate: int64(m.Compact.EstimatedDebt),
 		L0FileCount:                    m.Levels[0].NumFiles,
 		L0SublevelCount:                int64(m.Levels[0].Sublevels),
+		ReadAmplification:              int64(m.ReadAmp()),
+		NumSSTables:                    numSSTables,
 	}, nil
 }
 
@@ -1071,7 +1074,10 @@ func (p *Pebble) CreateCheckpoint(dir string) error {
 	return p.db.Checkpoint(dir)
 }
 
-// GetSSTables implements the WithSSTables interface.
+// GetSSTables implements the Engine interface.
+//
+// TODO(jackson): Remove GetSSTables altogether once RocksDB and the compactor
+// queue is removed.
 func (p *Pebble) GetSSTables() (sstables SSTableInfos) {
 	for level, tables := range p.db.SSTables() {
 		for _, table := range tables {
