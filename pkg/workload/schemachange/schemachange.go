@@ -116,6 +116,7 @@ const (
 	createTableAs  // CREATE TABLE <table> AS <def>
 	createView     // CREATE VIEW <view> AS <def>
 	createEnum     // CREATE TYPE <type> ENUM AS <def>
+	createSchema   // CREATE SCHEMA <schema>
 
 	dropColumn        // ALTER TABLE <table> DROP COLUMN <column>
 	dropColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> DROP DEFAULT
@@ -149,6 +150,7 @@ var opWeights = []int{
 	createTableAs:     1,
 	createView:        1,
 	createEnum:        1,
+	createSchema:      1,
 	dropColumn:        1,
 	dropColumnDefault: 1,
 	dropColumnNotNull: 1,
@@ -402,6 +404,9 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 
 		case createEnum:
 			stmt, err = w.createEnum(tx)
+
+		case createSchema:
+			stmt, err = w.createSchema(tx)
 
 		case dropColumn:
 			stmt, err = w.dropColumn(tx)
@@ -1084,6 +1089,36 @@ func (w *schemaChangeWorker) randType(tx *pgx.Tx) (tree.ResolvableTypeReference,
 		return n.ToUnresolvedObjectName(tree.NoAnnotation)
 	}
 	return rowenc.RandSortingType(w.rng), nil
+}
+
+func (w *schemaChangeWorker) createSchema(tx *pgx.Tx) (string, error) {
+	schemaName, err := w.randSchema(tx, 10)
+	if err != nil {
+		return "", err
+	}
+
+	stmt := rowenc.MakeSchemaName(w.rng.Intn(2) == 0, schemaName, "root")
+	return tree.Serialize(stmt), nil
+}
+
+func (w *schemaChangeWorker) randSchema(tx *pgx.Tx, pctExisting int) (string, error) {
+	if w.rng.Intn(100) >= pctExisting {
+		return fmt.Sprintf("schema%d", atomic.AddInt64(w.seqNum, 1)), nil
+	}
+	const q = `
+  SELECT *
+    FROM [information_schema.schemata]
+   WHERE schema_name
+    LIKE 'schema%'
+      OR schema_name = 'public'
+ORDER BY random()
+   LIMIT 1;
+`
+	var name string
+	if err := tx.QueryRow(q).Scan(&name); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 // txTypeResolver is a minimal type resolver to support writing enum values to
