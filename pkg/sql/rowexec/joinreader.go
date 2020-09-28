@@ -12,7 +12,9 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -578,22 +581,30 @@ func (jr *joinReader) close() {
 var _ execinfrapb.DistSQLSpanStats = &JoinReaderStats{}
 
 const joinReaderTagPrefix = "joinreader."
+const joinReaderIndexTagPrefix = joinReaderTagPrefix + "index."
 
 // Stats implements the SpanStats interface.
 func (jrs *JoinReaderStats) Stats() map[string]string {
 	statsMap := jrs.InputStats.Stats(joinReaderTagPrefix)
-	toMerge := jrs.IndexLookupStats.Stats(joinReaderTagPrefix + "index.")
+	toMerge := jrs.IndexLookupStats.Stats(joinReaderIndexTagPrefix)
 	for k, v := range toMerge {
 		statsMap[k] = v
 	}
+	statsMap[joinReaderIndexTagPrefix+bytesReadTagSuffix] = strconv.Itoa(int(jrs.IndexBytesRead))
+	statsMap[joinReaderIndexTagPrefix+batchesReadTagSuffix] = strconv.Itoa(int(jrs.IndexBatchesRead))
 	return statsMap
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (jrs *JoinReaderStats) StatsForQueryPlan() []string {
+	prefix := "index "
 	is := append(
 		jrs.InputStats.StatsForQueryPlan(""),
-		jrs.IndexLookupStats.StatsForQueryPlan("index ")...,
+		jrs.IndexLookupStats.StatsForQueryPlan(prefix)...,
+	)
+	is = append(is,
+		fmt.Sprintf("%s%s: %s", prefix, bytesReadQueryPlanSuffix, humanizeutil.IBytes(jrs.IndexBytesRead)),
+		fmt.Sprintf("%s%s: %d", prefix, batchesReadQueryPlanSuffix, jrs.IndexBatchesRead),
 	)
 	return is
 }
@@ -614,6 +625,8 @@ func (jr *joinReader) outputStatsToTrace() {
 	jrs := &JoinReaderStats{
 		InputStats:       is,
 		IndexLookupStats: ils,
+		IndexBytesRead:   jr.fetcher.GetBytesRead(),
+		IndexBatchesRead: jr.fetcher.GetBatchesRead(),
 	}
 	if sp := opentracing.SpanFromContext(jr.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, jrs)
