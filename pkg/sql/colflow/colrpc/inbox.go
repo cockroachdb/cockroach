@@ -14,10 +14,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -106,6 +109,9 @@ type Inbox struct {
 	// bytesRead contains the number of bytes sent to the Inbox.
 	bytesRead int64
 
+	latencyStopwatch *timeutil.StopWatch
+	networkLatency   time.Duration
+
 	scratch struct {
 		data []*array.Data
 		b    coldata.Batch
@@ -114,6 +120,7 @@ type Inbox struct {
 
 var _ colexecbase.Operator = &Inbox{}
 var _ execinfra.IOReader = &Inbox{}
+var _ colexec.NetworkReader = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
@@ -212,6 +219,12 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		return fmt.Errorf("%s: flowCtx while waiting for reader (local server canceled)", i.flowCtx.Err())
 	}
 
+	i.latencyStopwatch = timeutil.NewStopWatch()
+	i.latencyStopwatch.Start()
+	if err := i.stream.Send(&execinfrapb.ConsumerSignal{LatencyRequest: &execinfrapb.LatencyRequest{}}); err != nil {
+		log.Warningf(streamCtx, "Inbox unable to send latency signal to Outbox: %+v", err)
+	}
+
 	// Now wait for one of the events described in the method comment. If a
 	// cancellation is encountered, nothing special must be done to cancel the
 	// reader goroutine as returning from the handler will close the stream.
@@ -284,6 +297,10 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 			i.errCh <- err
 			colexecerror.ExpectedError(err)
 		}
+		if m.LatencyResponse != nil {
+			i.latencyStopwatch.Stop()
+			i.networkLatency = i.latencyStopwatch.Elapsed()
+		}
 		if len(m.Data.Metadata) != 0 {
 			for _, rpm := range m.Data.Metadata {
 				meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(ctx, rpm)
@@ -331,6 +348,11 @@ func (i *Inbox) GetBytesRead() int64 {
 // GetRowsRead is part of the execinfra.IOReader interface.
 func (i *Inbox) GetRowsRead() int64 {
 	return i.rowsRead
+}
+
+// GetLatency is part of the colexec.NetworkReader interface.
+func (i *Inbox) GetLatency() time.Duration {
+	return i.networkLatency
 }
 
 func (i *Inbox) sendDrainSignal(ctx context.Context) error {

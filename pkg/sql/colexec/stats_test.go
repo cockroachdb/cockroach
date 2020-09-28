@@ -36,7 +36,7 @@ func TestNumBatches(t *testing.T) {
 	vsc := NewVectorizedStatsCollector(
 		noop, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 		timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
-		nil, /* inputStatsCollectors */
+		nil /* inputStatsCollectors */, nil, /* networkReader */
 	)
 	vsc.Init()
 	for {
@@ -58,7 +58,7 @@ func TestNumTuples(t *testing.T) {
 		vsc := NewVectorizedStatsCollector(
 			noop, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
-			nil, /* inputStatsCollectors */
+			nil /* inputStatsCollectors */, nil, /* networkReader */
 		)
 		vsc.Init()
 		for {
@@ -90,7 +90,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		leftInput := NewVectorizedStatsCollector(
 			leftSource, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
-			nil, /* inputStatsCollectors */
+			nil /* inputStatsCollectors */, nil, /* networkReader */
 		)
 		rightSource := &timeAdvancingOperator{
 			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
@@ -99,7 +99,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		rightInput := NewVectorizedStatsCollector(
 			rightSource, nil /* ioReader */, 1 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
-			nil, /* inputStatsCollectors */
+			nil /* inputStatsCollectors */, nil, /* networkReader */
 		)
 		mergeJoiner, err := NewMergeJoinOp(
 			testAllocator, defaultMemoryLimit, queueCfg,
@@ -120,7 +120,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		mjStatsCollector := NewVectorizedStatsCollector(
 			timeAdvancingMergeJoiner, nil /* ioReader */, 2 /* id */, execinfrapb.ProcessorIDTagKey,
 			mjInputWatch, nil /* memMonitors */, nil, /* diskMonitors */
-			[]*VectorizedStatsCollector{leftInput, rightInput},
+			[]*VectorizedStatsCollector{leftInput, rightInput}, nil, /* networkReader */
 		)
 
 		// The inputs are identical, so the merge joiner should output

@@ -36,4 +36,11 @@ message VectorizedStats {
   // rows_read is the number of rows read from the disk. It is set only when
   // io is true.
   int64 rows_read = 9;
+  // on_stream indicates whether the stats are shown on a stream. This decides
+  // if network latency should be shown or not.
+  bool on_stream = 10;
+  // network_latency is the latency time between outbox and inbox. It is set
+  // only when on_stream is true.
+  google.protobuf.Duration network_latency = 11 [(gogoproto.nullable) = false,
+                                              (gogoproto.stdduration) = true];
 }

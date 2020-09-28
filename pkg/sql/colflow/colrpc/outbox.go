@@ -66,6 +66,10 @@ type Outbox struct {
 	// A copy of Run's caller ctx, with no StreamID tag.
 	// Used to pass a clean context to the input.Next.
 	runnerCtx context.Context
+
+	// latencyRequested is an atomic that represents whether Inbox
+	// has sent a latency request to Outbox
+	latencyRequested uint32
 }
 
 // NewOutbox creates a new Outbox.
@@ -156,7 +160,6 @@ func (o *Outbox) Run(
 			)
 			return err
 		}
-
 		log.VEvent(ctx, 2, "Outbox sending header")
 		// Send header message to establish the remote server (consumer).
 		if err := stream.Send(
@@ -263,6 +266,10 @@ func (o *Outbox) sendBatches(
 		}
 		o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
 
+		if atomic.CompareAndSwapUint32(&o.latencyRequested, 1, 0) {
+			o.scratch.msg.LatencyResponse = &execinfrapb.LatencyResponse{}
+		}
+
 		// o.scratch.msg can be reused as soon as Send returns since it returns as
 		// soon as the message is written to the control buffer. The message is
 		// marshaled (bytes are copied) before writing.
@@ -318,6 +325,8 @@ func (o *Outbox) runWithStream(
 				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
 			case msg.DrainRequest != nil:
 				o.moveToDraining(ctx)
+			case msg.LatencyRequest != nil:
+				atomic.SwapUint32(&o.latencyRequested, 1)
 			}
 		}
 		close(waitCh)

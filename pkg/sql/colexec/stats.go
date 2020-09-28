@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
@@ -25,6 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+// The NetworkReader interface only exists to avoid an import cycle with
+// with the colrpc file. This interface should only be implemented by the inbox.
+type NetworkReader interface {
+	GetLatency() time.Duration
+}
 
 // VectorizedStatsCollector collects VectorizedStats on Operators.
 //
@@ -51,6 +58,8 @@ type VectorizedStatsCollector struct {
 
 	memMonitors  []*mon.BytesMonitor
 	diskMonitors []*mon.BytesMonitor
+
+	networkReader NetworkReader
 }
 
 var _ colexecbase.Operator = &VectorizedStatsCollector{}
@@ -69,13 +78,16 @@ func NewVectorizedStatsCollector(
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
 	inputStatsCollectors []*VectorizedStatsCollector,
+	networkReader NetworkReader,
 ) *VectorizedStatsCollector {
 	if inputWatch == nil {
 		colexecerror.InternalError(errors.AssertionFailedf("input watch for VectorizedStatsCollector is nil"))
 	}
 	// ioTime indicates whether the time should be displayed as "IO time" on
 	// the diagram.
-	var ioTime bool
+	// statsOnStream indicates whether network latency should be displayed
+	// on the diagram
+	var ioTime, statsOnStream bool
 	if ioReader != nil {
 		ioTime = true
 		if _, isProcessor := ioReader.(execinfra.Processor); isProcessor {
@@ -87,15 +99,19 @@ func NewVectorizedStatsCollector(
 			ioTime = false
 		}
 	}
+	if networkReader != nil {
+		statsOnStream = true
+	}
 	return &VectorizedStatsCollector{
 		Operator:             op,
-		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioTime},
+		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioTime, OnStream: statsOnStream},
 		idTagKey:             idTagKey,
 		ioReader:             ioReader,
 		stopwatch:            inputWatch,
 		memMonitors:          memMonitors,
 		diskMonitors:         diskMonitors,
 		childStatsCollectors: inputStatsCollectors,
+		networkReader:        networkReader,
 	}
 }
 
@@ -138,6 +154,13 @@ func (vsc *VectorizedStatsCollector) finalizeStats() {
 		// themselves).
 		vsc.RowsRead = vsc.ioReader.GetRowsRead()
 	}
+	if vsc.networkReader != nil {
+		// GetLatency returns the round trip latency time between an outbox
+		// and an inbox. We divide this duration by 2 to achieve the average
+		// latency for one direction, since data is only sent from outbox
+		// to inbox.
+		vsc.NetworkLatency = vsc.networkReader.GetLatency() / 2
+	}
 }
 
 // OutputStats outputs the vectorized stats collected by vsc into ctx.
@@ -163,6 +186,7 @@ func (vsc *VectorizedStatsCollector) OutputStats(
 		vsc.MaxAllocatedDisk = 0
 		vsc.NumBatches = 0
 		vsc.BytesRead = 0
+		vsc.NetworkLatency = 0
 	}
 	tracing.SetSpanStats(span, &vsc.VectorizedStats)
 	span.Finish()

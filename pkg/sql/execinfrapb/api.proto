@@ -119,6 +119,13 @@ message ConsumerSignal {
 
   // Consumer->Producer handshake messages. See message definition.
   optional ConsumerHandshake handshake = 3;
+
+  // The consumer is requesting for the producer to respond to this request to
+  // measure network latency.
+  optional LatencyRequest latency_request = 4;
+}
+
+message LatencyRequest {
 }
 
 message DrainRequest {

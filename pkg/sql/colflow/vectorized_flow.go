@@ -344,6 +344,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
 	id int32,
 	idTagKey string,
 	monitors []*mon.BytesMonitor,
+	networkReader colexec.NetworkReader,
 ) (*colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
 	var memMonitors, diskMonitors []*mon.BytesMonitor
@@ -364,7 +365,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
 	}
 	vsc := colexec.NewVectorizedStatsCollector(
 		op, ioReader, id, idTagKey, inputWatch,
-		memMonitors, diskMonitors, inputStatsCollectors,
+		memMonitors, diskMonitors, inputStatsCollectors, networkReader,
 	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
 	return vsc, nil
@@ -689,6 +690,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				localOp, err = s.wrapWithVectorizedStatsCollector(
 					op, nil /* ioReader */, nil, /* inputs */
 					int32(stream.StreamID), execinfrapb.StreamIDTagKey, mons,
+					nil, /* networkReader */
 				)
 				if err != nil {
 					return err
@@ -761,7 +763,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			if s.recordingStats {
 				op, err = s.wrapWithVectorizedStatsCollector(
 					inbox, inbox, nil /* inputs */, int32(inputStream.StreamID),
-					execinfrapb.StreamIDTagKey, nil, /* monitors */
+					execinfrapb.StreamIDTagKey, nil /* monitors */, inbox,
 				)
 				if err != nil {
 					return nil, nil, nil, err
@@ -820,6 +822,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			op, err = s.wrapWithVectorizedStatsCollector(
 				op, nil /* ioReader */, statsInputsAsOps, -1, /* id */
 				"" /* idTagKey */, nil, /* monitors */
+				nil, /* networkReader */
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -1067,6 +1070,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				op, err = s.wrapWithVectorizedStatsCollector(
 					op, result.IOReader, inputs, pspec.ProcessorID,
 					execinfrapb.ProcessorIDTagKey, result.OpMonitors,
+					nil, /* networkReader */
 				)
 				if err != nil {
 					return

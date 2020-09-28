@@ -32,6 +32,7 @@ import "util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
 import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
 
 // Error is a generic representation including a string message.
 message Error {
@@ -223,6 +224,12 @@ message ProducerData {
   repeated RemoteProducerMetadata metadata = 2 [(gogoproto.nullable) = false];
 }
 
+// LatencyResponse is the msg an outbox sends an inbox when a LatencyRequest
+// is received. This response helps measure the latency time between the
+// inbox and outbox.
+message LatencyResponse {
+}
+
 message ProducerMessage {
   optional ProducerHeader header = 1;
 
@@ -236,6 +243,8 @@ message ProducerMessage {
   repeated DatumInfo typing = 2 [(gogoproto.nullable) = false];
 
   optional ProducerData data = 3 [(gogoproto.nullable) = false];
+
+  optional LatencyResponse latency_response = 4;
 }
 
 // RemoteProducerMetadata represents records that a producer wants to pass to
