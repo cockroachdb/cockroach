@@ -231,3 +231,5 @@ func DecodeRowInfo(
 	}
 	return index, names, values, nil
 }
+
+func (f *singleKVFetcher) close(context.Context) {}
