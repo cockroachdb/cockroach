@@ -580,11 +580,12 @@ func RestoreFixture(
 		g.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
 			importStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
+			log.Infof(ctx, "Restoring from %s", table.BackupURI)
 			var rows, index, tableBytes int64
 			var discard interface{}
 			res, err := sqlDB.Query(importStmt, table.BackupURI, database)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "backup: %s", table.BackupURI)
 			}
 			defer res.Close()
 			if !res.Next() {
