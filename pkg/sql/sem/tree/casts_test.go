@@ -203,3 +203,22 @@ func TestTupleCastVolatility(t *testing.T) {
 		}
 	}
 }
+
+func TestRawStringToEscapedUnresolvedObjectName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		in       string
+		expected string
+	}{
+		{"a", "a"},
+		{`a"`, `"a"""`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.in, func(t *testing.T) {
+			out := rawStringToEscapedUnresolvedObjectName(tc.in)
+			require.Equal(t, tc.expected, out)
+		})
+	}
+}

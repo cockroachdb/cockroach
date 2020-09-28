@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"bytes"
 	"math"
 	"math/big"
 	"strconv"
@@ -1118,7 +1119,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				}
 				return queryOid(ctx, t, NewDString(funcDef.Name))
 			case oid.T_regtype:
-				parsedTyp, err := ctx.Planner.ParseType(s)
+				parsedTyp, err := ctx.Planner.ParseType(rawStringToEscapedUnresolvedObjectName(s))
 				if err == nil {
 					return &DOid{
 						semanticType: t,
@@ -1155,7 +1156,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				}, nil
 
 			case oid.T_regclass:
-				tn, err := ctx.Planner.ParseQualifiedTableName(origS)
+				tn, err := ctx.Planner.ParseQualifiedTableName(rawStringToEscapedUnresolvedObjectName(origS))
 				if err != nil {
 					return nil, err
 				}
@@ -1176,4 +1177,21 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 
 	return nil, pgerror.Newf(
 		pgcode.CannotCoerce, "invalid cast: %s -> %s", d.ResolvedType(), t)
+}
+
+// rawStringToEscapedUnresolvedObjectName converts a SQL string into an escaped
+// unresolved object name.
+// For example, a tabled named `a"` must be escaped as `"a""` to be parsed correctly
+// as an identifier.
+func rawStringToEscapedUnresolvedObjectName(str string) string {
+	// We must escape the identifier, as otherwise tables such as `a"` do
+	// not correctly resolve.
+	var buf bytes.Buffer
+	for i, component := range strings.Split(str, ".") {
+		if i > 0 {
+			buf.WriteByte('.')
+		}
+		lex.EncodeUnrestrictedSQLIdent(&buf, component, lex.EncNoFlags)
+	}
+	return buf.String()
 }

@@ -29,3 +29,28 @@ SELECT t0.c0 FROM t0 WHERE t0.c0 BETWEEN t0.c0 AND INTERVAL '-1'::DECIMAL
 query T
 SELECT t1.c0 FROM t1 WHERE t1.c0 BETWEEN t1.c0 AND INTERVAL '-1'::DECIMAL
 ----
+
+# This does not work as the `"` character cannot be used for table names.
+statement error relation ".*"regression_53686.*"" does not exist
+SELECT '\"regression_53686\"'::regclass
+
+statement ok
+CREATE TABLE "regression_53686""" (a int)
+
+query T
+SELECT 'regression_53686"'::regclass
+----
+"regression_53686"""
+
+query T
+SELECT 'public.regression_53686"'::regclass
+----
+"regression_53686"""
+
+statement ok
+CREATE TYPE "regression_53686_enum""" AS ENUM()
+
+query T
+SELECT 'public.regression_53686_enum"'::regtype
+----
+regression_53686_enum"
