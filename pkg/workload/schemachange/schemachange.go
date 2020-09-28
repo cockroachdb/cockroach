@@ -127,6 +127,7 @@ const (
 	dropSequence      // DROP SEQUENCE <sequence>
 	dropTable         // DROP TABLE <table>
 	dropView          // DROP VIEW <view>
+	dropSchema        // DROP SCHEMA <schema>
 
 	renameColumn   // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
 	renameIndex    // ALTER TABLE <table> RENAME CONSTRAINT <constraint> TO <constraint>
@@ -162,6 +163,7 @@ var opWeights = []int{
 	dropSequence:      1,
 	dropTable:         1,
 	dropView:          1,
+	dropSchema:        1,
 	renameColumn:      1,
 	renameIndex:       1,
 	renameSequence:    1,
@@ -437,6 +439,9 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 
 		case dropView:
 			stmt, err = w.dropView(tx)
+
+		case dropSchema:
+			stmt, err = w.dropSchema(tx)
 
 		case renameColumn:
 			stmt, err = w.renameColumn(tx)
@@ -1157,6 +1162,14 @@ ORDER BY random()
 		return "", err
 	}
 	return name, nil
+}
+
+func (w *schemaChangeWorker) dropSchema(tx *pgx.Tx) (string, error) {
+	schemaName, err := w.randSchema(tx, 100)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName), nil
 }
 
 // txTypeResolver is a minimal type resolver to support writing enum values to
