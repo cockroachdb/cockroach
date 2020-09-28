@@ -13,7 +13,7 @@ import classnames from "classnames/bind";
 import styles from "./anchor.module.styl";
 
 interface AnchorProps {
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLAnchorElement, MouseEvent>) => void;
   href?: string;
   target?: "_blank" | "_parent" | "_self";
   className?: string;

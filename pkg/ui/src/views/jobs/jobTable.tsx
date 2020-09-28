@@ -17,13 +17,17 @@ import {JobStatusCell} from "src/views/jobs/jobStatusCell";
 import {Icon, Pagination} from "antd";
 import {SortSetting} from "src/views/shared/components/sortabletable";
 import {CachedDataReducerState} from "src/redux/cachedDataReducer";
-import { isEmpty, isEqual, map } from "lodash";
+import { isEqual, map } from "lodash";
 import {JobDescriptionCell} from "src/views/jobs/jobDescriptionCell";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import { paginationPageCount } from "src/components/pagination/pagination";
 import { jobTable } from "src/util/docs";
 import { trackDocsLink } from "src/util/analytics";
+import { EmptyState } from "@cockroachlabs/admin-ui-components";
+import { Anchor } from "src/components";
+import emptyTableResultsIcon from "assets/emptyState/empty-table-results.svg";
+import magnifyingGlassIcon from "assets/emptyState/magnifying-glass.svg";
 
 class JobsSortedTable extends SortedTable<Job> {}
 
@@ -123,22 +127,58 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     return `${count} of ${total} jobs`;
   }
 
+  renderEmptyState = () => {
+    const { isUsedFilter, jobs } = this.props;
+    const hasData = jobs?.data?.jobs?.length > 0;
+
+    if (hasData) {
+      return null;
+    }
+
+    if (isUsedFilter) {
+      return (
+        <EmptyState
+          title="No jobs match your search"
+          icon={magnifyingGlassIcon}
+          footer={
+            <Anchor
+              href={jobTable}
+              target="_blank"
+              onClick={this.redirectToLearnMore}
+            >
+              Learn more about jobs
+            </Anchor>
+          }
+        />
+      );
+    } else {
+      return (
+        <EmptyState
+          title="No jobs to show"
+          icon={emptyTableResultsIcon}
+          message="The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds."
+          footer={
+            <Anchor
+              href={jobTable}
+              target="_blank"
+              onClick={this.redirectToLearnMore}
+            >
+              Learn more about jobs
+            </Anchor>
+          }
+        />
+      );
+    }
+  }
+
   redirectToLearnMore = (e: MouseEvent<HTMLAnchorElement>) => {
     trackDocsLink(e.currentTarget.text);
   }
 
-  noJobResult = () => (
-    <>
-      <h3 className="table__no-results--title">There are no jobs that match your search or filter.</h3>
-      <p className="table__no-results--description">
-        <a href={jobTable} target="_blank" onClick={this.redirectToLearnMore}>Learn more</a>
-      </p>
-    </>
-  )
-
   render() {
     const jobs = this.props.jobs.data.jobs;
     const { pagination } = this.state;
+
     return (
       <React.Fragment>
         <div className="cl-table-statistic">
@@ -153,14 +193,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
           className="jobs-table"
           rowClass={job => "jobs-table__row--" + job.status}
           columns={jobsTableColumns}
-          renderNoResult={this.noJobResult()}
-          empty={isEmpty(jobs) && !this.props.isUsedFilter}
-          emptyProps={{
-            title: "There are no jobs to display.",
-            description: "The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds.",
-            label: "Learn more",
-            buttonHref: jobTable,
-          }}
+          renderNoResult={this.renderEmptyState()}
           pagination={pagination}
         />
         <Pagination
