@@ -2826,7 +2826,11 @@ func (d *DGeography) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d *DGeography) Size() uintptr {
-	return unsafe.Sizeof(*d)
+	var bboxSize uintptr
+	if bbox := d.Geography.SpatialObject().BoundingBox; bbox != nil {
+		bboxSize = unsafe.Sizeof(*bbox)
+	}
+	return unsafe.Sizeof(*d) + bboxSize + uintptr(len(d.EWKB()))
 }
 
 // DGeometry is the Geometry Datum.
@@ -2934,7 +2938,11 @@ func (d *DGeometry) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d *DGeometry) Size() uintptr {
-	return unsafe.Sizeof(*d)
+	var bboxSize uintptr
+	if bbox := d.Geometry.SpatialObject().BoundingBox; bbox != nil {
+		bboxSize = unsafe.Sizeof(*bbox)
+	}
+	return unsafe.Sizeof(*d) + bboxSize + uintptr(len(d.EWKB()))
 }
 
 // DBox2D is the Datum representation of the Box2D type.
