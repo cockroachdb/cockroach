@@ -820,16 +820,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
@@ -849,22 +840,16 @@ func TestJoinReaderDrain(t *testing.T) {
 	encRow := make(rowenc.EncDatumRow, 1)
 	encRow[0] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(1))
 
-	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
-	// joinReader finishes gracefully.
-	t.Run("ConsumerClosed", func(t *testing.T) {
-		in := distsqlutils.NewRowBuffer(rowenc.OneIntCol, rowenc.EncDatumRows{encRow}, distsqlutils.RowBufferArgs{})
-
-		out := &distsqlutils.RowBuffer{}
-		out.ConsumerClosed()
-		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{
-				Table: *td.TableDesc(),
-			}, in, &execinfrapb.PostProcessSpec{},
-			out, lookupJoinReaderType)
-		if err != nil {
-			t.Fatal(err)
-		}
-		jr.Run(ctx)
+	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
+		return newJoinReader(
+			&flowCtx,
+			0, /* processorID */
+			&execinfrapb.JoinReaderSpec{Table: *td.TableDesc()},
+			distsqlutils.NewRowBuffer(rowenc.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{}),
+			&execinfrapb.PostProcessSpec{},
+			out,
+			lookupJoinReaderType,
+		)
 	})
 
 	// ConsumerDone verifies that the producer drains properly by checking that
