@@ -2029,6 +2029,7 @@ func (r schemaChangeResumer) Resume(
 			case !isPermanentSchemaChangeError(scErr):
 				// Check if the error is on a allowlist of errors we should retry on,
 				// including the schema change not having the first mutation in line.
+				log.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
 			default:
 				// All other errors lead to a failed job.
 				return scErr
