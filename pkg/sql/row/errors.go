@@ -232,4 +232,12 @@ func DecodeRowInfo(
 	return index, names, values, nil
 }
 
+func (f *singleKVFetcher) getBatchesRead() int64 {
+	return 0
+}
+
+func (f *singleKVFetcher) getBytesRead() int64 {
+	return 0
+}
+
 func (f *singleKVFetcher) close(context.Context) {}
