@@ -51,6 +51,7 @@ func initCLIDefaults() {
 	setDemoContextDefaults()
 	setStmtDiagContextDefaults()
 	setAuthContextDefaults()
+	setImportContextDefaults()
 
 	initPreFlagsDefaults()
 
@@ -563,6 +564,17 @@ var stmtDiagCtx struct {
 
 func setStmtDiagContextDefaults() {
 	stmtDiagCtx.all = false
+}
+
+// importCtx captures the command-line parameters of the 'import' command.
+var importCtx struct {
+	maxRowSize      int
+	skipForeignKeys bool
+}
+
+func setImportContextDefaults() {
+	importCtx.maxRowSize = 512 * (1 << 10) // 512 KiB
+	importCtx.skipForeignKeys = false
 }
 
 // GetServerCfgStores provides direct public access to the StoreSpecList inside
