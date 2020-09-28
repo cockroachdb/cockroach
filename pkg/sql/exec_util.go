@@ -695,6 +695,8 @@ type ExecutorConfig struct {
 	InternalExecutor        *InternalExecutor
 	QueryCache              *querycache.C
 
+	SchemaChangerMetrics *SchemaChangerMetrics
+
 	TestingKnobs                  ExecutorTestingKnobs
 	PGWireTestingKnobs            *PGWireTestingKnobs
 	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
