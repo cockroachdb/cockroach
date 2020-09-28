@@ -12,7 +12,9 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -578,14 +581,17 @@ func (jr *joinReader) close() {
 var _ execinfrapb.DistSQLSpanStats = &JoinReaderStats{}
 
 const joinReaderTagPrefix = "joinreader."
+const joinReaderIndexTagPrefix = joinReaderTagPrefix + "index."
 
 // Stats implements the SpanStats interface.
 func (jrs *JoinReaderStats) Stats() map[string]string {
 	statsMap := jrs.InputStats.Stats(joinReaderTagPrefix)
-	toMerge := jrs.IndexLookupStats.Stats(joinReaderTagPrefix + "index.")
+	toMerge := jrs.IndexLookupStats.IndexLookupStats.Stats(joinReaderIndexTagPrefix)
 	for k, v := range toMerge {
 		statsMap[k] = v
 	}
+	statsMap[joinReaderIndexTagPrefix+bytesReadTagSuffix] = strconv.Itoa(int(jrs.IndexLookupStats.BytesRead))
+	statsMap[joinReaderIndexTagPrefix+batchesReadTagSuffix] = strconv.Itoa(int(jrs.IndexLookupStats.BatchesRead))
 	return statsMap
 }
 
@@ -593,7 +599,18 @@ func (jrs *JoinReaderStats) Stats() map[string]string {
 func (jrs *JoinReaderStats) StatsForQueryPlan() []string {
 	is := append(
 		jrs.InputStats.StatsForQueryPlan(""),
-		jrs.IndexLookupStats.StatsForQueryPlan("index ")...,
+		jrs.IndexLookupStats.StatsForQueryPlan()...,
+	)
+	return is
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (jris *JoinReaderIndexStats) StatsForQueryPlan() []string {
+	prefix := "index "
+	is := append(
+		jris.IndexLookupStats.StatsForQueryPlan(prefix),
+		fmt.Sprintf("%s%s: %s", prefix, bytesReadQueryPlanSuffix, humanizeutil.IBytes(jris.BytesRead)),
+		fmt.Sprintf("%s%s: %d", prefix, batchesReadQueryPlanSuffix, jris.BatchesRead),
 	)
 	return is
 }
@@ -609,11 +626,16 @@ func (jr *joinReader) outputStatsToTrace() {
 	if !ok {
 		return
 	}
+	indexStats := JoinReaderIndexStats{
+		IndexLookupStats: ils,
+		BytesRead:        jr.fetcher.GetBytesRead(),
+		BatchesRead:      jr.fetcher.GetBatchesRead(),
+	}
 
 	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
 	jrs := &JoinReaderStats{
 		InputStats:       is,
-		IndexLookupStats: ils,
+		IndexLookupStats: indexStats,
 	}
 	if sp := opentracing.SpanFromContext(jr.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, jrs)
