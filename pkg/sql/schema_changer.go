@@ -1956,13 +1956,7 @@ func createSchemaChangeEvalCtx(
 		},
 	}
 	// The backfill is going to use the current timestamp for the various
-	// functions, like now(), that need it.  It's possible that the backfill has
-	// been partially performed already by another SchemaChangeManager with
-	// another timestamp.
-	//
-	// TODO(andrei): Figure out if this is what we want, and whether the
-	// timestamp from the session that enqueued the schema change
-	// is/should be used for impure functions like now().
+	// functions, like now(), that need it.
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, ts.WallTime))
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, ts.WallTime))
 
