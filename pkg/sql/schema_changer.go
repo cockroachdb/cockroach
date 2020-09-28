@@ -699,6 +699,21 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	ctx context.Context, err error, evalCtx *extendedEvalContext,
 ) error {
+
+	// Ensure that this mutation is first in line prior to reverting.
+	{
+		// Pull out the requested descriptor.
+		desc, descErr := sc.getTargetDescriptor(ctx)
+		if descErr != nil {
+			return descErr
+		}
+
+		// Check that we aren't queued behind another schema changer.
+		if err := sc.notFirstInLine(ctx, desc); err != nil {
+			return err
+		}
+	}
+
 	if rollbackErr := sc.rollbackSchemaChange(ctx, err); rollbackErr != nil {
 		// From now on, the returned error will be a secondary error of the returned
 		// error, so we'll record the original error now.
