@@ -1480,6 +1480,25 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Schema Changer"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Running",
+				Metrics: []string{"sql.schema_changer.running"},
+			},
+			{
+				Title:       "Run Outcomes",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_SUM,
+				Metrics: []string{
+					"sql.schema_changer.permanent_errors",
+					"sql.schema_changer.retry_errors",
+					"sql.schema_changer.successes",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "DistSQL", "Flows"}},
 		Charts: []chartDescription{
 			{
