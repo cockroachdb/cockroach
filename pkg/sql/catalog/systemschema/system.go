@@ -342,6 +342,18 @@ CREATE TABLE system.sqlliveness (
     expiration       DECIMAL NOT NULL,
   	FAMILY fam0_session_id_expiration (session_id, expiration)
 )`
+
+	MigrationsTableSchema = `
+CREATE TABLE system.migrations (
+	version STRING NOT NULL,
+	status STRING NOT NULL,
+	description STRING NOT NULL,
+	start TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	completed TIMESTAMP NULL,
+	progress STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (version ASC),
+	FAMILY "primary" (version, status, description, start, completed, progress)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -595,6 +607,41 @@ var (
 		NextIndexID:  2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.SettingsTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// MigrationsTable is the descriptor for the migrations table. It contains
+	// details for all past and ongoing migrations.
+	MigrationsTable = tabledesc.NewImmutable(descpb.TableDescriptor{
+		Name:                    "migrations",
+		ID:                      keys.MigrationsID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "version", ID: 1, Type: types.String},
+			{Name: "status", ID: 2, Type: types.String},
+			{Name: "description", ID: 3, Type: types.String},
+			{Name: "start", ID: 4, Type: types.Timestamp, DefaultExpr: &nowString},
+			{Name: "completed", ID: 5, Type: types.Timestamp, Nullable: true},
+			{Name: "progress", ID: 6, Type: types.String, Nullable: true},
+		},
+		NextColumnID: 7,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name: "primary",
+				ID:   0,
+				ColumnNames: []string{
+					"version", "status", "description", "start", "completed", "progress",
+				},
+				ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6}},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: pk("version"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.MigrationsID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})

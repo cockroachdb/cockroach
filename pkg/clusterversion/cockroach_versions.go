@@ -199,6 +199,16 @@ const (
 	// EmptyArraysInInvertedIndexes is when empty arrays are added to array
 	// inverted indexes.
 	EmptyArraysInInvertedIndexes
+	// MigrationTable introduces the new system.migrations table.
+	MigrationTable
+	// TruncatedAndRangeAppliedStateMigration is part of the migration to stop
+	// using the legacy truncated state within KV. Once it's active, we'll be
+	// using the unreplicated truncated state and the RangeAppliedState on all
+	// ranges. In 21.2 we'll now be able to remove any holdover code handling
+	// the possibility of replicated truncated state.
+	//
+	// TODO(irfansharif): Do the above in 21.2.
+	TruncatedAndRangeAppliedStateMigration
 
 	// Step (1): Add new versions here.
 )
@@ -320,6 +330,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     EmptyArraysInInvertedIndexes,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     MigrationTable,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 6},
+	},
+	{
+		Key:     TruncatedAndRangeAppliedStateMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 8},
 	},
 
 	// Step (2): Add new versions here.

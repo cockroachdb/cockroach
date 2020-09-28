@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "migration",
     srcs = [
+        "helper.go",
         "manager.go",
         "migrations.go",
         "util.go",
@@ -11,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",

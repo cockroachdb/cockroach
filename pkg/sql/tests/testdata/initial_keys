@@ -1,6 +1,6 @@
 initial-keys tenant=system
 ----
-69 keys:
+71 keys:
  /System/"desc-idgen"
  /Table/3/1/1/2/1
  /Table/3/1/2/2/1
@@ -32,6 +32,7 @@ initial-keys tenant=system
  /Table/3/1/36/2/1
  /Table/3/1/37/2/1
  /Table/3/1/39/2/1
+ /Table/3/1/40/2/1
  /Table/5/1/0/2/1
  /Table/5/1/1/2/1
  /Table/5/1/16/2/1
@@ -47,6 +48,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"jobs"/4/1
  /NamespaceTable/30/1/1/29/"lease"/4/1
  /NamespaceTable/30/1/1/29/"locations"/4/1
+ /NamespaceTable/30/1/1/29/"migrations"/4/1
  /NamespaceTable/30/1/1/29/"namespace"/4/1
  /NamespaceTable/30/1/1/29/"namespace2"/4/1
  /NamespaceTable/30/1/1/29/"protected_ts_meta"/4/1
@@ -70,7 +72,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"users"/4/1
  /NamespaceTable/30/1/1/29/"web_sessions"/4/1
  /NamespaceTable/30/1/1/29/"zones"/4/1
-29 splits:
+30 splits:
  /Table/11
  /Table/12
  /Table/13
@@ -100,10 +102,11 @@ initial-keys tenant=system
  /Table/37
  /Table/38
  /Table/39
+ /Table/40
 
 initial-keys tenant=5
 ----
-60 keys:
+62 keys:
  /Tenant/5/Table/3/1/1/2/1
  /Tenant/5/Table/3/1/2/2/1
  /Tenant/5/Table/3/1/3/2/1
@@ -133,6 +136,7 @@ initial-keys tenant=5
  /Tenant/5/Table/3/1/36/2/1
  /Tenant/5/Table/3/1/37/2/1
  /Tenant/5/Table/3/1/39/2/1
+ /Tenant/5/Table/3/1/40/2/1
  /Tenant/5/Table/7/1/0/0
  /Tenant/5/NamespaceTable/30/1/0/0/"system"/4/1
  /Tenant/5/NamespaceTable/30/1/1/0/"public"/4/1
@@ -143,6 +147,7 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"jobs"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"lease"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"locations"/4/1
+ /Tenant/5/NamespaceTable/30/1/1/29/"migrations"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"namespace"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"namespace2"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"protected_ts_meta"/4/1
@@ -169,7 +174,7 @@ initial-keys tenant=5
 
 initial-keys tenant=999
 ----
-60 keys:
+62 keys:
  /Tenant/999/Table/3/1/1/2/1
  /Tenant/999/Table/3/1/2/2/1
  /Tenant/999/Table/3/1/3/2/1
@@ -199,6 +204,7 @@ initial-keys tenant=999
  /Tenant/999/Table/3/1/36/2/1
  /Tenant/999/Table/3/1/37/2/1
  /Tenant/999/Table/3/1/39/2/1
+ /Tenant/999/Table/3/1/40/2/1
  /Tenant/999/Table/7/1/0/0
  /Tenant/999/NamespaceTable/30/1/0/0/"system"/4/1
  /Tenant/999/NamespaceTable/30/1/1/0/"public"/4/1
@@ -209,6 +215,7 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"jobs"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"lease"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"locations"/4/1
+ /Tenant/999/NamespaceTable/30/1/1/29/"migrations"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"namespace"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"namespace2"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"protected_ts_meta"/4/1

@@ -709,6 +709,9 @@ func (*ImportRequest) Method() Method { return Import }
 func (*AdminScatterRequest) Method() Method { return AdminScatter }
 
 // Method implements the Request interface.
+func (*MigrateRequest) Method() Method { return Migrate }
+
+// Method implements the Request interface.
 func (*AddSSTableRequest) Method() Method { return AddSSTable }
 
 // Method implements the Request interface.
@@ -947,6 +950,12 @@ func (r *ImportRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *AdminScatterRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *MigrateRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1283,6 +1292,7 @@ func (*ExportRequest) flags() int                        { return isRead | isRan
 func (*ImportRequest) flags() int                        { return isAdmin | isAlone }
 func (*AdminScatterRequest) flags() int                  { return isAdmin | isRange | isAlone }
 func (*AdminVerifyProtectedTimestampRequest) flags() int { return isAdmin | isRange | isAlone }
+func (*MigrateRequest) flags() int                       { return isWrite | isRange | isAlone }
 func (*AddSSTableRequest) flags() int {
 	return isWrite | isRange | isAlone | isUnsplittable | canBackpressure
 }

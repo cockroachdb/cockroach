@@ -390,6 +390,7 @@ const (
 	ScheduledJobsTableID                = 37
 	TenantsRangesID                     = 38 // pseudo
 	SqllivenessID                       = 39
+	MigrationsID                        = 40
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
