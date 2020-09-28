@@ -32,6 +32,9 @@ import TerminateSessionModal, {TerminateSessionModalRef} from "src/views/session
 import TerminateQueryModal, {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
 import {showSessions} from "src/util/docs";
 import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/admin-ui-components";
+import emptyTableResultsIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
+import { Anchor } from "src/components";
+import { EmptyTable } from "@cockroachlabs/admin-ui-components";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 const cx = classNames.bind(styles);
@@ -159,14 +162,22 @@ export class SessionsPage extends React.Component<SessionsPageProps, SessionsPag
             columns={
               makeSessionsColumns(this.terminateSessionRef, this.terminateQueryRef)
             }
-            empty={sessionsData.length === 0}
-            emptyProps={{
-              title: "There are no currently running sessions.",
-              description: "Sessions shows you what statements and transactions the currently active sessions are running.",
-              label: "Learn more",
-              // TODO(jordan): point this to a more appropriate page.
-              buttonHref: showSessions,
-            }}
+            renderNoResult={
+              <EmptyTable
+                title="No sessions are currently running"
+                icon={emptyTableResultsIcon}
+                message="Sessions show you which statements and transactions are running for the active session."
+                footer={
+                  <Anchor
+                    // TODO(jordan): point this to a more appropriate page.
+                    href={showSessions}
+                    target="_blank"
+                  >
+                    Learn more about sessions
+                  </Anchor>
+                }
+              />
+            }
             sortSetting={this.state.sortSetting}
             onChangeSortSetting={this.changeSortSetting}
             pagination={pagination}
