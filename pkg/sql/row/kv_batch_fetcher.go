@@ -75,6 +75,7 @@ type txnKVFetcher struct {
 	origSpan         roachpb.Span
 	remainingBatches [][]byte
 	mon              *mon.BytesMonitor
+	acc              mon.BoundAccount
 }
 
 var _ kvBatchFetcher = &txnKVFetcher{}
@@ -265,6 +266,7 @@ func makeKVBatchFetcherWithSendFunc(
 		lockStrength:    lockStrength,
 		lockWaitPolicy:  lockWaitPolicy,
 		mon:             mon,
+		acc:             mon.MakeBoundAccount(),
 	}, nil
 }
 
@@ -332,6 +334,19 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		log.VEventf(ctx, 2, "Scan %s", buf.String())
 	}
 
+	monitoring := f.acc.Monitor() != nil
+
+	const tokenFetchAllocation = 1 << 10
+	if monitoring && f.acc.Used() < tokenFetchAllocation {
+		// Pre-reserve a token fraction of the maximum amount of memory this scan
+		// could return. Most of the time, scans won't use this amount of memory,
+		// so it's unnecessary to reserve it all. We reserve something rather than
+		// nothing at all to preserve some accounting.
+		if err := f.acc.ResizeTo(ctx, tokenFetchAllocation); err != nil {
+			return err
+		}
+	}
+
 	// Reset spans in preparation for adding resume-spans below.
 	f.spans = f.spans[:0]
 
@@ -343,6 +358,30 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		f.responses = br.Responses
 	} else {
 		f.responses = nil
+	}
+	returnedBytes := int64(br.Size())
+	if monitoring && (returnedBytes > maxScanResponseBytes || returnedBytes > f.acc.Used()) {
+		// Resize up to the actual amount of bytes we got back from the fetch,
+		// but don't ratchet down below maxScanResponseBytes if we ever exceed it.
+		// We would much prefer to over-account than under-account, especially when
+		// we are in a situation where we have large batches caused by parallel
+		// unlimited scans (index joins and lookup joins where cols are key).
+		//
+		// The reason we don't want to precisely account here is to hopefully
+		// protect ourselves from "slop" in our memory handling. In general, we
+		// expect that all SQL operators that buffer data for longer than a single
+		// call to Next do their own accounting, so theoretically, by the time
+		// this fetch method is called again, all memory will either be released
+		// from the system or accounted for elsewhere. In reality, though, Go's
+		// garbage collector has some lag between when the memory is no longer
+		// referenced and when it is freed. Also, we're not perfect with
+		// accounting by any means. When we start doing large fetches, it's more
+		// likely that we'll expose ourselves to OOM conditions, so that's the
+		// reasoning for why we never ratchet this account down past the maximum
+		// fetch size once it's exceeded.
+		if err := f.acc.ResizeTo(ctx, returnedBytes); err != nil {
+			return err
+		}
 	}
 
 	// Set end to true until disproved.
@@ -416,4 +455,9 @@ func (f *txnKVFetcher) nextBatch(
 		return false, nil, nil, roachpb.Span{}, err
 	}
 	return f.nextBatch(ctx)
+}
+
+// close releases the resources of this txnKVFetcher.
+func (f *txnKVFetcher) close(ctx context.Context) {
+	f.acc.Close(ctx)
 }
