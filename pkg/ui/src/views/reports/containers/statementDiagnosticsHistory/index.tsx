@@ -17,7 +17,7 @@ import Long from "long";
 import { Link } from "react-router-dom";
 import { isUndefined } from "lodash";
 
-import { Button, DownloadFile, DownloadFileRef, Text, TextTypes, Tooltip } from "src/components";
+import { Anchor, Button, DownloadFile, DownloadFileRef, Text, TextTypes, Tooltip } from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
@@ -44,6 +44,8 @@ import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { shortStatement } from "src/views/statements/statementsTable";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
+import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
+import { EmptyTable } from "@cockroachlabs/admin-ui-components";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps & MapDispatchToProps;
 
@@ -222,13 +224,20 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
           data={dataSource}
           columns={this.columns}
           loading={loading}
-          empty={!loading && !dataSource.length}
-          emptyProps={{
-            title: "There are no statement diagnostics to display.",
-            description: "Statement diagnostics can help when troubleshooting issues with specific queries. The diagnostic bundle can be activated from individual statement pages and will include EXPLAIN plans, table statistics, and traces.",
-            label: "Learn more",
-            buttonHref: statementDiagnostics,
-          }}
+          renderNoResult={
+            <EmptyTable
+              title="No statement diagnostics to show"
+              icon={EmptyTableIcon}
+              message={"Statement diagnostics  can help when troubleshooting issues with specific queries. " +
+              "The diagnostic bundle can be activated from individual statement pages and will include EXPLAIN" +
+              " plans, table statistics, and traces."}
+              footer={
+                <Anchor href={statementDiagnostics} target="_blank">
+                  Learn more about statement diagnostics
+                </Anchor>
+              }
+            />
+          }
           sortSetting={this.state.sortSetting}
           onChangeSortSetting={this.changeSortSetting}
         />
