@@ -166,6 +166,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 				return err
 			}
 
+			t.WorkerStatus("waiting for ~", curBankRanges, " merges to complete (and for at least ", timeutil.Now().Sub(deadline), " to pass)")
 			select {
 			case <-after:
 			case <-ctx.Done():
