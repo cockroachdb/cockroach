@@ -542,6 +542,19 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	ctx context.Context, err error, evalCtx *extendedEvalContext,
 ) error {
+
+	// Ensure that this mutation is first in line prior to reverting.
+	{
+		// Check that we aren't queued behind another schema changer.
+		_, notFirst, err := sc.notFirstInLine(ctx)
+		if err != nil {
+			return err
+		}
+		if notFirst {
+			return errSchemaChangeNotFirstInLine
+		}
+	}
+
 	if rollbackErr := sc.rollbackSchemaChange(ctx, err); rollbackErr != nil {
 		// From now on, the returned error will be a secondary error of the returned
 		// error, so we'll record the original error now.
@@ -1139,6 +1152,20 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		if err != nil {
 			return err
 		}
+
+		// If this is a real mutation, it should be the first mutation. Assert that.
+		if sc.mutationID != sqlbase.InvalidMutationID {
+			if len(desc.Mutations) == 0 {
+				return errors.AssertionFailedf("expected mutation %d to be the"+
+					" first mutation when reverted, found no mutations in descriptor %d",
+					sc.mutationID, desc.ID)
+			} else if desc.Mutations[0].MutationID != sc.mutationID {
+				return errors.AssertionFailedf("expected mutation %d to be the"+
+					" first mutation when reverted, found %d in descriptor %d",
+					sc.mutationID, desc.Mutations[0].MutationID, desc.ID)
+			}
+		}
+
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				break
