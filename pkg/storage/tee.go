@@ -257,9 +257,9 @@ func (t *TeeEngine) GetCompactionStats() string {
 	return t.eng1.GetCompactionStats()
 }
 
-// GetStats implements the Engine interface.
-func (t *TeeEngine) GetStats() (*Stats, error) {
-	return t.eng1.GetStats()
+// GetMetrics implements the Engine interface.
+func (t *TeeEngine) GetMetrics() (*Metrics, error) {
+	return t.eng1.GetMetrics()
 }
 
 // GetEncryptionRegistries implements the Engine interface.

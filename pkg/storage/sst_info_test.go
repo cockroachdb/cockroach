@@ -20,58 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestSSTableInfosString(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	info := func(level int, size int64) SSTableInfo {
-		return SSTableInfo{
-			Level: level,
-			Size:  size,
-		}
-	}
-	tables := SSTableInfos{
-		info(1, 7<<20),
-		info(1, 1<<20),
-		info(1, 63<<10),
-		info(2, 10<<20),
-		info(2, 8<<20),
-		info(2, 13<<20),
-		info(2, 31<<20),
-		info(2, 13<<20),
-		info(2, 30<<20),
-		info(2, 5<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 9<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 93<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 122<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 129<<20),
-		info(3, 24<<20),
-		info(3, 18<<20),
-	}
-	expected := `1 [   8M  3 ]: 7M 1M 63K
-2 [ 110M  7 ]: 31M 30M 13M[2] 10M 8M 5M
-3 [   2G 19 ]: 129M[14] 122M 93M 24M 18M 9M
-`
-	sort.Sort(tables)
-	s := tables.String()
-	if expected != s {
-		t.Fatalf("expected\n%s\ngot\n%s", expected, s)
-	}
-}
-
 func TestReadAmplification(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -89,7 +37,7 @@ func TestReadAmplification(t *testing.T) {
 		info(0, 0),
 		info(1, 0),
 	}
-	if a, e := tables1.ReadAmplification(-1), 4; a != e {
+	if a, e := tables1.readAmplification(-1), int64(4); a != e {
 		t.Errorf("got %d, expected %d", a, e)
 	}
 
@@ -99,7 +47,7 @@ func TestReadAmplification(t *testing.T) {
 		info(2, 0),
 		info(3, 0),
 	}
-	if a, e := tables2.ReadAmplification(-1), 4; a != e {
+	if a, e := tables2.readAmplification(-1), int64(4); a != e {
 		t.Errorf("got %d, expected %d", a, e)
 	}
 
@@ -114,13 +62,13 @@ func TestReadAmplification(t *testing.T) {
 		info(3, 0),
 		info(6, 0),
 	}
-	if a, e := tables3.ReadAmplification(-1), 7; a != e {
+	if a, e := tables3.readAmplification(-1), int64(7); a != e {
 		t.Errorf("got %d, expected %d", a, e)
 	}
-	if a, e := tables3.ReadAmplification(2), 6; a != e {
+	if a, e := tables3.readAmplification(2), int64(6); a != e {
 		t.Errorf("got %d, expected %d", a, e)
 	}
-	if a, e := tables3.ReadAmplification(1), 5; a != e {
+	if a, e := tables3.readAmplification(1), int64(5); a != e {
 		t.Errorf("got %d, expected %d", a, e)
 	}
 }

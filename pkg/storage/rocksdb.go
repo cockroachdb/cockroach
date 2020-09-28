@@ -881,14 +881,16 @@ func (r *RocksDB) GetUserProperties() (enginepb.SSTUserPropertiesCollection, err
 	return ssts, nil
 }
 
-// GetStats retrieves stats from this engine's RocksDB instance and
-// returns it in a new instance of Stats.
-func (r *RocksDB) GetStats() (*Stats, error) {
+// GetMetrics retrieves stats from this engine's RocksDB instance and
+// returns it in a new instance of Metrics.
+func (r *RocksDB) GetMetrics() (*Metrics, error) {
 	var s C.DBStatsResult
 	if err := statusToError(C.DBGetStats(r.rdb, &s)); err != nil {
 		return nil, err
 	}
-	return &Stats{
+	ssts := r.GetSSTables()
+
+	return &Metrics{
 		BlockCacheHits:                 int64(s.block_cache_hits),
 		BlockCacheMisses:               int64(s.block_cache_misses),
 		BlockCacheUsage:                int64(s.block_cache_usage),
@@ -906,12 +908,14 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 		PendingCompactionBytesEstimate: int64(s.pending_compaction_bytes_estimate),
 		L0FileCount:                    int64(s.l0_file_count),
 		L0SublevelCount:                -1, // Not a RocksDB feature.
+		ReadAmplification:              ssts.readAmplification(-1),
+		NumSSTables:                    int64(ssts.Len()),
 	}, nil
 }
 
-// GetTickersAndHistograms retrieves maps of all RocksDB tickers and histograms.
-// It differs from `GetStats` by getting _every_ ticker and histogram, and by not
-// getting anything else (DB properties, for example).
+// GetTickersAndHistograms retrieves maps of all RocksDB tickers and
+// histograms.  It differs from `GetMetrics` by getting _every_ ticker and
+// histogram, and by not getting anything else (DB properties, for example).
 func (r *RocksDB) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, error) {
 	res := new(enginepb.TickersAndHistograms)
 	var s C.DBTickersAndHistogramsResult
@@ -954,11 +958,11 @@ func (r *RocksDB) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, err
 func (r *RocksDB) GetCompactionStats() string {
 	s := cStringToGoString(C.DBGetCompactionStats(r.rdb)) +
 		"estimated_pending_compaction_bytes: "
-	stats, err := r.GetStats()
+	m, err := r.GetMetrics()
 	if err != nil {
 		return s + err.Error()
 	}
-	return s + humanizeutil.IBytes(stats.PendingCompactionBytesEstimate)
+	return s + humanizeutil.IBytes(m.PendingCompactionBytesEstimate)
 }
 
 // GetEnvStats returns stats for the RocksDB env. This may include encryption stats.
