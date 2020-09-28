@@ -512,6 +512,9 @@ func (z *zigzagJoiner) producerMeta(err error) *execinfrapb.ProducerMetadata {
 		} else if trace := execinfra.GetTraceData(z.Ctx); trace != nil {
 			meta = &execinfrapb.ProducerMetadata{TraceData: trace}
 		}
+		if tfs := execinfra.GetLeafTxnFinalState(z.Ctx, z.FlowCtx.Txn); tfs != nil {
+			z.returnedMeta = append(z.returnedMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
+		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
 		z.close()
