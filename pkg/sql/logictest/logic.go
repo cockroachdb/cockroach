@@ -449,6 +449,9 @@ type testClusterConfig struct {
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
+	// backupRestoreProbability will periodically backup the cluster and restore
+	// it's state to a new cluster at random points during a logic test.
+	backupRestoreProbability float32
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -630,6 +633,18 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats: "false",
 		useTenant:         true,
 		isCCLConfig:       true,
+	},
+	{
+		// TODO: Change this comment.
+		// 3node-tenant is a config that runs the test as a SQL tenant. This config
+		// can only be run with a CCL binary, so is a noop if run through the normal
+		// logictest command.
+		// To run a logic test with this config as a directive, run:
+		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic//<test_name>
+		name:                     "backup-restore",
+		numNodes:                 3,
+		backupRestoreProbability: 0.05,
+		isCCLConfig:              true,
 	},
 }
 
@@ -1031,9 +1046,18 @@ type logicTest struct {
 	rootT    *testing.T
 	subtestT *testing.T
 	rng      *rand.Rand
-	cfg      testClusterConfig
+	// cfg stores the testClusterConfig for this test. It should only be written
+	// once during setup.
+	cfg testClusterConfig
+	// serverArgs specifies parameters that can be specified to control the test
+	// clusters created.
+	serverArgs TestServerArgs
 	// the number of nodes in the cluster.
 	cluster serverutils.TestClusterInterface
+	// sharedIODir is the ExternalIO directory that is shared between all clusters
+	// created in the same logicTest. It is populated during setup() of the logic
+	// test.
+	sharedIODir string
 	// the index of the node (within the cluster) against which we run the test
 	// statements.
 	nodeIdx int
@@ -1046,9 +1070,20 @@ type logicTest struct {
 	// client currently in use. This can change during processing
 	// of a test input file when encountering the "user" directive.
 	// see setUser() for details.
-	user         string
-	db           *gosql.DB
-	cleanupFuncs []func()
+	user string
+	db   *gosql.DB
+	// clusterCleanupFuncs contains the cleanup methods that are specific to a
+	// cluster. These will be called during cluster tear-down. Note that 1 logic
+	// test may use more than 1 cluster. Cleanup methods that should be stored
+	// here include PGUrl connections for a particular user to a specific cluster.
+	clusterCleanupFuncs []func()
+	// TODO(pbardea): Possibly reword this as cleanup funcs that are "scoped" to
+	//  a test rather than a cluster. Same for the above.
+	// testCleanupFuncs are cleanup methods that are only called when closing a
+	// test (rather than a specific cluster). The type of cleanup methods that
+	// should be included here include teardown of the shared external IO
+	// directory that is used between all clusters in a test.
+	testCleanupFuncs []func()
 	// progress holds the number of tests executed so far.
 	progress int
 	// failures holds the number of tests failed so far, when
@@ -1151,22 +1186,12 @@ func (t *logicTest) emit(line string) {
 func (t *logicTest) close() {
 	t.traceStop()
 
-	for _, cleanup := range t.cleanupFuncs {
+	t.shutdownCluster()
+
+	for _, cleanup := range t.testCleanupFuncs {
 		cleanup()
 	}
-	t.cleanupFuncs = nil
-
-	if t.cluster != nil {
-		t.cluster.Stopper().Stop(context.TODO())
-		t.cluster = nil
-	}
-	if t.clients != nil {
-		for _, c := range t.clients {
-			c.Close()
-		}
-		t.clients = nil
-	}
-	t.db = nil
+	t.testCleanupFuncs = nil
 }
 
 // out emits a message both on stdout and the log files if
@@ -1231,20 +1256,41 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
-	t.cfg = cfg
-	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
-	// MySQL or Postgres instance.
+// shutdownCluster shuts down the existing cluster and does the necessary
+// cleanup.
+func (t *logicTest) shutdownCluster() {
+	for _, cleanup := range t.clusterCleanupFuncs {
+		cleanup()
+	}
+	t.clusterCleanupFuncs = nil
+
+	if t.cluster != nil {
+		t.cluster.Stopper().Stop(context.TODO())
+		t.cluster = nil
+	}
+	if t.clients != nil {
+		for _, c := range t.clients {
+			c.Close()
+		}
+		t.clients = nil
+	}
+	t.db = nil
+}
+
+// newCluster creates a new cluster. It should be called either in setup(), or
+// after logicTest.setup() has been called.
+func (t *logicTest) newCluster() {
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
 	var tempStorageConfig base.TempStorageConfig
-	if serverArgs.tempStorageDiskLimit == 0 {
+	if t.serverArgs.tempStorageDiskLimit == 0 {
 		tempStorageConfig = base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
 	} else {
-		tempStorageConfig = base.DefaultTestTempStorageConfigWithSize(cluster.MakeTestingClusterSettings(), serverArgs.tempStorageDiskLimit)
+		tempStorageConfig = base.DefaultTestTempStorageConfigWithSize(cluster.MakeTestingClusterSettings(), t.serverArgs.tempStorageDiskLimit)
 	}
+
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Specify a fixed memory limit (some test cases verify OOM conditions; we
@@ -1264,8 +1310,8 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 					OptimizerCostPerturbation:       *optimizerCostPerturbation,
 				},
 			},
-			ClusterName: "testclustername",
-			UseDatabase: "test",
+			ClusterName:   "testclustername",
+			ExternalIODir: t.sharedIODir,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.
@@ -1275,41 +1321,41 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	distSQLKnobs := &execinfra.TestingKnobs{
 		MetadataTestLevel: execinfra.Off, DeterministicStats: true, CheckVectorizedFlowIsClosedCorrectly: true,
 	}
-	if cfg.sqlExecUseDisk {
+	if t.cfg.sqlExecUseDisk {
 		distSQLKnobs.ForceDiskSpill = true
 	}
-	if cfg.distSQLMetadataTestEnabled {
+	if t.cfg.distSQLMetadataTestEnabled {
 		distSQLKnobs.MetadataTestLevel = execinfra.On
 	}
-	if strings.Compare(cfg.overrideVectorize, "off") != 0 {
+	if strings.Compare(t.cfg.overrideVectorize, "off") != 0 {
 		distSQLKnobs.EnableVectorizedInvariantsChecker = true
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
-	if cfg.bootstrapVersion != (roachpb.Version{}) {
+	if t.cfg.bootstrapVersion != (roachpb.Version{}) {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = cfg.bootstrapVersion
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = t.cfg.bootstrapVersion
 	}
-	if cfg.disableUpgrade {
+	if t.cfg.disableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = 1
 	}
 
-	if cfg.binaryVersion != (roachpb.Version{}) {
+	if t.cfg.binaryVersion != (roachpb.Version{}) {
 		// If we want to run a specific server version, we assume that it
 		// supports at least the bootstrap version.
 		paramsPerNode := map[int]base.TestServerArgs{}
-		binaryMinSupportedVersion := cfg.binaryVersion
-		if cfg.bootstrapVersion != (roachpb.Version{}) {
-			binaryMinSupportedVersion = cfg.bootstrapVersion
+		binaryMinSupportedVersion := t.cfg.binaryVersion
+		if t.cfg.bootstrapVersion != (roachpb.Version{}) {
+			binaryMinSupportedVersion = t.cfg.bootstrapVersion
 		}
-		for i := 0; i < cfg.numNodes; i++ {
+		for i := 0; i < t.cfg.numNodes; i++ {
 			nodeParams := params.ServerArgs
 			nodeParams.Settings = cluster.MakeTestingClusterSettingsWithVersions(
-				cfg.binaryVersion, binaryMinSupportedVersion, false /* initializeVersion */)
+				t.cfg.binaryVersion, binaryMinSupportedVersion, false /* initializeVersion */)
 			paramsPerNode[i] = nodeParams
 		}
 		params.ServerArgsPerNode = paramsPerNode
@@ -1322,14 +1368,14 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
 
-	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.numNodes, params)
-	if cfg.useFakeSpanResolver {
+	t.cluster = serverutils.StartNewTestCluster(t.rootT, t.cfg.numNodes, params)
+	if t.cfg.useFakeSpanResolver {
 		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
-	if cfg.useTenant {
+	if t.cfg.useTenant {
 		var err error
 		t.tenantAddr, _, err = t.cluster.Server(t.nodeIdx).StartTenant(base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), AllowSettingClusterSettings: true})
 		if err != nil {
@@ -1386,17 +1432,17 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 			t.Fatal(err)
 		}
 
-		if cfg.overrideDistSQLMode != "" {
+		if t.cfg.overrideDistSQLMode != "" {
 			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.distsql = $1::string", cfg.overrideDistSQLMode,
+				"SET CLUSTER SETTING sql.defaults.distsql = $1::string", t.cfg.overrideDistSQLMode,
 			); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		if cfg.overrideVectorize != "" {
+		if t.cfg.overrideVectorize != "" {
 			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.vectorize = $1::string", cfg.overrideVectorize,
+				"SET CLUSTER SETTING sql.defaults.vectorize = $1::string", t.cfg.overrideVectorize,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -1422,9 +1468,9 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 			t.Fatal(err)
 		}
 
-		if cfg.overrideAutoStats != "" {
+		if t.cfg.overrideAutoStats != "" {
 			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
+				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", t.cfg.overrideAutoStats,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -1450,19 +1496,19 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 			}
 		}
 
-		if cfg.overrideExperimentalDistSQLPlanning != "" {
+		if t.cfg.overrideExperimentalDistSQLPlanning != "" {
 			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.experimental_distsql_planning = $1::string", cfg.overrideExperimentalDistSQLPlanning,
+				"SET CLUSTER SETTING sql.defaults.experimental_distsql_planning = $1::string", t.cfg.overrideExperimentalDistSQLPlanning,
 			); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
 
-	if cfg.overrideDistSQLMode != "" {
-		_, ok := sessiondata.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
+	if t.cfg.overrideDistSQLMode != "" {
+		_, ok := sessiondata.DistSQLExecModeFromString(t.cfg.overrideDistSQLMode)
 		if !ok {
-			t.Fatalf("invalid distsql mode override: %s", cfg.overrideDistSQLMode)
+			t.Fatalf("invalid distsql mode override: %s", t.cfg.overrideDistSQLMode)
 		}
 		// Wait until all servers are aware of the setting.
 		testutils.SucceedsSoon(t.rootT, func() error {
@@ -1474,9 +1520,9 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 				if err != nil {
 					t.Fatal(errors.Wrapf(err, "%d", i))
 				}
-				if m != cfg.overrideDistSQLMode {
+				if m != t.cfg.overrideDistSQLMode {
 					return errors.Errorf("node %d is still waiting for update of DistSQLMode to %s (have %s)",
-						i, cfg.overrideDistSQLMode, m,
+						i, t.cfg.overrideDistSQLMode, m,
 					)
 				}
 			}
@@ -1486,10 +1532,35 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.cleanupFuncs = append(t.cleanupFuncs, t.setUser(security.RootUser))
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser))
+}
 
+// resetCluster tears down the logicTest's existing cluster and re-creates a new
+// one.
+func (t *logicTest) resetCluster() {
+	t.shutdownCluster()
+	t.newCluster()
+}
+
+// setup creates the initial cluster for the logic test and populates the
+// relevant fields on logicTest. It is expected to be called only once, and
+// before processing any test files - unless a mock logicTest is created (see
+// parallelTest.processTestFile).
+func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
+	t.cfg = cfg
+	t.serverArgs = serverArgs
+	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
+	// MySQL or Postgres instance.
+	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
+	t.sharedIODir = tempExternalIODir
+	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
+
+	t.newCluster()
+
+	// Only create the test database on the initial cluster, since cluster restore
+	// expects an empty cluster.
 	if _, err := t.db.Exec(`
-CREATE DATABASE test;
+CREATE DATABASE test; USE test;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -1639,6 +1710,9 @@ type subtestDetails struct {
 }
 
 func (t *logicTest) processTestFile(path string, config testClusterConfig) error {
+	// TODO: Log this seed so that failures can be reproduced.
+	rng, _ := randutil.NewPseudoRand()
+
 	subtests, err := fetchSubtests(path)
 	if err != nil {
 		return err
@@ -1656,7 +1730,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		// If subtest has no name, then it is not a subtest, so just run the lines
 		// in the overall test. Note that this can only happen in the first subtest.
 		if len(subtest.name) == 0 {
-			if err := t.processSubtest(subtest, path, config); err != nil {
+			if err := t.processSubtest(subtest, path, config, rng); err != nil {
 				return err
 			}
 		} else {
@@ -1666,7 +1740,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 				defer func() {
 					t.subtestT = nil
 				}()
-				if err := t.processSubtest(subtest, path, config); err != nil {
+				if err := t.processSubtest(subtest, path, config, rng); err != nil {
 					t.Error(err)
 				}
 			})
@@ -1687,6 +1761,48 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		}
 		fmt.Fprint(file, data)
 	}
+
+	return nil
+}
+
+// maybeBackupRestore will randomly issue a cluster backup, create a new
+// cluster, and restore that backup to the cluster. It does this based on the
+// passed in probability of doing this.
+// TODO: Consider if we want this as a method on logicTest?
+func maybeBackupRestore(t *logicTest, rng *rand.Rand, backupRestoreProbability float32) error {
+	// Check if we should not do the backup/restore operation, so we can return
+	// early if we can.
+	oldUser := t.user
+	users := make([]string, 0, len(t.clients))
+	for user := range t.clients {
+		users = append(users, user)
+	}
+
+	if rng.Float32() > backupRestoreProbability {
+		return nil
+	}
+
+	backupLocation := fmt.Sprintf("nodelocal://1/logic-test-backup-%s",
+		strconv.FormatInt(timeutil.Now().UnixNano(), 10))
+
+	t.setUser(security.RootUser)
+	if _, err := t.db.Exec("BACKUP TO $1", backupLocation); err != nil {
+		return err
+	}
+
+	t.resetCluster()
+
+	// Run the restore as root.
+	t.setUser(security.RootUser)
+	if _, err := t.db.Exec("RESTORE FROM $1", backupLocation); err != nil {
+		return err
+	}
+
+	// Create new connections for the existing users.
+	for _, user := range users {
+		t.setUser(user)
+	}
+	t.setUser(oldUser)
 
 	return nil
 }
@@ -1740,7 +1856,7 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 }
 
 func (t *logicTest) processSubtest(
-	subtest subtestDetails, path string, config testClusterConfig,
+	subtest subtestDetails, path string, config testClusterConfig, rng *rand.Rand,
 ) error {
 	defer t.traceStop()
 
@@ -1770,6 +1886,9 @@ func (t *logicTest) processSubtest(
 			return errors.Errorf("%s:%d: no expected error provided",
 				path, s.line+subtest.lineLineIndexIntoFile,
 			)
+		}
+		if err := maybeBackupRestore(t, rng, config.backupRestoreProbability); err != nil {
+			return err
 		}
 		switch cmd {
 		case "repeat":

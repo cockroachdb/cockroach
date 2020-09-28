@@ -33,6 +33,14 @@ func TestTenantLogic(t *testing.T) {
 	logictest.RunLogicTestWithDefaultConfig(t, logictest.TestServerArgs{}, "3node-tenant", true /* runCCLConfigs */, logictestPkg+testdataGlob)
 }
 
+// TestBackupRestoreLogic is mainly here for testing as this testing is built out.
+// Testing this with e.g.:
+//   make test PKG=./pkg/ccl/logictestccl TESTS=TestBackupRestore/backup-restore/alias_types TESTFLAGS="-show-sql -test.v"
+func TestBackupRestoreLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	logictest.RunLogicTestWithDefaultConfig(t, logictest.TestServerArgs{}, "backup-restore", true /* runCCLConfigs */, logictestPkg+testdataGlob)
+}
+
 func TestTenantSQLLiteLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	logictest.RunSQLLiteLogicTest(t, "3node-tenant")
