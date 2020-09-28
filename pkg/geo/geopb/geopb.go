@@ -10,11 +10,23 @@
 
 package geopb
 
-import "fmt"
+import (
+	"fmt"
+	"unsafe"
+)
 
 // EWKBHex returns the EWKB-hex version of this data type
 func (b *SpatialObject) EWKBHex() string {
 	return fmt.Sprintf("%X", b.EWKB)
+}
+
+// MemSize returns the size of the spatial object in memory.
+func (b *SpatialObject) MemSize() uintptr {
+	var bboxSize uintptr
+	if bbox := b.BoundingBox; bbox != nil {
+		bboxSize = unsafe.Sizeof(*bbox)
+	}
+	return unsafe.Sizeof(*b) + bboxSize + uintptr(len(b.EWKB))
 }
 
 // MultiType returns the corresponding multi-type for a shape type, or unset
