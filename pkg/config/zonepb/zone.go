@@ -20,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -88,7 +86,8 @@ func ZoneSpecifierFromID(
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
 // zone whose config applies.
 func ResolveZoneSpecifier(
-	zs *tree.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
+	zs *tree.ZoneSpecifier,
+	resolveName func(parentID uint32, schemaID uint32, name string) (id uint32, err error),
 ) (uint32, error) {
 	// A zone specifier has one of 3 possible structures:
 	// - a predefined named zone;
@@ -105,21 +104,28 @@ func ResolveZoneSpecifier(
 	}
 
 	if zs.Database != "" {
-		return resolveName(keys.RootNamespaceID, string(zs.Database))
+		return resolveName(keys.RootNamespaceID, keys.RootNamespaceID, string(zs.Database))
 	}
 
 	// Third case: a table or index name. We look up the table part here.
 
 	tn := &zs.TableOrIndex.Table
-	if tn.SchemaName != tree.PublicSchemaName {
-		return 0, pgerror.Newf(pgcode.ReservedName,
-			"only schema \"public\" is supported: %q", tree.ErrString(tn))
-	}
-	databaseID, err := resolveName(keys.RootNamespaceID, tn.Catalog())
+	databaseID, err := resolveName(keys.RootNamespaceID, keys.RootNamespaceID, tn.Catalog())
 	if err != nil {
 		return 0, err
 	}
-	return resolveName(databaseID, tn.Table())
+	schemaID := uint32(keys.PublicSchemaID)
+	if tn.SchemaName != tree.PublicSchemaName {
+		schemaID, err = resolveName(databaseID, keys.RootNamespaceID, tn.Schema())
+		if err != nil {
+			return 0, err
+		}
+	}
+	tableID, err := resolveName(databaseID, schemaID, tn.Table())
+	if err != nil {
+		return 0, err
+	}
+	return tableID, err
 }
 
 func (c Constraint) String() string {
