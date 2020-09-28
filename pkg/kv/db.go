@@ -639,6 +639,19 @@ func (db *DB) AddSSTable(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// Migrate ensures that the ranges overlapping with the provided keyspace carry
+// out all outstanding below-Raft migrations, given the target version.
+
+// Migrate proactively forces ranges overlapping with the provided keyspace to
+// transition out of any legacy modes of operation.
+func (db *DB) Migrate(
+	ctx context.Context, begin, end interface{}, targetVersion roachpb.Version,
+) error {
+	b := &Batch{}
+	b.migrate(begin, end, targetVersion)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // sendAndFill is a helper which sends the given batch and fills its results,
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.

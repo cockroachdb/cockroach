@@ -1586,6 +1586,34 @@ message AdminScatterResponse {
   repeated RangeInfo range_infos = 3 [(gogoproto.nullable) = false];
 }
 
+// MigrateRequest forces all ranges overlapping it to proactively move out of
+// any legacy modes that they are currently in (as defined by the delta between
+// the current version and the TargetVersion). When this command returns, the
+// ranges are ready to run with the TargetVersion.
+//
+// TODO(irfansharif): Should the implementation of the Migrate command consider
+// the delta between the current and the target version? Given the orchestrator
+// is already going to be the one responsible for stepping through all
+// intermediate versions, it's probably saner to only carry out the specific
+// migration associated with the target version.
+//
+// TODO(irfansharif): Should this be an admin request instead? There's no good
+// way for us to get the applied index of admin requests which don't go through
+// the usual eval+propose codepaths, and we do need to know the MLAI for the
+// request to wait for it to apply before returning. So perhaps not.
+message MigrateRequest {
+  option (gogoproto.equal) = true;
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The version that will become active next. A request with the
+  Version TargetVersion = 2 [(gogoproto.nullable) = false];
+}
+
+// MigrateResponse is the response to an Migrate operation.
+message MigrateResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // AdminVerifyProtectedTimestampRequest is the argument to the
 // AdminVerifyProtectedTimestamp method which ensures that the specified record
 // will be seen before data can be garbage collected at the timestamp.
@@ -1827,6 +1855,7 @@ message RequestUnion {
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
+    MigrateRequest migrate = 50;
   }
   reserved 8, 15, 23, 25, 27;
 }
@@ -1878,6 +1907,7 @@ message ResponseUnion {
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
+    MigrateResponse migrate = 50;
   }
   reserved 8, 15, 23, 25, 27, 28;
 }

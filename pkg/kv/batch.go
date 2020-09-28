@@ -754,3 +754,26 @@ func (b *Batch) addSSTable(
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
 }
+
+// migrate is only exported on DB.
+func (b *Batch) migrate(s, e interface{}, targetVersion roachpb.Version) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.MigrateRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+		TargetVersion: targetVersion,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
