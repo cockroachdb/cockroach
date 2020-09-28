@@ -909,8 +909,23 @@ func (sc *SchemaChanger) distBackfill(
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
 	origNRanges := -1
+
 	origFractionCompleted := sc.job.FractionCompleted()
 	fractionLeft := 1 - origFractionCompleted
+
+	// writeTimestamp will be used for impure functions in the backfill which
+	// read the clock. We choose this value as it will be consistent across
+	// restarts.
+	writeTimestamp := hlc.Timestamp{
+		WallTime: (sc.job.Payload().StartedMicros + 1) * 1000,
+	}
+	// It is okay that readAsOf may change when a backfill restarts because we
+	// know that the timestamp which will be chosen must be greater than the last
+	// checkpoint to the spans (because we've read the job since that checkpoint
+	// was written). For column backfills this is safe because of their
+	// transactional nature. For index backfills this is safe because deletes
+	// which might have occurred above the new readAsOf will have a higher MVCC
+	// timestamp.
 	readAsOf := sc.clock.Now()
 	// Index backfilling ingests SSTs that don't play nicely with running txns
 	// since they just add their keys blindly. Running a Scan of the target
@@ -995,7 +1010,7 @@ func (sc *SchemaChanger) distBackfill(
 				return nil
 			}
 			cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
-			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory)
+			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, writeTimestamp, sc.ieFactory)
 			recv := MakeDistSQLReceiver(
 				ctx,
 				&cbw,

@@ -11,6 +11,7 @@
 package sql_test
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -62,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -3739,18 +3742,25 @@ CREATE TABLE d.t (
 
 // Test that a backfill is executed with an EvalContext generated on the
 // gateway. We assert that by checking that the same timestamp is used by all
-// the backfilled columns.
+// the backfilled columns. This property is validated both across checkpoints
+// of a single backfill and restarts of the backfill.
 func TestSchemaChangeEvalContext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const numNodes = 3
-	const chunkSize = 200
+	const chunkSize = 100 // set a small chunk size so that checkpointing kicks in
 	const maxValue = 5000
 	params, _ := tests.CreateTestServerParams()
-	// Disable asynchronous schema change execution.
+	rf := newDynamicRequestFilter()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			BackfillChunkSize: chunkSize,
+			// Ensure that we split up the backfill to checkpoint progress.
+			WriteCheckpointInterval: time.Microsecond,
+			BackfillChunkSize:       chunkSize,
+		},
+		Store: &kvserver.StoreTestingKnobs{
+			// Add a dynamicRequestFilter so subtests can inject behaviors.
+			TestingRequestFilter: rf.filter,
 		},
 	}
 
@@ -3779,41 +3789,128 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	var sps []sql.SplitPoint
 	for i := 1; i <= numNodes-1; i++ {
-		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{maxValue / numNodes * i}})
+		sps = append(sps, sql.SplitPoint{TargetNodeIdx: i, Vals: []interface{}{(maxValue / numNodes) * i}})
 	}
 	sql.SplitTable(t, tc, tableDesc, sps)
 
 	testCases := []struct {
 		sql    string
 		column string
+		// expectedErr indicates that there is an error expected from the sql
+		// statement. It is assumed that the error is not permanent and the
+		// test will wait for the schema change to complete.
+		expectedErr string
+		before      func() (after func())
 	}{
-		{"ALTER TABLE t.test ADD COLUMN x TIMESTAMP DEFAULT current_timestamp;", "x"},
+		// This tests a rather vanilla case whereby we split up the batch over a
+		// few chunks and ensure that the correct timestamp is used.
+		{
+			sql:    "ALTER TABLE t.test ADD COLUMN x TIMESTAMP DEFAULT current_timestamp;",
+			column: "x",
+		},
+		// This tests the case of restarting the job after checkpointing some of
+		// the spans.
+		{
+			sql:    "ALTER TABLE t.test ADD COLUMN y TIMESTAMP DEFAULT current_timestamp;",
+			column: "y",
+			before: func() (after func()) {
+				// What we want is to figure out when an update to the job has
+				// occurred after a write to the index has occurred. Then we want to
+				// restart the job by injecting a retryable error. First, we check
+				// for the `PutRequest` to the table, then we check for a write to
+				// the jobs table for this schema change, then we check for a commit
+				// of the txn for the job, then we inject a retry error for a
+				// subsequent write to the job.
+				var state = struct {
+					syncutil.Mutex
+					sawWriteToIndex      bool
+					sawWriteToJob        bool
+					jobTxn               uuid.UUID
+					sawJobCommit         bool
+					sentErrorToBeRetried bool
+				}{}
+				indexPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.ID), uint32(tableDesc.PrimaryIndex.ID))
+				rf.setFilter(func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+					if request.Txn == nil {
+						return nil
+					}
+					state.Lock()
+					defer state.Unlock()
+					if !state.sawWriteToIndex {
+						if req, ok := request.GetArg(roachpb.Put); ok {
+							putReq := req.(*roachpb.PutRequest)
+							if bytes.HasPrefix(putReq.Key, indexPrefix) {
+								state.sawWriteToIndex = true
+							}
+						}
+					} else if !state.sawWriteToJob {
+						if req, ok := request.GetArg(roachpb.Put); ok {
+							putReq := req.(*roachpb.PutRequest)
+							_, tableID, _, err := keys.DecodeTableIDIndexID(putReq.Key)
+							if err != nil {
+								err = nil // defeat linter
+								return nil
+							}
+							if tableID == keys.JobsTableID {
+								state.sawWriteToJob = true
+								state.jobTxn = request.Txn.ID
+							}
+						}
+					} else if !state.sawJobCommit {
+						if req, ok := request.GetArg(roachpb.EndTxn); ok {
+							endTxnReq := req.(*roachpb.EndTxnRequest)
+							if endTxnReq.Commit && request.Txn.ID == state.jobTxn {
+								state.sawJobCommit = true
+							}
+						}
+					} else if !state.sentErrorToBeRetried {
+						if req, ok := request.GetArg(roachpb.Put); ok {
+							putReq := req.(*roachpb.PutRequest)
+							if bytes.HasPrefix(putReq.Key, indexPrefix) {
+								state.sentErrorToBeRetried = true
+								// Use a BatchTimestampBeforeGCError because it is retriable at
+								// the schema changer and it is properly serialized over the
+								// network in a way that context.Canceled is not.
+								return roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+									Timestamp: request.Txn.ReadTimestamp,
+									Threshold: request.Txn.ReadTimestamp.Prev(),
+								})
+							}
+						}
+					}
+					return nil
+				})
+				return func() { rf.setFilter(nil) }
+			},
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.sql, func(t *testing.T) {
-
-			if _, err := sqlDB.Exec(testCase.sql); err != nil {
-				t.Fatal(err)
+			if testCase.before != nil {
+				defer testCase.before()()
+			}
+			_, err := sqlDB.Exec(testCase.sql)
+			require.Regexp(t, testCase.expectedErr, err)
+			if err != nil {
+				testutils.SucceedsSoon(t, func() error {
+					var running int
+					require.NoError(t, sqlDB.QueryRow(`
+SELECT count(*) FROM crdb_internal.jobs WHERE status = 'running'
+`).Scan(&running))
+					if running != 0 {
+						return errors.Errorf("found %d running jobs, expected 0", running)
+					}
+					return nil
+				})
 			}
 
 			rows, err := sqlDB.Query(fmt.Sprintf(`SELECT DISTINCT %s from t.test`, testCase.column))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			defer rows.Close()
-
-			count := 0
-			for rows.Next() {
-				count++
-			}
-			if err := rows.Err(); err != nil {
-				t.Fatal(err)
-			}
-			if count != 1 {
-				t.Fatalf("read the wrong number of rows: e = %d, v = %d", 1, count)
-			}
-
+			strs, err := sqlutils.RowsToStrMatrix(rows)
+			require.NoError(t, err)
+			require.Len(t, strs, 1)
 		})
 	}
 }
