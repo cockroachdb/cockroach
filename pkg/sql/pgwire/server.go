@@ -193,7 +193,7 @@ type ServerMetrics struct {
 	BytesOutCount  *metric.Counter
 	Conns          *metric.Gauge
 	NewConns       *metric.Counter
-	ConnMemMetrics sql.MemoryMetrics
+	ConnMemMetrics sql.BaseMemoryMetrics
 	SQLMemMetrics  sql.MemoryMetrics
 }
 
@@ -205,7 +205,7 @@ func makeServerMetrics(
 		BytesOutCount:  metric.NewCounter(MetaBytesOut),
 		Conns:          metric.NewGauge(MetaConns),
 		NewConns:       metric.NewCounter(MetaNewConns),
-		ConnMemMetrics: sql.MakeMemMetrics("conns", histogramWindow),
+		ConnMemMetrics: sql.MakeBaseMemMetrics("conns", histogramWindow),
 		SQLMemMetrics:  sqlMemMetrics,
 	}
 }
@@ -240,8 +240,14 @@ func MakeServer(
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
-		server.metrics.SQLMemMetrics.CurBytesCount,
-		server.metrics.SQLMemMetrics.MaxBytesHist,
+		// Note that we don't report metrics on this monitor. The reason for this is
+		// that we report metrics on the sum of all the child monitors of this pool.
+		// This monitor is the "main sql" monitor. It's a child of the root memory
+		// monitor. Its children are the sql monitors for each new connection. The
+		// sum of those children, plus the extra memory in the "conn" monitor below,
+		// is more than enough metrics information about the monitors.
+		nil, /* curCount */
+		nil, /* maxHist */
 		0, noteworthySQLMemoryUsageBytes, st)
 	server.sqlMemoryPool.Start(context.Background(), parentMemoryMonitor, mon.BoundAccount{})
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
