@@ -16,10 +16,11 @@ import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
 // ClusterVersion represents a cluster's "active version". It is returned by the
-// Version cluster setting. Its IsActive() method can be used to determine if a
+// cluster version setting. Its IsActive() method can be used to determine if a
 // particular migration is to be considered enabled or disabled.
 message ClusterVersion {
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
 
   reserved 1;
   // The version of functionality in use in the cluster. This value must
