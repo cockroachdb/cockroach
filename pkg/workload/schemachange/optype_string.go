@@ -26,20 +26,21 @@ func _() {
 	_ = x[dropSequence-15]
 	_ = x[dropTable-16]
 	_ = x[dropView-17]
-	_ = x[renameColumn-18]
-	_ = x[renameIndex-19]
-	_ = x[renameSequence-20]
-	_ = x[renameTable-21]
-	_ = x[renameView-22]
-	_ = x[setColumnDefault-23]
-	_ = x[setColumnNotNull-24]
-	_ = x[setColumnType-25]
-	_ = x[insertRow-26]
+	_ = x[dropSchema-18]
+	_ = x[renameColumn-19]
+	_ = x[renameIndex-20]
+	_ = x[renameSequence-21]
+	_ = x[renameTable-22]
+	_ = x[renameView-23]
+	_ = x[setColumnDefault-24]
+	_ = x[setColumnNotNull-25]
+	_ = x[setColumnType-26]
+	_ = x[insertRow-27]
 }
 
-const _opType_name = "addColumnaddConstraintcreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumcreateSchemadropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewrenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypeinsertRow"
+const _opType_name = "addColumnaddConstraintcreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumcreateSchemadropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewdropSchemarenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypeinsertRow"
 
-var _opType_index = [...]uint16{0, 9, 22, 33, 47, 58, 71, 81, 91, 103, 113, 130, 147, 163, 177, 186, 198, 207, 215, 227, 238, 252, 263, 273, 289, 305, 318, 327}
+var _opType_index = [...]uint16{0, 9, 22, 33, 47, 58, 71, 81, 91, 103, 113, 130, 147, 163, 177, 186, 198, 207, 215, 225, 237, 248, 262, 273, 283, 299, 315, 328, 337}
 
 func (i opType) String() string {
 	if i < 0 || i >= opType(len(_opType_index)-1) {
