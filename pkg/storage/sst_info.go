@@ -11,9 +11,6 @@
 package storage
 
 import (
-	"bytes"
-	"fmt"
-	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -54,109 +51,7 @@ func (s SSTableInfos) Less(i, j int) bool {
 	}
 }
 
-func (s SSTableInfos) String() string {
-	const (
-		KB = 1 << 10
-		MB = 1 << 20
-		GB = 1 << 30
-		TB = 1 << 40
-	)
-
-	roundTo := func(val, to int64) int64 {
-		return (val + to/2) / to
-	}
-
-	// We're intentionally not using humanizeutil here as we want a slightly more
-	// compact representation.
-	humanize := func(size int64) string {
-		switch {
-		case size < MB:
-			return fmt.Sprintf("%dK", roundTo(size, KB))
-		case size < GB:
-			return fmt.Sprintf("%dM", roundTo(size, MB))
-		case size < TB:
-			return fmt.Sprintf("%dG", roundTo(size, GB))
-		default:
-			return fmt.Sprintf("%dT", roundTo(size, TB))
-		}
-	}
-
-	type levelInfo struct {
-		size  int64
-		count int
-	}
-
-	var levels []*levelInfo
-	for _, t := range s {
-		for i := len(levels); i <= t.Level; i++ {
-			levels = append(levels, &levelInfo{})
-		}
-		info := levels[t.Level]
-		info.size += t.Size
-		info.count++
-	}
-
-	var maxSize int
-	var maxLevelCount int
-	for _, info := range levels {
-		size := len(humanize(info.size))
-		if maxSize < size {
-			maxSize = size
-		}
-		count := 1 + int(math.Log10(float64(info.count)))
-		if maxLevelCount < count {
-			maxLevelCount = count
-		}
-	}
-	levelFormat := fmt.Sprintf("%%d [ %%%ds %%%dd ]:", maxSize, maxLevelCount)
-
-	level := -1
-	var buf bytes.Buffer
-	var lastSize string
-	var lastSizeCount int
-
-	flushLastSize := func() {
-		if lastSizeCount > 0 {
-			fmt.Fprintf(&buf, " %s", lastSize)
-			if lastSizeCount > 1 {
-				fmt.Fprintf(&buf, "[%d]", lastSizeCount)
-			}
-			lastSizeCount = 0
-		}
-	}
-
-	maybeFlush := func(newLevel, i int) {
-		if level == newLevel {
-			return
-		}
-		flushLastSize()
-		if buf.Len() > 0 {
-			buf.WriteString("\n")
-		}
-		level = newLevel
-		if level >= 0 {
-			info := levels[level]
-			fmt.Fprintf(&buf, levelFormat, level, humanize(info.size), info.count)
-		}
-	}
-
-	for i, t := range s {
-		maybeFlush(t.Level, i)
-		size := humanize(t.Size)
-		if size == lastSize {
-			lastSizeCount++
-		} else {
-			flushLastSize()
-			lastSize = size
-			lastSizeCount = 1
-		}
-	}
-
-	maybeFlush(-1, 0)
-	return buf.String()
-}
-
-// ReadAmplification returns the store's worst case read amplification, which is
+// readAmplification returns the store's worst case read amplification, which is
 // the number of levels (other than L0) with at least one sstable, and for
 // L0, either the value of `l0Sublevels` if that's >= 0, or the number
 // of sstables in L0 in all.
@@ -164,7 +59,7 @@ func (s SSTableInfos) String() string {
 // This definition comes from here (minus the sublevel handling, which is a
 // Pebble-specific optimization):
 // https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#level-style-compaction
-func (s SSTableInfos) ReadAmplification(l0Sublevels int) int {
+func (s SSTableInfos) readAmplification(l0Sublevels int) int64 {
 	if l0Sublevels < 0 {
 		l0Sublevels = 0
 		for i := range s {
@@ -173,7 +68,7 @@ func (s SSTableInfos) ReadAmplification(l0Sublevels int) int {
 			}
 		}
 	}
-	readAmp := l0Sublevels
+	readAmp := int64(l0Sublevels)
 	seenLevel := make(map[int]bool)
 	for _, t := range s {
 		if t.Level > 0 && !seenLevel[t.Level] {
