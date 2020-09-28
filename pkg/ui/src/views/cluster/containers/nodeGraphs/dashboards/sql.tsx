@@ -262,6 +262,28 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="SQL Memory"
+      tooltip={
+        `The current amount of allocated SQL memory. This amount is what is
+         compared against the node's --max-sql-memory flag.`
+      }
+    >
+      <Axis units={AxisUnits.Bytes} label="allocated bytes">
+        {
+          _.map(nodeIDs, (node) => (
+            <Metric
+              key={node}
+              name="cr.node.sql.mem.root.current"
+              title={nodeDisplayName(nodesSummary, node)}
+              sources={[node]}
+              downsampleMax
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Schema Changes"
       sources={nodeSources}
       tooltip={`The total number of DDL statements per second ${tooltipSelection}.`}

@@ -6268,3 +6268,32 @@ ALTER DATABASE db RENAME TO db2;
 	sqlRun.ExpectErr(t, `unknown schema "sc"`, `ALTER SCHEMA sc RENAME TO sc3`)
 	sqlRun.ExpectErr(t, `database "db" does not exist`, `ALTER DATABASE db RENAME TO db3`)
 }
+
+// TestAddingTableResolution tests that table names cannot be resolved in the
+// adding state.
+func TestAddingTableResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		// Don't run the schema change to take the table out of the adding state.
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SchemaChangeJobNoOp: func() bool { return true },
+		},
+	}
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Materialized views are in the adding state until successfully backfilled.
+	// In this test it gets stuck in the adding state.
+	sqlRun.Exec(t, `CREATE MATERIALIZED VIEW foo AS SELECT random(), generate_series FROM generate_series(1, 10);`)
+
+	sqlRun.ExpectErr(t, `pq: table is being added`, `SELECT * FROM foo`)
+	sqlRun.ExpectErr(t, `pq: relation "foo" does not exist`, `ALTER MATERIALIZED VIEW foo RENAME TO bar`)
+	// Regression test for #52829.
+	sqlRun.ExpectErr(t, `pq: relation "foo" does not exist`, `SHOW CREATE foo`)
+}

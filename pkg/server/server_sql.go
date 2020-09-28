@@ -87,7 +87,6 @@ type sqlServer struct {
 	statsRefresher         *stats.Refresher
 	temporaryObjectCleaner *sql.TemporaryObjectCleaner
 	internalMemMetrics     sql.MemoryMetrics
-	adminMemMetrics        sql.MemoryMetrics
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics           sql.MemoryMetrics
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
@@ -270,6 +269,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.LeaseManagerConfig,
 	)
 
+	rootSQLMetrics := sql.MakeBaseMemMetrics("root", cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(rootSQLMetrics)
+
 	// Set up internal memory metrics for use by internal SQL executors.
 	internalMemMetrics := sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(internalMemMetrics)
@@ -279,8 +281,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	rootSQLMemoryMonitor := mon.NewMonitor(
 		"root",
 		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
+		rootSQLMetrics.CurBytesCount,
+		rootSQLMetrics.MaxBytesHist,
 		-1,            /* increment: use default increment */
 		math.MaxInt64, /* noteworthy */
 		cfg.Settings,
@@ -326,10 +328,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
 		}
 	}))
-
-	// Set up admin memory metrics for use by admin SQL executors.
-	adminMemMetrics := sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
-	cfg.registry.AddMetricStruct(adminMemMetrics)
 
 	hydratedTablesCache := hydratedtables.NewCache(cfg.Settings)
 	cfg.registry.AddMetricStruct(hydratedTablesCache.Metrics())
@@ -594,7 +592,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		ie := sql.MakeInternalExecutor(
 			ctx,
 			pgServer.SQLServer,
-			sqlMemMetrics,
+			internalMemMetrics,
 			cfg.Settings,
 		)
 		ie.SetSessionData(sessionData)
@@ -644,7 +642,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		statsRefresher:          statsRefresher,
 		temporaryObjectCleaner:  temporaryObjectCleaner,
 		internalMemMetrics:      internalMemMetrics,
-		adminMemMetrics:         adminMemMetrics,
 		sqlMemMetrics:           sqlMemMetrics,
 		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
 		sqlLivenessProvider:     cfg.sqlLivenessProvider,
