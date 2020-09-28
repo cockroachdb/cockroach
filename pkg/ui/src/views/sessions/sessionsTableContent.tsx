@@ -97,7 +97,7 @@ export const SessionTableTitle = {
         </div>
       }
     >
-      Query Age
+      Statement Age
     </Tooltip>
   ),
   memUsage: (
