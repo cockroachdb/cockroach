@@ -376,6 +376,11 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		`CREATE DATABASE t;
 		CREATE TABLE t.a (k INT PRIMARY KEY);`)
 
+	// Test that stats for tables in user-defined schemas are also refreshed.
+	sqlRun.Exec(t,
+		`CREATE SCHEMA my_schema;
+		CREATE TABLE my_schema.b (j INT PRIMARY KEY);`)
+
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
@@ -396,11 +401,18 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// There should be one stat.
+	// There should be one stat for table t.a.
 	sqlRun.CheckQueryResultsRetry(t,
 		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t.a]`,
 		[][]string{
 			{"__auto__", "{k}", "0"},
+		})
+
+	// There should be one stat for table my_schema.b.
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE my_schema.b]`,
+		[][]string{
+			{"__auto__", "{j}", "0"},
 		})
 }
 
