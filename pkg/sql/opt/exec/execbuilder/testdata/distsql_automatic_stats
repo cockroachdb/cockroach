@@ -197,3 +197,31 @@ __auto__         {d}           550        0
 __auto__         {d}           0          0
 __auto__         {rowid}       550        0
 __auto__         {rowid}       0          0
+
+
+# Test user-defined schemas.
+
+# Disable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+statement ok
+CREATE SCHEMA my_schema;
+CREATE TABLE my_schema.my_table (k INT PRIMARY KEY, v STRING);
+
+# Enable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
+
+# Insert 10 rows.
+statement ok
+INSERT INTO my_schema.my_table SELECT k, NULL FROM
+   generate_series(1, 10) AS k(k)
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE my_schema.my_table] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {k}           10         10              0
+__auto__         {v}           10         1               10
