@@ -701,6 +701,11 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 							return err
 						}
 						d = tree.NewDOid(*i)
+					case types.BitFamily:
+						d, err = tree.ParseDBitArray(string(t))
+						if err != nil {
+							return err
+						}
 					default:
 						return errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
 					}
