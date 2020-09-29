@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -1188,5 +1190,67 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
+	}
+}
+
+func TestNodeLivenessDecommissionedCallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	var cb struct {
+		syncutil.Mutex
+		m map[roachpb.NodeID]bool // id -> decommissioned
+	}
+
+	tArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				OnDecommissionedCallback: func(rec kvserverpb.Liveness) {
+					cb.Lock()
+					if cb.m == nil {
+						cb.m = map[roachpb.NodeID]bool{}
+					}
+					cb.m[rec.NodeID] = rec.Membership == kvserverpb.MembershipStatus_DECOMMISSIONED
+					cb.Unlock()
+
+				},
+			},
+		},
+	}
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // for speed
+		ServerArgs:      tArgs,
+	}
+	tc := testcluster.NewTestCluster(t, 3, args)
+	tc.Start(t)
+	defer tc.Stopper().Stop(ctx)
+
+	nl1 := tc.Servers[0].NodeLiveness().(*kvserver.NodeLiveness)
+
+	// Make sure the callback doesn't fire willy-nilly...
+	func() {
+		chg, err := nl1.SetMembershipStatus(ctx, 2, kvserverpb.MembershipStatus_DECOMMISSIONING)
+		require.NoError(t, err)
+		require.True(t, chg)
+		cb.Lock()
+		defer cb.Unlock()
+		require.Zero(t, cb.m)
+	}()
+
+	// ... but only when a node actually gets decommissioned.
+	{
+		chg, err := nl1.SetMembershipStatus(ctx, 2, kvserverpb.MembershipStatus_DECOMMISSIONED)
+		require.NoError(t, err)
+		require.True(t, chg)
+		testutils.SucceedsSoon(t, func() error {
+			cb.Lock()
+			sl := pretty.Diff(map[roachpb.NodeID]bool{2: true}, cb.m)
+			cb.Unlock()
+			if len(sl) > 0 {
+				return errors.Errorf("diff(exp,act) = %s", strings.Join(sl, "\n"))
+			}
+			return nil
+		})
+
 	}
 }
