@@ -1502,6 +1502,8 @@ from the given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_clipbybox2d"></a><code>st_clipbybox2d(geometry: geometry, box2d: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Clips the geometry to conform to the bounding box specified by box2d.</p>
 </span></td></tr>
+<tr><td><a name="st_closestpoint"></a><code>st_closestpoint(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the 2-dimensional point on geometry_a that is closest to geometry_b. This is the first point of the shortest line.</p>
+</span></td></tr>
 <tr><td><a name="st_collectionextract"></a><code>st_collectionextract(geometry: geometry, type: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Given a collection, returns a multitype consisting only of elements of the specified type. If there are no elements of the given type, an EMPTY geometry is returned. Types are specified as 1=POINT, 2=LINESTRING, 3=POLYGON - other types are not supported.</p>
 </span></td></tr>
 <tr><td><a name="st_collectionhomogenize"></a><code>st_collectionhomogenize(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the “simplest” representation of a collection’s contents. Collections of a single type will be returned as an appopriate multitype, or a singleton if it only contains a single geometry.</p>
