@@ -235,27 +235,30 @@ type LivenessRecord struct {
 	raw []byte
 }
 
+// NoveLivenessOptions is the input to NewNodeLiveness.
+type NodeLivenessOptions struct {
+	AmbientCtx              log.AmbientContext
+	Settings                *cluster.Settings
+	Gossip                  *gossip.Gossip
+	Clock                   *hlc.Clock
+	DB                      *kv.DB
+	LivenessThreshold       time.Duration
+	RenewalDuration         time.Duration
+	HistogramWindowInterval time.Duration
+}
+
 // NewNodeLiveness returns a new instance of NodeLiveness configured
 // with the specified gossip instance.
-func NewNodeLiveness(
-	ambient log.AmbientContext,
-	clock *hlc.Clock,
-	db *kv.DB,
-	g *gossip.Gossip,
-	livenessThreshold time.Duration,
-	renewalDuration time.Duration,
-	st *cluster.Settings,
-	histogramWindow time.Duration,
-) *NodeLiveness {
+func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 	nl := &NodeLiveness{
-		ambientCtx:        ambient,
-		clock:             clock,
-		db:                db,
-		gossip:            g,
-		livenessThreshold: livenessThreshold,
-		heartbeatInterval: livenessThreshold - renewalDuration,
+		ambientCtx:        opts.AmbientCtx,
+		clock:             opts.Clock,
+		db:                opts.DB,
+		gossip:            opts.Gossip,
+		livenessThreshold: opts.LivenessThreshold,
+		heartbeatInterval: opts.LivenessThreshold - opts.RenewalDuration,
 		selfSem:           make(chan struct{}, 1),
-		st:                st,
+		st:                opts.Settings,
 		otherSem:          make(chan struct{}, 1),
 		heartbeatToken:    make(chan struct{}, 1),
 	}
@@ -265,7 +268,7 @@ func NewNodeLiveness(
 		HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
 		HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
 		EpochIncrements:    metric.NewCounter(metaEpochIncrements),
-		HeartbeatLatency:   metric.NewLatency(metaHeartbeatLatency, histogramWindow),
+		HeartbeatLatency:   metric.NewLatency(metaHeartbeatLatency, opts.HistogramWindowInterval),
 	}
 	nl.mu.nodes = make(map[roachpb.NodeID]LivenessRecord)
 	nl.heartbeatToken <- struct{}{}
