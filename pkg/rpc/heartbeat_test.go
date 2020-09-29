@@ -172,10 +172,10 @@ func TestClockOffsetMismatch(t *testing.T) {
 	hs.clusterID.Set(ctx, uuid.Nil)
 
 	request := &PingRequest{
-		Ping:           "testManual",
-		Addr:           "test",
-		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
-		ServerVersion:  st.Version.BinaryVersion(),
+		Ping:                 "testManual",
+		OriginAddr:           "test",
+		OriginMaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
+		ServerVersion:        st.Version.BinaryVersion(),
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
@@ -257,7 +257,7 @@ func TestNodeIDCompare(t *testing.T) {
 			heartbeat.nodeID.Reset(td.serverNodeID)
 			request := &PingRequest{
 				Ping:          "testPing",
-				NodeID:        td.clientNodeID,
+				TargetNodeID:  td.clientNodeID,
 				ServerVersion: st.Version.BinaryVersion(),
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
