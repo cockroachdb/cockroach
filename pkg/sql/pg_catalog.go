@@ -1244,7 +1244,7 @@ CREATE TABLE pg_catalog.pg_database (
 				return addRow(
 					dbOid(db.GetID()),           // oid
 					tree.NewDName(db.GetName()), // datname
-					tree.DNull,                  // datdba
+					getOwnerOID(db),             // datdba
 					// If there is a change in encoding value for the database we must update
 					// the definitions of getdatabaseencoding within pg_builtin.
 					builtins.DatEncodingUTFId,  // encoding

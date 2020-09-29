@@ -242,12 +242,12 @@ SELECT oid, datname, datdba, encoding, datcollate, datctype, datistemplate, data
 FROM pg_catalog.pg_database
 ORDER BY oid
 ----
-oid  datname        datdba  encoding  datcollate  datctype    datistemplate  datallowconn
-1    system         NULL    6         en_US.utf8  en_US.utf8  false          true
-50   defaultdb      NULL    6         en_US.utf8  en_US.utf8  false          true
-51   postgres       NULL    6         en_US.utf8  en_US.utf8  false          true
-52   test           NULL    6         en_US.utf8  en_US.utf8  false          true
-54   constraint_db  NULL    6         en_US.utf8  en_US.utf8  false          true
+oid  datname        datdba      encoding  datcollate  datctype    datistemplate  datallowconn
+1    system         3233629770  6         en_US.utf8  en_US.utf8  false          true
+50   defaultdb      1546506610  6         en_US.utf8  en_US.utf8  false          true
+51   postgres       1546506610  6         en_US.utf8  en_US.utf8  false          true
+52   test           1546506610  6         en_US.utf8  en_US.utf8  false          true
+54   constraint_db  1546506610  6         en_US.utf8  en_US.utf8  false          true
 
 query OTIOIIOT colnames
 SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, dattablespace, datacl
