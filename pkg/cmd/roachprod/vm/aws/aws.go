@@ -75,6 +75,7 @@ type providerOpts struct {
 	EBSVolumeType      string
 	EBSVolumeSize      int
 	EBSProvisionedIOPs int
+	UseMultipleDisks   bool
 
 	// Use specified ImageAMI when provisioning.
 	// Overrides config.json AMI.
@@ -147,6 +148,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"of geo (default [%s])", strings.Join(defaultCreateZones, ",")))
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		"", "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
+	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
+		false, "Enable the use of multiple stores by creating one store directory per disk.  Default is to raid0 stripe all disks.")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -676,7 +679,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(extraMountOpts)
+	filename, err := writeStartupScript(extraMountOpts, p.opts.UseMultipleDisks)
 	if err != nil {
 		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
@@ -713,10 +716,10 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	if !opts.SSDOpts.UseLocalSSD {
 		var ebsParams string
 		switch t := p.opts.EBSVolumeType; t {
-		case "gp2", "io2":
+		case "gp2":
 			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,DeleteOnTermination=true}",
 				p.opts.EBSVolumeSize, t)
-		case "io1":
+		case "io1", "io2":
 			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,Iops=%d,DeleteOnTermination=true}",
 				p.opts.EBSVolumeSize, t, p.opts.EBSProvisionedIOPs)
 		default:
