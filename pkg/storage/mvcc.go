@@ -269,8 +269,8 @@ func updateStatsForInline(
 // as the actual details of the merge play out asynchronously during
 // compaction. Instead, we undercount by adding only the size of the
 // value.Bytes byte slice (an estimated 12 bytes for timestamp,
-// included in valSize by caller). These errors are corrected during
-// splits and merges.
+// included in valSize by caller). We expect these errors are corrected
+// during splits and merges.
 func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 	sys := isSysLocal(key)
@@ -2172,7 +2172,7 @@ func MVCCMerge(
 	if err == nil {
 		if err = rw.Merge(metaKey, data); err == nil && ms != nil {
 			ms.Add(updateStatsOnMerge(
-				key, int64(len(rawBytes))+MVCCVersionTimestampSize, timestamp.WallTime))
+				key, int64(len(rawBytes)), timestamp.WallTime))
 		}
 	}
 	buf.release()
