@@ -667,7 +667,14 @@ func init() {
 	boolFlag(dumpCmd.Flags(), &dumpCtx.dumpAll, cliflags.DumpAll)
 
 	// Commands that establish a SQL connection.
-	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd, doctorClusterCmd}
+	sqlCmds := []*cobra.Command{
+		sqlShellCmd,
+		dumpCmd,
+		demoCmd,
+		doctorClusterCmd,
+		lsNodesCmd,
+		statusNodeCmd,
+	}
 	sqlCmds = append(sqlCmds, authCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	sqlCmds = append(sqlCmds, stmtDiagCmds...)
@@ -675,6 +682,9 @@ func init() {
 	sqlCmds = append(sqlCmds, userFileCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.Flags()
+		// The --echo-sql flag is special: it is a marker for CLI tests to
+		// recognize SQL-only commands. If/when adding this flag to non-SQL
+		// commands, ensure the isSQLCommand() predicate is updated accordingly.
 		boolFlag(f, &sqlCtx.echo, cliflags.EchoSQL)
 
 		if cmd != demoCmd {
