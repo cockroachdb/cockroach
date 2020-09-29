@@ -229,7 +229,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	if !ltc.DisableLivenessHeartbeat {
-		cfg.NodeLiveness.StartHeartbeat(ctx, ltc.stopper, []storage.Engine{ltc.Eng}, nil /* alive */)
+		cfg.NodeLiveness.Start(ctx, ltc.stopper, []storage.Engine{ltc.Eng}, nil /* alive */)
 	}
 
 	if err := ltc.Store.Start(ctx, ltc.stopper); err != nil {
