@@ -783,7 +783,7 @@ func isDatabaseEmpty(
 	dbDesc catalog.DatabaseDescriptor,
 	ignoredTables map[descpb.ID]struct{},
 ) (bool, error) {
-	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec)
+	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec, true)
 	if err != nil {
 		return false, err
 	}
