@@ -254,6 +254,7 @@ func makeKVFeedCfg(
 		Sink:               buf,
 		Settings:           cfg.Settings,
 		DB:                 cfg.DB,
+		Codec:              cfg.Codec,
 		Clock:              cfg.DB.Clock(),
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
