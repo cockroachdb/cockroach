@@ -162,6 +162,60 @@ func TestHeartbeatCB(t *testing.T) {
 	})
 }
 
+// TestPingInterceptors checks that OnSendPing and OnHandlePing can inject errors.
+func TestPingInterceptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	const (
+		blockedTargetNodeID = 5
+		blockedOriginNodeID = 123
+	)
+
+	errBoomSend := errors.Handled(errors.New("boom due to onSendPing"))
+	errBoomRecv := status.Error(codes.FailedPrecondition, "boom due to onHandlePing")
+	opts := ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Config:     testutils.NewNodeTestBaseContext(),
+		Clock:      hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
+		Stopper:    stop.NewStopper(),
+		Settings:   cluster.MakeTestingClusterSettings(),
+		OnSendPing: func(req *PingRequest) error {
+			if req.TargetNodeID == blockedTargetNodeID {
+				return errBoomSend
+			}
+			return nil
+		},
+		OnHandlePing: func(req *PingRequest) error {
+			if req.OriginNodeID == blockedOriginNodeID {
+				return errBoomRecv
+			}
+			return nil
+		},
+	}
+	defer opts.Stopper.Stop(ctx)
+
+	rpcCtx := NewContext(opts)
+	{
+		_, err := rpcCtx.GRPCDialNode("unused:1234", 5, SystemClass).Connect(ctx)
+		require.Equal(t, errBoomSend, errors.Cause(err))
+	}
+
+	s := newTestServer(t, rpcCtx)
+	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
+	rpcCtx.NodeID.Set(ctx, blockedOriginNodeID)
+	ln, err := netutil.ListenAndServeGRPC(rpcCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+	{
+		_, err := rpcCtx.GRPCDialNode(remoteAddr, blockedOriginNodeID, SystemClass).Connect(ctx)
+		require.Equal(t, errBoomRecv, errors.Cause(err))
+	}
+}
+
 var _ roachpb.InternalServer = &internalServer{}
 
 type internalServer struct{}
