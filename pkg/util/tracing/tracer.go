@@ -251,8 +251,10 @@ func (t *Tracer) StartSpan(
 
 	shadowTr := t.getShadowTracer()
 
-	if len(opts) == 0 && !t.useNetTrace() && shadowTr == nil && !t.forceRealSpans {
-		return &t.noopSpan
+	if !t.alwaysTrace() {
+		if len(opts) == 0 && shadowTr == nil {
+			return &t.noopSpan
+		}
 	}
 
 	var sso opentracing.StartSpanOptions
@@ -293,6 +295,17 @@ func (t *Tracer) StartSpan(
 		recordingType = parentCtx.recordingType
 		break
 	}
+
+	// If there is no parent, this is a root span. Thus, a sampling decision needs
+	// to be made.
+	if !hasParent {
+		if !t.alwaysTrace() {
+			if !t.shouldSample() {
+				return &t.noopSpan
+			}
+		}
+	}
+
 	if hasParent {
 		// We use the parent's shadow tracer, to avoid inconsistency inside a
 		// trace when the shadow tracer changes.
@@ -302,8 +315,10 @@ func (t *Tracer) StartSpan(
 	// If tracing is disabled, the Recordable option wasn't passed, and we're not
 	// part of a recording or snowball trace, avoid overhead and return a noop
 	// span.
-	if !recordable && recordingType == NoRecording && shadowTr == nil && !t.useNetTrace() && !t.forceRealSpans {
-		return &t.noopSpan
+	if !t.alwaysTrace() {
+		if !recordable && recordingType == NoRecording && shadowTr == nil {
+			return &t.noopSpan
+		}
 	}
 
 	s := &span{
@@ -380,7 +395,7 @@ const (
 	NonRecordableSpan RecordableOpt = false
 )
 
-// alwaysTrace can be used to set conditions for when 100% tracing is desired
+// alwaysTrace can be used to set conditions for when 100% tracing is desired.
 func (t *Tracer) alwaysTrace() bool {
 	return t.useNetTrace() || t.forceRealSpans
 }
@@ -395,7 +410,7 @@ func (t *Tracer) effectiveSamplingRate() float64 {
 	return *sr
 }
 
-// shouldSample determines if traces should be recorded starting at the root.
+// shouldSample randomly decides if traces should be recorded starting at the root.
 func (t *Tracer) shouldSample() bool {
 	sr := t.effectiveSamplingRate()
 	return sr == 1 || (sr > 0 && rand.Float64() < sr)

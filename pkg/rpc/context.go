@@ -96,11 +96,13 @@ var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRE
 func spanInclusionFuncForServer(
 	t *tracing.Tracer, parentSpanCtx opentracing.SpanContext, method string, req, resp interface{},
 ) bool {
-	// Is client tracing?
-	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
-	// Should we trace regardless of the client? This is useful for calls coming
-	// through the HTTP->RPC gateway (i.e. the AdminUI), where client is never
-	// tracing.
+	return true
+	// This determines if OpenTracingServerInterceptor can call Tracer.StartSpan() to start recording a span.
+	// Normally, we would check parentSpanCtx to see if the client is tracing or not to make this decision, but
+	// there are situations where we may want to trace even though the client is not (i.e. the AdminUI).
+	//
+	// To deal with this edge case and to keep tracing logic organized, it is best to always allow Tracer.StartSpan()
+	// to be called and let the logic inside the tracing package decide if the span will become a noop or not.
 }
 
 // spanInclusionFuncForClient is used as a SpanInclusionFunc for the client-side
