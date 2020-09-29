@@ -574,7 +574,7 @@ func (w *schemaChangeWorker) createEnum(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	stmt := rowenc.RandCreateType(w.rng, typName, "asdf")
+	stmt := rowenc.RandCreateType(w.rng, typName.String(), "asdf")
 	return tree.Serialize(stmt), nil
 }
 
@@ -1037,22 +1037,27 @@ ORDER BY random()
 	return name, nil
 }
 
-func (w *schemaChangeWorker) randEnum(tx *pgx.Tx, pctExisting int) (string, error) {
+func (w *schemaChangeWorker) randEnum(tx *pgx.Tx, pctExisting int) (tree.UnresolvedName, error) {
 	if w.rng.Intn(100) >= pctExisting {
-		return fmt.Sprintf("enum%d", atomic.AddInt64(w.seqNum, 1)), nil
+		randSchema, err := w.randSchema(tx, 100-pctExisting)
+		if err != nil {
+			return tree.MakeUnresolvedName(), err
+		}
+		return tree.MakeUnresolvedName(randSchema, fmt.Sprintf("enum%d", atomic.AddInt64(w.seqNum, 1))), nil
 	}
 	const q = `
-  SELECT name
+  SELECT schema, name
     FROM [SHOW ENUMS]
    WHERE name LIKE 'enum%'
 ORDER BY random()
    LIMIT 1;
 `
+	var schemaName string
 	var typName string
-	if err := tx.QueryRow(q).Scan(&typName); err != nil {
-		return "", err
+	if err := tx.QueryRow(q).Scan(&schemaName, &typName); err != nil {
+		return tree.MakeUnresolvedName(), err
 	}
-	return typName, nil
+	return tree.MakeUnresolvedName(schemaName, typName), nil
 }
 
 // randTable returns a schema name along with a table name
@@ -1152,8 +1157,7 @@ func (w *schemaChangeWorker) randType(tx *pgx.Tx) (tree.ResolvableTypeReference,
 		if err != nil {
 			return nil, err
 		}
-		n := tree.MakeUnresolvedName(typName)
-		return n.ToUnresolvedObjectName(tree.NoAnnotation)
+		return typName.ToUnresolvedObjectName(tree.NoAnnotation)
 	}
 	return rowenc.RandSortingType(w.rng), nil
 }
