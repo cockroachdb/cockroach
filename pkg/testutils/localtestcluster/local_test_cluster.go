@@ -229,7 +229,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	}
 
 	if !ltc.DisableLivenessHeartbeat {
-		cfg.NodeLiveness.Start(ctx, ltc.stopper, []storage.Engine{ltc.Eng}, nil /* alive */)
+		cfg.NodeLiveness.Start(ctx,
+			kvserver.NodeLivenessStartOptions{Stopper: ltc.stopper, Engines: []storage.Engine{ltc.Eng}})
 	}
 
 	if err := ltc.Store.Start(ctx, ltc.stopper); err != nil {

@@ -216,8 +216,8 @@ type NodeLiveness struct {
 		//
 		// More concretely, we want `getLivenessRecordFromKV` to be tucked away
 		// within `getLivenessLocked`.
-		nodes             map[roachpb.NodeID]LivenessRecord
-		heartbeatCallback HeartbeatCallback
+		nodes      map[roachpb.NodeID]LivenessRecord
+		onSelfLive HeartbeatCallback
 		// Before heartbeating, we write to each of these engines to avoid
 		// maintaining liveness when a local disks is stalled.
 		engines []storage.Engine
@@ -235,7 +235,13 @@ type LivenessRecord struct {
 	raw []byte
 }
 
-// NoveLivenessOptions is the input to NewNodeLiveness.
+// NodeLivenessOptions is the input to NewNodeLiveness.
+//
+// Note that there is yet another struct, NodeLivenessStartOptions, which
+// is supplied when the instance is started. This is necessary as during
+// server startup, some inputs can only be constructed at Start time. The
+// separation has grown organically and various options could in principle
+// be moved back and forth.
 type NodeLivenessOptions struct {
 	AmbientCtx              log.AmbientContext
 	Settings                *cluster.Settings
@@ -620,32 +626,39 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	return liveness.IsLive(nl.clock.Now().GoTime()), nil
 }
 
+// NodeLivenessStartOptions are the arguments to `NodeLiveness.Start`.
+type NodeLivenessStartOptions struct {
+	Stopper *stop.Stopper
+	Engines []storage.Engine
+	// OnSelfLive is invoked after every successful heartbeat
+	// of the local liveness instance's heartbeat loop.
+	OnSelfLive HeartbeatCallback
+}
+
 // Start starts a periodic heartbeat to refresh this node's last
 // heartbeat in the node liveness table. The optionally provided
 // HeartbeatCallback will be invoked whenever this node updates its
 // own liveness. The slice of engines will be written to before each
 // heartbeat to avoid maintaining liveness in the presence of disk stalls.
-func (nl *NodeLiveness) Start(
-	ctx context.Context, stopper *stop.Stopper, engines []storage.Engine, alive HeartbeatCallback,
-) {
+func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions) {
 	log.VEventf(ctx, 1, "starting liveness heartbeat")
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.Closer = stopper.ShouldQuiesce()
+	retryOpts.Closer = opts.Stopper.ShouldQuiesce()
 
-	if len(engines) == 0 {
+	if len(opts.Engines) == 0 {
 		// Avoid silently forgetting to pass the engines. It happened before.
 		log.Fatalf(ctx, "must supply at least one engine")
 	}
 
 	nl.mu.Lock()
-	nl.mu.heartbeatCallback = alive
-	nl.mu.engines = engines
+	nl.mu.onSelfLive = opts.OnSelfLive
+	nl.mu.engines = opts.Engines
 	nl.mu.Unlock()
 
-	stopper.RunWorker(ctx, func(context.Context) {
+	opts.Stopper.RunWorker(ctx, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("liveness-hb", nil)
-		ctx, cancel := stopper.WithCancelOnStop(context.Background())
+		ctx, cancel := opts.Stopper.WithCancelOnStop(context.Background())
 		defer cancel()
 		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
 		defer sp.Finish()
@@ -656,7 +669,7 @@ func (nl *NodeLiveness) Start(
 		for {
 			select {
 			case <-nl.heartbeatToken:
-			case <-stopper.ShouldStop():
+			case <-opts.Stopper.ShouldStop():
 				return
 			}
 			// Give the context a timeout approximately as long as the time we
@@ -693,7 +706,7 @@ func (nl *NodeLiveness) Start(
 			nl.heartbeatToken <- struct{}{}
 			select {
 			case <-ticker.C:
-			case <-stopper.ShouldStop():
+			case <-opts.Stopper.ShouldStop():
 				return
 			}
 		}
@@ -1236,7 +1249,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	}
 
 	nl.mu.RLock()
-	cb := nl.mu.heartbeatCallback
+	cb := nl.mu.onSelfLive
 	nl.mu.RUnlock()
 	if cb != nil {
 		cb(ctx)
