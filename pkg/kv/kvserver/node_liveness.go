@@ -216,11 +216,12 @@ type NodeLiveness struct {
 		//
 		// More concretely, we want `getLivenessRecordFromKV` to be tucked away
 		// within `getLivenessLocked`.
-		nodes      map[roachpb.NodeID]LivenessRecord
-		onSelfLive HeartbeatCallback
+		nodes                map[roachpb.NodeID]LivenessRecord
+		onSelfLive           HeartbeatCallback         // set in Start()
+		onNodeDecommissioned func(kvserverpb.Liveness) // set in Start()
 		// Before heartbeating, we write to each of these engines to avoid
 		// maintaining liveness when a local disks is stalled.
-		engines []storage.Engine
+		engines []storage.Engine // set in Start()
 	}
 }
 
@@ -278,9 +279,6 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 	}
 	nl.mu.nodes = make(map[roachpb.NodeID]LivenessRecord)
 	nl.heartbeatToken <- struct{}{}
-
-	livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
-	nl.gossip.RegisterCallback(livenessRegex, nl.livenessGossipUpdate)
 
 	return nl
 }
@@ -633,6 +631,11 @@ type NodeLivenessStartOptions struct {
 	// OnSelfLive is invoked after every successful heartbeat
 	// of the local liveness instance's heartbeat loop.
 	OnSelfLive HeartbeatCallback
+	// OnNodeDecommissioned is invoked whenever the instance learns that a
+	// node was permanently removed from the cluster. This method must be
+	// idempotent as it may be invoked multiple times and defaults to a
+	// noop.
+	OnNodeDecommissioned func(kvserverpb.Liveness)
 }
 
 // Start starts a periodic heartbeat to refresh this node's last
@@ -641,7 +644,7 @@ type NodeLivenessStartOptions struct {
 // own liveness. The slice of engines will be written to before each
 // heartbeat to avoid maintaining liveness in the presence of disk stalls.
 func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions) {
-	log.VEventf(ctx, 1, "starting liveness heartbeat")
+	log.VEventf(ctx, 1, "starting node liveness instance")
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = opts.Stopper.ShouldQuiesce()
 
@@ -650,10 +653,22 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 		log.Fatalf(ctx, "must supply at least one engine")
 	}
 
+	if opts.OnNodeDecommissioned == nil {
+		opts.OnNodeDecommissioned = func(kvserverpb.Liveness) {}
+	}
+
 	nl.mu.Lock()
 	nl.mu.onSelfLive = opts.OnSelfLive
+	nl.mu.onNodeDecommissioned = opts.OnNodeDecommissioned
 	nl.mu.engines = opts.Engines
 	nl.mu.Unlock()
+
+	// Register with gossip only now that we've added the callbacks above.
+	// Registering with gossip has the effect of invoking the callbacks
+	// with the initial information present in Gossip, and failing to do
+	// so post registration could result in missed callbacks (or NPEs).
+	livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
+	nl.gossip.RegisterCallback(livenessRegex, nl.livenessGossipUpdate)
 
 	opts.Stopper.RunWorker(ctx, func(context.Context) {
 		ambient := nl.ambientCtx
@@ -1289,6 +1304,12 @@ func (nl *NodeLiveness) maybeUpdate(ctx context.Context, newLivenessRec Liveness
 		for _, fn := range onIsLive {
 			fn(newLivenessRec.Liveness)
 		}
+	}
+	if newLivenessRec.Membership == kvserverpb.MembershipStatus_DECOMMISSIONED {
+		nl.mu.Lock()
+		fn := nl.mu.onNodeDecommissioned
+		nl.mu.Unlock()
+		fn(newLivenessRec.Liveness)
 	}
 }
 
