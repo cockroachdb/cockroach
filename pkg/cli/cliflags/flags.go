@@ -145,6 +145,17 @@ percentage of physical memory (e.g. .25). If left unspecified, defaults to 25% o
 physical memory.`,
 	}
 
+	BulkOpsMem = FlagInfo{
+		Name: "bulk-ops-memory",
+		Description: `
+Maximum memory capacity available to use during bulk operations such as import,
+index backfills. Primarily used to buffer data prior to being ingested by the
+storage engine.
+Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
+percentage of physical memory (e.g. .25). If left unspecified, defaults to 25%
+of physical memory.`,
+	}
+
 	SQLAuditLogDirName = FlagInfo{
 		Name: "sql-audit-dir",
 		Description: `
@@ -1055,6 +1066,16 @@ execution. Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and
 1GiB) or a percentage of physical memory (e.g. .25). If left unspecified,
 defaults to 128MiB.
 `,
+	}
+	DemoNodeBulkOpsMemSize = FlagInfo{
+		Name: "bulk-ops-memory",
+		Description: `
+Maximum memory capacity available to use during bulk operations such as import,
+index backfills. Primarily used to buffer data prior to being ingested by the
+storage engine.
+Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
+percentage of physical memory (e.g. .25). If left unspecified, defaults to 25%
+of physical memory.`,
 	}
 	DemoNodeCacheSize = FlagInfo{
 		Name: "cache",

@@ -186,6 +186,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SQLMemoryPoolSize != 0 {
 		cfg.MemoryPoolSize = params.SQLMemoryPoolSize
 	}
+	if params.BulkOpsMemorySize != 0 {
+		cfg.BulkOpsMemoryPoolSize = params.BulkOpsMemorySize
+	}
 	if params.CacheSize != 0 {
 		cfg.CacheSize = params.CacheSize
 	}

@@ -314,6 +314,7 @@ func testServerArgsForTransientCluster(
 		DisableTLSForHTTP:       true,
 		StoreSpecs:              []base.StoreSpec{storeSpec},
 		SQLMemoryPoolSize:       demoCtx.sqlPoolMemorySize,
+		BulkOpsMemorySize:       demoCtx.bulkOpsMemorySize,
 		CacheSize:               demoCtx.cacheSize,
 		NoAutoInitializeCluster: true,
 		// This disables the tenant server. We could enable it but would have to
@@ -495,6 +496,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 
 func maybeWarnMemSize(ctx context.Context) {
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
+		// TODO(adityamaru): Consider including bulkops memory usage here too.
 		requestedMem := (demoCtx.cacheSize + demoCtx.sqlPoolMemorySize) * int64(demoCtx.nodes)
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {

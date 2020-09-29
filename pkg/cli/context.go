@@ -106,6 +106,12 @@ func setServerContextDefaults() {
 	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
 		serverCfg.SQLConfig.MemoryPoolSize = bytes
 	}
+
+	// TODO(adityamaru): Figure out the correct default value.
+	// Attempt to default serverCfg.BulkOpsMemoryPoolSize to 25% if possible.
+	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
+		serverCfg.SQLConfig.BulkOpsMemoryPoolSize = bytes
+	}
 }
 
 // baseCfg points to the base.Config inside serverCfg.
@@ -508,6 +514,7 @@ func setSqlfmtContextDefaults() {
 var demoCtx struct {
 	nodes                     int
 	sqlPoolMemorySize         int64
+	bulkOpsMemorySize         int64
 	cacheSize                 int64
 	disableTelemetry          bool
 	disableLicenseAcquisition bool
@@ -526,6 +533,7 @@ var demoCtx struct {
 func setDemoContextDefaults() {
 	demoCtx.nodes = 1
 	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.bulkOpsMemorySize = 128 << 20 // TODO(adityamaru) confirm
 	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
 	demoCtx.useEmptyDatabase = false
 	demoCtx.simulateLatency = false

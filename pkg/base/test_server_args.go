@@ -99,6 +99,7 @@ type TestServerArgs struct {
 	TimeSeriesQueryWorkerMax    int
 	TimeSeriesQueryMemoryBudget int64
 	SQLMemoryPoolSize           int64
+	BulkOpsMemorySize           int64
 	CacheSize                   int64
 
 	// By default, test servers have AutoInitializeCluster=true set in

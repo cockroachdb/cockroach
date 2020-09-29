@@ -435,6 +435,7 @@ func init() {
 		// Engine flags.
 		varFlag(f, cacheSizeValue, cliflags.Cache)
 		varFlag(f, sqlSizeValue, cliflags.SQLMem)
+		varFlag(f, bulkOpsSizeValue, cliflags.BulkOpsMem)
 		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
 		// the stores flag has been parsed and the storage device that a percentage
 		// refers to becomes known.
@@ -742,6 +743,7 @@ func init() {
 		varFlag(f, &demoCtx.localities, cliflags.DemoNodeLocality)
 		boolFlag(f, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
 		varFlag(f, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
+		varFlag(f, demoNodeBulkOpsMemSizeValue, cliflags.DemoNodeBulkOpsMemSize)
 		varFlag(f, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
 		boolFlag(f, &demoCtx.insecure, cliflags.ClientInsecure)
 		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+

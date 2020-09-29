@@ -29,6 +29,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 		nodeID            roachpb.NodeID
 		joinAddr          string
 		sqlPoolMemorySize int64
+		bulkOpsMemorySize int64
 		cacheSize         int64
 
 		expected base.TestServerArgs
@@ -37,12 +38,14 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			nodeID:            roachpb.NodeID(1),
 			joinAddr:          "127.0.0.1",
 			sqlPoolMemorySize: 2 << 10,
+			bulkOpsMemorySize: 3 << 10,
 			cacheSize:         1 << 10,
 			expected: base.TestServerArgs{
 				PartOfCluster:           true,
 				JoinAddr:                "127.0.0.1",
 				DisableTLSForHTTP:       true,
 				SQLMemoryPoolSize:       2 << 10,
+				BulkOpsMemorySize:       3 << 10,
 				CacheSize:               1 << 10,
 				NoAutoInitializeCluster: true,
 				TenantAddr:              new(string),
@@ -52,12 +55,14 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			nodeID:            roachpb.NodeID(3),
 			joinAddr:          "127.0.0.1",
 			sqlPoolMemorySize: 4 << 10,
+			bulkOpsMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
 			expected: base.TestServerArgs{
 				PartOfCluster:           true,
 				JoinAddr:                "127.0.0.1",
 				DisableTLSForHTTP:       true,
 				SQLMemoryPoolSize:       4 << 10,
+				BulkOpsMemorySize:       4 << 10,
 				CacheSize:               4 << 10,
 				NoAutoInitializeCluster: true,
 				TenantAddr:              new(string),

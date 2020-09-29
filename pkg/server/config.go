@@ -50,9 +50,11 @@ const (
 	// settings and we'll warn in the logs about doing so.
 	DefaultCacheSize         = 128 << 20 // 128 MB
 	defaultSQLMemoryPoolSize = 128 << 20 // 128 MB
-	defaultScanInterval      = 10 * time.Minute
-	defaultScanMinIdleTime   = 10 * time.Millisecond
-	defaultScanMaxIdleTime   = 1 * time.Second
+	// TODO(adityamaru): Consider what the correct default value is.
+	defaultBulkOpsMemoryPoolSize = 128 << 20 // 128 MB
+	defaultScanInterval          = 10 * time.Minute
+	defaultScanMinIdleTime       = 10 * time.Millisecond
+	defaultScanMaxIdleTime       = 1 * time.Second
 
 	DefaultStorePath = "cockroach-data"
 	// TempDirPrefix is the filename prefix of any temporary subdirectory
@@ -319,6 +321,10 @@ type SQLConfig struct {
 	// used by SQL clients to store row data in server RAM.
 	MemoryPoolSize int64
 
+	// BulkOpsMemoryPoolSize is the amount of memory in bytes that can be used by
+	// Bulk operations to store row data in server RAM.
+	BulkOpsMemoryPoolSize int64
+
 	// AuditLogDirName is the target directory name for SQL audit logs.
 	AuditLogDirName *log.DirName
 
@@ -344,12 +350,13 @@ type SQLConfig struct {
 // MakeSQLConfig returns a SQLConfig with default values.
 func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig) SQLConfig {
 	sqlCfg := SQLConfig{
-		TenantID:           tenID,
-		MemoryPoolSize:     defaultSQLMemoryPoolSize,
-		TableStatCacheSize: defaultSQLTableStatCacheSize,
-		QueryCacheSize:     defaultSQLQueryCacheSize,
-		TempStorageConfig:  tempStorageCfg,
-		LeaseManagerConfig: base.NewLeaseManagerConfig(),
+		TenantID:              tenID,
+		MemoryPoolSize:        defaultSQLMemoryPoolSize,
+		BulkOpsMemoryPoolSize: defaultBulkOpsMemoryPoolSize,
+		TableStatCacheSize:    defaultSQLTableStatCacheSize,
+		QueryCacheSize:        defaultSQLQueryCacheSize,
+		TempStorageConfig:     tempStorageCfg,
+		LeaseManagerConfig:    base.NewLeaseManagerConfig(),
 	}
 	return sqlCfg
 }
@@ -412,6 +419,7 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "max offset\t", cfg.MaxOffset)
 	fmt.Fprintln(w, "cache size\t", humanizeutil.IBytes(cfg.CacheSize))
 	fmt.Fprintln(w, "SQL memory pool size\t", humanizeutil.IBytes(cfg.MemoryPoolSize))
+	fmt.Fprintln(w, "BulkOps memory pool size\t", humanizeutil.IBytes(cfg.BulkOpsMemoryPoolSize))
 	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
 	fmt.Fprintln(w, "scan min idle time\t", cfg.ScanMinIdleTime)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)

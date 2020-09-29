@@ -85,6 +85,10 @@ var demoNodeSQLMemSizeValue = newBytesOrPercentageValue(
 	&demoCtx.sqlPoolMemorySize,
 	memoryPercentResolver,
 )
+var demoNodeBulkOpsMemSizeValue = newBytesOrPercentageValue(
+	&demoCtx.bulkOpsMemorySize,
+	memoryPercentResolver,
+)
 
 type regionPair struct {
 	regionA string

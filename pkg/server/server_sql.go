@@ -272,6 +272,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	rootSQLMetrics := sql.MakeBaseMemMetrics("root", cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(rootSQLMetrics)
 
+	bulkOpsMetrics := sql.MakeBaseMemMetrics("bulkops", cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(bulkOpsMetrics)
+
 	// Set up internal memory metrics for use by internal SQL executors.
 	internalMemMetrics := sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(internalMemMetrics)
@@ -287,16 +290,22 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		math.MaxInt64, /* noteworthy */
 		cfg.Settings,
 	)
-	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(cfg.MemoryPoolSize))
+	rootSQLMemoryMonitor.Start(context.Background(), nil,
+		mon.MakeStandaloneBudget(cfg.MemoryPoolSize))
 
-	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
-	// operations (IMPORT, index backfill). It is itself a child of the
-	// ParentMemoryMonitor.
-	bulkMemoryMonitor := mon.NewMonitorInheritWithLimit("bulk-mon", 0 /* limit */, rootSQLMemoryMonitor)
-	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
-	cfg.registry.AddMetricStruct(bulkMetrics)
-	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
-	bulkMemoryMonitor.Start(context.Background(), rootSQLMemoryMonitor, mon.BoundAccount{})
+	// bulkMemoryMonitor is the root monitor to all child memory monitors tracking
+	// bulk operations (IMPORT, index backfill).
+	bulkMemoryMonitor := mon.NewMonitor(
+		"bulk-mon",
+		mon.MemoryResource,
+		bulkOpsMetrics.CurBytesCount,
+		bulkOpsMetrics.MaxBytesHist,
+		-1,            /* increment: use default increment */
+		math.MaxInt64, /* noteworthy */
+		cfg.Settings,
+	)
+	bulkMemoryMonitor.Start(context.Background(), nil,
+		mon.MakeStandaloneBudget(cfg.BulkOpsMemoryPoolSize))
 
 	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
 

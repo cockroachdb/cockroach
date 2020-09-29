@@ -130,6 +130,8 @@ func initMutexProfile() {
 
 var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
+var bulkOpsSizeValue = newBytesOrPercentageValue(&serverCfg.BulkOpsMemoryPoolSize,
+	memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
 func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
@@ -974,6 +976,9 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		}
 		log.Warningf(ctx, "%s", buf.String())
 	}
+
+	// TODO(adityamaru): Add recommendations and account for bulkOpsMemory in the below warning after
+	// ascertaining appropriate values.
 
 	// Check that the total suggested "max" memory is well below the available memory.
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
