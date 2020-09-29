@@ -252,7 +252,21 @@ template <bool reverse> class mvccScanner {
 
     rocksdb::Slice value = intent.value();
     if (value.size() > 0 || tombstones_) {
-      kvs_->Put(cur_raw_key_, value);
+      // If we're adding a value due to a previous intent, as indicated by the
+      // zero-valued timestamp, we want to populate the timestamp as of current
+      // metaTimestamp. Note that this may be controversial as this maybe be
+      // neither the write timestamp when this intent was written. However, this
+      // was the only case in which a value could have been returned from a read
+      // without an MVCC timestamp.
+      if (cur_timestamp_ == kZeroTimestamp) {
+        auto meta_timestamp = meta_.timestamp();
+        auto key = EncodeKey(cur_key_,
+          meta_timestamp.wall_time(),
+          meta_timestamp.logical());
+        kvs_->Put(key, value);
+      } else {
+        kvs_->Put(cur_raw_key_, value);
+      }
     }
     return true;
   }
