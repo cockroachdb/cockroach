@@ -272,11 +272,10 @@ func (nl *NodeLiveness) SetDraining(
 		}
 		return nil
 	}
-	// TODO(irfansharif): The code flow here seems buggy? It seems it is only a
-	// best effort attempt at marking the node as draining. It can return
-	// without an error after trying unsuccessfully a few times. Is that what we
-	// want?
-	return nil
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errors.New("failed to drain self")
 }
 
 // SetMembershipStatus changes the liveness record to reflect the target
