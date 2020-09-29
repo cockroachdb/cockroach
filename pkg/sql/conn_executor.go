@@ -1435,65 +1435,50 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 
 	switch tcmd := cmd.(type) {
 	case ExecStmt:
-		if tcmd.AST == nil {
-			res = ex.clientComm.CreateEmptyQueryResult(pos)
-			break
-		}
-		ex.curStmt = tcmd.AST
-
-		stmtRes := ex.clientComm.CreateStatementResult(
-			tcmd.AST,
-			NeedRowDesc,
-			pos,
-			nil, /* formatCodes */
-			ex.sessionData.DataConversion,
-			0,  /* limit */
-			"", /* portalName */
-			ex.implicitTxn(),
-		)
-		res = stmtRes
-		curStmt := Statement{Statement: tcmd.Statement}
-
 		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
 		ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
 		ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
 
-		stmtCtx := withStatement(ctx, ex.curStmt)
-		ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, nil /* pinfo */)
+		// We use a closure for the body of the execution so as to
+		// guarantee that the full service time is captured below.
+		err := func() error {
+			if tcmd.AST == nil {
+				res = ex.clientComm.CreateEmptyQueryResult(pos)
+				return nil
+			}
+			ex.curStmt = tcmd.AST
+
+			stmtRes := ex.clientComm.CreateStatementResult(
+				tcmd.AST,
+				NeedRowDesc,
+				pos,
+				nil, /* formatCodes */
+				ex.sessionData.DataConversion,
+				0,  /* limit */
+				"", /* portalName */
+				ex.implicitTxn(),
+			)
+			res = stmtRes
+			curStmt := Statement{Statement: tcmd.Statement}
+
+			stmtCtx := withStatement(ctx, ex.curStmt)
+			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, nil /* pinfo */)
+			return err
+		}()
+		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
+		// because:
+		// - stats use ex.statsCollector, not ex.phaseTimes.
+		// - ex.statsCollector merely contains a copy of the times, that
+		//   was created when the statement started executing (via the
+		//   reset() method).
+		ex.statsCollector.phaseTimes[sessionQueryServiced] = timeutil.Now()
 		if err != nil {
 			return err
 		}
+
 	case ExecPortal:
 		// ExecPortal is handled like ExecStmt, except that the placeholder info
 		// is taken from the portal.
-
-		portalName := tcmd.Name
-		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]
-		if !ok {
-			err := pgerror.Newf(
-				pgcode.InvalidCursorName, "unknown portal %q", portalName)
-			ev = eventNonRetriableErr{IsCommit: fsm.False}
-			payload = eventNonRetriableErrPayload{err: err}
-			res = ex.clientComm.CreateErrorResult(pos)
-			break
-		}
-		if portal.Stmt.AST == nil {
-			res = ex.clientComm.CreateEmptyQueryResult(pos)
-			break
-		}
-
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.VEventf(ctx, 2, "portal resolved to: %s", portal.Stmt.AST.String())
-		}
-		ex.curStmt = portal.Stmt.AST
-
-		pinfo := &tree.PlaceholderInfo{
-			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
-				TypeHints: portal.Stmt.TypeHints,
-				Types:     portal.Stmt.Types,
-			},
-			Values: portal.Qargs,
-		}
 
 		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
 		// When parsing has been done earlier, via a separate parse
@@ -1502,23 +1487,63 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		// parsing took no time.
 		ex.phaseTimes[sessionStartParse] = time.Time{}
 		ex.phaseTimes[sessionEndParse] = time.Time{}
+		// We use a closure for the body of the execution so as to
+		// guarantee that the full service time is captured below.
+		err := func() error {
+			portalName := tcmd.Name
+			portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]
+			if !ok {
+				err := pgerror.Newf(
+					pgcode.InvalidCursorName, "unknown portal %q", portalName)
+				ev = eventNonRetriableErr{IsCommit: fsm.False}
+				payload = eventNonRetriableErrPayload{err: err}
+				res = ex.clientComm.CreateErrorResult(pos)
+				return nil
+			}
+			if portal.Stmt.AST == nil {
+				res = ex.clientComm.CreateEmptyQueryResult(pos)
+				return nil
+			}
 
-		stmtRes := ex.clientComm.CreateStatementResult(
-			portal.Stmt.AST,
-			// The client is using the extended protocol, so no row description is
-			// needed.
-			DontNeedRowDesc,
-			pos, portal.OutFormats,
-			ex.sessionData.DataConversion,
-			tcmd.Limit,
-			portalName,
-			ex.implicitTxn(),
-		)
-		res = stmtRes
-		ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo)
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.VEventf(ctx, 2, "portal resolved to: %s", portal.Stmt.AST.String())
+			}
+			ex.curStmt = portal.Stmt.AST
+
+			pinfo := &tree.PlaceholderInfo{
+				PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
+					TypeHints: portal.Stmt.TypeHints,
+					Types:     portal.Stmt.Types,
+				},
+				Values: portal.Qargs,
+			}
+
+			stmtRes := ex.clientComm.CreateStatementResult(
+				portal.Stmt.AST,
+				// The client is using the extended protocol, so no row description is
+				// needed.
+				DontNeedRowDesc,
+				pos, portal.OutFormats,
+				ex.sessionData.DataConversion,
+				tcmd.Limit,
+				portalName,
+				ex.implicitTxn(),
+			)
+			res = stmtRes
+			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo)
+			return err
+		}()
+		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
+		// because:
+		// - stats use ex.statsCollector, not ex.phasetimes.
+		// - ex.statsCollector merely contains a copy of the times, that
+		//   was created when the statement started executing (via the
+		//   reset() method).
+		ex.statsCollector.phaseTimes[sessionQueryServiced] = timeutil.Now()
 		if err != nil {
 			return err
 		}
+
 	case PrepareStmt:
 		ex.curStmt = tcmd.AST
 		res = ex.clientComm.CreatePrepareResult(pos)
