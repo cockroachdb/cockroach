@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"hash"
 	"hash/fnv"
 	"strings"
@@ -52,7 +51,6 @@ var (
 	negOneVal = tree.NewDInt(-1)
 
 	passwdStarString = tree.NewDString("********")
-
 )
 
 const (
@@ -1246,7 +1244,7 @@ CREATE TABLE pg_catalog.pg_database (
 				return addRow(
 					dbOid(db.GetID()),           // oid
 					tree.NewDName(db.GetName()), // datname
-					getOwnerOID(db),            // datdba
+					getOwnerOID(db),             // datdba
 					// If there is a change in encoding value for the database we must update
 					// the definitions of getdatabaseencoding within pg_builtin.
 					builtins.DatEncodingUTFId,  // encoding
@@ -1980,7 +1978,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 						ownerOID = getOwnerOID(sc.Desc)
 					} else if sc.Kind == catalog.SchemaPublic {
 						// admin is the owner of the public schema.
-            ownerOID = h.UserOid("admin")
+						ownerOID = h.UserOid("admin")
 					}
 					return addRow(
 						h.NamespaceOid(db.GetID(), sc.Name), // oid
@@ -3499,9 +3497,3 @@ func stringOid(s string) *tree.DOid {
 	h.writeStr(s)
 	return h.getOid()
 }
-
-func init() {
-	// Initialize NodeUserOid
-	delegate.NodeUserOid = makeOidHasher().UserOid(security.NodeUser)
-}
-

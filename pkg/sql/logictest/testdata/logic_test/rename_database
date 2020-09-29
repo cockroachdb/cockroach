@@ -56,9 +56,6 @@ SELECT * FROM kv
 statement error target database or schema does not exist
 SHOW GRANTS ON DATABASE test
 
-statement ok
-SET DATABASE = u
-
 query TT
 SHOW DATABASES
 ----
@@ -112,9 +109,6 @@ user testuser
 
 statement error must be owner of database t
 ALTER DATABASE t RENAME TO v
-
-statement ok
-SET DATABASE = t
 
 query TT
 SHOW DATABASES
@@ -186,9 +180,6 @@ statement ok
 ALTER DATABASE defaultdb RENAME TO w;
   ALTER DATABASE postgres RENAME TO defaultdb;
   ALTER DATABASE w RENAME TO postgres
-
-statement ok
-SET DATABASE = t
 
 query TT
 SHOW DATABASES

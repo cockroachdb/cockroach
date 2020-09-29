@@ -559,11 +559,11 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql --execute=show databases
-	// database_name owner
-	// defaultdb root
-	// postgres  root
-	// system  node
-	// t root
+	// database_name	owner
+	// defaultdb	root
+	// postgres	root
+	// system	node
+	// t	root
 	// sql -e select 1 as "1"; select 2 as "2"
 	// 1
 	// 1
