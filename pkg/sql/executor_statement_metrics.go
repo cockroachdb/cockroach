@@ -52,6 +52,7 @@ const (
 	sessionEndExecTransaction             // Transaction is committed/rolled back.
 	sessionStartTransactionCommit         // Transaction `COMMIT` starts.
 	sessionEndTransactionCommit           // Transaction `COMMIT` ends.
+	sessionQueryServiced                  // Query is serviced.
 
 	// sessionNumPhases must be listed last so that it can be used to
 	// define arrays sufficiently large to hold all the other values.
@@ -68,6 +69,14 @@ type phaseTimes [sessionNumPhases]time.Time
 // of run.
 func (p *phaseTimes) getServiceLatency() time.Duration {
 	return p[plannerEndExecStmt].Sub(p[sessionQueryReceived])
+}
+
+// getStatementServiceLatency returns the time between a query being received
+// and being serviced. This is required to provide accurate query statistics to
+// the CLI, as all queries don't hit the execution engine and therefore can't
+// rely on the getServiceLatency method above.
+func (p *phaseTimes) getStatementServiceLatency() time.Duration {
+	return p[sessionQueryServiced].Sub(p[sessionQueryReceived])
 }
 
 // getRunLatency returns the time between a query execution starting and ending.
