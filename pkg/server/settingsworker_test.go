@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -363,16 +364,9 @@ func TestSettingsTraceSamplingRate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Start test cluster containing a test db and test table.
+
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(
-		t, 3,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				RaftConfig: base.RaftConfig{
-					RaftElectionTimeoutTicks: 100,
-				},
-			},
-		})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	execStatement := func(statement string) {
@@ -431,11 +425,12 @@ func TestSettingsTraceSamplingRate(t *testing.T) {
 	}
 	execStatement(fmt.Sprintf(`SET CLUSTER SETTING trace.zipkin.collector = '%s'`, traceCollectorServerURL.Host))
 
-	// Function that writes 500 rows.
+	// startKey ensures that for every call to this function, it inserts
+	// rows with primary keys that are not already present
 	startKey := 0
-	write1000Rows := func() {
+	writeRows := func(numOps int) {
 		waitGroup := sync.WaitGroup{}
-		for key := startKey; key < startKey+500; key += 25 {
+		for key := startKey; key < startKey+numOps; key += 25 {
 			waitGroup.Add(1)
 			go func(wg *sync.WaitGroup, k int) {
 				defer wg.Done()
@@ -445,42 +440,41 @@ func TestSettingsTraceSamplingRate(t *testing.T) {
 			}(&waitGroup, key)
 		}
 		waitGroup.Wait()
-		startKey = startKey + 500
+		startKey = startKey + numOps
 	}
 
-	// Test 100% Sampling Rate.
-	setClusterTraceSamplingRate(1.0)
-	atomic.StoreInt64(&nTraces, 0)
-	write1000Rows()
-	testutils.SucceedsSoon(t, func() error {
-		currentTraces := atomic.LoadInt64(&nTraces)
-		if currentTraces < 475 && currentTraces > 525 {
-			return fmt.Errorf(`could not trace all SQL 'INSERT INTO' statements. traced %d out of 500`, currentTraces)
-		}
-		return nil
-	})
+	numOps := 500
+	tolerance := 100
+	if util.RaceEnabled {
+		numOps = 50
+		tolerance = 20
+	}
+	type testCase struct {
+		sampleRate float64
+	}
 
-	// Test 50% Sampling Rate.
-	setClusterTraceSamplingRate(0.5)
-	atomic.StoreInt64(&nTraces, 0)
-	write1000Rows()
-	testutils.SucceedsSoon(t, func() error {
-		currentTraces := atomic.LoadInt64(&nTraces)
-		if currentTraces < 225 && currentTraces > 275 {
-			return fmt.Errorf(`could not trace 50 percent of SQL 'INSERT INTO' statements. traced %d out of 500`, currentTraces)
-		}
-		return nil
-	})
+	run := func(t *testing.T, tc testCase) {
+		setClusterTraceSamplingRate(tc.sampleRate)
+		atomic.StoreInt64(&nTraces, 0)
+		minAllowed := int64(float64(numOps)*tc.sampleRate - float64(tolerance)/2)
+		maxAllowed := int64(float64(numOps)*tc.sampleRate + float64(tolerance)/2)
+		writeRows(numOps)
+		testutils.SucceedsSoon(t, func() error {
+			currentTraces := atomic.LoadInt64(&nTraces)
+			if currentTraces < minAllowed || currentTraces > maxAllowed {
+				return errors.Errorf("expected between %d and %d traces at a sample rate of %f for %d ops, got %d",
+					minAllowed, maxAllowed, tc.sampleRate, numOps, currentTraces)
+			}
+			return nil
+		})
+	}
 
-	// Test 10% Sampling Rate.
-	setClusterTraceSamplingRate(0.1)
-	atomic.StoreInt64(&nTraces, 0)
-	write1000Rows()
-	testutils.SucceedsSoon(t, func() error {
-		currentTraces := atomic.LoadInt64(&nTraces)
-		if currentTraces < 25 && currentTraces > 75 {
-			return fmt.Errorf(`could not trace 10 percent of SQL 'INSERT INTO' statements. traced %d out of 500`, currentTraces)
-		}
-		return nil
-	})
+	subtest := func(tc testCase) (string, func(t *testing.T)) {
+		return fmt.Sprintf("sampleRate=%f", tc.sampleRate), func(t *testing.T) { run(t, tc) }
+	}
+	for _, tc := range []testCase{
+		{1}, {.5}, {.1},
+	} {
+		t.Run(subtest(tc))
+	}
 }
