@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -439,6 +440,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		}
 	}
 
+	migrationMgr := migration.NewManager()
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -465,9 +467,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache:         &sql.MembershipCache{},
 		TestingKnobs:            sqlExecutorTestingKnobs,
-		VersionUpgradeHook: func(ctx context.Context, to roachpb.Version) error {
-			// TODO(irfansharif): Do something real here.
-			return nil
+		VersionUpgradeHook: func(ctx context.Context, targetV roachpb.Version) error {
+			return migrationMgr.MigrateTo(ctx, targetV)
 		},
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(

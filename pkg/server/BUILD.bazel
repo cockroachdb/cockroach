@@ -68,6 +68,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptprovider",
         "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/kv/kvserver/reports",
+        "//pkg/migration",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
