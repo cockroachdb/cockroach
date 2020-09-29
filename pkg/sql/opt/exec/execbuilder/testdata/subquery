@@ -156,23 +156,19 @@ WHERE
     OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27))
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-·                         distribution         local                ·                          ·
-·                         vectorized           true                 ·                          ·
-project                   ·                    ·                    (col0)                     ·
- │                        estimated row count  311 (missing stats)  ·                          ·
- └── project              ·                    ·                    (col0, col3, col4)         ·
-      │                   estimated row count  311 (missing stats)  ·                          ·
-      └── index join      ·                    ·                    (col0, col3, col4, rowid)  ·
-           │              estimated row count  311 (missing stats)  ·                          ·
-           │              table                tab4@primary         ·                          ·
-           │              key columns          rowid                ·                          ·
-           └── filter     ·                    ·                    (col0, col4, rowid)        ·
-                │         estimated row count  111 (missing stats)  ·                          ·
-                │         filter               col0 <= 0            ·                          ·
-                └── scan  ·                    ·                    (col0, col4, rowid)        ·
-·                         estimated row count  333 (missing stats)  ·                          ·
-·                         table                tab4@idx_tab4_0      ·                          ·
-·                         spans                /!NULL-/5.38/1       ·                          ·
+·                    distribution         local                           ·                          ·
+·                    vectorized           true                            ·                          ·
+project              ·                    ·                               (col0)                     ·
+ │                   estimated row count  311 (missing stats)             ·                          ·
+ └── project         ·                    ·                               (col0, col3, col4)         ·
+      │              estimated row count  311 (missing stats)             ·                          ·
+      └── filter     ·                    ·                               (col0, col3, col4, rowid)  ·
+           │         estimated row count  311 (missing stats)             ·                          ·
+           │         filter               (col0 <= 0) AND (col4 <= 5.38)  ·                          ·
+           └── scan  ·                    ·                               (col0, col3, col4, rowid)  ·
+·                    estimated row count  1000 (missing stats)            ·                          ·
+·                    table                tab4@primary                    ·                          ·
+·                    spans                FULL SCAN                       ·                          ·
 
 # ------------------------------------------------------------------------------
 # Correlated subqueries.

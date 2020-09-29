@@ -60,6 +60,10 @@ type FixtureConfig struct {
 	// storage requests. This is required to be set if using a "requestor pays"
 	// bucket.
 	BillingProject string
+
+	// If TableStats is true, CREATE STATISTICS is called on all tables before
+	// creating the fixture.
+	TableStats bool
 }
 
 func (s FixtureConfig) objectPathToURI(folder string) string {
@@ -277,6 +281,28 @@ func MakeFixture(
 	// yak will remain unshaved.
 	if _, err := l.InitialDataLoad(ctx, sqlDB, gen); err != nil {
 		return Fixture{}, err
+	}
+
+	if config.TableStats {
+		// Clean up any existing statistics.
+		_, err := sqlDB.Exec("DELETE FROM system.table_statistics WHERE true")
+		if err != nil {
+			return Fixture{}, errors.Wrapf(err, "while deleting table statistics")
+		}
+		g := ctxgroup.WithContext(ctx)
+		for _, t := range gen.Tables() {
+			t := t
+			g.Go(func() error {
+				log.Infof(ctx, "Creating table stats for %s", t.Name)
+				_, err := sqlDB.Exec(fmt.Sprintf(
+					`CREATE STATISTICS pre_backup FROM "%s"."%s"`, dbName, t.Name,
+				))
+				return err
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return Fixture{}, err
+		}
 	}
 
 	g := ctxgroup.WithContext(ctx)
@@ -554,11 +580,12 @@ func RestoreFixture(
 		g.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
 			importStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
+			log.Infof(ctx, "Restoring from %s", table.BackupURI)
 			var rows, index, tableBytes int64
 			var discard interface{}
 			res, err := sqlDB.Query(importStmt, table.BackupURI, database)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "backup: %s", table.BackupURI)
 			}
 			defer res.Close()
 			if !res.Next() {

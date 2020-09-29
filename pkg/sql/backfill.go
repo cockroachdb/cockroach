@@ -956,6 +956,7 @@ func (sc *SchemaChanger) distBackfill(
 		// variable and assign to todoSpans after committing.
 		var updatedTodoSpans []roachpb.Span
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			updatedTodoSpans = todoSpans
 			// Report schema change progress. We define progress at this point
 			// as the the fraction of fully-backfilled ranges of the primary index of
 			// the table being scanned. Since we may have already modified the
@@ -988,7 +989,7 @@ func (sc *SchemaChanger) distBackfill(
 			}
 			metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.BulkProcessorProgress != nil {
-					updatedTodoSpans = roachpb.SubtractSpans(todoSpans,
+					updatedTodoSpans = roachpb.SubtractSpans(updatedTodoSpans,
 						meta.BulkProcessorProgress.CompletedSpans)
 				}
 				return nil

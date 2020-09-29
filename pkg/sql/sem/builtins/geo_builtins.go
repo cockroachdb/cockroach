@@ -4120,7 +4120,19 @@ The matrix transformation will be applied as follows for each coordinate:
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return nil, unimplemented.NewWithIssue(49021, "st_rotate")
+				g := tree.MustBeDGeometry(args[0])
+				rotRadians := float64(tree.MustBeDFloat(args[1]))
+				originPoint := tree.MustBeDGeometry(args[2])
+
+				ret, err := geomfn.RotateWithPointOrigin(g.Geometry, rotRadians, originPoint.Geometry)
+				if errors.Is(err, geomfn.ErrPointOriginEmpty) {
+					return tree.DNull, nil
+				}
+
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
 			},
 			Info: infoBuilder{
 				info: `Returns a modified Geometry whose coordinates are rotated around the provided origin by a rotation angle.`,

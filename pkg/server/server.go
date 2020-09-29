@@ -2008,7 +2008,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 		if err := os.MkdirAll(cfg.goroutineDumpDirName, 0755); err != nil {
 			// This is possible when running with only in-memory stores;
 			// in that case the start-up code sets the output directory
-			// to the current directory (.). If wrunning the process
+			// to the current directory (.). If running the process
 			// from a directory which is not writable, we won't
 			// be able to create a sub-directory here.
 			log.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
