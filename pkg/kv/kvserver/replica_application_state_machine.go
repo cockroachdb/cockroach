@@ -999,8 +999,10 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	clearTrivialReplicatedEvalResultFields(cmd.replicatedResult())
 	if !cmd.IsTrivial() {
 		shouldAssert, isRemoved := sm.handleNonTrivialReplicatedEvalResult(ctx, *cmd.replicatedResult())
-
 		if isRemoved {
+			// The proposal must not have been local, because we don't allow a
+			// proposing replica to remove itself from the Range.
+			cmd.FinishNonLocal(ctx)
 			return nil, apply.ErrRemoved
 		}
 		// NB: Perform state assertion before acknowledging the client.

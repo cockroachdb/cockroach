@@ -55,8 +55,9 @@ type StateMachine interface {
 	ApplySideEffects(CheckedCommand) (AppliedCommand, error)
 }
 
-// ErrRemoved can be returned from ApplySideEffects which will stop the
-// task from processing more commands and return immediately.
+// ErrRemoved can be returned from ApplySideEffects which will stop the task
+// from processing more commands and return immediately. The error should
+// only be thrown by non-trivial commands.
 var ErrRemoved = errors.New("replica removed")
 
 // Batch accumulates a series of updates from Commands and performs them
@@ -222,9 +223,9 @@ func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxInde
 	// in the batch and can be acknowledged before they are actually applied.
 	// Don't acknowledge rejected proposals early because the StateMachine may
 	// want to retry the command instead of returning the error to the client.
-	return forEachCheckedCmdIter(stagedIter, func(cmd CheckedCommand) error {
+	return forEachCheckedCmdIter(ctx, stagedIter, func(cmd CheckedCommand, ctx context.Context) error {
 		if !cmd.Rejected() && cmd.IsLocal() && cmd.CanAckBeforeApplication() {
-			return cmd.AckSuccess()
+			return cmd.AckSuccess(ctx)
 		}
 		return nil
 	})
@@ -242,12 +243,21 @@ func (t *Task) ApplyCommittedEntries(ctx context.Context) error {
 	t.assertDecoded()
 
 	iter := t.dec.NewCommandIter()
-	defer iter.Close()
 	for iter.Valid() {
 		if err := t.applyOneBatch(ctx, iter); err != nil {
+			// If the batch threw an error, reject all remaining commands in the
+			// iterator to avoid leaking resources or leaving a proposer hanging.
+			//
+			// NOTE: forEachCmdIter closes iter.
+			if rejectErr := forEachCmdIter(ctx, iter, func(cmd Command, ctx context.Context) error {
+				return cmd.AckErrAndFinish(ctx, err)
+			}); rejectErr != nil {
+				return rejectErr
+			}
 			return err
 		}
 	}
+	iter.Close()
 	return nil
 }
 
@@ -284,7 +294,7 @@ func (t *Task) applyOneBatch(ctx context.Context, iter CommandIterator) error {
 	}
 
 	// Finish and acknowledge the outcome of each command.
-	return forEachAppliedCmdIter(ctx, appliedIter, AppliedCommand.FinishAndAckOutcome)
+	return forEachAppliedCmdIter(ctx, appliedIter, AppliedCommand.AckOutcomeAndFinish)
 }
 
 // trivialPolicy encodes a batching policy that allows a batch to consist of

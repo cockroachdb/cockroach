@@ -5209,7 +5209,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 				RangeID: desc.RangeID,
 			}, putArgs(k, bytes.Repeat([]byte{'a'}, 1000)))
 			require.Regexp(t,
-				`result is ambiguous \(removing replica\)|`+
+				`result is ambiguous \(replica removed\)|`+
 					`r`+strconv.Itoa(int(desc.RangeID))+" was not found on s1", pErr.GoError())
 		}(i)
 	}

@@ -16,6 +16,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -250,7 +251,9 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		// NB: each proposal needs its own version of the error (i.e. don't try to
 		// share the error across proposals).
 		p.finishApplication(ctx, proposalResult{
-			Err: roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
+			Err: roachpb.NewError(
+				roachpb.NewAmbiguousResultError(
+					apply.ErrRemoved.Error())),
 		})
 	}
 	r.mu.internalRaftGroup = nil
