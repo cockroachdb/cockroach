@@ -265,7 +265,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:      clock,
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
-	}
+		OnSendPing: func(req *rpc.PingRequest) error {
+			// TODO(tbg): hook this up to a check for decommissioned nodes.
+			return nil
+		},
+		OnHandlePing: func(req *rpc.PingRequest) error {
+			// TODO(tbg): hook this up to a check for decommissioned nodes.
+			return nil
+		}}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
 		rpcCtxOpts.Knobs = serverKnobs.ContextTestingKnobs

@@ -53,6 +53,8 @@ type HeartbeatService struct {
 	clusterName                    string
 	disableClusterNameVerification bool
 
+	onHandlePing func(*PingRequest) error // see ContextOptions.OnHandlePing
+
 	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
 	// disables errors in case a heartbeat requests a specific node ID but
 	// the remote node doesn't have a node ID yet. This testing knob is
@@ -150,6 +152,12 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	if mo != 0 && amo != 0 && mo != amo {
 		panic(fmt.Sprintf("locally configured maximum clock offset (%s) "+
 			"does not match that of node %s (%s)", mo, args.OriginAddr, amo))
+	}
+
+	if fn := hs.onHandlePing; fn != nil {
+		if err := fn(args); err != nil {
+			return nil, err
+		}
 	}
 
 	serverOffset := args.Offset
