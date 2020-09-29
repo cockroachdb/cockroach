@@ -63,36 +63,10 @@ type tpccOptions struct {
 }
 
 // tpccFixturesCmd generates the command string to load tpcc data for the
-// specified warehouse count into a cluster using either `fixtures import`
-// or `fixtures load` depending on the cloud.
-func tpccFixturesCmd(t *test, cloud string, warehouses int, extraArgs string) string {
-	var command string
-	switch cloud {
-	case gce:
-		// TODO(nvanbenschoten): We could switch to import for both clouds.
-		// At the moment, import is still a little unstable and load is still
-		// marginally faster.
-		command = "./workload fixtures load"
-		fixtureWarehouses := -1
-		for _, w := range []int{1, 10, 100, 1000, 2000, 5000, 10000} {
-			if w >= warehouses {
-				fixtureWarehouses = w
-				break
-			}
-		}
-		if fixtureWarehouses == -1 {
-			t.Fatalf("could not find fixture big enough for %d warehouses", warehouses)
-		}
-		warehouses = fixtureWarehouses
-	case aws, azure:
-		// For fixtures import, use the version built into the cockroach binary
-		// so the tpcc workload-versions match on release branches.
-		command = "./cockroach workload fixtures import"
-	default:
-		t.Fatalf("unknown cloud: %q", cloud)
-	}
-	return fmt.Sprintf("%s tpcc --warehouses=%d %s {pgurl:1}",
-		command, warehouses, extraArgs)
+// specified warehouse count into a cluster.
+func tpccFixturesCmd(t *test, warehouses int, extraArgs string) string {
+	return fmt.Sprintf("./workload fixtures import tpcc --warehouses=%d %s {pgurl:1}",
+		warehouses, extraArgs)
 }
 
 func setupTPCC(
@@ -136,6 +110,10 @@ func setupTPCC(
 	c.Put(ctx, cockroach, "./cockroach", workloadNode)
 	c.Put(ctx, workload, "./workload", workloadNode)
 
+	extraArgs := opts.ExtraSetupArgs
+	if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+		extraArgs += " --deprecated-fk-indexes"
+	}
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
@@ -144,14 +122,13 @@ func setupTPCC(
 		switch opts.SetupType {
 		case usingFixture:
 			t.Status("loading fixture")
-			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, opts.ExtraSetupArgs))
+			c.Run(ctx, workloadNode, tpccFixturesCmd(t, opts.Warehouses, extraArgs))
 		case usingInit:
 			t.Status("initializing tables")
-			cmd := fmt.Sprintf("./workload init tpcc --warehouses=%d %s {pgurl:1}",
-				opts.Warehouses, opts.ExtraSetupArgs)
-			if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
-				cmd += " --deprecated-fk-indexes"
-			}
+			cmd := fmt.Sprintf(
+				"./workload init tpcc --warehouses=%d %s {pgurl:1}",
+				opts.Warehouses, extraArgs,
+			)
 			c.Run(ctx, workloadNode, cmd)
 		default:
 			t.Fatal("unknown tpcc setup type")
@@ -382,7 +359,7 @@ func registerTPCC(r *testRegistry) {
 		CPUs:  4,
 
 		LoadWarehouses: 1000,
-		EstimatedMax:   gceOrAws(cloud, 400, 600),
+		EstimatedMax:   gceOrAws(cloud, 650, 800),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
@@ -683,7 +660,7 @@ func loadTPCCBench(
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
 	waitForFullReplication(t, db)
-	cmd := tpccFixturesCmd(t, cloud, b.LoadWarehouses, loadArgs)
+	cmd := tpccFixturesCmd(t, b.LoadWarehouses, loadArgs)
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
 		return err
 	}
