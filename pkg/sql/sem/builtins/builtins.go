@@ -3890,6 +3890,35 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// Returns the descriptor of a database based on its name.
+	// Allows a non-admin to query the system.namespace table, but performs
+	// the relevant permission checks to ensure secure access.
+	// Returns NULL if none is found.
+	// Errors if there is no permission for the current user to view the descriptor.
+	"crdb_internal.get_database_id": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				name := tree.MustBeDString(args[0])
+				id, found, err := ctx.PrivilegedAccessor.LookupNamespaceID(
+					ctx.Context,
+					int64(0),
+					string(name),
+				)
+				if err != nil {
+					return nil, err
+				}
+				if !found {
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(id), nil
+			},
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	// Returns the zone config based on a given namespace id.
 	// Returns NULL if a zone configuration is not found.
 	// Errors if there is no permission for the current user to view the zone config.
