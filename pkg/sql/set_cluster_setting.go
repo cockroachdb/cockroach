@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -47,6 +48,10 @@ type setClusterSettingNode struct {
 	setting settings.WritableSetting
 	// If value is nil, the setting should be reset.
 	value tree.TypedExpr
+	// versionUpgradeHook is called after validating a `SET CLUSTER SETTING
+	// version` but before executing it. It can carry out arbitrary migrations
+	// that allow us to eventually remove legacy code.
+	versionUpgradeHook func(ctx context.Context, to roachpb.Version) error
 }
 
 func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, action string) error {
@@ -156,7 +161,11 @@ func (p *planner) SetClusterSetting(
 		}
 	}
 
-	return &setClusterSettingNode{name: name, st: st, setting: setting, value: value}, nil
+	csNode := setClusterSettingNode{
+		name: name, st: st, setting: setting, value: value,
+		versionUpgradeHook: p.execCfg.VersionUpgradeHook,
+	}
+	return &csNode, nil
 }
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
@@ -209,7 +218,8 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 			reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
 			var prev tree.Datum
-			if _, ok := n.setting.(*settings.VersionSetting); ok {
+			_, isSetVersion := n.setting.(*settings.VersionSetting)
+			if isSetVersion {
 				datums, err := execCfg.InternalExecutor.QueryRowEx(
 					ctx, "retrieve-prev-setting", txn,
 					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -232,6 +242,18 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
+
+			if isSetVersion {
+				// toSettingString already validated the input, and checked to
+				// see that we are allowed to transition. Let's call into our
+				// upgrade hook to run migrations, if any.
+				versionStr := string(*value.(*tree.DString))
+				targetVersion := roachpb.MustParseVersion(versionStr)
+				if err := n.versionUpgradeHook(ctx, targetVersion); err != nil {
+					return err
+				}
+			}
+
 			if _, err = execCfg.InternalExecutor.ExecEx(
 				ctx, "update-setting", txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},

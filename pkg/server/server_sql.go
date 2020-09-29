@@ -465,6 +465,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache:         &sql.MembershipCache{},
 		TestingKnobs:            sqlExecutorTestingKnobs,
+		VersionUpgradeHook: func(ctx context.Context, to roachpb.Version) error {
+			// TODO(irfansharif): Do something real here.
+			return nil
+		},
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
