@@ -1128,3 +1128,29 @@ var _ tree.ParseTimeContext = testParseTimeContext{}
 func (t testParseTimeContext) GetRelativeParseTime() time.Time {
 	return time.Time(t)
 }
+
+func TestGeospatialSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCases := []struct {
+		wkt      string
+		expected uintptr
+	}{
+		{"SRID=4004;POINT EMPTY", 73},
+		{"SRID=4326;LINESTRING(0 0, 10 0)", 125},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			t.Run("geometry", func(t *testing.T) {
+				g, err := tree.ParseDGeometry(tc.wkt)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, g.Size())
+			})
+			t.Run("geography", func(t *testing.T) {
+				g, err := tree.ParseDGeography(tc.wkt)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, g.Size())
+			})
+		})
+	}
+}

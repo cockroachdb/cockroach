@@ -3671,6 +3671,27 @@ The paths themselves are given in the direction of the first geometry.`,
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_closestpoint": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ClosestPoint(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				geom := tree.NewDGeometry(ret)
+				return geom, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns the 2-dimensional point on geometry_a that is closest to geometry_b. This is the first point of the shortest line.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_symdifference": makeBuiltin(
 		defProps(),
 		geometryOverload2(
@@ -5269,7 +5290,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 	"st_buildarea":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
 	"st_chaikinsmoothing":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),
 	"st_cleangeometry":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48895}),
-	"st_closestpoint":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48896}),
 	"st_clusterdbscan":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48898}),
 	"st_clusterintersecting":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48899}),
 	"st_clusterkmeans":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48900}),
