@@ -1098,22 +1098,37 @@ ORDER BY random()
 	return &treeTableName, nil
 }
 
-func (w *schemaChangeWorker) randView(tx *pgx.Tx, pctExisting int) (string, error) {
+func (w *schemaChangeWorker) randView(tx *pgx.Tx, pctExisting int) (*tree.TableName, error) {
 	if w.rng.Intn(100) >= pctExisting {
-		return fmt.Sprintf("view%d", atomic.AddInt64(w.seqNum, 1)), nil
+		randSchema, err := w.randSchema(tx, 100-pctExisting)
+		if err != nil {
+			treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+			return &treeViewName, err
+		}
+		treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(randSchema),
+			ExplicitSchema: true,
+		}, tree.Name(fmt.Sprintf("view%d", atomic.AddInt64(w.seqNum, 1))))
+		return &treeViewName, nil
 	}
 	const q = `
-  SELECT table_name
+  SELECT schema_name, table_name
     FROM [SHOW TABLES]
    WHERE table_name LIKE 'view%'
 ORDER BY random()
    LIMIT 1;
 `
-	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
-		return "", err
+	var schemaName string
+	var viewName string
+	if err := tx.QueryRow(q).Scan(&schemaName, &viewName); err != nil {
+		treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+		return &treeViewName, err
 	}
-	return name, nil
+	treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+		SchemaName:     tree.Name(schemaName),
+		ExplicitSchema: true,
+	}, tree.Name(viewName))
+	return &treeViewName, nil
 }
 
 func (w *schemaChangeWorker) tableColumnsShuffled(tx *pgx.Tx, tableName string) ([]string, error) {
