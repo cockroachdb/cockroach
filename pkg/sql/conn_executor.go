@@ -65,6 +65,18 @@ import (
 // logging overall usage growth in the log.
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_SESSION_MEMORY_USAGE", 1024*1024)
 
+const maxActiveQueriesClusterSettingName = "sql.max_active_queries"
+
+// MaxActiveQueries is a cluster setting that specifies the maximum number of
+// active queries per gateway node.
+var MaxActiveQueries = settings.RegisterPublicNonNegativeIntSetting(
+	maxActiveQueriesClusterSettingName,
+	"the maximum number of active SQL queries allowed per gateway server "+
+		"at once, disabled if 0. Note that this limit does not affect users with "+
+		"the admin role and internal transactions.",
+	0,
+)
+
 // A connExecutor is in charge of executing queries received on a given client
 // connection. The connExecutor implements a state machine (dictated by the
 // Postgres/pgwire session semantics). The state machine is supposed to run
@@ -281,6 +293,10 @@ type Metrics struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements.
 	ExecutedStatementCounters StatementCounters
+
+	// ActiveQueries is a gauge that tracks the number of active queries at a
+	// given time.
+	ActiveQueries *metric.Gauge
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -325,6 +341,7 @@ func makeMetrics(internal bool) Metrics {
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
+		ActiveQueries:             metric.NewGauge(MetaActiveSQLQueries),
 	}
 }
 

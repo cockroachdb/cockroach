@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -44,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -897,6 +901,182 @@ func TestShowLastQueryStatistics(t *testing.T) {
 	if rows.Next() {
 		t.Fatalf("unexpected number of rows returned by last query statistics: %v", err)
 	}
+}
+
+func TestMaxActiveQueries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	require.Zero(t, sql.MaxActiveQueries.Get(&st.SV), "expected default max_active_queries to be 0")
+
+	const (
+		testUser  = server.TestUser
+		adminUser = "staff"
+	)
+
+	var (
+		execingSleepFn = make(chan struct{}, 1)
+		params         = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					BeforeExecute: func(_ context.Context, stmt string) {
+						if strings.Contains(stmt, "pg_sleep") && !strings.Contains(stmt, "CANCEL") {
+							execingSleepFn <- struct{}{}
+						}
+					},
+				},
+			},
+			Settings: st,
+		}
+		s, rootDB, _ = serverutils.StartServer(t, params)
+		ctx          = context.Background()
+	)
+
+	defer s.Stopper().Stop(ctx)
+	defer func() {
+		_ = rootDB.Close()
+	}()
+
+	openDBWithUser := func(t *testing.T, user string) (*gosql.DB, func()) {
+		pgURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
+			t, s.ServingSQLAddr(), t.Name(), url.User(user), user == server.TestUser || user == security.RootUser,
+		)
+		if user == adminUser {
+			pgURL.User = url.UserPassword(adminUser, adminUser)
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return db, func() {
+			_ = db.Close()
+			cleanup()
+		}
+	}
+
+	_, err := rootDB.Exec(
+		fmt.Sprintf("CREATE USER %[1]s WITH PASSWORD %[1]s; GRANT ADMIN TO %[1]s; CREATE USER %[2]s", adminUser, testUser),
+	)
+	require.NoError(t, err)
+
+	nonAdminDB, nonAdminDBCleanup := openDBWithUser(t, testUser)
+	defer nonAdminDBCleanup()
+	adminDB, adminDBCleanup := openDBWithUser(t, adminUser)
+	defer adminDBCleanup()
+
+	runShortQuery := func(db *gosql.DB) error {
+		_, err := db.ExecContext(ctx, "SELECT 1")
+		return err
+	}
+
+	// runLongQuery is a helper function to run a query that will take at least
+	// a day to complete. A function to cancel this query is returned, which fails
+	// the test if an error occurs while trying to find the query or if the query
+	// encountered any error other than a cancellation error.
+	runLongQuery := func(t *testing.T, db *gosql.DB) func(t *testing.T) {
+		t.Helper()
+
+		errChan := make(chan error)
+		uniqueSleepTime := make(chan int)
+		go func() {
+			defer close(errChan)
+			// Sleep for at least a day.
+			minimumSleepTime := 86400
+			// Max a year.
+			maxSleepTime := 31536000
+			rng, _ := randutil.NewPseudoRand()
+			sleepTime := rng.Intn(maxSleepTime-minimumSleepTime) + minimumSleepTime
+			uniqueSleepTime <- sleepTime
+			close(uniqueSleepTime)
+			if _, err := db.Exec(fmt.Sprintf("SELECT pg_sleep(%d)", sleepTime)); err != nil {
+				pqErr := (*pq.Error)(nil)
+				if !(errors.As(err, &pqErr) && string(pqErr.Code) == pgcode.QueryCanceled.String()) {
+					errChan <- err
+				}
+			}
+		}()
+
+		sleepTime := <-uniqueSleepTime
+
+		// Ensure that the sleep function has executed.
+		select {
+		case <-execingSleepFn:
+		case err := <-errChan:
+			t.Fatalf("query unexpectedly returned before cancellation with err: %v", err)
+		}
+
+		return func(t *testing.T) {
+			// Cancel the query with the root DB, otherwise this might run into a
+			// query limit error.
+			_, err = rootDB.Exec(
+				fmt.Sprintf(
+					"CANCEL QUERY (SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE '%%pg_sleep(%d)%%' AND query NOT LIKE '%%SHOW QUERIES%%')",
+					sleepTime,
+				),
+			)
+			require.NoError(t, err)
+			require.NoError(t, <-errChan)
+		}
+	}
+
+	assertQueryLimitExceededError := func(t *testing.T, err error) {
+		t.Helper()
+		require.Error(t, err)
+		pqErr := (*pq.Error)(nil)
+		require.True(t, errors.As(err, &pqErr), "unexpected error %v", err)
+		require.Equal(t, pgcode.ConfigurationLimitExceeded.String(), string(pqErr.Code))
+	}
+
+	sql.MaxActiveQueries.Override(&st.SV, 1)
+
+	t.Run("NonAdminQueryWithNoActiveQueries", func(t *testing.T) {
+		require.NoError(t, runShortQuery(nonAdminDB))
+	})
+
+	t.Run("NonAdminQueryWithAnActiveQuery", func(t *testing.T) {
+		defer runLongQuery(t, nonAdminDB)(t)
+		assertQueryLimitExceededError(t, runShortQuery(nonAdminDB))
+	})
+
+	t.Run("AdminUsersAreNotAffected", func(t *testing.T) {
+		defer runLongQuery(t, nonAdminDB)(t)
+		assertQueryLimitExceededError(t, runShortQuery(nonAdminDB))
+		require.NoError(t, runShortQuery(rootDB))
+		require.NoError(t, runShortQuery(adminDB))
+	})
+
+	t.Run("AdminUsersCountTowardsTheLimit", func(t *testing.T) {
+		defer runLongQuery(t, adminDB)(t)
+		assertQueryLimitExceededError(t, runShortQuery(nonAdminDB))
+		require.NoError(t, runShortQuery(rootDB))
+		require.NoError(t, runShortQuery(adminDB))
+	})
+
+	t.Run("OpenTxnDoesNotCountAsActiveQuery", func(t *testing.T) {
+		tx, err := nonAdminDB.Begin()
+		defer func() {
+			require.NoError(t, tx.Rollback())
+		}()
+		require.NoError(t, err)
+		require.NoError(t, runShortQuery(nonAdminDB))
+
+		defer runLongQuery(t, nonAdminDB)(t)
+		// Now that there is a query running, attempting to run a statement in the
+		// txn should fail.
+		_, err = tx.ExecContext(ctx, "SELECT 1")
+		assertQueryLimitExceededError(t, err)
+	})
+
+	t.Run("InternalQueriesAreNotLimited", func(t *testing.T) {
+		defer runLongQuery(t, nonAdminDB)(t)
+
+		// Try to run an internal query on testUser's behalf. Even though there is
+		// an active query, this should succeed.
+		ie := s.InternalExecutor().(*sql.InternalExecutor)
+		_, err := ie.QueryRowEx(
+			ctx, "internal-test-query", nil /* txn */, sessiondata.InternalExecutorOverride{User: testUser}, "SELECT 1",
+		)
+		require.NoError(t, err)
+	})
 }
 
 // dynamicRequestFilter exposes a filter method which is a

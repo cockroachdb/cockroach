@@ -237,7 +237,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	ex.incrementStartedStmtCounter(stmt)
+	ex.metrics.ActiveQueries.Inc(1)
 	defer func() {
+		ex.metrics.ActiveQueries.Dec(1)
 		if retErr == nil && !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(stmt)
 		}
@@ -538,6 +540,29 @@ func (ex *connExecutor) execStmtInOpenState(
 
 		if s.DiscardRows {
 			p.discardRows = true
+		}
+	}
+
+	if ex.executorType != executorTypeInternal {
+		// Only limit non-internal queries.
+		if maxActiveQueries := MaxActiveQueries.Get(&ex.server.cfg.Settings.SV); maxActiveQueries != 0 &&
+			ex.metrics.ActiveQueries.Value() > maxActiveQueries {
+			// There are too many active queries. Any users without an admin role will
+			// be rejected. Note that this HasAdminRole check is done after the
+			// metrics check because it's relatively more expensive.
+			if hasAdminRole, err := ex.planner.HasAdminRole(ctx); err != nil {
+				// Unexpected error.
+				return makeErrEvent(err)
+			} else if !hasAdminRole {
+				return makeErrEvent(
+					errors.WithHint(
+						pgerror.New(pgcode.ConfigurationLimitExceeded, "sorry, too many active queries"),
+						fmt.Sprintf(
+							"maximum active query limit is %d, consider increasing %s", maxActiveQueries, maxActiveQueriesClusterSettingName,
+						),
+					),
+				)
+			}
 		}
 	}
 

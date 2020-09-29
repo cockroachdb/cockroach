@@ -629,6 +629,11 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaActiveSQLQueries = metric.Metadata{
+		Name: "sql.query.active",
+		Help: "Number of active SQL queries",
+		Unit: metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
