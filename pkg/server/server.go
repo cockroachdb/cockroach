@@ -387,6 +387,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RenewalDuration:         nlRenewal,
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		OnNodeDecommissioned: func(liveness kvserverpb.Liveness) {
+			if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
+				knobs.OnDecommissionedCallback(liveness)
+			}
+		},
 	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 

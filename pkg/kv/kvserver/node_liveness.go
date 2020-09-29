@@ -176,13 +176,14 @@ type NodeLiveness struct {
 	// heartbeatPaused contains an atomically-swapped number representing a bool
 	// (1 or 0). heartbeatToken is a channel containing a token which is taken
 	// when heartbeating or when pausing the heartbeat. Used for testing.
-	heartbeatPaused uint32
-	heartbeatToken  chan struct{}
-	metrics         LivenessMetrics
+	heartbeatPaused      uint32
+	heartbeatToken       chan struct{}
+	metrics              LivenessMetrics
+	onNodeDecommissioned func(kvserverpb.Liveness) // noop if nil
 
 	mu struct {
 		syncutil.RWMutex
-		onIsLive []IsLiveCallback
+		onIsLive []IsLiveCallback // see NodeLivenessOptions.OnSelfLive
 		// nodes is an in-memory cache of liveness records that NodeLiveness
 		// knows about (having learnt of them through gossip or through KV).
 		// It's a look-aside cache, and is accessed primarily through
@@ -217,10 +218,10 @@ type NodeLiveness struct {
 		// More concretely, we want `getLivenessRecordFromKV` to be tucked away
 		// within `getLivenessLocked`.
 		nodes      map[roachpb.NodeID]LivenessRecord
-		onSelfLive HeartbeatCallback
+		onSelfLive HeartbeatCallback // set in Start()
 		// Before heartbeating, we write to each of these engines to avoid
 		// maintaining liveness when a local disks is stalled.
-		engines []storage.Engine
+		engines []storage.Engine // set in Start()
 	}
 }
 
@@ -251,22 +252,28 @@ type NodeLivenessOptions struct {
 	LivenessThreshold       time.Duration
 	RenewalDuration         time.Duration
 	HistogramWindowInterval time.Duration
+	// OnNodeDecommissioned is invoked whenever the instance learns that a
+	// node was permanently removed from the cluster. This method must be
+	// idempotent as it may be invoked multiple times and defaults to a
+	// noop.
+	OnNodeDecommissioned func(kvserverpb.Liveness)
 }
 
 // NewNodeLiveness returns a new instance of NodeLiveness configured
 // with the specified gossip instance.
 func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 	nl := &NodeLiveness{
-		ambientCtx:        opts.AmbientCtx,
-		clock:             opts.Clock,
-		db:                opts.DB,
-		gossip:            opts.Gossip,
-		livenessThreshold: opts.LivenessThreshold,
-		heartbeatInterval: opts.LivenessThreshold - opts.RenewalDuration,
-		selfSem:           make(chan struct{}, 1),
-		st:                opts.Settings,
-		otherSem:          make(chan struct{}, 1),
-		heartbeatToken:    make(chan struct{}, 1),
+		ambientCtx:           opts.AmbientCtx,
+		clock:                opts.Clock,
+		db:                   opts.DB,
+		gossip:               opts.Gossip,
+		livenessThreshold:    opts.LivenessThreshold,
+		heartbeatInterval:    opts.LivenessThreshold - opts.RenewalDuration,
+		selfSem:              make(chan struct{}, 1),
+		st:                   opts.Settings,
+		otherSem:             make(chan struct{}, 1),
+		heartbeatToken:       make(chan struct{}, 1),
+		onNodeDecommissioned: opts.OnNodeDecommissioned,
 	}
 	nl.metrics = LivenessMetrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -279,6 +286,11 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 	nl.mu.nodes = make(map[roachpb.NodeID]LivenessRecord)
 	nl.heartbeatToken <- struct{}{}
 
+	// NB: we should consider moving this registration to .Start() once we
+	// have ensured that nobody uses the server's KV client (kv.DB) before
+	// nl.Start() is invoked. At the time of writing this invariant does
+	// not hold (which is a problem, since the node itself won't be live
+	// at this point, and requests routed to it will hang).
 	livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 	nl.gossip.RegisterCallback(livenessRegex, nl.livenessGossipUpdate)
 
@@ -643,7 +655,7 @@ type NodeLivenessStartOptions struct {
 // own liveness. The slice of engines will be written to before each
 // heartbeat to avoid maintaining liveness in the presence of disk stalls.
 func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions) {
-	log.VEventf(ctx, 1, "starting liveness heartbeat")
+	log.VEventf(ctx, 1, "starting node liveness instance")
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = opts.Stopper.ShouldQuiesce()
 
@@ -1293,6 +1305,9 @@ func (nl *NodeLiveness) maybeUpdate(ctx context.Context, newLivenessRec Liveness
 		for _, fn := range onIsLive {
 			fn(newLivenessRec.Liveness)
 		}
+	}
+	if newLivenessRec.Membership.Decommissioned() && nl.onNodeDecommissioned != nil {
+		nl.onNodeDecommissioned(newLivenessRec.Liveness)
 	}
 }
 
