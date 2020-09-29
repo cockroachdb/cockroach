@@ -35,11 +35,23 @@ SELECT * FROM t AS OF SYSTEM TIME (SELECT '-1h'::INTERVAL)
 statement error pq: relation "t" does not exist
 SELECT * FROM t AS OF SYSTEM TIME '-1h'
 
-statement error pq: follower_read_timestamp\(\): follower_read_timestamp is only available in ccl distribution
-SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
+query T noticetrace
+SELECT pg_sleep(5) -- we need to sleep so that the 4.8s elapses and the SELECT * FROM t returns something.
+----
 
-statement error pq: experimental_follower_read_timestamp\(\): follower_read_timestamp is only available in ccl distribution
+# Notices print twice -- once during planning and once during execution.
+# There's no nice way of reducing this to once without some hacks -- so left as is.
+query T noticetrace
+SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
+----
+NOTICE: follower_read_timestamp does not returns a value that is less likely to read from the closest replica in a non-CCL distribution, using -4.8s from statement time instead
+NOTICE: follower_read_timestamp does not returns a value that is less likely to read from the closest replica in a non-CCL distribution, using -4.8s from statement time instead
+
+query T noticetrace
 SELECT * FROM t AS OF SYSTEM TIME experimental_follower_read_timestamp()
+----
+NOTICE: follower_read_timestamp does not returns a value that is less likely to read from the closest replica in a non-CCL distribution, using -4.8s from statement time instead
+NOTICE: follower_read_timestamp does not returns a value that is less likely to read from the closest replica in a non-CCL distribution, using -4.8s from statement time instead
 
 statement error pq: unknown signature: follower_read_timestamp\(string\) \(desired <timestamptz>\)
 SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp('boom')
