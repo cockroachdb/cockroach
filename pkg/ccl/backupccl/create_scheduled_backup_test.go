@@ -638,8 +638,8 @@ func TestScheduleBackupRecoversFromClusterDown(t *testing.T) {
 	defer cleanup()
 
 	th.sqlDB.Exec(t, `
-CREATE DATABASE db; 
-USE db; 
+CREATE DATABASE db;
+USE db;
 CREATE TABLE t(a int);
 INSERT INTO t values (1), (10), (100);
 `)
@@ -746,7 +746,7 @@ INSERT INTO t values (1), (10), (100);
 		ex, _, err := jobs.GetScheduledJobExecutor(tree.ScheduledBackupExecutor.InternalName())
 		require.NoError(t, err)
 		require.NotNil(t, ex.Metrics())
-		return ex.Metrics().(*jobs.ExecutorMetrics)
+		return &ex.Metrics().(*backupMetrics).ExecutorMetrics
 	}()
 
 	t.Run("retry", func(t *testing.T) {

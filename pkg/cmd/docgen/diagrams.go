@@ -451,7 +451,8 @@ var specs = []stmtSpec{
 			"scont_or_placeholder":           "destination",
 			"sconst_or_placeholder":          "subdirectory",
 		},
-		unlink: []string{"destination", "timestamp", "full_backup_location", "incremental_backup_location", "destination"},
+		unlink:  []string{"destination", "timestamp", "full_backup_location", "incremental_backup_location", "destination"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'INTO'")},
 	},
 	{
 		name: "begin_transaction",

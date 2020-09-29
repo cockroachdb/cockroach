@@ -625,7 +625,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(
-			ctx, env, *b.job.ID(), jobStatus, scheduleID, exec.InternalExecutor, txn); err != nil {
+			ctx, env, *b.job.ID(), jobStatus, b.job.Details(), scheduleID, exec.InternalExecutor, txn); err != nil {
 			log.Warningf(ctx,
 				"failed to notify schedule %d of completion of job %d; err=%s",
 				scheduleID, *b.job.ID(), err)

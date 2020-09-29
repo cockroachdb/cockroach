@@ -60,7 +60,7 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 
 			// Pretend we failed running; we expect job to be rescheduled.
 			require.NoError(t, NotifyJobTermination(
-				ctx, h.env, 123, StatusFailed, j.ScheduleID(), h.cfg.InternalExecutor, nil))
+				ctx, h.env, 123, StatusFailed, nil, j.ScheduleID(), h.cfg.InternalExecutor, nil))
 
 			// Verify nextRun updated
 			loaded := h.loadSchedule(t, j.ScheduleID())
