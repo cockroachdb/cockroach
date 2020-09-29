@@ -50,10 +50,16 @@ message PingRequest {
     (gogoproto.customname) = "ClusterID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   optional roachpb.Version server_version = 6 [(gogoproto.nullable) = false];
-  // Node ID to prevent connections from being misrouted to an invalid node inside the cluster.
+  // NodeID the originator of the request wishes to connect to.
+  // This helps prevent connections from being misrouted when addresses are reused.
   optional int32 target_node_id = 7 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "TargetNodeID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // NodeID of the originator of the PingRequest.
+  optional int32 origin_node_id = 8 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "OriginNodeID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
