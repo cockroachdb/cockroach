@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,6 +28,17 @@ type controlSchedulesNode struct {
 	rows    planNode
 	command tree.ScheduleCommand
 	numRows int
+}
+
+func collectTelemetry(command tree.ScheduleCommand) {
+	switch command {
+	case tree.PauseSchedule:
+		telemetry.Inc(sqltelemetry.ScheduledBackupControlCounter("pause"))
+	case tree.ResumeSchedule:
+		telemetry.Inc(sqltelemetry.ScheduledBackupControlCounter("resume"))
+	case tree.DropSchedule:
+		telemetry.Inc(sqltelemetry.ScheduledBackupControlCounter("drop"))
+	}
 }
 
 // FastPathResults implements the planNodeFastPath interface.
@@ -134,6 +147,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 		default:
 			err = errors.AssertionFailedf("unhandled command %s", n.command)
 		}
+		collectTelemetry(n.command)
 
 		if err != nil {
 			return err
