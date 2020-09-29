@@ -374,16 +374,16 @@ DROP TABLE sharded_primary
 statement ok
 SET experimental_enable_hash_sharded_indexes = false
 
-statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes cluster setting
+statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable
 CREATE TABLE disabled (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 10)
 
 statement ok
 CREATE TABLE disabled_secondary (k INT, v BYTES)
 
-statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes cluster setting
+statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable
 CREATE INDEX failure on disabled_secondary (k) USING HASH WITH BUCKET_COUNT = 12
 
-statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes cluster setting
+statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable
 CREATE TABLE disabled (k INT, INDEX (k) USING HASH WITH BUCKET_COUNT = 10)
 
 # Ensure everything works with weird column names
