@@ -1144,13 +1144,7 @@ user testuser
 query TT
 SHOW DATABASES
 ----
-db2        root
-defaultdb  root
-postgres   root
-privatedb  root
 publicdb   root
-system     node
-test       root
 
 query TTTTI
 SHOW TABLES FROM publicdb
