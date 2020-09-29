@@ -62,31 +62,33 @@ func vectorizeOptionToSetting(vectorize bool, version crdbVersion) string {
 	}
 }
 
-var (
-	// queriesToSkipByVersion is a map keyed by version that contains query numbers
-	// to be skipped for the given version (as well as the reasons for why they are skipped).
-	queriesToSkipByVersion = map[crdbVersion]map[int]string{
-		tpchVecVersion19_2: {
-			5:  "can cause OOM",
-			7:  "can cause OOM",
-			8:  "can cause OOM",
-			9:  "can cause OOM",
-			19: "can cause OOM",
-		},
-	}
+// queriesToSkipByVersion is a map keyed by version that contains query numbers
+// to be skipped for the given version (as well as the reasons for why they are
+// skipped).
+var queriesToSkipByVersion = map[crdbVersion]map[int]string{
+	tpchVecVersion19_2: {
+		5:  "can cause OOM",
+		7:  "can cause OOM",
+		8:  "can cause OOM",
+		9:  "can cause OOM",
+		19: "can cause OOM",
+	},
+}
 
-	// slownessThreshold describes the threshold at which we fail the test
-	// if vec ON is slower that vec OFF, meaning that if
-	// vec_on_time > vecOnSlowerFailFactor * vec_off_time, the test is failed.
-	// This will help catch any regressions.
+// getSlownessThreshold returns the threshold at which we fail the test if vec
+// ON is slower that vec OFF, meaning that if
+//   vec_on_time >= slownessThreshold * vec_off_time
+// the test is failed. This will help catch any regressions.
+func getSlownessThreshold(version crdbVersion) float64 {
+	switch version {
 	// Note that for 19.2 version the threshold is higher in order to reduce
 	// the noise.
-	slownessThresholdByVersion = map[crdbVersion]float64{
-		tpchVecVersion19_2: 1.5,
-		tpchVecVersion20_1: 1.2,
-		tpchVecVersion20_2: 1.15,
+	case tpchVecVersion19_2:
+		return 1.5
+	default:
+		return 1.2
 	}
-)
+}
 
 var tpchTables = []string{
 	"nation", "region", "part", "supplier",
@@ -322,7 +324,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
 					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
 		}
-		if vecOnTime >= slownessThresholdByVersion[version]*vecOffTime {
+		if vecOnTime >= getSlownessThreshold(version)*vecOffTime {
 			// For some reason, the vectorized engine executed the query a lot
 			// slower than the row-by-row engine which is unexpected. In order
 			// to understand where the slowness comes from, we will run EXPLAIN
@@ -358,11 +360,12 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					// We are interested in the line that contains the url that
 					// we will curl below.
 					directLinkPrefix := "Direct link: "
-					var line, url string
+					var line, url, debugOutput string
 					for rows.Next() {
 						if err = rows.Scan(&line); err != nil {
 							t.Fatal(err)
 						}
+						debugOutput += line + "\n"
 						if strings.HasPrefix(line, directLinkPrefix) {
 							url = line[len(directLinkPrefix):]
 							break
@@ -373,7 +376,8 @@ func (p *tpchVecPerfTest) postTestRunHook(
 					}
 					if url == "" {
 						t.Fatal(fmt.Sprintf("unexpectedly didn't find a line "+
-							"with %q prefix in EXPLAIN ANALYZE (DEBUG) output", directLinkPrefix))
+							"with %q prefix in EXPLAIN ANALYZE (DEBUG) output\n%s",
+							directLinkPrefix, debugOutput))
 					}
 					// We will curl into the logs folder so that test runner
 					// retrieves the bundle together with the log files.
