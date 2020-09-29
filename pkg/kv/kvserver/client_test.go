@@ -1019,15 +1019,19 @@ func (m *multiTestContext) addStore(idx int) {
 			m.t.Fatal(err)
 		}
 	}
-	m.nodeLivenesses[idx].Start(ctx, stopper, m.engines[idx:idx+1], func(ctx context.Context) {
-		now := clock.Now()
-		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
-		ran.Do(func() {
-			close(ran.ch)
-		})
-	})
+	m.nodeLivenesses[idx].Start(ctx,
+		kvserver.NodeLivenessStartOptions{
+			Stopper: stopper,
+			Engines: m.engines[idx : idx+1],
+			OnSelfLive: func(ctx context.Context) {
+				now := clock.Now()
+				if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
+					log.Warningf(ctx, "%v", err)
+				}
+				ran.Do(func() {
+					close(ran.ch)
+				})
+			}})
 
 	store.WaitForInit()
 
@@ -1117,11 +1121,15 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.DefaultClass).Reset()
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.SystemClass).Reset()
 	m.mu.Unlock()
-	cfg.NodeLiveness.Start(ctx, stopper, m.engines[i:i+1], func(ctx context.Context) {
-		now := m.clocks[i].Now()
-		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
+	cfg.NodeLiveness.Start(ctx, kvserver.NodeLivenessStartOptions{
+		Stopper: stopper,
+		Engines: m.engines[i : i+1],
+		OnSelfLive: func(ctx context.Context) {
+			now := m.clocks[i].Now()
+			if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
+				log.Warningf(ctx, "%v", err)
+			}
+		},
 	})
 }
 
