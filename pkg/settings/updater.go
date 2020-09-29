@@ -121,10 +121,12 @@ func (u updater) Set(key, rawValue string, vt string) error {
 			return err
 		}
 		return setting.set(u.sv, d)
-	case *StateMachineSetting:
-		return setting.set(u.sv, []byte(rawValue))
+	//case *StateMachineSetting:
+	//	return setting.set(u.sv, []byte(rawValue))
+	default:
+		// XXX: Disconnecting the state machine setting here.
+		return nil
 	}
-	return nil
 }
 
 // ResetRemaining sets all settings not updated by the updater to their default values.

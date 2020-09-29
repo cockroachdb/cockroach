@@ -373,6 +373,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:              markDeprecatedSchemaChangeJobsFailed,
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionLeasedDatabaseDescriptors),
 	},
+	{
+		// Introduced in v21.1.
+		name:                "xxx: introduce new jobs table",
+		workFn:              createLRMTable,
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionLRMTable),
+		newDescriptorIDs:    staticIDs(keys.LRMID),
+	},
 }
 
 func staticIDs(
@@ -1062,6 +1069,16 @@ func createRoleOptionsTable(ctx context.Context, r runner) error {
 	return nil
 }
 
+// XXX:
+func createLRMTable(ctx context.Context, r runner) error {
+	err := createSystemTable(ctx, r, systemschema.LRMTable)
+	if err != nil {
+		return errors.Wrap(err, "failed to create system.role_options")
+	}
+
+	return nil
+}
+
 func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {
 	// Add the CREATELOGIN option to roles that already have CREATEROLE.
 	const upsertCreateRoleStmt = `
@@ -1217,6 +1234,8 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		return err
 	}
 
+	// XXX: this can sometimes fail with "no version found". I think because we
+	// disconnected the gossip prop.
 	if err := r.execAsRoot(
 		ctx, "set-setting", "SET CLUSTER SETTING version = $1", v.String(),
 	); err != nil {

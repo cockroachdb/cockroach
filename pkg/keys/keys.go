@@ -81,6 +81,11 @@ func StoreNodeTombstoneKey(nodeID roachpb.NodeID) roachpb.Key {
 	return MakeStoreKey(localStoreNodeTombstoneSuffix, encoding.EncodeUint32Ascending(nil, uint32(nodeID)))
 }
 
+// StoreTargetVersionKey XXX: DOC:
+func StoreTargetVersionKey() roachpb.Key {
+	return MakeStoreKey(localStoreTargetVersionSuffix, nil)
+}
+
 // DecodeNodeTombstoneKey returns the NodeID for the node tombstone.
 func DecodeNodeTombstoneKey(key roachpb.Key) (roachpb.NodeID, error) {
 	suffix, detail, err := DecodeStoreKey(key)

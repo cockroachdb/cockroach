@@ -1747,6 +1747,43 @@ func (s *adminServer) Decommission(
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
 }
 
+// EveryNode XXX: DOC:
+func (s *adminServer) EveryNode(
+	ctx context.Context, req *serverpb.EveryNodeRequest,
+) (*serverpb.EveryNodeResponse, error) {
+	{
+		got, err := s.server.GetPendingVersion(ctx)
+		if err != nil {
+			return nil, err
+		}
+		log.Infof(ctx, "xxx: found existing-version=%s", got)
+	}
+	{
+		// XXX: We need something similar to batch_generated.go. Even for the
+		// response.
+		ackReq := req.Request.GetAckPendingVersion()
+		if err := s.server.PersistPendingVersion(ctx, ackReq.Version); err != nil {
+			return nil, err
+		}
+
+		// XXX: TODO: Bump the local version gate here. On 21.1 nodes we'll no
+		// longer use gossip to propagate version bumps. We'll still have
+		// disseminate it, but we won't listen to it or anything.
+		_ = s.server.ClusterSettings().MutableVersionRef.Set(ctx, ackReq.Version)
+
+		ackResp := &serverpb.AckPendingVersionResponse{}
+		ackRespU := &serverpb.EveryNodeResponseUnion_AckPendingVersion{
+			AckPendingVersion: ackResp,
+		}
+		resp := &serverpb.EveryNodeResponse{
+			Response: serverpb.EveryNodeResponseUnion{
+				Value: ackRespU,
+			},
+		}
+		return resp, nil
+	}
+}
+
 // DataDistribution returns a count of replicas on each node for each table.
 func (s *adminServer) DataDistribution(
 	ctx context.Context, req *serverpb.DataDistributionRequest,

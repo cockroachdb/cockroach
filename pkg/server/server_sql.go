@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"math"
 	"net"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/migration"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -84,6 +86,7 @@ type sqlServer struct {
 	sessionRegistry        *sql.SessionRegistry
 	jobRegistry            *jobs.Registry
 	migMgr                 *sqlmigrations.Manager
+	lrmOrchestrator        *migration.Orchestrator
 	statsRefresher         *stats.Refresher
 	temporaryObjectCleaner *sql.TemporaryObjectCleaner
 	internalMemMetrics     sql.MemoryMetrics
@@ -459,14 +462,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache:         &sql.MembershipCache{},
 		TestingKnobs:            sqlExecutorTestingKnobs,
-		VersionUpgradeHook: func(ctx context.Context, to roachpb.Version) error {
-			// TODO(irfansharif): Do something real here. We want to be able to
-			// send out a Migrate request spanning the entire keyspace. We'll
-			// need to make sure all stores have synced once to persist any raft
-			// command applications.
-			log.Infof(ctx, "version upgrade callback called with target version=%s", to.String())
-			return nil
-		},
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
@@ -646,6 +641,25 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		sqlExecutorTestingKnobs,
 	)
 
+	// XXX: Could use the same pkg/sqlmigrations/leasemanager/lease instance
+	// between this and sqlmigrations. Will need to get pulled up above or
+	// something.
+	lrmLeaseMgr := leasemanager.New(cfg.db, execCfg.Clock, leasemanager.Options{})
+	lrmMgr := migration.NewOrchestrator(
+		lrmLeaseMgr,
+		cfg.circularInternalExecutor,
+		cfg.db,
+		cfg.nodeDialer,
+	)
+	execCfg.VersionUpgradeHook = func(ctx context.Context, to roachpb.Version) error {
+		// TODO(irfansharif): Do something real here. We want to be able to
+		// send out a Migrate request spanning the entire keyspace. We'll
+		// need to make sure all stores have synced once to persist any raft
+		// command applications.
+		log.Infof(ctx, "xxx: running migrations for target version=%s", to.String())
+		return lrmMgr.RunMigrations(ctx, to)
+	}
+
 	return &sqlServer{
 		pgServer:                pgServer,
 		distSQLServer:           distSQLServer,
@@ -663,6 +677,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
 		sqlLivenessProvider:     cfg.sqlLivenessProvider,
 		metricsRegistry:         cfg.registry,
+		lrmOrchestrator:         lrmMgr,
 	}, nil
 }
 

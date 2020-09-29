@@ -12,7 +12,6 @@ package clusterversion
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,6 +55,11 @@ var version = registerClusterVersionSetting()
 // clusterVersionSetting is the implementation of the 'version' setting. Like all
 // setting structs, it is immutable, as Version is a global; all the state is
 // maintained in a Handle instance.
+// XXX: We'll need another view into `version` that _also_ looks like cluster
+// setting to users, but underneath the hood uses a different machinery for
+// storage/mutation of data.
+// XXX: Who currently holds a reference to the mutable handle on this guy? It's
+// the setting that's stored in the registry.
 type clusterVersionSetting struct {
 	settings.StateMachineSetting
 }
@@ -248,6 +252,7 @@ func (cv *clusterVersionSetting) ValidateGossipUpdate(
 	if err := protoutil.Unmarshal(rawProto, &ver); err != nil {
 		return err
 	}
+	log.Infof(ctx, "xxx: validating gossip update for cluster version setting, v=%s", ver.String())
 	return cv.validateSupportedVersionInner(ctx, ver.Version, sv)
 }
 
@@ -281,11 +286,12 @@ func (cv *clusterVersionSetting) validateSupportedVersionInner(
 	if vh.BinaryMinSupportedVersion() == (roachpb.Version{}) {
 		panic("BinaryMinSupportedVersion not set")
 	}
-	if vh.BinaryVersion().Less(ver) {
-		// TODO(tschottdorf): also ask gossip about other nodes.
-		return errors.Errorf("cannot upgrade to %s: node running %s",
-			ver, vh.BinaryVersion())
-	}
+	// XXX: For testing purposes, letting versions ratchet up endlessly.
+	//if vh.BinaryVersion().Less(ver) {
+	//	// TODO(tschottdorf): also ask gossip about other nodes.
+	//	return errors.Errorf("cannot upgrade to %s: node running %s",
+	//		ver, vh.BinaryVersion())
+	//}
 	if ver.Less(vh.BinaryMinSupportedVersion()) {
 		return errors.Errorf("node at %s cannot run %s (minimum version is %s)",
 			vh.BinaryVersion(), ver, vh.BinaryMinSupportedVersion())

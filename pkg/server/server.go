@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -2391,4 +2392,47 @@ func (s *Server) RunLocalSQL(
 // Insecure returns true iff the server has security disabled.
 func (s *Server) Insecure() bool {
 	return s.cfg.Insecure
+}
+
+// PersistPendingVersion XXX: TODO: DOC:
+func (s *Server) PersistPendingVersion(ctx context.Context, version *roachpb.Version) error {
+	log.Infof(ctx, "xxx: received op=ack-pending-version, args=%s", version)
+	var v roachpb.Value
+	if err := v.SetProto(version); err != nil {
+		return err
+	}
+	for _, eng := range s.engines {
+		if err := storage.MVCCPut(
+			ctx, eng, nil /* MVCCStats */, keys.StoreTargetVersionKey(), hlc.Timestamp{}, v, nil, /* txn */
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetPendingVersion XXX: TODO: DOC:
+func (s *Server) GetPendingVersion(ctx context.Context) (roachpb.Version, error) {
+	for _, eng := range s.engines {
+		v, _, err := storage.MVCCGet(ctx, eng, keys.StoreTargetVersionKey(), hlc.Timestamp{}, storage.MVCCGetOptions{})
+		if err != nil {
+			return roachpb.Version{}, err
+		}
+		if v == nil {
+			// Not found. // XXX: Should this be possible?
+			continue
+		}
+		var ver roachpb.Version
+		if err := v.GetProto(&ver); err != nil {
+			return roachpb.Version{}, err
+		}
+
+		// XXX: We're just returning from the first one we find. What about the
+		// others?
+		return ver, nil
+	}
+
+	// XXX: Is this what we want? When no version is found on disk the very
+	// first time?
+	return clusterversion.TestingBinaryVersion, nil
 }

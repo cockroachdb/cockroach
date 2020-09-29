@@ -1684,6 +1684,30 @@ var (
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
+
+	// XXX:
+	LRMTable = tabledesc.NewImmutable(descpb.TableDescriptor{
+		Name:                    "lrm",
+		ID:                      keys.LRMID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "job_id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
+			{Name: "metadata", ID: 2, Type: types.String, Nullable: false},
+		},
+		NextColumnID: 3,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"job_id", "metadata"}, ColumnIDs: []descpb.ColumnID{1, 2}},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: pk("job_id"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.LRMID], security.NodeUser),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
 )
 
 // newCommentPrivilegeDescriptor returns a privilege descriptor for comment table

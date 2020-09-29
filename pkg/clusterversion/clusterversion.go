@@ -41,9 +41,9 @@ package clusterversion
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 )
@@ -76,6 +76,11 @@ func SetBeforeChange(
 
 // Handle is a read-only view to the active cluster version and this binary's
 // version details.
+//
+// XXX: We'll want this same handle to exist going forward. Except underneath
+// the hood the "setting" of things doesn't happen through this StateMachine guy
+// anymore. It happens through the one RPC.
+// XXX: I'm unsure what the migration story _there_ looks like.
 type Handle interface {
 	// ActiveVersion returns the cluster's current active version: the minimum
 	// cluster version the caller may assume is in effect.
@@ -156,6 +161,32 @@ var _ Handle = (*handleImpl)(nil)
 // supported versions respectively.
 func MakeVersionHandle(sv *settings.Values) Handle {
 	return MakeVersionHandleWithOverride(sv, binaryVersion, binaryMinSupportedVersion)
+}
+
+type MutableRef struct {
+	handleImpl *handleImpl
+}
+
+func (r MutableRef) Set(ctx context.Context, v *roachpb.Version) error {
+	sv := r.handleImpl.sv
+	newV := *v
+	if err := version.validateSupportedVersionInner(ctx, newV, sv); err != nil {
+		return err
+	}
+
+	value := ClusterVersion{Version: newV}
+	encoded, err := protoutil.Marshal(&value)
+	if err != nil {
+		return err
+	}
+	version.SetInternal(sv, encoded)
+	return nil
+}
+
+func MakeMutableRef(handle Handle) MutableRef {
+	return MutableRef{
+		handleImpl: handle.(*handleImpl),
+	}
 }
 
 // MakeVersionHandleWithOverride returns a Handle that has its

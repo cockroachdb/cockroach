@@ -14,6 +14,7 @@ option go_package = "serverpb";
 
 import "config/zonepb/zone.proto";
 import "jobs/jobspb/jobs.proto";
+import "roachpb/metadata.proto";
 import "server/serverpb/status.proto";
 import "storage/enginepb/mvcc.proto";
 import "kv/kvserver/kvserverpb/liveness.proto";
@@ -455,6 +456,40 @@ message DecommissionStatusResponse {
   repeated Status status = 2 [(gogoproto.nullable) = false];
 }
 
+// XXX: Should all this stuff sit in a new proto entirely? It's pretty self
+// contained.
+
+// AckPendingVersionRequest XXX:
+message AckPendingVersionRequest {
+  roachpb.Version version = 1;
+}
+
+// AckPendingVersionResponse XXX:
+message AckPendingVersionResponse { }
+
+// EveryNodeRequestUnion XXX:
+message EveryNodeRequestUnion {
+  oneof value {
+    AckPendingVersionRequest ack_pending_version = 1;
+  }
+}
+
+message EveryNodeResponseUnion {
+  oneof value {
+    AckPendingVersionResponse ack_pending_version = 1;
+  }
+}
+
+// EveryNodeRequest XXX:
+message EveryNodeRequest {
+  EveryNodeRequestUnion request = 1 [(gogoproto.nullable) = false];
+}
+
+// EveryNodeResponse XXX:
+message EveryNodeResponse {
+  EveryNodeResponseUnion response = 1 [(gogoproto.nullable) = false];
+}
+
 // SettingsRequest inquires what are the current settings in the cluster.
 message SettingsRequest {
   // The array of setting names to retrieve.
@@ -862,6 +897,10 @@ service Admin {
   // If this ever becomes exposed via HTTP, ensure that it performs
   // authorization. See #42567.
   rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
+  }
+
+  // EveryNode XXX:
+  rpc EveryNode(EveryNodeRequest) returns (EveryNodeResponse) {
   }
 
   // DecommissionStatus retrieves the decommissioning status of the specified nodes.

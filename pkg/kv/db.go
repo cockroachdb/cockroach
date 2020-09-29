@@ -532,6 +532,13 @@ func (db *DB) AdminSplit(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// XXX: Migrates the range containing the key. Needs to take a target version.
+func (db *DB) AdminMigrate(ctx context.Context, begin, end interface{}) error {
+	b := &Batch{}
+	b.adminMigrate(begin, end)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // SplitAndScatter is a helper that wraps AdminSplit + AdminScatter.
 func (db *DB) SplitAndScatter(
 	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp,

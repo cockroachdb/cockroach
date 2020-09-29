@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -31,7 +32,12 @@ func declareKeysMigrate(
 // Migrate ensures that the range proactively carries out any outstanding
 // below-Raft migrations.
 func Migrate(
-	_ context.Context, _ storage.ReadWriter, _ CommandArgs, _ roachpb.Response,
+	ctx context.Context, _ storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
+	args := cArgs.Args.(*roachpb.MigrateRequest)
+	h := cArgs.Header
+
+	log.Infof(ctx, "xxx: evaluating Migrate command for r%d [%s, %s)", h.RangeID, args.Key, args.EndKey)
+
 	return result.Result{}, nil
 }

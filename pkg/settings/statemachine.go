@@ -63,6 +63,7 @@ type StateMachineSettingImpl interface {
 // The state machine as well as its encoding are represented by the
 // StateMachineSettingImpl backing this StateMachineSetting; it is in charge to
 // converting to/from strings and performing validations.
+// XXX: Need the equivalent of this guy to be placed under pkg/clusterversion.
 type StateMachineSetting struct {
 	impl StateMachineSettingImpl
 	common

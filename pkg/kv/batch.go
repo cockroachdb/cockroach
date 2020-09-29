@@ -244,6 +244,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.EndTxnRequest:
 			case *roachpb.AdminMergeRequest:
 			case *roachpb.AdminSplitRequest:
+			case *roachpb.MigrateRequest:
 			case *roachpb.AdminUnsplitRequest:
 			case *roachpb.AdminTransferLeaseRequest:
 			case *roachpb.AdminChangeReplicasRequest:
@@ -624,6 +625,28 @@ func (b *Batch) adminSplit(splitKeyIn interface{}, expirationTime hlc.Timestamp)
 		},
 		SplitKey:       splitKey,
 		ExpirationTime: expirationTime,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// XXX:
+func (b *Batch) adminMigrate(begin, end interface{}) {
+	beginKey, err := marshalKey(begin)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	endKey, err := marshalKey(end)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.MigrateRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    beginKey,
+			EndKey: endKey,
+		},
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

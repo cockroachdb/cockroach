@@ -342,6 +342,10 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.ScheduledJobsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.SqllivenessTable)
+
+	// Tables introduced in 21.1.
+	// XXX:
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.LRMTable)
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied

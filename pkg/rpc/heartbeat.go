@@ -91,8 +91,10 @@ func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb
 			"cluster requires at least version %s, but peer did not provide a version", activeVersion)
 	}
 	if peerVersion.Less(activeVersion.Version) {
-		return errors.Errorf(
-			"cluster requires at least version %s, but peer has version %s", activeVersion, peerVersion)
+		// XXX: Hacking this in to let us ratchet things willy nilly.
+		//return errors.Errorf(
+		//	"cluster requires at least version %s, but peer has version %s", activeVersion, peerVersion)
+		return nil
 	}
 	return nil
 }

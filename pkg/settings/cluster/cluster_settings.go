@@ -48,7 +48,8 @@ type Settings struct {
 
 	// Version provides a read-only view to the active cluster version and this
 	// binary's version details.
-	Version clusterversion.Handle
+	Version           clusterversion.Handle
+	MutableVersionRef clusterversion.MutableRef
 }
 
 // TelemetryOptOut is a place for controlling whether to opt out of telemetry or not.
@@ -116,6 +117,8 @@ func MakeClusterSettings() *Settings {
 
 	sv := &s.SV
 	s.Version = clusterversion.MakeVersionHandle(&s.SV)
+	// XXX: Should the init happen through this mutable ref instead?
+	s.MutableVersionRef = clusterversion.MakeMutableRef(s.Version)
 	sv.Init(s.Version)
 
 	s.Tracer = tracing.NewTracer()

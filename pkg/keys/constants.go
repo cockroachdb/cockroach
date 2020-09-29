@@ -178,6 +178,9 @@ var (
 	// localStoreNodeTombstoneSuffix stores key value pairs that map
 	// nodeIDs to time of removal from cluster.
 	localStoreNodeTombstoneSuffix = []byte("ntmb")
+	// localStoreTargetVersionSuffix stores the target version.
+	// XXX: DOC:
+	localStoreTargetVersionSuffix = []byte("tver")
 	// localStoreLastUpSuffix stores the last timestamp that a store's node
 	// acknowledged that it was still running. This value will be regularly
 	// refreshed on all stores for a running node; the intention of this value
@@ -236,6 +239,8 @@ var (
 	// BootstrapVersion is the key at which clusters bootstrapped with a version
 	// > 1.0 persist the version at which they were bootstrapped.
 	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
+	// ClusterVersionKey XXX: DOC:
+	ClusterVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("cluster-version")))
 	//
 	// descIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs for the system tenant. All other tenants use a
@@ -258,6 +263,8 @@ var (
 	// MigrationLease is the key that nodes must take a lease on in order to run
 	// system migrations on the cluster.
 	MigrationLease = roachpb.Key(makeKey(MigrationPrefix, roachpb.RKey("lease")))
+	// XXX
+	LRMLease = roachpb.Key(makeKey(MigrationPrefix, roachpb.RKey("lrm-lease")))
 	//
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
@@ -383,6 +390,7 @@ const (
 	ScheduledJobsTableID                = 37
 	TenantsRangesID                     = 38 // pseudo
 	SqllivenessID                       = 39
+	LRMID                               = 40 // XXX:
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
