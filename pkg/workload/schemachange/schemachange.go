@@ -568,11 +568,11 @@ func (w *schemaChangeWorker) createTable(tx *pgx.Tx) (string, error) {
 }
 
 func (w *schemaChangeWorker) createEnum(tx *pgx.Tx) (string, error) {
-	typName, err := w.randEnum(tx, w.existingPct)
+	schemaName, typName, err := w.randEnum(tx, w.existingPct)
 	if err != nil {
 		return "", err
 	}
-	stmt := rowenc.RandCreateType(w.rng, typName, "asdf")
+	stmt := rowenc.RandCreateType(w.rng, fmt.Sprintf("%s.%s", schemaName, typName), "asdf")
 	return tree.Serialize(stmt), nil
 }
 
@@ -1021,22 +1021,27 @@ ORDER BY random()
 	return name, nil
 }
 
-func (w *schemaChangeWorker) randEnum(tx *pgx.Tx, pctExisting int) (string, error) {
+func (w *schemaChangeWorker) randEnum(tx *pgx.Tx, pctExisting int) (string, string, error) {
 	if w.rng.Intn(100) >= pctExisting {
-		return fmt.Sprintf("enum%d", atomic.AddInt64(w.seqNum, 1)), nil
+		randSchema, err := w.randSchema(tx, pctExisting)
+		if err != nil {
+			return "", "", err
+		}
+		return randSchema, fmt.Sprintf("enum%d", atomic.AddInt64(w.seqNum, 1)), nil
 	}
 	const q = `
-  SELECT name
+  SELECT schema, name
     FROM [SHOW ENUMS]
    WHERE name LIKE 'enum%'
 ORDER BY random()
    LIMIT 1;
 `
+	var schemaName string
 	var typName string
-	if err := tx.QueryRow(q).Scan(&typName); err != nil {
-		return "", err
+	if err := tx.QueryRow(q).Scan(&schemaName, &typName); err != nil {
+		return "", "", err
 	}
-	return typName, nil
+	return schemaName, typName, nil
 }
 
 // randTable returns a schema name along with a table name
@@ -1120,11 +1125,11 @@ FROM [SHOW COLUMNS FROM "%s"];
 func (w *schemaChangeWorker) randType(tx *pgx.Tx) (tree.ResolvableTypeReference, error) {
 	if w.rng.Intn(100) <= w.enumPct {
 		// TODO(ajwerner): Support arrays of enums.
-		typName, err := w.randEnum(tx, 100)
+		schemaName, typName, err := w.randEnum(tx, 100)
 		if err != nil {
 			return nil, err
 		}
-		n := tree.MakeUnresolvedName(typName)
+		n := tree.MakeUnresolvedName(schemaName, typName)
 		return n.ToUnresolvedObjectName(tree.NoAnnotation)
 	}
 	return rowenc.RandSortingType(w.rng), nil
