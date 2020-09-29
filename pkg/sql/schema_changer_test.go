@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -63,7 +64,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 // setTestJobsAdoptInterval sets a short job adoption interval for a test
@@ -6295,4 +6298,88 @@ func TestAddingTableResolution(t *testing.T) {
 	sqlRun.ExpectErr(t, `pq: relation "foo" does not exist`, `ALTER MATERIALIZED VIEW foo RENAME TO bar`)
 	// Regression test for #52829.
 	sqlRun.ExpectErr(t, `pq: relation "foo" does not exist`, `SHOW CREATE foo`)
+}
+
+// TestCancelMultipleQueued tests that canceling schema changes when there are
+// multiple queued schema changes works as expected.
+func TestCancelMultipleQueued(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	canProceed := make(chan struct{})
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				<-canProceed
+				return nil
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (i INT PRIMARY KEY, j INT)`)
+	var schemaChangeWaitGroup sync.WaitGroup
+	var jobsErrGroup errgroup.Group
+	const numIndexes = 10               // number of indexes to add
+	jobIDs := make([]int64, numIndexes) // job IDs for the index additions
+	shouldCancel := make([]bool, numIndexes)
+	for i := 0; i < numIndexes; i++ {
+		idxName := "t_" + strconv.Itoa(i) + "_idx"
+		schemaChangeWaitGroup.Add(1)
+		i := i
+		shouldCancel[i] = rand.Float64() < .5
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := sqlDB.Exec("CREATE INDEX " + idxName + " ON db.t (j)")
+			if shouldCancel[i] {
+				assert.Regexp(t, "job canceled by user", err)
+			} else {
+				assert.NoError(t, err)
+			}
+		}()
+		jobsErrGroup.Go(func() error {
+			return testutils.SucceedsSoonError(func() error {
+				return sqlDB.QueryRow(`
+SELECT job_id FROM crdb_internal.jobs 
+ WHERE description LIKE '%` + idxName + `%'`).Scan(&jobIDs[i])
+			})
+		})
+	}
+	require.NoError(t, jobsErrGroup.Wait())
+	for i, id := range jobIDs {
+		if shouldCancel[i] {
+			tdb.Exec(t, "CANCEL JOB $1", id)
+		}
+	}
+	close(canProceed)
+	schemaChangeWaitGroup.Wait()
+
+	// Verify that after all of the canceled jobs have been canceled and all of
+	// the other indexes which were not canceled have completed, that we can
+	// perform another schema change. This ensures that there are no orphaned
+	// mutations.
+	tdb.Exec(t, "CREATE INDEX foo ON db.t (j)")
+
+	// Verify that all the jobs reached the expected terminal state.
+	// Do this after the above change to ensure that all canceled states have
+	// been reached.
+	for i, id := range jobIDs {
+		var status jobs.Status
+		tdb.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", id).
+			Scan(&status)
+		if shouldCancel[i] {
+			require.Equal(t, jobs.StatusCanceled, status)
+		} else {
+			require.Equal(t, jobs.StatusSucceeded, status)
+		}
+
+		if shouldCancel[i] {
+			tdb.Exec(t, "CANCEL JOB $1", id)
+		}
+	}
 }
