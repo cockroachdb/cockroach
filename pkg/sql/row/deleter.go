@@ -67,12 +67,6 @@ func MakeDeleter(
 				return Deleter{}
 			}
 		}
-		// The extra columns are needed to fix #14601.
-		for _, colID := range index.ExtraColumnIDs {
-			if err := maybeAddCol(colID); err != nil {
-				return Deleter{}
-			}
-		}
 	}
 
 	rd := Deleter{
