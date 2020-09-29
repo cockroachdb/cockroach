@@ -90,7 +90,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_03
 SELECT i_price, i_name, i_data
 FROM item
-WHERE i_id IN (125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300)
+WHERE i_id = ANY ('{125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300}')
 ORDER BY i_id
 ----
 ----
@@ -133,54 +133,55 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 
 stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_04 ignore-tables=1
 SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
-FROM stock
-WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
+FROM (SELECT unnest('{1000, 900, 1100, 1500, 1400}':::INT[]) AS i_id, 
+             unnest('{4, 4, 4, 4, 4}':::INT[])               AS w_id)
+INNER LOOKUP JOIN stock ON s_i_id = i_id AND s_w_id = w_id
 ORDER BY s_i_id
 ----
 ----
-project
- ├── save-table-name: new_order_04_project_1
- ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
+sort
+ ├── save-table-name: new_order_04_sort_1
+ ├── columns: s_quantity:5(int) s_ytd:16(int) s_order_cnt:17(int) s_remote_cnt:18(int) s_data:19(varchar) s_dist_05:10(char)  [hidden: s_i_id:3(int!null)]
  ├── cardinality: [0 - 5]
- ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(3)=4.86513081, null(3)=0, distinct(8)=4.8037108, null(8)=0, distinct(14)=0.993262137, null(14)=0, distinct(15)=0.993262137, null(15)=0, distinct(16)=0.993262137, null(16)=0, distinct(17)=4.99972957, null(17)=0]
- ├── key: (1)
- ├── fd: (1)-->(3,8,14-17)
- ├── ordering: +1
- └── scan stock
-      ├── save-table-name: new_order_04_scan_2
-      ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(char) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar)
-      ├── constraint: /2/1
-      │    ├── [/4/900 - /4/900]
-      │    ├── [/4/1000 - /4/1000]
-      │    ├── [/4/1100 - /4/1100]
-      │    ├── [/4/1400 - /4/1400]
-      │    └── [/4/1500 - /4/1500]
+ ├── stats: [rows=5, distinct(3)=5, null(3)=0, distinct(5)=4.88136116, null(5)=0, distinct(10)=4.81952865, null(10)=0, distinct(16)=0.993376698, null(16)=0, distinct(17)=0.993376698, null(17)=0, distinct(18)=0.993376698, null(18)=0, distinct(19)=5, null(19)=0]
+ ├── ordering: +3
+ └── project
+      ├── save-table-name: new_order_04_project_2
+      ├── columns: s_i_id:3(int!null) s_quantity:5(int) s_dist_05:10(char) s_ytd:16(int) s_order_cnt:17(int) s_remote_cnt:18(int) s_data:19(varchar)
       ├── cardinality: [0 - 5]
-      ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.86513081, null(3)=0, distinct(8)=4.8037108, null(8)=0, distinct(14)=0.993262137, null(14)=0, distinct(15)=0.993262137, null(15)=0, distinct(16)=0.993262137, null(16)=0, distinct(17)=4.99972957, null(17)=0, distinct(1,2)=5, null(1,2)=0]
-      ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(3,8,14-17)
-      └── ordering: +1 opt(2) [actual: +1]
+      ├── stats: [rows=5, distinct(3)=5, null(3)=0, distinct(5)=4.88136116, null(5)=0, distinct(10)=4.81952865, null(10)=0, distinct(16)=0.993376698, null(16)=0, distinct(17)=0.993376698, null(17)=0, distinct(18)=0.993376698, null(18)=0, distinct(19)=5, null(19)=0]
+      └── inner-join (lookup stock)
+           ├── save-table-name: new_order_04_lookup_join_3
+           ├── columns: unnest:1(int!null) unnest:2(int!null) s_i_id:3(int!null) s_w_id:4(int!null) s_quantity:5(int) s_dist_05:10(char) s_ytd:16(int) s_order_cnt:17(int) s_remote_cnt:18(int) s_data:19(varchar)
+           ├── flags: force lookup join (into right side)
+           ├── key columns: [2 1] = [4 3]
+           ├── lookup columns are key
+           ├── cardinality: [0 - 5]
+           ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=5, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=4.88136116, null(5)=0, distinct(10)=4.81952865, null(10)=0, distinct(16)=0.993376698, null(16)=0, distinct(17)=0.993376698, null(17)=0, distinct(18)=0.993376698, null(18)=0, distinct(19)=5, null(19)=0]
+           ├── fd: (3,4)-->(5,10,16-19), (1)==(3), (3)==(1), (2)==(4), (4)==(2)
+           ├── values
+           │    ├── save-table-name: new_order_04_values_4
+           │    ├── columns: unnest:1(int!null) unnest:2(int!null)
+           │    ├── cardinality: [5 - 5]
+           │    ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0]
+           │    ├── (1000, 4) [type=tuple{int, int}]
+           │    ├── (900, 4) [type=tuple{int, int}]
+           │    ├── (1100, 4) [type=tuple{int, int}]
+           │    ├── (1500, 4) [type=tuple{int, int}]
+           │    └── (1400, 4) [type=tuple{int, int}]
+           └── filters (true)
 
-----Stats for new_order_04_scan_2----
-column_names    row_count  distinct_count  null_count
-{s_data}        5          5               0
-{s_dist_05}     5          5               0
-{s_i_id}        5          5               0
-{s_order_cnt}   5          1               0
-{s_quantity}    5          4               0
-{s_remote_cnt}  5          1               0
-{s_w_id}        5          1               0
-{s_ytd}         5          1               0
-~~~~
-column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_data}        5.00           1.00           5.00                1.00                0.00            1.00
-{s_dist_05}     5.00           1.00           5.00                1.00                0.00            1.00
-{s_i_id}        5.00           1.00           5.00                1.00                0.00            1.00
-{s_order_cnt}   5.00           1.00           1.00                1.00                0.00            1.00
-{s_quantity}    5.00           1.00           5.00                1.25                0.00            1.00
-{s_remote_cnt}  5.00           1.00           1.00                1.00                0.00            1.00
-{s_w_id}        5.00           1.00           1.00                1.00                0.00            1.00
-{s_ytd}         5.00           1.00           1.00                1.00                0.00            1.00
+----Stats for new_order_04_project_2----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for new_order_04_lookup_join_3----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for new_order_04_values_4----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 ----
 ----
 
@@ -464,90 +465,397 @@ column_names      row_count_est  row_count_err  distinct_count_est  distinct_cou
 # recorded into a result file.
 # --------------------------------------------------
 stats-quality format=hide-qual database=tpcc stats-quality-prefix=delivery_01 ignore-tables=1
-SELECT no_o_id
-FROM new_order
-WHERE no_w_id = 7 AND no_d_id = 6
-ORDER BY no_o_id ASC
-LIMIT 1
+SELECT no_d_id, no_o_id, sum(ol_amount)
+FROM (
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 1  ORDER BY no_o_id ASC LIMIT 1)
+UNION ALL
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 2  ORDER BY no_o_id ASC LIMIT 1)
+UNION ALL
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 3  ORDER BY no_o_id ASC LIMIT 1)
+UNION ALL
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 4  ORDER BY no_o_id ASC LIMIT 1)
+UNION ALL
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 5  ORDER BY no_o_id ASC LIMIT 1)
+UNION ALL
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 6  ORDER BY no_o_id ASC LIMIT 1)
+UNION ALL
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 7  ORDER BY no_o_id ASC LIMIT 1)
+UNION ALL
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 8  ORDER BY no_o_id ASC LIMIT 1)
+UNION ALL
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 9  ORDER BY no_o_id ASC LIMIT 1)
+UNION ALL
+     (SELECT no_d_id, no_o_id FROM new_order WHERE no_w_id = 7 AND no_d_id = 10 ORDER BY no_o_id ASC LIMIT 1)
+)
+INNER LOOKUP JOIN order_line
+ON ol_d_id = no_d_id AND ol_o_id = no_o_id
+WHERE ol_w_id = 7
+GROUP BY no_d_id, no_o_id
 ----
 ----
-project
- ├── save-table-name: delivery_01_project_1
- ├── columns: no_o_id:1(int!null)
- ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(1)=0.99967821, null(1)=0]
- ├── key: ()
- ├── fd: ()-->(1)
- └── scan new_order
-      ├── save-table-name: delivery_01_scan_2
-      ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
-      ├── constraint: /3/2/1: [/7/6 - /7/6]
-      ├── limit: 1
-      ├── stats: [rows=1, distinct(1)=0.99967821, null(1)=0, distinct(2)=0.632320605, null(2)=0, distinct(3)=0.632320605, null(3)=0]
-      ├── key: ()
-      └── fd: ()-->(1-3)
-
-----Stats for delivery_01_scan_2----
-column_names  row_count  distinct_count  null_count
-{no_d_id}     1          1               0
-{no_o_id}     1          1               0
-{no_w_id}     1          1               0
-~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{no_d_id}     1.00           1.00           1.00                1.00                0.00            1.00
-{no_o_id}     1.00           1.00           1.00                1.00                0.00            1.00
-{no_w_id}     1.00           1.00           1.00                1.00                0.00            1.00
-----
-----
-
-stats-quality format=hide-qual database=tpcc stats-quality-prefix=delivery_02
-SELECT sum(ol_amount)
-FROM order_line
-WHERE ol_w_id = 8 AND ol_d_id = 6 AND ol_o_id = 1000
-----
-----
-scalar-group-by
- ├── save-table-name: delivery_02_scalar_group_by_1
- ├── columns: sum:12(decimal)
- ├── cardinality: [1 - 1]
- ├── stats: [rows=1, distinct(12)=1, null(12)=0]
- ├── key: ()
- ├── fd: ()-->(12)
- ├── scan order_line
- │    ├── save-table-name: delivery_02_scan_2
- │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_amount:9(decimal)
- │    ├── constraint: /3/2/-1/4: [/8/6/1000 - /8/6/1000]
- │    ├── stats: [rows=10.2098768, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(9)=10.2098057, null(9)=0, distinct(1-3)=1, null(1-3)=0]
- │    │   histogram(1)=  0 10.21
- │    │                <--- 1000
- │    │   histogram(2)=  0 10.21
- │    │                <---- 6 -
- │    │   histogram(3)=  0 10.21
- │    │                <---- 8 -
- │    └── fd: ()-->(1-3)
+group-by
+ ├── save-table-name: delivery_01_group_by_1
+ ├── columns: no_d_id:57(int!null) no_o_id:58(int!null) sum:70(decimal)
+ ├── grouping columns: no_d_id:57(int!null) no_o_id:58(int!null)
+ ├── stats: [rows=9.99678837, distinct(57)=6.32323565, null(57)=0, distinct(58)=9.99678837, null(58)=0, distinct(70)=9.99678837, null(70)=0, distinct(57,58)=9.99678837, null(57,58)=0]
+ ├── key: (57,58)
+ ├── fd: (57,58)-->(70)
+ ├── inner-join (lookup order_line)
+ │    ├── save-table-name: delivery_01_lookup_join_2
+ │    ├── columns: no_d_id:57(int!null) no_o_id:58(int!null) ol_o_id:59(int!null) ol_d_id:60(int!null) ol_w_id:61(int!null) ol_amount:67(decimal)
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [71 57 58] = [61 60 59]
+ │    ├── stats: [rows=100.474292, distinct(57)=6.32323565, null(57)=0, distinct(58)=9.99678837, null(58)=0, distinct(59)=9.99678837, null(59)=0, distinct(60)=6.32323565, null(60)=0, distinct(61)=1, null(61)=0, distinct(67)=100.455405, null(67)=0, distinct(57,58)=9.99678837, null(57,58)=0]
+ │    ├── fd: ()-->(61), (57)==(60), (60)==(57), (58)==(59), (59)==(58)
+ │    ├── project
+ │    │    ├── save-table-name: delivery_01_project_3
+ │    │    ├── columns: "project_const_col_@61":71(int!null) no_d_id:57(int!null) no_o_id:58(int!null)
+ │    │    ├── cardinality: [0 - 10]
+ │    │    ├── stats: [rows=10, distinct(57)=6.32323565, null(57)=0, distinct(58)=9.99678837, null(58)=0, distinct(71)=1, null(71)=0]
+ │    │    ├── fd: ()-->(71)
+ │    │    ├── union-all
+ │    │    │    ├── save-table-name: delivery_01_union_all_4
+ │    │    │    ├── columns: no_d_id:57(int!null) no_o_id:58(int!null)
+ │    │    │    ├── left columns: no_d_id:51(int) no_o_id:52(int)
+ │    │    │    ├── right columns: new_order.no_d_id:54(int) new_order.no_o_id:53(int)
+ │    │    │    ├── cardinality: [0 - 10]
+ │    │    │    ├── stats: [rows=10, distinct(57)=6.32323565, null(57)=0, distinct(58)=9.99678837, null(58)=0, distinct(57,58)=9.99678837, null(57,58)=0]
+ │    │    │    ├── union-all
+ │    │    │    │    ├── save-table-name: delivery_01_union_all_5
+ │    │    │    │    ├── columns: no_d_id:51(int!null) no_o_id:52(int!null)
+ │    │    │    │    ├── left columns: no_d_id:45(int) no_o_id:46(int)
+ │    │    │    │    ├── right columns: new_order.no_d_id:48(int) new_order.no_o_id:47(int)
+ │    │    │    │    ├── cardinality: [0 - 9]
+ │    │    │    │    ├── stats: [rows=9, distinct(51)=5.69091816, null(51)=0, distinct(52)=8.99711087, null(52)=0, distinct(51,52)=8.99711087, null(51,52)=0]
+ │    │    │    │    ├── union-all
+ │    │    │    │    │    ├── save-table-name: delivery_01_union_all_6
+ │    │    │    │    │    ├── columns: no_d_id:45(int!null) no_o_id:46(int!null)
+ │    │    │    │    │    ├── left columns: no_d_id:39(int) no_o_id:40(int)
+ │    │    │    │    │    ├── right columns: new_order.no_d_id:42(int) new_order.no_o_id:41(int)
+ │    │    │    │    │    ├── cardinality: [0 - 8]
+ │    │    │    │    │    ├── stats: [rows=8, distinct(45)=5.05859656, null(45)=0, distinct(46)=7.99743244, null(46)=0, distinct(45,46)=7.99743244, null(45,46)=0]
+ │    │    │    │    │    ├── union-all
+ │    │    │    │    │    │    ├── save-table-name: delivery_01_union_all_7
+ │    │    │    │    │    │    ├── columns: no_d_id:39(int!null) no_o_id:40(int!null)
+ │    │    │    │    │    │    ├── left columns: no_d_id:33(int) no_o_id:34(int)
+ │    │    │    │    │    │    ├── right columns: new_order.no_d_id:36(int) new_order.no_o_id:35(int)
+ │    │    │    │    │    │    ├── cardinality: [0 - 7]
+ │    │    │    │    │    │    ├── stats: [rows=7, distinct(39)=4.42627456, null(39)=0, distinct(40)=6.99775391, null(40)=0, distinct(39,40)=6.99775391, null(39,40)=0]
+ │    │    │    │    │    │    ├── union-all
+ │    │    │    │    │    │    │    ├── save-table-name: delivery_01_union_all_8
+ │    │    │    │    │    │    │    ├── columns: no_d_id:33(int!null) no_o_id:34(int!null)
+ │    │    │    │    │    │    │    ├── left columns: no_d_id:27(int) no_o_id:28(int)
+ │    │    │    │    │    │    │    ├── right columns: new_order.no_d_id:30(int) new_order.no_o_id:29(int)
+ │    │    │    │    │    │    │    ├── cardinality: [0 - 6]
+ │    │    │    │    │    │    │    ├── stats: [rows=6, distinct(33)=3.79395745, null(33)=0, distinct(34)=5.99807651, null(34)=0, distinct(33,34)=5.99807651, null(33,34)=0]
+ │    │    │    │    │    │    │    ├── union-all
+ │    │    │    │    │    │    │    │    ├── save-table-name: delivery_01_union_all_9
+ │    │    │    │    │    │    │    │    ├── columns: no_d_id:27(int!null) no_o_id:28(int!null)
+ │    │    │    │    │    │    │    │    ├── left columns: no_d_id:21(int) no_o_id:22(int)
+ │    │    │    │    │    │    │    │    ├── right columns: new_order.no_d_id:24(int) new_order.no_o_id:23(int)
+ │    │    │    │    │    │    │    │    ├── cardinality: [0 - 5]
+ │    │    │    │    │    │    │    │    ├── stats: [rows=5, distinct(27)=3.16163684, null(27)=0, distinct(28)=4.9983983, null(28)=0, distinct(27,28)=4.9983983, null(27,28)=0]
+ │    │    │    │    │    │    │    │    ├── union-all
+ │    │    │    │    │    │    │    │    │    ├── save-table-name: delivery_01_union_all_10
+ │    │    │    │    │    │    │    │    │    ├── columns: no_d_id:21(int!null) no_o_id:22(int!null)
+ │    │    │    │    │    │    │    │    │    ├── left columns: no_d_id:15(int) no_o_id:16(int)
+ │    │    │    │    │    │    │    │    │    ├── right columns: new_order.no_d_id:18(int) new_order.no_o_id:17(int)
+ │    │    │    │    │    │    │    │    │    ├── cardinality: [0 - 4]
+ │    │    │    │    │    │    │    │    │    ├── stats: [rows=4, distinct(21)=2.52931838, null(21)=0, distinct(22)=3.99872058, null(22)=0, distinct(21,22)=3.99872058, null(21,22)=0]
+ │    │    │    │    │    │    │    │    │    ├── union-all
+ │    │    │    │    │    │    │    │    │    │    ├── save-table-name: delivery_01_union_all_11
+ │    │    │    │    │    │    │    │    │    │    ├── columns: no_d_id:15(int!null) no_o_id:16(int!null)
+ │    │    │    │    │    │    │    │    │    │    ├── left columns: no_d_id:9(int) no_o_id:10(int)
+ │    │    │    │    │    │    │    │    │    │    ├── right columns: new_order.no_d_id:12(int) new_order.no_o_id:11(int)
+ │    │    │    │    │    │    │    │    │    │    ├── cardinality: [0 - 3]
+ │    │    │    │    │    │    │    │    │    │    ├── stats: [rows=3, distinct(15)=1.89698913, null(15)=0, distinct(16)=2.99904049, null(16)=0, distinct(15,16)=2.99904049, null(15,16)=0]
+ │    │    │    │    │    │    │    │    │    │    ├── union-all
+ │    │    │    │    │    │    │    │    │    │    │    ├── save-table-name: delivery_01_union_all_12
+ │    │    │    │    │    │    │    │    │    │    │    ├── columns: no_d_id:9(int!null) no_o_id:10(int!null)
+ │    │    │    │    │    │    │    │    │    │    │    ├── left columns: new_order.no_d_id:2(int) new_order.no_o_id:1(int)
+ │    │    │    │    │    │    │    │    │    │    │    ├── right columns: new_order.no_d_id:6(int) new_order.no_o_id:5(int)
+ │    │    │    │    │    │    │    │    │    │    │    ├── cardinality: [0 - 2]
+ │    │    │    │    │    │    │    │    │    │    │    ├── stats: [rows=2, distinct(9)=1.26466221, null(9)=0, distinct(10)=1.9993609, null(10)=0, distinct(9,10)=1.9993609, null(9,10)=0]
+ │    │    │    │    │    │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    │    │    │    │    │    ├── save-table-name: delivery_01_project_13
+ │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null)
+ │    │    │    │    │    │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │    │    │    │    │    │    ├── stats: [rows=1, distinct(1)=0.999679417, null(1)=0, distinct(2)=0.63232608, null(2)=0, distinct(1,2)=0.999679417, null(1,2)=0]
+ │    │    │    │    │    │    │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    │    │    │    │    │    │    ├── fd: ()-->(1,2)
+ │    │    │    │    │    │    │    │    │    │    │    │    └── scan new_order
+ │    │    │    │    │    │    │    │    │    │    │    │         ├── save-table-name: delivery_01_scan_14
+ │    │    │    │    │    │    │    │    │    │    │    │         ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) no_w_id:3(int!null)
+ │    │    │    │    │    │    │    │    │    │    │    │         ├── constraint: /3/2/1: [/7/1 - /7/1]
+ │    │    │    │    │    │    │    │    │    │    │    │         ├── limit: 1
+ │    │    │    │    │    │    │    │    │    │    │    │         ├── stats: [rows=1, distinct(1)=0.999679417, null(1)=0, distinct(2)=0.63232608, null(2)=0, distinct(3)=0.63232608, null(3)=0, distinct(1,2)=0.999679417, null(1,2)=0]
+ │    │    │    │    │    │    │    │    │    │    │    │         ├── key: ()
+ │    │    │    │    │    │    │    │    │    │    │    │         └── fd: ()-->(1-3)
+ │    │    │    │    │    │    │    │    │    │    │    └── project
+ │    │    │    │    │    │    │    │    │    │    │         ├── save-table-name: delivery_01_project_15
+ │    │    │    │    │    │    │    │    │    │    │         ├── columns: new_order.no_o_id:5(int!null) new_order.no_d_id:6(int!null)
+ │    │    │    │    │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │    │    │    │    │         ├── stats: [rows=1, distinct(5)=0.999681479, null(5)=0, distinct(6)=0.632336132, null(6)=0, distinct(5,6)=0.999681479, null(5,6)=0]
+ │    │    │    │    │    │    │    │    │    │    │         ├── key: ()
+ │    │    │    │    │    │    │    │    │    │    │         ├── fd: ()-->(5,6)
+ │    │    │    │    │    │    │    │    │    │    │         └── scan new_order
+ │    │    │    │    │    │    │    │    │    │    │              ├── save-table-name: delivery_01_scan_16
+ │    │    │    │    │    │    │    │    │    │    │              ├── columns: new_order.no_o_id:5(int!null) new_order.no_d_id:6(int!null) no_w_id:7(int!null)
+ │    │    │    │    │    │    │    │    │    │    │              ├── constraint: /7/6/5: [/7/2 - /7/2]
+ │    │    │    │    │    │    │    │    │    │    │              ├── limit: 1
+ │    │    │    │    │    │    │    │    │    │    │              ├── stats: [rows=1, distinct(5)=0.999681479, null(5)=0, distinct(6)=0.632336132, null(6)=0, distinct(7)=0.632336132, null(7)=0, distinct(5,6)=0.999681479, null(5,6)=0]
+ │    │    │    │    │    │    │    │    │    │    │              ├── key: ()
+ │    │    │    │    │    │    │    │    │    │    │              └── fd: ()-->(5-7)
+ │    │    │    │    │    │    │    │    │    │    └── project
+ │    │    │    │    │    │    │    │    │    │         ├── save-table-name: delivery_01_project_17
+ │    │    │    │    │    │    │    │    │    │         ├── columns: new_order.no_o_id:11(int!null) new_order.no_d_id:12(int!null)
+ │    │    │    │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │    │    │    │         ├── stats: [rows=1, distinct(11)=0.999679596, null(11)=0, distinct(12)=0.632326917, null(12)=0, distinct(11,12)=0.999679596, null(11,12)=0]
+ │    │    │    │    │    │    │    │    │    │         ├── key: ()
+ │    │    │    │    │    │    │    │    │    │         ├── fd: ()-->(11,12)
+ │    │    │    │    │    │    │    │    │    │         └── scan new_order
+ │    │    │    │    │    │    │    │    │    │              ├── save-table-name: delivery_01_scan_18
+ │    │    │    │    │    │    │    │    │    │              ├── columns: new_order.no_o_id:11(int!null) new_order.no_d_id:12(int!null) no_w_id:13(int!null)
+ │    │    │    │    │    │    │    │    │    │              ├── constraint: /13/12/11: [/7/3 - /7/3]
+ │    │    │    │    │    │    │    │    │    │              ├── limit: 1
+ │    │    │    │    │    │    │    │    │    │              ├── stats: [rows=1, distinct(11)=0.999679596, null(11)=0, distinct(12)=0.632326917, null(12)=0, distinct(13)=0.632326917, null(13)=0, distinct(11,12)=0.999679596, null(11,12)=0]
+ │    │    │    │    │    │    │    │    │    │              ├── key: ()
+ │    │    │    │    │    │    │    │    │    │              └── fd: ()-->(11-13)
+ │    │    │    │    │    │    │    │    │    └── project
+ │    │    │    │    │    │    │    │    │         ├── save-table-name: delivery_01_project_19
+ │    │    │    │    │    │    │    │    │         ├── columns: new_order.no_o_id:17(int!null) new_order.no_d_id:18(int!null)
+ │    │    │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │    │    │         ├── stats: [rows=1, distinct(17)=0.999680088, null(17)=0, distinct(18)=0.632329254, null(18)=0, distinct(17,18)=0.999680088, null(17,18)=0]
+ │    │    │    │    │    │    │    │    │         ├── key: ()
+ │    │    │    │    │    │    │    │    │         ├── fd: ()-->(17,18)
+ │    │    │    │    │    │    │    │    │         └── scan new_order
+ │    │    │    │    │    │    │    │    │              ├── save-table-name: delivery_01_scan_20
+ │    │    │    │    │    │    │    │    │              ├── columns: new_order.no_o_id:17(int!null) new_order.no_d_id:18(int!null) no_w_id:19(int!null)
+ │    │    │    │    │    │    │    │    │              ├── constraint: /19/18/17: [/7/4 - /7/4]
+ │    │    │    │    │    │    │    │    │              ├── limit: 1
+ │    │    │    │    │    │    │    │    │              ├── stats: [rows=1, distinct(17)=0.999680088, null(17)=0, distinct(18)=0.632329254, null(18)=0, distinct(19)=0.632329254, null(19)=0, distinct(17,18)=0.999680088, null(17,18)=0]
+ │    │    │    │    │    │    │    │    │              ├── key: ()
+ │    │    │    │    │    │    │    │    │              └── fd: ()-->(17-19)
+ │    │    │    │    │    │    │    │    └── project
+ │    │    │    │    │    │    │    │         ├── save-table-name: delivery_01_project_21
+ │    │    │    │    │    │    │    │         ├── columns: new_order.no_o_id:23(int!null) new_order.no_d_id:24(int!null)
+ │    │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │    │         ├── stats: [rows=1, distinct(23)=0.999677719, null(23)=0, distinct(24)=0.632318458, null(24)=0, distinct(23,24)=0.999677719, null(23,24)=0]
+ │    │    │    │    │    │    │    │         ├── key: ()
+ │    │    │    │    │    │    │    │         ├── fd: ()-->(23,24)
+ │    │    │    │    │    │    │    │         └── scan new_order
+ │    │    │    │    │    │    │    │              ├── save-table-name: delivery_01_scan_22
+ │    │    │    │    │    │    │    │              ├── columns: new_order.no_o_id:23(int!null) new_order.no_d_id:24(int!null) no_w_id:25(int!null)
+ │    │    │    │    │    │    │    │              ├── constraint: /25/24/23: [/7/5 - /7/5]
+ │    │    │    │    │    │    │    │              ├── limit: 1
+ │    │    │    │    │    │    │    │              ├── stats: [rows=1, distinct(23)=0.999677719, null(23)=0, distinct(24)=0.632318458, null(24)=0, distinct(25)=0.632318458, null(25)=0, distinct(23,24)=0.999677719, null(23,24)=0]
+ │    │    │    │    │    │    │    │              ├── key: ()
+ │    │    │    │    │    │    │    │              └── fd: ()-->(23-25)
+ │    │    │    │    │    │    │    └── project
+ │    │    │    │    │    │    │         ├── save-table-name: delivery_01_project_23
+ │    │    │    │    │    │    │         ├── columns: new_order.no_o_id:29(int!null) new_order.no_d_id:30(int!null)
+ │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │         ├── stats: [rows=1, distinct(29)=0.99967821, null(29)=0, distinct(30)=0.632320605, null(30)=0, distinct(29,30)=0.99967821, null(29,30)=0]
+ │    │    │    │    │    │    │         ├── key: ()
+ │    │    │    │    │    │    │         ├── fd: ()-->(29,30)
+ │    │    │    │    │    │    │         └── scan new_order
+ │    │    │    │    │    │    │              ├── save-table-name: delivery_01_scan_24
+ │    │    │    │    │    │    │              ├── columns: new_order.no_o_id:29(int!null) new_order.no_d_id:30(int!null) no_w_id:31(int!null)
+ │    │    │    │    │    │    │              ├── constraint: /31/30/29: [/7/6 - /7/6]
+ │    │    │    │    │    │    │              ├── limit: 1
+ │    │    │    │    │    │    │              ├── stats: [rows=1, distinct(29)=0.99967821, null(29)=0, distinct(30)=0.632320605, null(30)=0, distinct(31)=0.632320605, null(31)=0, distinct(29,30)=0.99967821, null(29,30)=0]
+ │    │    │    │    │    │    │              ├── key: ()
+ │    │    │    │    │    │    │              └── fd: ()-->(29-31)
+ │    │    │    │    │    │    └── project
+ │    │    │    │    │    │         ├── save-table-name: delivery_01_project_25
+ │    │    │    │    │    │         ├── columns: new_order.no_o_id:35(int!null) new_order.no_d_id:36(int!null)
+ │    │    │    │    │    │         ├── cardinality: [0 - 1]
+ │    │    │    │    │    │         ├── stats: [rows=1, distinct(35)=0.999677407, null(35)=0, distinct(36)=0.632317115, null(36)=0, distinct(35,36)=0.999677407, null(35,36)=0]
+ │    │    │    │    │    │         ├── key: ()
+ │    │    │    │    │    │         ├── fd: ()-->(35,36)
+ │    │    │    │    │    │         └── scan new_order
+ │    │    │    │    │    │              ├── save-table-name: delivery_01_scan_26
+ │    │    │    │    │    │              ├── columns: new_order.no_o_id:35(int!null) new_order.no_d_id:36(int!null) no_w_id:37(int!null)
+ │    │    │    │    │    │              ├── constraint: /37/36/35: [/7/7 - /7/7]
+ │    │    │    │    │    │              ├── limit: 1
+ │    │    │    │    │    │              ├── stats: [rows=1, distinct(35)=0.999677407, null(35)=0, distinct(36)=0.632317115, null(36)=0, distinct(37)=0.632317115, null(37)=0, distinct(35,36)=0.999677407, null(35,36)=0]
+ │    │    │    │    │    │              ├── key: ()
+ │    │    │    │    │    │              └── fd: ()-->(35-37)
+ │    │    │    │    │    └── project
+ │    │    │    │    │         ├── save-table-name: delivery_01_project_27
+ │    │    │    │    │         ├── columns: new_order.no_o_id:41(int!null) new_order.no_d_id:42(int!null)
+ │    │    │    │    │         ├── cardinality: [0 - 1]
+ │    │    │    │    │         ├── stats: [rows=1, distinct(41)=0.999678522, null(41)=0, distinct(42)=0.632321997, null(42)=0, distinct(41,42)=0.999678522, null(41,42)=0]
+ │    │    │    │    │         ├── key: ()
+ │    │    │    │    │         ├── fd: ()-->(41,42)
+ │    │    │    │    │         └── scan new_order
+ │    │    │    │    │              ├── save-table-name: delivery_01_scan_28
+ │    │    │    │    │              ├── columns: new_order.no_o_id:41(int!null) new_order.no_d_id:42(int!null) no_w_id:43(int!null)
+ │    │    │    │    │              ├── constraint: /43/42/41: [/7/8 - /7/8]
+ │    │    │    │    │              ├── limit: 1
+ │    │    │    │    │              ├── stats: [rows=1, distinct(41)=0.999678522, null(41)=0, distinct(42)=0.632321997, null(42)=0, distinct(43)=0.632321997, null(43)=0, distinct(41,42)=0.999678522, null(41,42)=0]
+ │    │    │    │    │              ├── key: ()
+ │    │    │    │    │              └── fd: ()-->(41-43)
+ │    │    │    │    └── project
+ │    │    │    │         ├── save-table-name: delivery_01_project_29
+ │    │    │    │         ├── columns: new_order.no_o_id:47(int!null) new_order.no_d_id:48(int!null)
+ │    │    │    │         ├── cardinality: [0 - 1]
+ │    │    │    │         ├── stats: [rows=1, distinct(47)=0.999678433, null(47)=0, distinct(48)=0.632321597, null(48)=0, distinct(47,48)=0.999678433, null(47,48)=0]
+ │    │    │    │         ├── key: ()
+ │    │    │    │         ├── fd: ()-->(47,48)
+ │    │    │    │         └── scan new_order
+ │    │    │    │              ├── save-table-name: delivery_01_scan_30
+ │    │    │    │              ├── columns: new_order.no_o_id:47(int!null) new_order.no_d_id:48(int!null) no_w_id:49(int!null)
+ │    │    │    │              ├── constraint: /49/48/47: [/7/9 - /7/9]
+ │    │    │    │              ├── limit: 1
+ │    │    │    │              ├── stats: [rows=1, distinct(47)=0.999678433, null(47)=0, distinct(48)=0.632321597, null(48)=0, distinct(49)=0.632321597, null(49)=0, distinct(47,48)=0.999678433, null(47,48)=0]
+ │    │    │    │              ├── key: ()
+ │    │    │    │              └── fd: ()-->(47-49)
+ │    │    │    └── project
+ │    │    │         ├── save-table-name: delivery_01_project_31
+ │    │    │         ├── columns: new_order.no_o_id:53(int!null) new_order.no_d_id:54(int!null)
+ │    │    │         ├── cardinality: [0 - 1]
+ │    │    │         ├── stats: [rows=1, distinct(53)=0.999677496, null(53)=0, distinct(54)=0.632317497, null(54)=0, distinct(53,54)=0.999677496, null(53,54)=0]
+ │    │    │         ├── key: ()
+ │    │    │         ├── fd: ()-->(53,54)
+ │    │    │         └── scan new_order
+ │    │    │              ├── save-table-name: delivery_01_scan_32
+ │    │    │              ├── columns: new_order.no_o_id:53(int!null) new_order.no_d_id:54(int!null) no_w_id:55(int!null)
+ │    │    │              ├── constraint: /55/54/53: [/7/10 - /7/10]
+ │    │    │              ├── limit: 1
+ │    │    │              ├── stats: [rows=1, distinct(53)=0.999677496, null(53)=0, distinct(54)=0.632317497, null(54)=0, distinct(55)=0.632317497, null(55)=0, distinct(53,54)=0.999677496, null(53,54)=0]
+ │    │    │              ├── key: ()
+ │    │    │              └── fd: ()-->(53-55)
+ │    │    └── projections
+ │    │         └── 7 [as="project_const_col_@61":71, type=int]
+ │    └── filters (true)
  └── aggregations
-      └── sum [as=sum:12, type=decimal, outer=(9)]
-           └── ol_amount:9 [type=decimal]
+      └── sum [as=sum:70, type=decimal, outer=(67)]
+           └── ol_amount:67 [type=decimal]
 
-----Stats for delivery_02_scalar_group_by_1----
-column_names  row_count  distinct_count  null_count
-{sum}         1          1               0
-~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{sum}         1.00           1.00           1.00                1.00                0.00            1.00
+----Stats for delivery_01_lookup_join_2----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 
-----Stats for delivery_02_scan_2----
-column_names  row_count  distinct_count  null_count
-{ol_amount}   7          1               0
-{ol_d_id}     7          1               0
-{ol_o_id}     7          1               0
-{ol_w_id}     7          1               0
-~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ol_amount}   10.00          1.43           10.00               10.00 <==           0.00            1.00
-{ol_d_id}     10.00          1.43           1.00                1.00                0.00            1.00
-{ol_o_id}     10.00          1.43           1.00                1.00                0.00            1.00
-{ol_w_id}     10.00          1.43           1.00                1.00                0.00            1.00
+----Stats for delivery_01_project_3----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_union_all_4----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_union_all_5----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_union_all_6----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_union_all_7----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_union_all_8----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_union_all_9----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_union_all_10----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_union_all_11----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_union_all_12----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_13----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_14----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_15----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_16----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_17----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_18----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_19----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_20----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_21----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_22----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_23----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_24----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_25----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_26----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_27----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_28----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_29----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_30----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_project_31----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
+
+----Stats for delivery_01_scan_32----
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 ----
 ----
 
