@@ -273,7 +273,7 @@ var invalidClusterForShardedIndexError = pgerror.Newf(pgcode.FeatureNotSupported
 	"hash sharded indexes can only be created on a cluster that has fully migrated to version 20.1")
 
 var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
-	"hash sharded indexes require the experimental_enable_hash_sharded_indexes cluster setting")
+	"hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable")
 
 func setupShardedIndex(
 	ctx context.Context,
