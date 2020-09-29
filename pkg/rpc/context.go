@@ -1125,11 +1125,11 @@ func (ctx *Context) runHeartbeat(
 			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
 			clusterID := ctx.ClusterID.Get()
 			request := &PingRequest{
-				Addr:           ctx.Config.Addr,
-				MaxOffsetNanos: maxOffsetNanos,
-				ClusterID:      &clusterID,
-				NodeID:         conn.remoteNodeID,
-				ServerVersion:  ctx.Settings.Version.BinaryVersion(),
+				OriginAddr:           ctx.Config.Addr,
+				OriginMaxOffsetNanos: maxOffsetNanos,
+				ClusterID:            &clusterID,
+				TargetNodeID:         conn.remoteNodeID,
+				ServerVersion:        ctx.Settings.Version.BinaryVersion(),
 			}
 
 			var response *PingResponse
