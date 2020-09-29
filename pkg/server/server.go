@@ -1592,6 +1592,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 				log.Warningf(ctx, "writing last up timestamp: %v", err)
 			}
 		},
+		OnNodeDecommissioned: func(liveness kvserverpb.Liveness) {
+			if knobs, ok := s.cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
+				knobs.OnDecommissionedCallback(liveness)
+			}
+		},
 	})
 
 	// Begin recording status summaries.
