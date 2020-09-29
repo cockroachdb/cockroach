@@ -1251,7 +1251,7 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 	runLat := phaseTimes.getRunLatency().Seconds()
 	parseLat := phaseTimes.getParsingLatency().Seconds()
 	planLat := phaseTimes.getPlanningLatency().Seconds()
-	svcLat := phaseTimes.getServiceLatency().Seconds()
+	svcLat := phaseTimes.getStatementServiceLatency().Seconds()
 
 	return res.AddRow(ctx,
 		tree.Datums{

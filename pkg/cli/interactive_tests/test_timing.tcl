@@ -28,3 +28,16 @@ send "SELECT pg_sleep(0.02) FROM vehicles LIMIT 1;\r"
 eexpect "execution"
 eexpect "network"
 end_test
+
+start_test "Test non-negative PREPARE stmt timings #54888"
+send "create table t1 (a int, updated_at timestamptz);\r"
+send "prepare stmt (timestamptz) as insert into t1 values (1, \$1);\r"
+eexpect "execution \[0-9\]"
+eexpect "network \[0-9\]"
+end_test
+
+start_test "Test observer statements non neg timings #54750"
+send "SHOW SYNTAX 'CREATE TABLE t(a INT)';\r"
+eexpect "execution \[0-9\]"
+eexpect "network \[0-9\]"
+end_test

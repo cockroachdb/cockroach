@@ -1473,6 +1473,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
+		ex.statsCollector.phaseTimes[sessionQueryServiced] = timeutil.Now()
 	case ExecPortal:
 		// ExecPortal is handled like ExecStmt, except that the placeholder info
 		// is taken from the portal.
@@ -1529,6 +1531,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
+		ex.statsCollector.phaseTimes[sessionQueryServiced] = timeutil.Now()
 	case PrepareStmt:
 		ex.curStmt = tcmd.AST
 		res = ex.clientComm.CreatePrepareResult(pos)
