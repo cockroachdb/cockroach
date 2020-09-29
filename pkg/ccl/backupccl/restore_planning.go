@@ -1049,7 +1049,7 @@ func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 func getUserDescriptorNames(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) ([]string, error) {
-	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, codec)
+	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, codec, true /* validate */)
 	if err != nil {
 		return nil, err
 	}
