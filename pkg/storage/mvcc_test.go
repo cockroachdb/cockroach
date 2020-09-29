@@ -5248,6 +5248,58 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 	}
 }
 
+// TestTimeSeriesMVCCStats ensures that merge operations
+// result in expected increase in timeseries data
+func TestTimeSeriesMVCCStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+			var ms = enginepb.MVCCStats{}
+
+			// Perform the same sequence of merges on the same key
+			// twice and record timeseries data
+			var firstSysBytes = ms.SysBytes
+			var firstLiveBytes = ms.LiveBytes
+			var firstValBytes = ms.ValBytes
+			if err := MVCCMerge(ctx, engine, &ms, testKey1, hlc.Timestamp{Logical: 1}, tsvalue1); err != nil {
+				t.Fatal(err)
+			}
+
+			var secondSysBytes = ms.SysBytes
+			var secondLiveBytes = ms.LiveBytes
+			var secondValBytes = ms.ValBytes
+			if err := MVCCMerge(ctx, engine, &ms, testKey1, hlc.Timestamp{Logical: 1}, tsvalue1); err != nil {
+				t.Fatal(err)
+			}
+
+			// Ensure timeseries metrics increases as expected
+			if isSysLocal(testKey1) {
+				var expectedSysBytes = firstSysBytes + int64(len(tsvalue1.RawBytes))
+
+				if secondSysBytes != expectedSysBytes {
+					t.Fatalf("second merged SysBytes value %v differed from expected SysBytes value %v", secondSysBytes, expectedSysBytes)
+				}
+			} else {
+				var expectedLiveBytes = firstLiveBytes + int64(len(tsvalue1.RawBytes))
+				var expectedValBytes = firstValBytes + int64(len(tsvalue1.RawBytes))
+
+				if secondLiveBytes != expectedLiveBytes {
+					t.Fatalf("second merged LiveBytes value %v differed from expected LiveBytes value %v", secondLiveBytes, expectedLiveBytes)
+				}
+				if secondValBytes != expectedValBytes {
+					t.Fatalf("second merged ValBytes value %v differed from expected ValBytes value %v", secondValBytes, expectedValBytes)
+				}
+			}
+		})
+	}
+}
+
+
 // TestMVCCTimeSeriesPartialMerge ensures that "partial merges" of merged time
 // series data does not result in a different final result than a "full merge".
 func TestMVCCTimeSeriesPartialMerge(t *testing.T) {

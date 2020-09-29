@@ -265,12 +265,8 @@ func updateStatsForInline(
 }
 
 // updateStatsOnMerge updates metadata stats while merging inlined
-// values. Unfortunately, we're unable to keep accurate stats on merge
-// as the actual details of the merge play out asynchronously during
-// compaction. Instead, we undercount by adding only the size of the
-// value.Bytes byte slice (an estimated 12 bytes for timestamp,
-// included in valSize by caller). These errors are corrected during
-// splits and merges.
+// values. We only the size of the value.RawBytes byte slice (an
+// estimated 12 bytes for timestamp, included in valSize by caller).
 func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 	sys := isSysLocal(key)
@@ -2171,8 +2167,11 @@ func MVCCMerge(
 	data, err := buf.marshalMeta(meta)
 	if err == nil {
 		if err = rw.Merge(metaKey, data); err == nil && ms != nil {
+			// We add only the size of value.RawBytes and do not add the
+			// mvccVersionTimestampSize as we do not incur the metadata overhead
+			// each time because each merge is into the same key.
 			ms.Add(updateStatsOnMerge(
-				key, int64(len(rawBytes))+MVCCVersionTimestampSize, timestamp.WallTime))
+				key, int64(len(rawBytes)), timestamp.WallTime))
 		}
 	}
 	buf.release()
