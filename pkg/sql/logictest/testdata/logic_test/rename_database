@@ -79,6 +79,9 @@ u  pg_extension        root   ALL
 u  public              admin  ALL
 u  public              root   ALL
 
+statement ok
+SET DATABASE = u
+
 query II rowsort
 SELECT * FROM kv
 ----
@@ -113,11 +116,7 @@ ALTER DATABASE t RENAME TO v
 query TT
 SHOW DATABASES
 ----
-defaultdb  root
-postgres   root
-system     node
 t          root
-u          root
 
 # Test that owners can rename databases as long as they have the CREATEDB
 # privilege.
