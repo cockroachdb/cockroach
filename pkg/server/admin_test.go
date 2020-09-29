@@ -13,6 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -415,11 +416,11 @@ func TestAdminAPIDatabases(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			path, err := ts.admin.queryDescriptorIDPath(ctx, security.RootUser, []string{testdb})
+			databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUser, testdb)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if a, e := details.DescriptorID, int64(path[1]); a != e {
+			if a, e := details.DescriptorID, int64(databaseID); a != e {
 				t.Fatalf("db had descriptorID %d, expected %d", a, e)
 			}
 		})
@@ -549,14 +550,17 @@ func TestRangeCount(t *testing.T) {
 		// their range count comes back as zero. Let's just use the descriptor
 		// table to count this range as they're not picked up by the "non-table
 		// data" neither.
-		for _, table := range []string{"descriptor", "settings", "namespace", "zones"} {
+		for _, table := range []string{"public.descriptor", "public.settings", "public.zones"} {
 			n, ok := sysDBMap[table]
 			require.True(t, ok, table)
 			require.Zero(t, n, table)
 		}
 
-		sysDBMap["descriptor"] = 1
-
+		sysDBMap["public.descriptor"] = 1
+		// public.namespace resolves to public.namespace2, which means that we
+		// double count public.namespace2's range in this test. Set it to 0 to remove
+		// this double counting.
+		sysDBMap["public.namespace"] = 0
 	}
 	var systemTableRangeCount int64
 	for _, n := range sysDBMap {
@@ -629,36 +633,47 @@ func TestAdminAPITableDetails(t *testing.T) {
 		name, dbName, tblName string
 	}{
 		{name: "lower", dbName: "test", tblName: "tbl"},
-		{name: "lower with space", dbName: "test test", tblName: "tbl tbl"},
-		{name: "upper", dbName: "TEST", tblName: "TBL"}, // Regression test for issue #14056
+		{name: "lower", dbName: "test", tblName: `testschema.tbl`},
+		{name: "lower with space", dbName: "test test", tblName: `"tbl tbl"`},
+		{name: "upper", dbName: "TEST", tblName: `"TBL"`}, // Regression test for issue #14056
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(context.Background())
 			ts := s.(*TestServer)
 
 			escDBName := tree.NameStringP(&tc.dbName)
-			escTblName := tree.NameStringP(&tc.tblName)
+			tblName := tc.tblName
+			schemaName := "testschema"
 
 			ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 			defer span.Finish()
 
-			setupQueries := []string{
-				fmt.Sprintf("CREATE DATABASE %s", escDBName),
-				fmt.Sprintf(`CREATE TABLE %s.%s (
-							nulls_allowed INT8,
+			tableSchema := `nulls_allowed INT8,
 							nulls_not_allowed INT8 NOT NULL DEFAULT 1000,
 							default2 INT8 DEFAULT 2,
 							string_default STRING DEFAULT 'default_string',
-						  INDEX descidx (default2 DESC)
-						)`, escDBName, escTblName),
+						  INDEX descidx (default2 DESC)`
+
+			setupQueries := []string{
+				fmt.Sprintf("CREATE DATABASE %s", escDBName),
+				fmt.Sprintf("CREATE SCHEMA %s", schemaName),
+				fmt.Sprintf(`CREATE TABLE %s.%s (%s)`, escDBName, tblName, tableSchema),
 				fmt.Sprintf("CREATE USER readonly"),
 				fmt.Sprintf("CREATE USER app"),
-				fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, escTblName),
-				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, escTblName),
+				fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, tblName),
+				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, tblName),
 			}
-
+			pgURL, cleanupGoDB := sqlutils.PGUrl(
+				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+			defer cleanupGoDB()
+			pgURL.Path = tc.dbName
+			db, err := gosql.Open("postgres", pgURL.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
 			for _, q := range setupQueries {
 				if _, err := db.Exec(q); err != nil {
 					t.Fatal(err)
@@ -667,7 +682,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			// Perform API call.
 			var resp serverpb.TableDetailsResponse
-			url := fmt.Sprintf("databases/%s/tables/%s", tc.dbName, tc.tblName)
+			url := fmt.Sprintf("databases/%s/tables/%s", tc.dbName, tblName)
 			if err := getAdminJSONProto(s, url, &resp); err != nil {
 				t.Fatal(err)
 			}
@@ -738,7 +753,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 			// Verify Create Table Statement.
 			{
 
-				showCreateTableQuery := fmt.Sprintf("SHOW CREATE TABLE %s.%s", escDBName, escTblName)
+				showCreateTableQuery := fmt.Sprintf("SHOW CREATE TABLE %s.%s", escDBName, tblName)
 
 				row := db.QueryRow(showCreateTableQuery)
 				var createStmt, tableName string
@@ -752,12 +767,11 @@ func TestAdminAPITableDetails(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			path, err := ts.admin.queryDescriptorIDPath(ctx,
-				security.RootUser, []string{tc.dbName, tc.tblName})
+			tableID, err := ts.admin.queryTableID(ctx, security.RootUser, tc.dbName, tc.tblName)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if a, e := resp.DescriptorID, int64(path[2]); a != e {
+			if a, e := resp.DescriptorID, int64(tableID); a != e {
 				t.Fatalf("table had descriptorID %d, expected %d", a, e)
 			}
 		})
@@ -843,9 +857,11 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	verifyDbZone(s.(*TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 	verifyTblZone(s.(*TestServer).Cfg.DefaultZoneConfig, serverpb.ZoneConfigurationLevel_CLUSTER)
 
-	// Get ID path for table. This will be an array of three IDs, containing the ID of the root namespace,
-	// the database, and the table (in that order).
-	idPath, err := ts.admin.queryDescriptorIDPath(ctx, security.RootUser, []string{"test", "tbl"})
+	databaseID, err := ts.admin.queryDatabaseID(ctx, security.RootUser, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tableID, err := ts.admin.queryTableID(ctx, security.RootUser, "test", "tbl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -854,7 +870,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	dbZone := zonepb.ZoneConfig{
 		RangeMinBytes: proto.Int64(456),
 	}
-	setZone(dbZone, idPath[1])
+	setZone(dbZone, databaseID)
 	verifyDbZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
 	verifyTblZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
 
@@ -862,7 +878,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	tblZone := zonepb.ZoneConfig{
 		RangeMinBytes: proto.Int64(789),
 	}
-	setZone(tblZone, idPath[2])
+	setZone(tblZone, tableID)
 	verifyDbZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
 	verifyTblZone(tblZone, serverpb.ZoneConfigurationLevel_TABLE)
 }
