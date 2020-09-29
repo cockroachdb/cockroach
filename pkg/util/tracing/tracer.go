@@ -143,7 +143,7 @@ func NewTracer() *Tracer {
 // Configure sets up the Tracer according to the cluster settings (and keeps
 // it updated if they change).
 func (t *Tracer) Configure(sv *settings.Values) {
-	reconfigure := func() {
+	reconfigureShadowTracer := func() {
 		if lsToken := lightstepToken.Get(sv); lsToken != "" {
 			t.setShadowTracer(createLightStepTracer(lsToken))
 		} else if zipkinAddr := zipkinCollector.Get(sv); zipkinAddr != "" {
@@ -154,23 +154,30 @@ func (t *Tracer) Configure(sv *settings.Values) {
 		} else {
 			t.setShadowTracer(nil, nil)
 		}
+	}
+
+	reconfigureUseNetTrace := func() {
 		var nt int32
 		if enableNetTrace.Get(sv) {
 			nt = 1
 		}
 		atomic.StoreInt32(&t._useNetTrace, nt)
+	}
 
+	reconfigureSamplingRate := func() {
 		sr := samplingRate.Get(sv)
 		atomic.SwapPointer(&t._samplingRate, unsafe.Pointer(&sr))
 	}
 
-	reconfigure()
+	reconfigureShadowTracer()
+	reconfigureUseNetTrace()
+	reconfigureSamplingRate()
 
-	enableNetTrace.SetOnChange(sv, reconfigure)
-	lightstepToken.SetOnChange(sv, reconfigure)
-	zipkinCollector.SetOnChange(sv, reconfigure)
-	zipkinCollectorBatchSize.SetOnChange(sv, reconfigure)
-	samplingRate.SetOnChange(sv, reconfigure)
+	lightstepToken.SetOnChange(sv, reconfigureShadowTracer)
+	zipkinCollector.SetOnChange(sv, reconfigureShadowTracer)
+	zipkinCollectorBatchSize.SetOnChange(sv, reconfigureShadowTracer)
+	enableNetTrace.SetOnChange(sv, reconfigureUseNetTrace)
+	samplingRate.SetOnChange(sv, reconfigureSamplingRate)
 }
 
 func (t *Tracer) useNetTrace() bool {
