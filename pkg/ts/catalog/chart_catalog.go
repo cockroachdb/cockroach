@@ -2238,7 +2238,8 @@ var charts = []sectionDescription{
 			{
 				Title: "Total",
 				Metrics: []string{
-					"schedules.corrupt",
+					"schedules.malformed",
+					"schedules.error",
 					"schedules.total.started",
 					"schedules.total.succeeded",
 					"schedules.total.failed",

@@ -76,6 +76,10 @@ type providerOpts struct {
 	EBSVolumeSize      int
 	EBSProvisionedIOPs int
 
+	// Use specified ImageAMI when provisioning.
+	// Overrides config.json AMI.
+	ImageAMI string
+
 	// CreateZones stores the list of zones for used cluster creation.
 	// When > 1 zone specified, geo is automatically used, otherwise, geo depends
 	// on the geo flag being set. If no zones specified, defaultCreateZones are
@@ -141,6 +145,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"as AZ:N where N is an integer, the zone will be repeated N times. If > 1\n"+
 			"zone specified, the cluster will be spread out evenly by zone regardless\n"+
 			"of geo (default [%s])", strings.Join(defaultCreateZones, ",")))
+	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
+		"", "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -678,12 +684,19 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		_ = os.Remove(filename)
 	}()
 
+	withFlagOverride := func(cfg string, fl *string) string {
+		if *fl == "" {
+			return cfg
+		}
+		return *fl
+	}
+
 	args := []string{
 		"ec2", "run-instances",
 		"--associate-public-ip-address",
 		"--count", "1",
-		"--image-id", az.region.AMI,
 		"--instance-type", machineType,
+		"--image-id", withFlagOverride(az.region.Name, &p.opts.ImageAMI),
 		"--key-name", keyName,
 		"--region", az.region.Name,
 		"--security-group-ids", az.region.SecurityGroup,
@@ -691,6 +704,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"--tag-specifications", tagSpecs,
 		"--user-data", "file://" + filename,
 	}
+
 	if cpuOptions != "" {
 		args = append(args, "--cpu-options", cpuOptions)
 	}
@@ -699,10 +713,10 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	if !opts.SSDOpts.UseLocalSSD {
 		var ebsParams string
 		switch t := p.opts.EBSVolumeType; t {
-		case "gp2":
+		case "gp2", "io2":
 			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,DeleteOnTermination=true}",
 				p.opts.EBSVolumeSize, t)
-		case "io1", "io2":
+		case "io1":
 			ebsParams = fmt.Sprintf("{VolumeSize=%d,VolumeType=%s,Iops=%d,DeleteOnTermination=true}",
 				p.opts.EBSVolumeSize, t, p.opts.EBSProvisionedIOPs)
 		default:
@@ -714,7 +728,6 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			"DeviceName=/dev/sdd,Ebs="+ebsParams,
 		)
 	}
-
 	return p.runJSONCommand(args, &data)
 }
 

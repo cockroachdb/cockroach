@@ -897,7 +897,7 @@ func backupPlanHook(
 
 		collectTelemetry := func() {
 			// sourceSuffix specifies if this schedule was created by a schedule.
-			sourceSuffix := ""
+			sourceSuffix := ".manual"
 			if backupStmt.CreatedByInfo != nil &&
 				backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 				sourceSuffix = ".scheduled"

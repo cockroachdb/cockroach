@@ -47,6 +47,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var threeIntColsAndBoolCol = []*types.T{
+	types.Int, types.Int, types.Int, types.Bool}
+var sixIntColsAndStringCol = []*types.T{
+	types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.String}
+
 func TestJoinReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -102,16 +107,17 @@ func TestJoinReader(t *testing.T) {
 	tdInterleaved := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t3")
 
 	testCases := []struct {
-		description string
-		indexIdx    uint32
-		post        execinfrapb.PostProcessSpec
-		onExpr      string
-		input       [][]tree.Datum
-		lookupCols  []uint32
-		joinType    descpb.JoinType
-		inputTypes  []*types.T
-		outputTypes []*types.T
-		expected    string
+		description    string
+		indexIdx       uint32
+		post           execinfrapb.PostProcessSpec
+		onExpr         string
+		input          [][]tree.Datum
+		lookupCols     []uint32
+		joinType       descpb.JoinType
+		inputTypes     []*types.T
+		outputTypes    []*types.T
+		leftJoinPaired bool
+		expected       string
 	}{
 		{
 			description: "Test selecting columns from second table",
@@ -391,6 +397,159 @@ func TestJoinReader(t *testing.T) {
 			outputTypes: rowenc.TwoIntCols,
 			expected:    "[[0 NULL]]",
 		},
+		{
+			description: "Test paired join with outer join",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2, 4, 5, 6, 7},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(12)), aFn(2), bFn(2), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(12)), aFn(5), bFn(5), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(105), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(23)), tree.DNull, tree.DNull, tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(34)), aFn(105), bFn(105), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(34)), aFn(110), bFn(110), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(34)), aFn(120), bFn(120), tree.DBoolTrue},
+			},
+			lookupCols:     []uint32{1, 2},
+			joinType:       descpb.LeftOuterJoin,
+			inputTypes:     threeIntColsAndBoolCol,
+			outputTypes:    sixIntColsAndStringCol,
+			leftJoinPaired: true,
+			expected: "[[12 0 2 0 2 2 'two'] [12 0 5 0 5 5 'five'] [23 NULL NULL NULL NULL NULL NULL] " +
+				"[34 12 0 NULL NULL NULL NULL]]",
+		},
+		{
+			description: "Test paired join with semi join",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(12)), aFn(2), bFn(2), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(12)), aFn(5), bFn(5), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(105), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(34)), aFn(105), bFn(105), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(34)), aFn(110), bFn(110), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(34)), aFn(120), bFn(120), tree.DBoolTrue},
+			},
+			lookupCols:     []uint32{1, 2},
+			joinType:       descpb.LeftSemiJoin,
+			inputTypes:     threeIntColsAndBoolCol,
+			outputTypes:    rowenc.ThreeIntCols,
+			leftJoinPaired: true,
+			expected:       "[[12 0 2]]",
+		},
+		{
+			description: "Test paired join with anti join",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(12)), aFn(2), bFn(2), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(12)), aFn(5), bFn(5), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(105), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(23)), tree.DNull, tree.DNull, tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(34)), aFn(105), bFn(105), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(34)), aFn(110), bFn(110), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(34)), aFn(120), bFn(120), tree.DBoolTrue},
+			},
+			lookupCols:     []uint32{1, 2},
+			joinType:       descpb.LeftAntiJoin,
+			inputTypes:     threeIntColsAndBoolCol,
+			outputTypes:    rowenc.ThreeIntCols,
+			leftJoinPaired: true,
+			expected:       "[[23 NULL NULL] [34 12 0]]",
+		},
+		{
+			// Group will span batches since we SetBatchSizeBytes to ~2 rows below.
+			description: "Test paired join with outer join with group spanning batches",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2, 4, 5, 6, 7},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(12)), aFn(2), bFn(2), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(12)), aFn(105), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(106), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(107), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(108), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(109), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(110), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(111), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(112), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(113), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(114), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(34)), aFn(5), bFn(5), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(43)), aFn(105), bFn(105), tree.DBoolFalse},
+			},
+			lookupCols:     []uint32{1, 2},
+			joinType:       descpb.LeftOuterJoin,
+			inputTypes:     threeIntColsAndBoolCol,
+			outputTypes:    sixIntColsAndStringCol,
+			leftJoinPaired: true,
+			expected:       "[[12 0 2 0 2 2 'two'] [34 0 5 0 5 5 'five'] [43 10 5 NULL NULL NULL NULL]]",
+		},
+		{
+			// Group will span batches since we SetBatchSizeBytes to ~2 rows below.
+			description: "Test paired join with semi join with group spanning batches",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(12)), aFn(2), bFn(2), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(12)), aFn(105), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(106), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(107), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(108), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(109), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(110), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(111), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(112), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(113), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(114), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(34)), aFn(5), bFn(5), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(43)), aFn(105), bFn(105), tree.DBoolFalse},
+			},
+			lookupCols:     []uint32{1, 2},
+			joinType:       descpb.LeftSemiJoin,
+			inputTypes:     threeIntColsAndBoolCol,
+			outputTypes:    rowenc.ThreeIntCols,
+			leftJoinPaired: true,
+			expected:       "[[12 0 2] [34 0 5]]",
+		},
+		{
+			// Group will span batches since we SetBatchSizeBytes to ~2 rows below.
+			description: "Test paired join with anti join with group spanning batches",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(12)), aFn(2), bFn(2), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(12)), aFn(105), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(106), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(107), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(108), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(109), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(110), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(111), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(112), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(113), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(12)), aFn(114), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(34)), aFn(5), bFn(5), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(43)), aFn(105), bFn(105), tree.DBoolFalse},
+			},
+			lookupCols:     []uint32{1, 2},
+			joinType:       descpb.LeftAntiJoin,
+			inputTypes:     threeIntColsAndBoolCol,
+			outputTypes:    rowenc.ThreeIntCols,
+			leftJoinPaired: true,
+			expected:       "[[43 10 5]]",
+		},
 	}
 	st := cluster.MakeTestingClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
@@ -439,12 +598,13 @@ func TestJoinReader(t *testing.T) {
 						&flowCtx,
 						0, /* processorID */
 						&execinfrapb.JoinReaderSpec{
-							Table:            *td.TableDesc(),
-							IndexIdx:         c.indexIdx,
-							LookupColumns:    c.lookupCols,
-							OnExpr:           execinfrapb.Expression{Expr: c.onExpr},
-							Type:             c.joinType,
-							MaintainOrdering: reqOrdering,
+							Table:                    *td.TableDesc(),
+							IndexIdx:                 c.indexIdx,
+							LookupColumns:            c.lookupCols,
+							OnExpr:                   execinfrapb.Expression{Expr: c.onExpr},
+							Type:                     c.joinType,
+							MaintainOrdering:         reqOrdering,
+							LeftJoinWithPairedJoiner: c.leftJoinPaired,
 						},
 						in,
 						&c.post,
@@ -456,7 +616,7 @@ func TestJoinReader(t *testing.T) {
 					}
 
 					// Set a lower batch size to force multiple batches.
-					jr.(*joinReader).SetBatchSizeBytes(int64(encRows[0].Size() * 3))
+					jr.(*joinReader).SetBatchSizeBytes(int64(encRows[0].Size() * 2))
 
 					jr.Run(ctx)
 
