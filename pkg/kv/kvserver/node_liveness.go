@@ -182,7 +182,7 @@ type NodeLiveness struct {
 
 	mu struct {
 		syncutil.RWMutex
-		callbacks []IsLiveCallback
+		onIsLive []IsLiveCallback
 		// nodes is an in-memory cache of liveness records that NodeLiveness
 		// knows about (having learnt of them through gossip or through KV).
 		// It's a look-aside cache, and is accessed primarily through
@@ -205,7 +205,7 @@ type NodeLiveness struct {
 		// - Update the liveness record in KV
 		// - Add the updated record into this cache (see `maybeUpdate`)
 		//
-		// (See `StartHeartbeat` for an example of this pattern.)
+		// (See `Start` for an example of this pattern.)
 		//
 		// What we want instead is a bit simpler:
 		//
@@ -503,7 +503,7 @@ type livenessUpdate struct {
 // given node ID. This is typically used when adding a new node to a running
 // cluster, or when bootstrapping a cluster through a given node.
 //
-// This is a pared down version of StartHeartbeat; it exists only to durably
+// This is a pared down version of Start; it exists only to durably
 // persist a liveness to record the node's existence. Nodes will heartbeat their
 // records after starting up, and incrementing to epoch=1 when doing so, at
 // which point we'll set an appropriate expiration timestamp, gossip the
@@ -620,12 +620,12 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	return liveness.IsLive(nl.clock.Now().GoTime()), nil
 }
 
-// StartHeartbeat starts a periodic heartbeat to refresh this node's last
+// Start starts a periodic heartbeat to refresh this node's last
 // heartbeat in the node liveness table. The optionally provided
-// HeartbeatCallback will be invoked whenever this node updates its own
-// liveness. The slice of engines will be written to before each heartbeat to
-// avoid maintaining liveness in the presence of disk stalls.
-func (nl *NodeLiveness) StartHeartbeat(
+// HeartbeatCallback will be invoked whenever this node updates its
+// own liveness. The slice of engines will be written to before each
+// heartbeat to avoid maintaining liveness in the presence of disk stalls.
+func (nl *NodeLiveness) Start(
 	ctx context.Context, stopper *stop.Stopper, engines []storage.Engine, alive HeartbeatCallback,
 ) {
 	log.VEventf(ctx, 1, "starting liveness heartbeat")
@@ -727,7 +727,7 @@ func (nl *NodeLiveness) PauseHeartbeatLoopForTest() func() {
 }
 
 // PauseSynchronousHeartbeatsForTest disables all node liveness
-// heartbeats triggered from outside the normal StartHeartbeat loop.
+// heartbeats triggered from outside the normal Start loop.
 // Returns a closure to call to re-enable synchronous heartbeats. Only
 // safe for use in tests.
 func (nl *NodeLiveness) PauseSynchronousHeartbeatsForTest() func() {
@@ -740,7 +740,7 @@ func (nl *NodeLiveness) PauseSynchronousHeartbeatsForTest() func() {
 }
 
 // PauseAllHeartbeatsForTest disables all node liveness heartbeats,
-// including those triggered from outside the normal StartHeartbeat
+// including those triggered from outside the normal Start
 // loop. Returns a closure to call to re-enable heartbeats. Only safe
 // for use in tests.
 func (nl *NodeLiveness) PauseAllHeartbeatsForTest() func() {
@@ -770,7 +770,7 @@ var errNodeAlreadyLive = errors.New("node already live")
 // TODO(bdarnell): Fix error semantics here.
 //
 // This method is rarely called directly; heartbeats are normally sent
-// by the StartHeartbeat loop.
+// by the Start loop.
 // TODO(bdarnell): Should we just remove this synchronous heartbeat completely?
 func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness kvserverpb.Liveness) error {
 	return nl.heartbeatInternal(ctx, liveness, false /* increment epoch */)
@@ -1113,7 +1113,7 @@ func (nl *NodeLiveness) Metrics() LivenessMetrics {
 func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
-	nl.mu.callbacks = append(nl.mu.callbacks, cb)
+	nl.mu.onIsLive = append(nl.mu.onIsLive, cb)
 }
 
 // updateLiveness does a conditional put on the node liveness record for the
@@ -1260,10 +1260,10 @@ func (nl *NodeLiveness) maybeUpdate(ctx context.Context, newLivenessRec Liveness
 		shouldReplace = shouldReplaceLiveness(ctx, oldLivenessRec.Liveness, newLivenessRec.Liveness)
 	}
 
-	var callbacks []IsLiveCallback
+	var onIsLive []IsLiveCallback
 	if shouldReplace {
 		nl.mu.nodes[newLivenessRec.NodeID] = newLivenessRec
-		callbacks = append(callbacks, nl.mu.callbacks...)
+		onIsLive = append(onIsLive, nl.mu.onIsLive...)
 	}
 	nl.mu.Unlock()
 
@@ -1273,7 +1273,7 @@ func (nl *NodeLiveness) maybeUpdate(ctx context.Context, newLivenessRec Liveness
 
 	now := nl.clock.Now().GoTime()
 	if !oldLivenessRec.IsLive(now) && newLivenessRec.IsLive(now) {
-		for _, fn := range callbacks {
+		for _, fn := range onIsLive {
 			fn(newLivenessRec.Liveness)
 		}
 	}
