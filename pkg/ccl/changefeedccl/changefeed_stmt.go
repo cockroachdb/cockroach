@@ -254,7 +254,11 @@ func changefeedPlanHook(
 		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
 
 		if details.SinkURI == `` {
+			telemetry.Count(`changefeed.create.core`)
 			err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
+			if err != nil {
+				telemetry.Count(`changefeed.core.error`)
+			}
 			return MaybeStripRetryableErrorMarker(err)
 		}
 
@@ -270,6 +274,8 @@ func changefeedPlanHook(
 		); err != nil {
 			return err
 		}
+
+		telemetry.Count(`changefeed.create.enterprise`)
 
 		// In the case where a user is executing a CREATE CHANGEFEED and is still
 		// waiting for the statement to return, we take the opportunity to ensure
@@ -646,6 +652,15 @@ func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, planHookState in
 	progress := b.job.Progress()
 	b.maybeCleanUpProtectedTimestamp(ctx, execCfg.DB, execCfg.ProtectedTimestampProvider,
 		progress.GetChangefeed().ProtectedTimestampRecord)
+
+	// If this job has failed (not canceled), increment the counter.
+	if jobs.HasErrJobCanceled(
+		errors.DecodeError(ctx, *b.job.Payload().FinalResumeError),
+	) {
+		telemetry.Count(`changefeed.enterprise.cancel`)
+	} else {
+		telemetry.Count(`changefeed.enterprise.fail`)
+	}
 	return nil
 }
 
