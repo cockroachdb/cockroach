@@ -886,39 +886,64 @@ func backupPlanHook(
 		}
 
 		collectTelemetry := func() {
-			telemetry.Count("backup.total.started")
+			// sourceSuffix specifies if this schedule was created by a schedule.
+			sourceSuffix := ".manual"
+			if backupStmt.CreatedByInfo != nil &&
+				backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
+				sourceSuffix = ".scheduled"
+			}
+
+			// countSource emits a telemetry counter and also adds a ".scheduled"
+			// suffix if the job was created by a schedule.
+			countSource := func(feature string) {
+				telemetry.Count(feature + sourceSuffix)
+			}
+
+			countSource("backup.total.started")
 			if isEnterprise {
-				telemetry.Count("backup.licensed")
-				telemetry.Count("backup.using-enterprise-features")
+				countSource("backup.licensed")
+				countSource("backup.using-enterprise-features")
 			} else {
 				if err := utilccl.CheckEnterpriseEnabled(
 					p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "",
 				); err == nil {
-					telemetry.Count("backup.licensed")
+					countSource("backup.licensed")
 				} else {
-					telemetry.Count("backup.free")
+					countSource("backup.free")
 				}
 			}
 			if startTime.IsEmpty() {
-				telemetry.Count("backup.span.full")
+				countSource("backup.span.full")
 			} else {
-				telemetry.Count("backup.span.incremental")
+				countSource("backup.span.incremental")
 				telemetry.CountBucketed("backup.incremental-span-sec", int64(timeutil.Since(startTime.GoTime()).Seconds()))
 				if len(incrementalFrom) == 0 {
-					telemetry.Count("backup.auto-incremental")
+					countSource("backup.auto-incremental")
 				}
 			}
 			if len(backupStmt.To) > 1 {
-				telemetry.Count("backup.partitioned")
+				countSource("backup.partitioned")
 			}
 			if mvccFilter == MVCCFilter_All {
-				telemetry.Count("backup.revision-history")
+				countSource("backup.revision-history")
 			}
 			if encryptionOptions != nil {
-				telemetry.Count("backup.encrypted")
+				countSource("backup.encrypted")
+				switch encryptionOptions.Mode {
+				case jobspb.EncryptionMode_Passphrase:
+					countSource("backup.encryption.passphrase")
+				case jobspb.EncryptionMode_KMS:
+					countSource("backup.encryption.kms")
+				}
+			}
+			if backupStmt.Nested {
+				countSource("backup.nested")
+				if backupStmt.AppendToLatest {
+					countSource("backup.into-latest")
+				}
 			}
 			if backupStmt.Coverage() == tree.AllDescriptors {
-				telemetry.Count("backup.targets.full_cluster")
+				countSource("backup.targets.full_cluster")
 			}
 		}
 
