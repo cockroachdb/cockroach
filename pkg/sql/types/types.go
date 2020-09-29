@@ -525,6 +525,46 @@ var (
 	DecimalArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: Decimal, Oid: oid.T__numeric, Locale: &emptyLocale}}
 
+	// BoolArray is the type of an array value having Bool-typed elements.
+	BoolArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Bool, Oid: oid.T__bool, Locale: &emptyLocale}}
+
+	// UUIDArray is the type of an array value having UUID-typed elements.
+	UUIDArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Uuid, Oid: oid.T__uuid, Locale: &emptyLocale}}
+
+	// TimeArray is the type of an array value having Date-typed elements.
+	DateArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Date, Oid: oid.T__date, Locale: &emptyLocale}}
+
+	// TimeArray is the type of an array value having Time-typed elements.
+	TimeArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Time, Oid: oid.T__time, Locale: &emptyLocale}}
+
+	// TimeTZArray is the type of an array value having TimeTZ-typed elements.
+	TimeTZArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: TimeTZ, Oid: oid.T__timetz, Locale: &emptyLocale}}
+
+	// TimestampArray is the type of an array value having Timestamp-typed elements.
+	TimestampArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Timestamp, Oid: oid.T__timestamp, Locale: &emptyLocale}}
+
+	// TimestampTZArray is the type of an array value having TimestampTZ-typed elements.
+	TimestampTZArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: TimestampTZ, Oid: oid.T__timestamptz, Locale: &emptyLocale}}
+
+	// IntervalArray is the type of an array value having Interval-typed elements.
+	IntervalArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Interval, Oid: oid.T__interval, Locale: &emptyLocale}}
+
+	// INetArray is the type of an array value having INet-typed elements.
+	INetArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: INet, Oid: oid.T__inet, Locale: &emptyLocale}}
+
+	// VarBitArray is the type of an array value having VarBit-typed elements.
+	VarBitArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: VarBit, Oid: oid.T__varbit, Locale: &emptyLocale}}
+
 	// Int2Vector is a type-alias for an array of Int2 values with a different
 	// OID (T_int2vector instead of T__int2). It is a special VECTOR type used
 	// by Postgres in system tables. Int2vectors are 0-indexed, unlike normal arrays.

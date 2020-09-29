@@ -1750,3 +1750,29 @@ SELECT CASE
 END
 ----
 (2,{-23791})
+
+# Test that string literals can be implicitly casted to array types
+statement ok
+DROP TABLE t;
+CREATE TABLE t (
+  a INT[],
+  b DECIMAL[],
+  c UUID[],
+  d STRING[],
+  e TIMESTAMPTZ[],
+  f DATE[],
+  g INTERVAL[],
+  h INET[],
+  i VARBIT[],
+  j FLOAT[]);
+INSERT INTO t VALUES (
+  '{1, 2}',
+  '{1.1, 2.2}',
+  '{18e7b17e-4ead-4e27-bfd5-bb6d11261bb6, 18e7b17e-4ead-4e27-bfd5-bb6d11261bb7}',
+  '{cat, dog}',
+  '{2010-09-28 12:00:00.1, 2010-09-29 12:00:00.1}',
+  '{2010-09-28, 2010-09-29}',
+  '{PT12H2M, -23:00:00}',
+  '{192.168.100.128, ::ffff:10.4.3.2}',
+  '{0101, 11}',
+  '{12.34, 45.67}');
