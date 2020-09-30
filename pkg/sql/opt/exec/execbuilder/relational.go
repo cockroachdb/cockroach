@@ -624,7 +624,7 @@ func (b *Builder) buildInvertedFilter(invFilter *memo.InvertedFilterExpr) (execP
 	invertedCol := input.getNodeColumnOrdinal(invFilter.InvertedColumn)
 	var typedPreFilterExpr tree.TypedExpr
 	var typ *types.T
-	if invFilter.PreFiltererState.Expr != nil {
+	if invFilter.PreFiltererState != nil && invFilter.PreFiltererState.Expr != nil {
 		// The expression has a single variable, corresponding to the indexed
 		// column. We assign it an ordinal of 0.
 		var colMap opt.ColMap
