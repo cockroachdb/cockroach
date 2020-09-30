@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/kr/text"
 )
 
@@ -613,18 +614,33 @@ the socket name programmatically. To use, for example:
 		Name:   "insecure",
 		EnvVar: "COCKROACH_INSECURE",
 		Description: `
-Connect to an insecure cluster. This is strongly discouraged for
-production usage.`,
+Connect to a cluster without using TLS nor authentication.
+This makes the client-server connection vulnerable to MITM attacks. Use with care.`,
 	}
 
 	ServerInsecure = FlagInfo{
 		Name: "insecure",
 		Description: `
-Start an insecure node, using unencrypted (non-TLS) connections,
-listening on all IP addresses (unless --listen-addr is provided) and
-disabling password authentication for all database users. This is
-strongly discouraged for production usage and should never be used on
-a public network without combining it with --listen-addr.`,
+Start a node with all security controls disabled.
+There is no encryption, no authentication and internal security
+checks are also disabled. This makes any client able to take
+over the entire cluster.
+<PRE>
+
+</PRE>
+This flag is only intended for non-production testing.
+<PRE>
+
+</PRE>
+Beware that using this flag on a public network without --listen-addr
+is likely to cause the entire host server to become compromised.
+<PRE>
+
+</PRE>
+To simply accept non-TLS connections for SQL clients while keeping
+the cluster secure, consider using --accept-sql-without-tls instead.
+Also see: ` + unimplemented.MakeURL(53404) + `
+`,
 	}
 
 	ExternalIODisableHTTP = FlagInfo{
