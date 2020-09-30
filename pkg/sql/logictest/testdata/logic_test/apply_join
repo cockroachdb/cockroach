@@ -351,3 +351,31 @@ UPDATE cpk SET extra = (
     WHERE k='k1'
 )
 WHERE ((cpk.key, cpk.value) IN (SELECT new_values.k, new_values.v FROM new_values))
+
+# Regression test for not closing the subqueries in the apply join if they hit
+# an error (#54166).
+query error pgcode XX000 invalid index .*
+SELECT
+  (
+    SELECT
+      tab_4.col_4
+    FROM
+      (VALUES (1)) AS tab_1 (col_1)
+      JOIN (
+          VALUES
+            (
+              (
+                SELECT
+                  1
+                FROM
+                  (SELECT 1)
+                WHERE
+                  EXISTS(SELECT 1)
+              )
+            )
+        )
+          AS tab_6 (col_6) ON (tab_1.col_1) = (tab_6.col_6)
+  )
+FROM
+  (VALUES (NULL)) AS tab_4 (col_4),
+  (VALUES (NULL), (NULL)) AS tab_5 (col_5)
