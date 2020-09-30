@@ -2976,6 +2976,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE RULE a`, 0, `create rule`, ``},
 		{`CREATE SERVER a`, 0, `create server`, ``},
 		{`CREATE SUBSCRIPTION a`, 0, `create subscription`, ``},
+		{`CREATE TABLESPACE a`, 54113, `create tablespace`, ``},
 		{`CREATE TEXT SEARCH a`, 7821, `create text`, ``},
 		{`CREATE TRIGGER a`, 28296, `create`, ``},
 
