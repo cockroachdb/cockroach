@@ -38,7 +38,7 @@ import (
 type tpccSetupType int
 
 const (
-	usingFixture tpccSetupType = iota
+	usingImport tpccSetupType = iota
 	usingInit
 )
 
@@ -63,10 +63,12 @@ type tpccOptions struct {
 	Versions []string
 }
 
-// tpccFixturesCmd generates the command string to load tpcc data for the
+// tpccImportCmd generates the command string to load tpcc data for the
 // specified warehouse count into a cluster.
-func tpccFixturesCmd(t *test, warehouses int, extraArgs string) string {
-	return fmt.Sprintf("./workload fixtures import tpcc --warehouses=%d %s {pgurl:1}",
+func tpccImportCmd(t *test, warehouses int, extraArgs string) string {
+	// Use `cockroach workload` instead of `workload` so the tpcc
+	// workload-versions match on release branches.
+	return fmt.Sprintf("./cockroach workload fixtures import tpcc --warehouses=%d %s {pgurl:1}",
 		warehouses, extraArgs)
 }
 
@@ -111,21 +113,21 @@ func setupTPCC(
 	c.Put(ctx, cockroach, "./cockroach", workloadNode)
 	c.Put(ctx, workload, "./workload", workloadNode)
 
-	extraArgs := opts.ExtraSetupArgs
-	if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
-		extraArgs += " --deprecated-fk-indexes"
-	}
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 		c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
 		switch opts.SetupType {
-		case usingFixture:
+		case usingImport:
 			t.Status("loading fixture")
-			c.Run(ctx, workloadNode, tpccFixturesCmd(t, opts.Warehouses, extraArgs))
+			c.Run(ctx, workloadNode, tpccImportCmd(t, opts.Warehouses, opts.ExtraSetupArgs))
 		case usingInit:
 			t.Status("initializing tables")
+			extraArgs := opts.ExtraSetupArgs
+			if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+				extraArgs += " --deprecated-fk-indexes"
+			}
 			cmd := fmt.Sprintf(
 				"./workload init tpcc --warehouses=%d %s {pgurl:1}",
 				opts.Warehouses, extraArgs,
@@ -234,7 +236,7 @@ func registerTPCC(r *testRegistry) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: headroomWarehouses,
 				Duration:   120 * time.Minute,
-				SetupType:  usingFixture,
+				SetupType:  usingImport,
 			})
 		},
 	})
@@ -268,7 +270,7 @@ func registerTPCC(r *testRegistry) {
 				Warehouses: headroomWarehouses,
 				Duration:   120 * time.Minute,
 				Versions:   []string{oldV, "", oldV, ""},
-				SetupType:  usingFixture,
+				SetupType:  usingImport,
 			})
 			// TODO(tbg): run another TPCC with the final binaries here and
 			// teach TPCC to re-use the dataset (seems easy enough) to at least
@@ -285,7 +287,7 @@ func registerTPCC(r *testRegistry) {
 				Warehouses:   1,
 				Duration:     10 * time.Minute,
 				ExtraRunArgs: "--wait=false",
-				SetupType:    usingFixture,
+				SetupType:    usingImport,
 			})
 		},
 	})
@@ -301,7 +303,7 @@ func registerTPCC(r *testRegistry) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				Duration:   6 * 24 * time.Hour,
-				SetupType:  usingFixture,
+				SetupType:  usingImport,
 			})
 		},
 	})
@@ -330,7 +332,7 @@ func registerTPCC(r *testRegistry) {
 						DrainAndQuit: false,
 					}
 				},
-				SetupType: usingFixture,
+				SetupType: usingImport,
 			})
 		},
 	})
@@ -662,7 +664,7 @@ func loadTPCCBench(
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
 	waitForFullReplication(t, db)
-	cmd := tpccFixturesCmd(t, b.LoadWarehouses, loadArgs)
+	cmd := tpccImportCmd(t, b.LoadWarehouses, loadArgs)
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
 		return err
 	}
