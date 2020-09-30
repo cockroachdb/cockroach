@@ -30,8 +30,8 @@ send "2, 3\r"
 eexpect " ->"
 end_test
 
-start_test "Test that \show does what it says."
-send "\\show\r"
+start_test "Test that \p does what it says."
+send "\\p\r"
 eexpect "select 1,"
 eexpect "2, 3"
 eexpect " ->"
@@ -49,6 +49,17 @@ eexpect "2, 3"
 eexpect ";"
 end_test
 
+start_test "Test that \r does what it says."
+# backspace to erase the semicolon
+send "\010"
+# newline to get a prompt
+send "\r"
+eexpect " ->"
+# Now send \r followed by a carriage return.
+send "\\r\r"
+eexpect root@
+end_test
+
 start_test "Test that Ctrl+C after the first line merely cancels the statement and presents the prompt."
 send "\r"
 eexpect root@
@@ -58,10 +69,10 @@ interrupt
 eexpect root@
 end_test
 
-start_test "Test that \show does what it says."
+start_test "Test that \p does what it says."
 send "select\r"
 eexpect " ->"
-send "\\show\r"
+send "\\p\r"
 eexpect "select\r\n*->"
 interrupt
 end_test
