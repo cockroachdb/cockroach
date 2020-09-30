@@ -14,38 +14,38 @@ CREATE DATABASE IF NOT EXISTS a
 statement error pgcode 42601 empty database name
 CREATE DATABASE ""
 
-query T colnames
+query TT colnames
 SHOW DATABASES
 ----
-database_name
-a
-defaultdb
-postgres
-system
-test
+database_name  owner
+a              root
+defaultdb      root
+postgres       root
+system         node
+test           root
 
 statement ok
 COMMENT ON DATABASE a IS 'A'
 
-query TT colnames
+query TTT colnames
 SHOW DATABASES WITH COMMENT
 ----
-database_name  comment
-a              A
-defaultdb      NULL
-postgres       NULL
-system         NULL
-test           NULL
+database_name  owner  comment
+a              root   A
+defaultdb      root   NULL
+postgres       root   NULL
+system         node   NULL
+test           root   NULL
 
-query T colnames
+query TT colnames
 SHOW SCHEMAS FROM a
 ----
-schema_name
-crdb_internal
-information_schema
-pg_catalog
-pg_extension
-public
+schema_name         owner
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
 
 statement ok
 CREATE DATABASE b TEMPLATE=template0
@@ -98,22 +98,22 @@ CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
 statement ok
 CREATE DATABASE c
 
-query T
+query TT
 SHOW DATABASES
 ----
-a
-b
-b2
-b3
-b4
-b5
-b6
-b7
-c
-defaultdb
-postgres
-system
-test
+a          root
+b          root
+b2         root
+b3         root
+b4         root
+b5         root
+b6         root
+b7         root
+c          root
+defaultdb  root
+postgres   root
+system     node
+test       root
 
 statement ok
 CREATE TABLE b.a (id INT PRIMARY KEY)
@@ -154,16 +154,16 @@ DROP DATABASE b2 CASCADE;
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
 
-query T colnames
+query TT colnames
 SHOW DATABASES
 ----
-database_name
-a
-c
-defaultdb
-postgres
-system
-test
+database_name  owner
+a              root
+c              root
+defaultdb      root
+postgres       root
+system         node
+test           root
 
 statement ok
 CREATE DATABASE b
