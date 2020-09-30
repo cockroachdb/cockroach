@@ -518,6 +518,12 @@ func (ib *IndexBackfiller) Close(ctx context.Context) {
 	}
 }
 
+// Clear releases the allocations on the IndexBackfiller's bound account,
+// prepping it for reuse.
+func (ib *IndexBackfiller) Clear(ctx context.Context) {
+	ib.boundAccount.Clear(ctx)
+}
+
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc *tabledesc.Immutable) {
@@ -788,6 +794,11 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	if err := writeBatch(ctx, batch); err != nil {
 		return nil, ConvertBackfillError(ctx, tableDesc, batch)
 	}
+
+	// After the chunk entries have been written, we must clear the bound account
+	// tracking the memory usage for the chunk.
+	entries = nil
+	ib.Clear(ctx)
 
 	return key, nil
 }
