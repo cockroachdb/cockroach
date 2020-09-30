@@ -6,6 +6,10 @@ exec-ddl
 CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
 ----
 
+exec-ddl
+CREATE TABLE c (k INT PRIMARY KEY, v INT, INDEX partial_v (v) WHERE k > 0 AND k < 0)
+----
+
 # --------------------------------------------------
 # SimplifyZeroCardinalityGroup
 # --------------------------------------------------
@@ -100,7 +104,7 @@ values
  ├── key: ()
  └── fd: ()-->(1-5)
 
-norm
+norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
 ----
 project
@@ -116,3 +120,15 @@ project
  │    └── fd: ()-->(1)
  └── projections
       └── CASE WHEN k:1 < 0 THEN 3 / 0 ELSE 3 END [as=case:7, outer=(1), immutable]
+
+# Building the partial index predicate should trigger the rule.
+norm expect=SimplifyZeroCardinalityGroup
+SELECT * FROM c
+----
+scan c
+ ├── columns: k:1!null v:2
+ ├── partial index predicates
+ │    └── partial_v: filters
+ │         └── false [constraints=(contradiction; tight)]
+ ├── key: (1)
+ └── fd: (1)-->(2)

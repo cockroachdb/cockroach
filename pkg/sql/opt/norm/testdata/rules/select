@@ -402,6 +402,25 @@ scan a
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
+exec-ddl
+CREATE INDEX partial_idx ON a (s) WHERE true
+----
+
+# Building the partial index predicate should trigger the rule.
+norm expect=EliminateSelect
+SELECT * FROM a
+----
+scan a
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── partial index predicates
+ │    └── partial_idx: filters (true)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+exec-ddl
+DROP INDEX partial_idx
+----
+
 # --------------------------------------------------
 # MergeSelects
 # --------------------------------------------------
@@ -1343,6 +1362,25 @@ project
       │    └── fd: (1)-->(2)
       └── filters
            └── (i:2 + k:1) IS NOT NULL [outer=(1,2), immutable]
+
+exec-ddl
+CREATE INDEX partial_idx ON b (f) WHERE s IS NOT NULL
+----
+
+# Building the partial index predicate should trigger the rule.
+norm expect=RemoveNotNullCondition
+SELECT * FROM b
+----
+scan b
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ ├── partial index predicates
+ │    └── partial_idx: filters (true)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+exec-ddl
+DROP INDEX partial_idx
+----
 
 # --------------------------------------------------
 # PushSelectIntoProjectSet
