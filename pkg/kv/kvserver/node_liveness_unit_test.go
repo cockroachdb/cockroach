@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -58,8 +59,8 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	}{
 		{
 			// Epoch update only.
-			kvserverpb.Liveness{},
 			l(1, hlc.Timestamp{}, false, "active"),
+			l(2, hlc.Timestamp{}, false, "active"),
 			yes,
 		},
 		{
@@ -106,7 +107,7 @@ func TestShouldReplaceLiveness(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			if act := shouldReplaceLiveness(test.old, test.new); act != test.exp {
+			if act := shouldReplaceLiveness(context.Background(), test.old, test.new); act != test.exp {
 				t.Errorf("unexpected update: %+v", test)
 			}
 		})

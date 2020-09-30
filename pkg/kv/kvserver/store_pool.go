@@ -103,8 +103,8 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 	return func(
 		nodeID roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
 	) kvserverpb.NodeLivenessStatus {
-		liveness, err := nodeLiveness.GetLiveness(nodeID)
-		if err != nil {
+		liveness, ok := nodeLiveness.GetLiveness(nodeID)
+		if !ok {
 			return kvserverpb.NodeLivenessStatus_UNAVAILABLE
 		}
 		return LivenessStatus(liveness.Liveness, now, timeUntilStoreDead)

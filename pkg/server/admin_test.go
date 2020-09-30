@@ -1365,10 +1365,8 @@ func TestHealthAPI(t *testing.T) {
 	// server's clock.
 	ts := s.(*TestServer)
 	defer ts.nodeLiveness.PauseAllHeartbeatsForTest()()
-	self, err := ts.nodeLiveness.Self()
-	if err != nil {
-		t.Fatal(err)
-	}
+	self, ok := ts.nodeLiveness.Self()
+	assert.True(t, ok)
 	s.Clock().Update(hlc.Timestamp(self.Expiration).Add(1, 0))
 
 	var resp serverpb.HealthResponse
