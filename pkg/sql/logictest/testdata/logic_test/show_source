@@ -180,10 +180,10 @@ pg_catalog
 pg_extension
 public
 
-query T colnames
+query TT colnames
 SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
-sequence_name
+sequence_schema  sequence_name
 
 query TTTT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
