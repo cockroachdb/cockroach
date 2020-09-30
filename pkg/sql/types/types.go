@@ -1190,7 +1190,7 @@ func (t *T) TypeModifier() int32 {
 	}
 	if width := t.Width(); width != 0 {
 		switch t.Family() {
-		case StringFamily:
+		case StringFamily, CollatedStringFamily:
 			// Postgres adds 4 to the attypmod for bounded string types, the
 			// var header size.
 			typeModifier = width + 4
