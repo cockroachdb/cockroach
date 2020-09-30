@@ -612,7 +612,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDING INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
-%token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
+%token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED IS ISERROR ISNULL ISOLATION
 
@@ -964,6 +964,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <*tree.InterleaveDef> opt_interleave
 %type <*tree.PartitionBy> opt_partition_by partition_by
 %type <str> partition opt_partition
+%type <str> opt_create_table_inherits
 %type <tree.ListPartition> list_partition
 %type <[]tree.ListPartition> list_partitions
 %type <tree.RangePartition> range_partition
@@ -1843,6 +1844,18 @@ alter_table_cmd:
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT constraint_name error { return unimplementedWithIssueDetail(sqllex, 31632, "alter constraint") }
+  // ALTER TABLE <name> INHERITS ....
+| INHERITS error
+  {
+    /* SKIP DOC */
+    return unimplementedWithIssueDetail(sqllex, 22456, "alter table inherits")
+  }
+  // ALTER TABLE <name> NO INHERITS ....
+| NO INHERITS error
+  {
+    /* SKIP DOC */
+    return unimplementedWithIssueDetail(sqllex, 22456, "alter table no inherits")
+  }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
   // ALTER TABLE <name> ALTER PRIMARY KEY USING INDEX <name>
 | ALTER PRIMARY KEY USING COLUMNS '(' index_params ')' opt_hash_sharded opt_interleave
@@ -5438,34 +5451,34 @@ alter_schema_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
+  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: false,
-      Interleave: $8.interleave(),
+      Interleave: $9.interleave(),
       Defs: $6.tblDefs(),
       AsSource: nil,
-      PartitionBy: $9.partitionBy(),
+      PartitionBy: $10.partitionBy(),
       Persistence: $2.persistence(),
-      StorageParams: $10.storageParams(),
-      OnCommit: $11.createTableOnCommitSetting(),
+      StorageParams: $11.storageParams(),
+      OnCommit: $12.createTableOnCommitSetting(),
     }
   }
-| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
+| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: true,
-      Interleave: $11.interleave(),
+      Interleave: $12.interleave(),
       Defs: $9.tblDefs(),
       AsSource: nil,
-      PartitionBy: $12.partitionBy(),
+      PartitionBy: $13.partitionBy(),
       Persistence: $2.persistence(),
-      StorageParams: $13.storageParams(),
-      OnCommit: $14.createTableOnCommitSetting(),
+      StorageParams: $14.storageParams(),
+      OnCommit: $15.createTableOnCommitSetting(),
     }
   }
 
@@ -5480,6 +5493,17 @@ opt_table_with:
 | WITH OIDS error
   {
     return unimplemented(sqllex, "create table with oids")
+  }
+
+opt_create_table_inherits:
+  /* EMPTY */
+  {
+    $$ = ""
+  }
+| INHERITS error
+  {
+    /* SKIP DOC */
+    return unimplementedWithIssueDetail(sqllex, 22456, "create table inherits")
   }
 
 opt_with_storage_parameter_list:
@@ -11604,6 +11628,7 @@ unreserved_keyword:
 | INCREMENT
 | INCREMENTAL
 | INDEXES
+| INHERITS
 | INJECT
 | INSERT
 | INTERLEAVE
