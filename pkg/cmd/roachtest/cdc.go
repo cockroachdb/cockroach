@@ -45,7 +45,6 @@ type cdcTestArgs struct {
 	kafkaChaos         bool
 	crdbChaos          bool
 	cloudStorageSink   bool
-	fixturesImport     bool
 
 	targetInitialScanLatency time.Duration
 	targetSteadyLatency      time.Duration
@@ -101,7 +100,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		// value" errors #34025.
 		tpcc.tolerateErrors = true
 
-		tpcc.install(ctx, c, args.fixturesImport)
+		tpcc.install(ctx, c)
 		// TODO(dan,ajwerner): sleeping momentarily before running the workload
 		// mitigates errors like "error in newOrder: missing stock row" from tpcc.
 		time.Sleep(2 * time.Second)
@@ -593,7 +592,6 @@ func registerCDC(r *testRegistry) {
 				workloadDuration:         "30m",
 				initialScan:              true,
 				cloudStorageSink:         true,
-				fixturesImport:           true,
 				targetInitialScanLatency: 30 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 			})
@@ -733,16 +731,11 @@ type tpccWorkload struct {
 	tolerateErrors     bool
 }
 
-func (tw *tpccWorkload) install(ctx context.Context, c *cluster, fixturesImport bool) {
-	command := `./workload fixtures load`
-	if fixturesImport {
-		// For fixtures import, use the version built into the cockroach binary so
-		// the tpcc workload-versions match on release branches.
-		command = `./cockroach workload fixtures import`
-	}
+func (tw *tpccWorkload) install(ctx context.Context, c *cluster) {
+	// For fixtures import, use the version built into the cockroach binary so
+	// the tpcc workload-versions match on release branches.
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`%s tpcc --warehouses=%d --checks=false {pgurl%s}`,
-		command,
+		`./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl%s}`,
 		tw.tpccWarehouseCount,
 		tw.sqlNodes.randNode(),
 	))
