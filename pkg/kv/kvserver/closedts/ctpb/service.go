@@ -36,3 +36,29 @@ func (c *closedTimestampClient) Get192(
 	x := &closedTimestampGetClient{stream}
 	return x, nil
 }
+
+// _ClosedTimestampServiceDesc192 is like _ClosedTimestamp_serviceDesc, except
+// it uses the service name that 19.2 nodes were using. We've changed the
+// service name in 20.1 by mistake.
+var _ClosedTimestampServiceDesc192 = grpc.ServiceDesc{
+	// Instead of "cockroach.kv.kvserver.ctupdate.ClosedTimestamp".
+	ServiceName: "cockroach.storage.ctupdate.ClosedTimestamp",
+	HandlerType: (*ClosedTimestampServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Get",
+			Handler:       _ClosedTimestamp_Get_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
+	Metadata: "kv/kvserver/closedts/ctpb/service.proto",
+}
+
+// RegisterClosedTimestampServerUnder192Name is like
+// RegisterClosedTimestampServer, except it uses a different service name - the
+// old name that 19.2 nodes are using.
+func RegisterClosedTimestampServerUnder192Name(s *grpc.Server, srv ClosedTimestampServer) {
+	s.RegisterService(&_ClosedTimestampServiceDesc192, srv)
+}
