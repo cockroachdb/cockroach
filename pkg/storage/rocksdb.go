@@ -1303,6 +1303,10 @@ func (r *batchIterator) UnsafeKey() MVCCKey {
 	return r.iter.UnsafeKey()
 }
 
+func (r *batchIterator) UnsafeRawKey() []byte {
+	return r.iter.UnsafeRawKey()
+}
+
 func (r *batchIterator) UnsafeValue() []byte {
 	return r.iter.UnsafeValue()
 }
@@ -2029,6 +2033,10 @@ func (r *rocksDBIterator) ValueProto(msg protoutil.Message) error {
 
 func (r *rocksDBIterator) UnsafeKey() MVCCKey {
 	return cToUnsafeGoKey(r.key)
+}
+
+func (r *rocksDBIterator) UnsafeRawKey() []byte {
+	panic("unimplemented; only meant to be used with Pebble")
 }
 
 func (r *rocksDBIterator) UnsafeValue() []byte {
