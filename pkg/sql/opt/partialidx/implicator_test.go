@@ -101,7 +101,7 @@ func TestImplicator(t *testing.T) {
 			}
 
 			// Build the predicate from the second split, everything after "=>".
-			pred, err := makePredicate(splitInput[1], &semaCtx, &evalCtx, &f)
+			pred, err := makeFilters(splitInput[1], cols, &semaCtx, &evalCtx, &f)
 			if err != nil {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
@@ -273,7 +273,7 @@ func BenchmarkImplicator(b *testing.B) {
 		}
 
 		// Build the predicate.
-		pred, err := makePredicate(tc.pred, &semaCtx, &evalCtx, &f)
+		pred, err := makeFilters(tc.pred, cols, &semaCtx, &evalCtx, &f)
 		if err != nil {
 			b.Fatalf("unexpected error while building predicate: %v\n", err)
 		}
@@ -352,26 +352,13 @@ func makeFilters(
 		return s.Filters, nil
 	}
 
-	// If the resulting relational expression is not a Select, the Select has
-	// been eliminated by normalization rules. This can occur for certain
-	// filters, such as "true". We still want to test these cases, so we normalize
-	// the filters in the same way that predicate expressions are normalized.
-	return f.NormalizePartialIndexPredicate(filters), nil
-}
-
-// makePredicate returns a FiltersExpr generated from the input string and
-// normalized in the same way that optbuilder normalizes partial index
-// predicates.
-func makePredicate(
-	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
-) (memo.FiltersExpr, error) {
-	filters, err := makeFiltersExpr(input, semaCtx, evalCtx, f)
-	if err != nil {
-		return nil, err
+	// Otherwise, the filters may be either true or false. Check the cardinality
+	// to determine which one.
+	if sel.Relational().Cardinality.IsZero() {
+		return memo.FiltersExpr{f.ConstructFiltersItem(memo.FalseSingleton)}, nil
 	}
 
-	// Normalize the predicate expression as it is in select.go.
-	return f.NormalizePartialIndexPredicate(filters), nil
+	return memo.TrueFilter, nil
 }
 
 // makeFiltersExpr returns a FiltersExpr generated from the input string.

@@ -2954,6 +2954,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 	}{
 		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`, ``},
 		{`ALTER TABLE a ADD CONSTRAINT foo EXCLUDE USING gist (bar WITH =)`, 46657, `add constraint exclude using`, ``},
+		{`ALTER TABLE a INHERITS b`, 22456, `alter table inherits`, ``},
+		{`ALTER TABLE a NO INHERITS b`, 22456, `alter table no inherits`, ``},
 
 		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
 
@@ -2974,6 +2976,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE RULE a`, 0, `create rule`, ``},
 		{`CREATE SERVER a`, 0, `create server`, ``},
 		{`CREATE SUBSCRIPTION a`, 0, `create subscription`, ``},
+		{`CREATE TABLESPACE a`, 54113, `create tablespace`, ``},
 		{`CREATE TEXT SEARCH a`, 7821, `create text`, ``},
 		{`CREATE TRIGGER a`, 28296, `create`, ``},
 
@@ -3029,6 +3032,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a (LIKE b INCLUDING IDENTITY)`, 47071, `like table`, ``},
 		{`CREATE TABLE a (LIKE b INCLUDING STATISTICS)`, 47071, `like table`, ``},
 		{`CREATE TABLE a (LIKE b INCLUDING STORAGE)`, 47071, `like table`, ``},
+
+		{`CREATE TABLE a () INHERITS b`, 22456, `create table inherit`, ``},
 
 		{`CREATE TEMP TABLE a (a int) ON COMMIT DROP`, 46556, `drop`, ``},
 		{`CREATE TEMP TABLE a (a int) ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``},

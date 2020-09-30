@@ -1628,26 +1628,26 @@ func (sm *TenantsStorageMetrics) subtractMVCCStats(
 	sm.incMVCCGauges(ctx, tenantID, neg)
 }
 
-func (sm *StoreMetrics) updateRocksDBStats(stats storage.Stats) {
-	// We do not grab a lock here, because it's not possible to get a point-in-
-	// time snapshot of RocksDB stats. Retrieving RocksDB stats doesn't grab any
-	// locks, and there's no way to retrieve multiple stats in a single operation.
-	sm.RdbBlockCacheHits.Update(stats.BlockCacheHits)
-	sm.RdbBlockCacheMisses.Update(stats.BlockCacheMisses)
-	sm.RdbBlockCacheUsage.Update(stats.BlockCacheUsage)
-	sm.RdbBlockCachePinnedUsage.Update(stats.BlockCachePinnedUsage)
-	sm.RdbBloomFilterPrefixUseful.Update(stats.BloomFilterPrefixUseful)
-	sm.RdbBloomFilterPrefixChecked.Update(stats.BloomFilterPrefixChecked)
-	sm.RdbMemtableTotalSize.Update(stats.MemtableTotalSize)
-	sm.RdbFlushes.Update(stats.Flushes)
-	sm.RdbFlushedBytes.Update(stats.FlushedBytes)
-	sm.RdbCompactions.Update(stats.Compactions)
-	sm.RdbIngestedBytes.Update(stats.IngestedBytes)
-	sm.RdbCompactedBytesRead.Update(stats.CompactedBytesRead)
-	sm.RdbCompactedBytesWritten.Update(stats.CompactedBytesWritten)
-	sm.RdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)
-	sm.DiskSlow.Update(stats.DiskSlowCount)
-	sm.DiskStalled.Update(stats.DiskStallCount)
+func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
+	sm.RdbBlockCacheHits.Update(m.BlockCacheHits)
+	sm.RdbBlockCacheMisses.Update(m.BlockCacheMisses)
+	sm.RdbBlockCacheUsage.Update(m.BlockCacheUsage)
+	sm.RdbBlockCachePinnedUsage.Update(m.BlockCachePinnedUsage)
+	sm.RdbBloomFilterPrefixUseful.Update(m.BloomFilterPrefixUseful)
+	sm.RdbBloomFilterPrefixChecked.Update(m.BloomFilterPrefixChecked)
+	sm.RdbMemtableTotalSize.Update(m.MemtableTotalSize)
+	sm.RdbFlushes.Update(m.Flushes)
+	sm.RdbFlushedBytes.Update(m.FlushedBytes)
+	sm.RdbCompactions.Update(m.Compactions)
+	sm.RdbIngestedBytes.Update(m.IngestedBytes)
+	sm.RdbCompactedBytesRead.Update(m.CompactedBytesRead)
+	sm.RdbCompactedBytesWritten.Update(m.CompactedBytesWritten)
+	sm.RdbTableReadersMemEstimate.Update(m.TableReadersMemEstimate)
+	sm.RdbReadAmplification.Update(m.ReadAmplification)
+	sm.RdbPendingCompaction.Update(m.PendingCompactionBytesEstimate)
+	sm.RdbNumSSTables.Update(m.NumSSTables)
+	sm.DiskSlow.Update(m.DiskSlowCount)
+	sm.DiskStalled.Update(m.DiskStallCount)
 }
 
 func (sm *StoreMetrics) updateEnvStats(stats storage.EnvStats) {

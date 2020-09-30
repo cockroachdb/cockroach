@@ -2611,12 +2611,12 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		return err
 	}
 
-	// Get the latest RocksDB stats.
-	stats, err := s.engine.GetStats()
+	// Get the latest engine metrics.
+	m, err := s.engine.GetMetrics()
 	if err != nil {
 		return err
 	}
-	s.metrics.updateRocksDBStats(*stats)
+	s.metrics.updateEngineMetrics(*m)
 
 	// Get engine Env stats.
 	envStats, err := s.engine.GetEnvStats()
@@ -2625,17 +2625,11 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	}
 	s.metrics.updateEnvStats(*envStats)
 
-	sstables := s.engine.GetSSTables()
-	s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
-	readAmp := sstables.ReadAmplification(int(stats.L0SublevelCount))
-	s.metrics.RdbReadAmplification.Update(int64(readAmp))
-	s.metrics.RdbPendingCompaction.Update(stats.PendingCompactionBytesEstimate)
 	// Log this metric infrequently (with current configurations,
 	// every 10 minutes). Trigger on tick 1 instead of tick 0 so that
 	// non-periodic callers of this method don't trigger expensive
 	// stats.
 	if tick%logSSTInfoTicks == 1 /* every 10m */ {
-		log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
 		log.Infof(ctx, "%s", s.engine.GetCompactionStats())
 	}
 	return nil

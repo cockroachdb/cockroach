@@ -470,8 +470,7 @@ delete partial_indexes
       │         ├── secondary: filters
       │         │    └── c:7 = 'foo'
       │         └── secondary: filters
-      │              ├── a:5 > b:6
-      │              └── c:7 = 'bar'
+      │              └── (a:5 > b:6) AND (c:7 = 'bar')
       └── projections
            ├── c:7 = 'foo' [as=partial_index_del1:9]
            ├── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10]
