@@ -326,7 +326,7 @@ func (r *Refresher) ensureAllTables(
 	getAllTablesQuery := fmt.Sprintf(
 		`
 SELECT table_id FROM crdb_internal.tables AS OF SYSTEM TIME '-%s'
-WHERE schema_name = 'public'
+WHERE database_name IS NOT NULL
 AND drop_time IS NULL
 `,
 		initialTableCollectionDelay)
