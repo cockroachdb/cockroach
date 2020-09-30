@@ -1,5 +1,6 @@
 feature-allowlist
 sql.udts.*
+sql.schema.alter_type.*
 ----
 
 feature-usage
@@ -10,6 +11,7 @@ sql.udts.create_enum
 feature-usage
 ALTER TYPE t ADD VALUE 'howdy'
 ----
+sql.schema.alter_type.add_value
 sql.udts.alter_enum
 
 feature-usage
