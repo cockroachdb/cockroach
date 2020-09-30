@@ -347,3 +347,19 @@ FROM
       (d.adrelid = a.attrelid AND d.adnum = a.attnum)
   JOIN (SELECT 1 AS oid, 1 AS attnum) AS vals ON
       (c.oid = vals.oid AND a.attnum = vals.attnum);
+
+statement error relation ".*"regression_53686.*"" does not exist
+SELECT '\"regression_53686\"'::regclass
+
+statement ok
+CREATE TABLE "regression_53686""" (a int)
+
+query T
+SELECT 'regression_53686"'::regclass
+----
+"regression_53686"""
+
+query T
+SELECT 'public.regression_53686"'::regclass
+----
+"regression_53686"""
