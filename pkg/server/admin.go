@@ -1368,9 +1368,9 @@ func (s *adminServer) checkReadinessForHealthCheck() error {
 
 	// TODO(knz): update this code when progress is made on
 	// https://github.com/cockroachdb/cockroach/issues/45123
-	l, err := s.server.nodeLiveness.GetLiveness(s.server.NodeID())
-	if err != nil {
-		return s.serverError(err)
+	l, ok := s.server.nodeLiveness.GetLiveness(s.server.NodeID())
+	if !ok {
+		return status.Error(codes.Unavailable, "liveness record not found")
 	}
 	if !l.IsLive(s.server.clock.Now().GoTime()) {
 		return status.Errorf(codes.Unavailable, "node is not healthy")
@@ -1706,9 +1706,9 @@ func (s *adminServer) DecommissionStatus(
 	var res serverpb.DecommissionStatusResponse
 
 	for nodeID := range replicaCounts {
-		l, err := s.server.nodeLiveness.GetLiveness(nodeID)
-		if err != nil {
-			return nil, errors.Wrapf(err, "unable to get liveness for %d", nodeID)
+		l, ok := s.server.nodeLiveness.GetLiveness(nodeID)
+		if !ok {
+			return nil, errors.Newf("unable to get liveness for %d", nodeID)
 		}
 		nodeResp := serverpb.DecommissionStatusResponse_Status{
 			NodeID:       l.NodeID,

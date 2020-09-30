@@ -86,7 +86,9 @@ import (
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 var (
@@ -2000,6 +2002,9 @@ func (s *Server) Decommission(
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
 		if err != nil {
+			if errors.Is(err, kvserver.ErrMissingLivenessRecord) {
+				return grpcstatus.Error(codes.NotFound, kvserver.ErrMissingLivenessRecord.Error())
+			}
 			return err
 		}
 		if statusChanged {
