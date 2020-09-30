@@ -1954,8 +1954,7 @@ insert partial_indexes
       │    │         │    │    │         │    │         ├── secondary: filters
       │    │         │    │    │         │    │         │    └── c:10 = 'foo'
       │    │         │    │    │         │    │         └── secondary: filters
-      │    │         │    │    │         │    │              ├── a:8 > b:9
-      │    │         │    │    │         │    │              └── c:10 = 'bar'
+      │    │         │    │    │         │    │              └── (a:8 > b:9) AND (c:10 = 'bar')
       │    │         │    │    │         │    └── filters
       │    │         │    │    │         │         └── column1:5 = a:8
       │    │         │    │    │         └── filters
@@ -1971,8 +1970,7 @@ insert partial_indexes
       │    │         │    │         ├── secondary: filters
       │    │         │    │         │    └── c:14 = 'foo'
       │    │         │    │         └── secondary: filters
-      │    │         │    │              ├── a:12 > b:13
-      │    │         │    │              └── c:14 = 'bar'
+      │    │         │    │              └── (a:12 > b:13) AND (c:14 = 'bar')
       │    │         │    └── filters
       │    │         │         ├── column2:6 = b:13
       │    │         │         └── column3:7 = c:14
@@ -2029,8 +2027,7 @@ upsert partial_indexes
       │    │    │    │    │         ├── secondary: filters
       │    │    │    │    │         │    └── c:10 = 'foo'
       │    │    │    │    │         └── secondary: filters
-      │    │    │    │    │              ├── a:8 > b:9
-      │    │    │    │    │              └── c:10 = 'bar'
+      │    │    │    │    │              └── (a:8 > b:9) AND (c:10 = 'bar')
       │    │    │    │    └── filters
       │    │    │    │         ├── column2:6 = b:9
       │    │    │    │         └── column3:7 = c:10
@@ -2094,8 +2091,7 @@ upsert partial_indexes
       │    │    │    │         ├── secondary: filters
       │    │    │    │         │    └── c:10 = 'foo'
       │    │    │    │         └── secondary: filters
-      │    │    │    │              ├── a:8 > b:9
-      │    │    │    │              └── c:10 = 'bar'
+      │    │    │    │              └── (a:8 > b:9) AND (c:10 = 'bar')
       │    │    │    └── filters
       │    │    │         └── column1:5 = a:8
       │    │    └── projections
@@ -2553,8 +2549,7 @@ upsert t
       │    │    │    │    │    │    ├── columns: t.partial_index_put1:9 t.partial_index_del1:10 rowid:11!null crdb_internal_mvcc_timestamp:12
       │    │    │    │    │    │    └── partial index predicates
       │    │    │    │    │    │         └── secondary: filters
-      │    │    │    │    │    │              ├── t.partial_index_put1:9 > 0
-      │    │    │    │    │    │              └── t.partial_index_del1:10 > 0
+      │    │    │    │    │    │              └── (t.partial_index_put1:9 > 0) AND (t.partial_index_del1:10 > 0)
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── (t.partial_index_put1:9 > 0) AND (t.partial_index_del1:10 > 0)
       │    │    │    │    └── filters
