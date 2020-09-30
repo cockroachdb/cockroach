@@ -1,5 +1,8 @@
 # Regression test for incorrect post-processing setup in the join reader when
-# performing an index join (#54226).
+# performing an index join (#54226). Note that this only happened under high
+# verbosity, so this failure would only reproduce when this file is run with
+# --vmodule=processorsbase=4, which is the case for the nightly verbose logic
+# tests.
 
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
@@ -31,7 +34,6 @@ ALTER TABLE lineitem INJECT STATISTICS '[
     "distinct_count": 2500
   }
 ]';
-SELECT crdb_internal.set_vmodule('processorsbase=4')
 
 query R
 SELECT sum(l_extendedprice) FROM lineitem WHERE l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR AND l_extendedprice < 100
