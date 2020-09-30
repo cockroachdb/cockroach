@@ -102,6 +102,21 @@ SELECT upper('roacH7')
 upper
 ROACH7
 
+query T
+SELECT unaccent(str) FROM ( VALUES 
+   ('no_special_CHARACTERS1!'),
+   ('Żółć'),
+   ('⃞h̀ＥＬＬＯ`̀́⃞'),
+   ('Softhyphen­separator'),
+   ('some ̂thing')
+) tbl(str)
+----
+no_special_CHARACTERS1!
+Zolc
+hELLO`
+Softhyphen-separator
+something
+
 statement error unknown signature: upper\(decimal\)
 SELECT upper(2.2)
 

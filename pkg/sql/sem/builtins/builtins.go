@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/knz/strtime"
@@ -256,6 +257,26 @@ var builtins = map[string]builtinDefinition{
 			},
 			types.String,
 			"Converts all characters in `val` to their lower-case equivalents.",
+			tree.VolatilityImmutable,
+		),
+	),
+
+	"unaccent": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		stringOverload1(
+			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
+				var b strings.Builder
+				for _, ch := range s {
+					v, ok := unaccent.Dictionary[ch]
+					if ok {
+						b.WriteString(v)
+					} else {
+						b.WriteRune(ch)
+					}
+				}
+				return tree.NewDString(b.String()), nil
+			},
+			types.String,
+			"Removes accents (diacritic signs) from the text provided in `val`.",
 			tree.VolatilityImmutable,
 		),
 	),

@@ -433,6 +433,65 @@ func getBackupStatement(stmt tree.Statement) *annotatedBackupStatement {
 	}
 }
 
+func checkPrivilegesForBackup(
+	ctx context.Context,
+	backupStmt *annotatedBackupStatement,
+	p sql.PlanHookState,
+	targetDescs []catalog.Descriptor,
+	to []string,
+) error {
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
+	}
+	// Do not allow full cluster backups.
+	if backupStmt.Coverage() == tree.AllDescriptors {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role are allowed to perform full cluster backups")
+	}
+	// Do not allow tenant backups.
+	if backupStmt.Targets != nil && backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role can perform BACKUP TENANT")
+	}
+	for _, desc := range targetDescs {
+		switch desc := desc.(type) {
+		case catalog.DatabaseDescriptor, catalog.TableDescriptor:
+			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+				return err
+			}
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
+			if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
+				return err
+			}
+		}
+	}
+	knobs := p.ExecCfg().BackupRestoreTestingKnobs
+	if knobs != nil && knobs.AllowImplicitAccess {
+		return nil
+	}
+	// Check that none of the destinations require an admin role.
+	for _, uri := range to {
+		hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(uri)
+		if err != nil {
+			return err
+		}
+		if !hasExplicitAuth {
+			return pgerror.Newf(
+				pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to BACKUP to the specified %s URI",
+				uriScheme)
+		}
+	}
+
+	return nil
+}
+
 // backupPlanHook implements PlanHookFn.
 func backupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -502,10 +561,6 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if err := p.RequireAdminRole(ctx, "BACKUP"); err != nil {
-			return err
-		}
-
 		if !(p.ExtendedEvalContext().TxnImplicit || backupStmt.Options.Detached) {
 			return errors.Errorf("BACKUP cannot be used inside a transaction without DETACHED option")
 		}
@@ -570,30 +625,22 @@ func backupPlanHook(
 			return errors.New("no descriptors available to backup at selected time")
 		}
 
+		// Check BACKUP privileges.
+		err = checkPrivilegesForBackup(ctx, backupStmt, p, targetDescs, to)
+		if err != nil {
+			return err
+		}
+
 		var tables []catalog.TableDescriptor
 		statsFiles := make(map[descpb.ID]string)
-		// N.B.: These privilege checks currently do nothing since we require the
-		// user running the backup to be an admin. If the user is an Admin, they
-		// should have ALL privileges on these descriptors anyway.
 		for _, desc := range targetDescs {
 			switch desc := desc.(type) {
-			case catalog.DatabaseDescriptor:
-				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-					return err
-				}
 			case catalog.TableDescriptor:
-				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-					return err
-				}
 				tables = append(tables, desc)
 
 				// TODO (anzo): look into the tradeoffs of having all objects in the array to be in the same file,
 				// vs having each object in a separate file, or somewhere in between.
 				statsFiles[desc.GetID()] = backupStatisticsFileName
-			case catalog.TypeDescriptor, catalog.SchemaDescriptor:
-				if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
-					return err
-				}
 			}
 		}
 

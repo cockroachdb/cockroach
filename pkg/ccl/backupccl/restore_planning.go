@@ -1306,21 +1306,22 @@ func checkPrivilegesForRestore(
 		}
 	}
 	knobs := p.ExecCfg().BackupRestoreTestingKnobs
-	if knobs == nil || !knobs.AllowImplicitAccess {
-		// Check that none of the sources rely on implicit access.
-		for i := range from {
-			for j := range from[i] {
-				uri := from[i][j]
-				hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(uri)
-				if err != nil {
-					return err
-				}
-				if !hasExplicitAuth {
-					return pgerror.Newf(
-						pgcode.InsufficientPrivilege,
-						"only users with the admin role are allowed to RESTORE from the specified %s URI",
-						uriScheme)
-				}
+	if knobs != nil && knobs.AllowImplicitAccess {
+		return nil
+	}
+	// Check that none of the sources rely on implicit access.
+	for i := range from {
+		for j := range from[i] {
+			uri := from[i][j]
+			hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(uri)
+			if err != nil {
+				return err
+			}
+			if !hasExplicitAuth {
+				return pgerror.Newf(
+					pgcode.InsufficientPrivilege,
+					"only users with the admin role are allowed to RESTORE from the specified %s URI",
+					uriScheme)
 			}
 		}
 	}
