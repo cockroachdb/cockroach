@@ -25,6 +25,10 @@ type EventLogType string
 // NOTE: When you add a new event type here. Please manually add it to
 // pkg/ui/src/util/eventTypes.ts so that it will be recognized in the UI.
 const (
+	// EventLogInitialSQLExecuted is recorded when the SQL initialization code
+	// has been run by the first node upon cluter initialization.
+	EventLogInitialSQLExecuted EventLogType = "initial_sql_executed"
+
 	// EventLogCreateDatabase is recorded when a database is created.
 	EventLogCreateDatabase EventLogType = "create_database"
 	// EventLogDropDatabase is recorded when a database is dropped.

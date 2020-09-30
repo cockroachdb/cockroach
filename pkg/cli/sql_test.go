@@ -89,7 +89,7 @@ select '''
 			fmt.Fprintln(stderr, err)
 			return
 		}
-		err := runInteractive(conn, f)
+		err := runShell(conn, f, false /* allowExternalCommands */)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 		}

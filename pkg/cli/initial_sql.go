@@ -13,12 +13,17 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // runInitialSQL concerns itself with running "initial SQL" code when
@@ -31,13 +36,22 @@ import (
 func runInitialSQL(
 	ctx context.Context, s *server.Server, startSingleNode bool, adminUser string,
 ) (adminPassword string, err error) {
-	newCluster := s.InitialStart() && s.NodeID() == server.FirstNodeID
-	if !newCluster {
-		// The initial SQL code only runs the first time the cluster is initialized.
+	if s.NodeID() != server.FirstNodeID {
+		return "", waitUntilInitialSQLDone(ctx, s)
+	}
+
+	// We're on the first done. Has the initial SQL already run?
+	isDone, err := isInitialSQLDone(ctx, s)
+	if err != nil {
+		return "", err
+	}
+	if isDone {
+		log.Infof(ctx, "initial SQL has already run")
 		return "", nil
 	}
 
 	if startSingleNode {
+		log.Infof(ctx, "disabling replication for single-node cluster")
 		// For start-single-node, set the default replication factor to
 		// 1 so as to avoid warning messages and unnecessary rebalance
 		// churn.
@@ -50,13 +64,84 @@ func runInitialSQL(
 	}
 
 	if adminUser != "" && !s.Insecure() {
+		log.Infof(ctx, "creating admin user %q", adminUser)
 		adminPassword, err = createAdminUser(ctx, s, adminUser)
 		if err != nil {
 			return "", err
 		}
 	}
 
+	// If there are initialization scripts, run them.
+	if err := maybeRunScripts(ctx, s); err != nil {
+		return "", err
+	}
+
+	// We completed the SQL initialization. Tell all the other nodes we're done.
+	log.Infof(ctx, "initial SQL completed execution")
+	if err := markInitialSQLDone(ctx, s); err != nil {
+		return "", err
+	}
+
 	return adminPassword, nil
+}
+
+// markInitialSQLDone marks the initial SQL as having been executed.
+// This unlocks the client acceptor in every node in the cluster.
+func markInitialSQLDone(ctx context.Context, s *server.Server) error {
+	return s.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		_, err := ie.Exec(ctx, "mark-sql-init", nil,
+			`INSERT INTO system.eventlog(timestamp, "eventType", "targetID", "reportingID")
+          VALUES (now(), $1, 0, $2)`,
+			sql.EventLogInitialSQLExecuted, int32(s.NodeID()))
+		return err
+	})
+}
+
+// isInitialSQLDone returns true iff the initial SQL has been executed
+// already.
+func isInitialSQLDone(ctx context.Context, s *server.Server) (bool, error) {
+	isDone := false
+	err := s.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		vals, err := ie.QueryRow(ctx, "wait-for-sql-init", nil,
+			"SELECT count(*)=1 FROM system.eventlog WHERE \"eventType\" = $1",
+			sql.EventLogInitialSQLExecuted)
+		if err != nil {
+			return err
+		}
+		isDone = bool(*vals[0].(*tree.DBool))
+		return nil
+	})
+	return isDone, err
+}
+
+// waitUntilInitialSQLDone makes the node wait until the initial SQL has
+// been executed. This waits until a row with a particular event ID
+// appears in system.eventlog.
+func waitUntilInitialSQLDone(ctx context.Context, s *server.Server) error {
+	timer := timeutil.NewTimer()
+	defer timer.Stop()
+	for {
+		log.Infof(ctx, "waiting for initial SQL to complete execution")
+		isDone, err := isInitialSQLDone(ctx, s)
+		if err != nil {
+			return err
+		}
+		if isDone {
+			log.Infof(ctx, "initial SQL has completed")
+			break
+		}
+
+		// Wait a little bit before the next iteration, or let the context
+		// cancel the wait.
+		timer.Reset(time.Second)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			timer.Read = true
+		}
+	}
+	return nil
 }
 
 // createAdminUser creates an admin user with the given name.
@@ -108,4 +193,60 @@ func cliDisableReplication(ctx context.Context, s *server.Server) error {
 
 			return nil
 		})
+}
+
+// maybeRunScripts runs the configured initial configuration scripts.
+func maybeRunScripts(ctx context.Context, s *server.Server) error {
+	if startCtx.initialSQLDir == "" {
+		// Directory not configured. No-op.
+		return nil
+	}
+
+	scripts, err := filepath.Glob(filepath.Join(startCtx.initialSQLDir, "*.sql"))
+	if err != nil {
+		return err
+	}
+	if len(scripts) == 0 {
+		log.Infof(ctx, "no custom initial SQL scripts found in %q", startCtx.initialSQLDir)
+		return nil
+	}
+
+	// Fixup the CLI configuration since we're in a running server.
+	// TODO(knz): make this state part of the sqlConn object,
+	// instead of a global object.
+	cliCtx.isInteractive = false
+
+	// There are scripts to run. Use a loopback connection to run them.
+	// We use the root account for now.
+	sqlConn := newLoopbackSQLConn(s, security.RootUser)
+	if err := sqlConn.ensureConn(); err != nil {
+		return err
+	}
+
+	// Now run the scripts.
+	// TODO(knz): We may want to redirect stdout/stderr
+	// from the script to the log file.
+	for _, script := range scripts {
+		log.Infof(ctx, "executing initial SQL from %s", script)
+		if err := func() (err error) {
+			var f *os.File
+			f, err = os.Open(script)
+			if err != nil {
+				return err
+			}
+			defer func() {
+				err = errors.CombineErrors(err, f.Close())
+			}()
+
+			// Run the script inside the shell.
+			// We disable the execution of external commands with \! etc.
+			// so that the node process cannot be used to gain access
+			// to the host system.
+			return runShell(sqlConn, f, false /* allowExternalCommands */)
+		}(); err != nil {
+			log.Infof(ctx, "%s: initial SQL failed: %v", script, err)
+			return err
+		}
+	}
+	return nil
 }

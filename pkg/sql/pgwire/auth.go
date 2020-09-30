@@ -40,6 +40,9 @@ type authOptions struct {
 	// connType is the actual type of client connection (e.g. local,
 	// hostssl, hostnossl).
 	connType hba.ConnType
+	// loopback is true if the connection is in-memory from the server
+	// itself.
+	loopback bool
 	// auth is the current HBA configuration as returned by
 	// (*Server).GetAuthenticationConfiguration().
 	auth *hba.Conf
@@ -136,8 +139,16 @@ func (c *conn) findAuthenticationMethod(
 	if authOpt.insecure {
 		// Insecure connections always use "trust" no matter what, and the
 		// remaining of the configuration is ignored.
+		// TODO(knz): Remove this. See issue #53404.
 		methodFn = authTrust
 		hbaEntry = &insecureEntry
+		return
+	}
+	if authOpt.loopback {
+		// The loopback (in-memory) connection is used by the server
+		// itself and uses the trust method.
+		methodFn = authTrust
+		hbaEntry = &loopbackEntry
 		return
 	}
 

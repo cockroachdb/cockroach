@@ -380,6 +380,10 @@ var startCtx struct {
 	// logging settings specific to file logging.
 	logDir log.DirName
 
+	// initialSQLDir is the directory containing SQL initialization
+	// scripts.
+	initialSQLDir string
+
 	// geoLibsDir is used to specify locations of the GEOS library.
 	geoLibsDir string
 }
@@ -399,6 +403,7 @@ func setStartContextDefaults() {
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
+	startCtx.initialSQLDir = ""
 }
 
 // quitCtx captures the command-line parameters of the `quit` and

@@ -392,6 +392,8 @@ func init() {
 		stringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
 
+		stringFlag(f, &startCtx.initialSQLDir, cliflags.InitialSQLDir)
+
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
 		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)

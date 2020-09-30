@@ -88,9 +88,15 @@ func (l *loopbackListener) Connect(ctx context.Context) (net.Conn, error) {
 		return nil, errLocalListenerClosed
 	case <-l.active:
 		return nil, errLocalListenerClosed
+	case <-ctx.Done():
+		return nil, errLocalListenerClosed
 	case l.requests <- struct{}{}:
 	}
 	// Get conn from acceptor.
+	//
+	// Note: we do not check ctx.Done() here, because if the request was
+	// sent into the queue above the connection is ready for us to pick
+	// it up; we don't want to let it clog l.conns.
 	select {
 	case <-l.stopper.ShouldQuiesce():
 		return nil, errLocalListenerClosed
