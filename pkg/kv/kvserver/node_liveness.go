@@ -182,7 +182,7 @@ type NodeLiveness struct {
 
 	mu struct {
 		syncutil.RWMutex
-		onIsLive []IsLiveCallback
+		onIsLive []IsLiveCallback // see NodeLivenessOptions.OnSelfLive
 		// nodes is an in-memory cache of liveness records that NodeLiveness
 		// knows about (having learnt of them through gossip or through KV).
 		// It's a look-aside cache, and is accessed primarily through
@@ -1305,7 +1305,7 @@ func (nl *NodeLiveness) maybeUpdate(ctx context.Context, newLivenessRec Liveness
 			fn(newLivenessRec.Liveness)
 		}
 	}
-	if newLivenessRec.Membership == kvserverpb.MembershipStatus_DECOMMISSIONED {
+	if newLivenessRec.Membership.Decommissioned() {
 		nl.mu.Lock()
 		fn := nl.mu.onNodeDecommissioned
 		nl.mu.Unlock()

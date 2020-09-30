@@ -1147,10 +1147,11 @@ func (ctx *Context) runHeartbeat(
 			ping := func(goCtx context.Context) error {
 				// NB: We want the request to fail-fast (the default), otherwise we won't
 				// be notified of transport failures.
-				err := interceptor(request)
-				if err == nil {
-					response, err = heartbeatClient.Ping(goCtx, request)
+				if err := interceptor(request); err != nil {
+					return err
 				}
+				var err error
+				response, err = heartbeatClient.Ping(goCtx, request)
 				return err
 			}
 			var err error
