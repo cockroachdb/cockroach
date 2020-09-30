@@ -1306,6 +1306,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... UNSPLIT ALL
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER TABLE ... INJECT STATISTICS ...  (experimental)
+//   ALTER TABLE ... OWNER TO {<newowner> | CURRENT_USER | SESSION_USER }
 //   ALTER TABLE ... PARTITION BY RANGE ( <name...> ) ( <rangespec> )
 //   ALTER TABLE ... PARTITION BY LIST ( <name...> ) ( <listspec> )
 //   ALTER TABLE ... PARTITION BY NOTHING
