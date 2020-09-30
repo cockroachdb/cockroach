@@ -146,25 +146,33 @@ TRUNCATE foo
 statement error pgcode 42809 "foo" is not a table
 DROP TABLE foo
 
+# Create a sequence on another schema
+statement ok
+CREATE SCHEMA other_schema
+
+statement ok
+CREATE SEQUENCE other_schema.seq
+
 # List sequences with SHOW
 
-query T
+query TT rowsort
 SHOW SEQUENCES
 ----
-foo
-high_minvalue_test
-ignored_options_test
-lastval_test
-lastval_test_2
-show_create_test
+public        foo
+public        high_minvalue_test
+public        ignored_options_test
+public        lastval_test
+public        lastval_test_2
+other_schema  seq
+public        show_create_test
 
 statement ok
 CREATE DATABASE seqdb; USE seqdb; CREATE SEQUENCE otherseq; USE test
 
-query T
+query TT rowsort
 SHOW SEQUENCES FROM seqdb
 ----
-otherseq
+public  otherseq
 
 # You can select from a sequence to get its value.
 
