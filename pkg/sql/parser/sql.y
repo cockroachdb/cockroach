@@ -1410,6 +1410,7 @@ alter_sequence_options_stmt:
 // %Text:
 // ALTER DATABASE <name> RENAME TO <newname>
 // ALTER DATABASE <name> OWNER TO <newowner>
+// ALTER DATABASE <name> CONVERT TO SCHEMA WITH PARENT <name>
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
