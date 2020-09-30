@@ -408,6 +408,44 @@ const (
 	emitNoResolved  = -1
 )
 
+type schemaChangeBoundary struct {
+	timestampsBySpan map[string]hlc.Timestamp
+}
+
+func (scb *schemaChangeBoundary) SetForSpan(span roachpb.Span, boundary hlc.Timestamp) {
+	scb.timestampsBySpan[string(span.Key)] = boundary
+}
+
+func (scb *schemaChangeBoundary) ClearForSpan(span roachpb.Span) {
+	delete(scb.timestampsBySpan, string(span.Key))
+}
+
+func (scb *schemaChangeBoundary) ForSpan(span roachpb.Span) (boundary hlc.Timestamp) {
+	return scb.timestampsBySpan[string(span.Key)]
+}
+
+func (scb *schemaChangeBoundary) ForAnySpanEquals(boundary hlc.Timestamp) bool {
+	for _, v := range scb.timestampsBySpan {
+		if v == boundary {
+			return true
+		}
+	}
+	return false
+}
+
+func (scb *schemaChangeBoundary) ArbitraryBoundary() (v hlc.Timestamp) {
+	for _, v := range scb.timestampsBySpan {
+		return v
+	}
+	return v
+}
+
+func emptySchemaChangeBoundary() schemaChangeBoundary {
+	var scb schemaChangeBoundary
+	scb.timestampsBySpan = make(map[string]hlc.Timestamp)
+	return scb
+}
+
 type changeFrontier struct {
 	execinfra.ProcessorBase
 
@@ -449,7 +487,7 @@ type changeFrontier struct {
 	// Resolved messages send from the changeAggregators. The policy regarding
 	// which schema change events lead to a schemaChangeBoundary is controlled
 	// by the KV feed based on OptSchemaChangeEvents and OptSchemaChangePolicy.
-	schemaChangeBoundary hlc.Timestamp
+	schemaChangeBoundary schemaChangeBoundary
 
 	// jobProgressedFn, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
@@ -486,11 +524,12 @@ func newChangeFrontierProcessor(
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
 	cf := &changeFrontier{
-		flowCtx: flowCtx,
-		spec:    spec,
-		memAcc:  memMonitor.MakeBoundAccount(),
-		input:   input,
-		sf:      span.MakeFrontier(spec.TrackedSpans...),
+		flowCtx:              flowCtx,
+		spec:                 spec,
+		memAcc:               memMonitor.MakeBoundAccount(),
+		input:                input,
+		sf:                   span.MakeFrontier(spec.TrackedSpans...),
+		schemaChangeBoundary: emptySchemaChangeBoundary(),
 	}
 	if err := cf.Init(
 		cf,
@@ -634,7 +673,7 @@ func (cf *changeFrontier) closeMetrics() {
 // schemaChangeBoundaryReached returns true if the spanFrontier is at the
 // current schemaChangeBoundary.
 func (cf *changeFrontier) schemaChangeBoundaryReached() (r bool) {
-	return !cf.schemaChangeBoundary.IsEmpty() && cf.schemaChangeBoundary.Equal(cf.sf.Frontier())
+	return cf.schemaChangeBoundary.ForAnySpanEquals(cf.sf.Frontier())
 }
 
 // shouldFailOnSchemaChange checks the job's spec to determine whether it should
@@ -664,7 +703,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			// TODO(ajwerner): make this more useful by at least informing the client
 			// of which tables changed.
 			cf.MoveToDraining(pgerror.Newf(pgcode.SchemaChangeOccurred,
-				"schema change occurred at %v", cf.schemaChangeBoundary.Next().AsOfSystemTime()))
+				"schema change occurred at %v", cf.schemaChangeBoundary.ArbitraryBoundary().Next().AsOfSystemTime()))
 			break
 		}
 
@@ -727,12 +766,13 @@ func (cf *changeFrontier) noteResolvedSpan(d rowenc.EncDatum) error {
 
 	// We want to ensure that we mark the schemaChangeBoundary and then we want to detect when
 	// the frontier reaches to or past the schemaChangeBoundary.
-	if resolved.BoundaryReached && (cf.schemaChangeBoundary.IsEmpty() || resolved.Timestamp.Less(cf.schemaChangeBoundary)) {
-		cf.schemaChangeBoundary = resolved.Timestamp
+	boundaryForThisSpan := cf.schemaChangeBoundary.ForSpan(resolved.Span)
+	if resolved.BoundaryReached && (boundaryForThisSpan.IsEmpty() || resolved.Timestamp.Less(boundaryForThisSpan)) {
+		cf.schemaChangeBoundary.SetForSpan(resolved.Span, resolved.Timestamp)
 	}
 	// If we've moved past a schemaChangeBoundary, make sure to clear it.
-	if !resolved.BoundaryReached && !cf.schemaChangeBoundary.IsEmpty() && cf.schemaChangeBoundary.Less(resolved.Timestamp) {
-		cf.schemaChangeBoundary = hlc.Timestamp{}
+	if !resolved.BoundaryReached && !boundaryForThisSpan.IsEmpty() && boundaryForThisSpan.Less(resolved.Timestamp) {
+		cf.schemaChangeBoundary.ClearForSpan(resolved.Span)
 	}
 
 	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
