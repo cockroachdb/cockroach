@@ -256,6 +256,26 @@ filter              ·             ·
 ·                   table         session_variables@primary
 
 query TTT
+SELECT * FROM [EXPLAIN SHOW SCHEMAS] WHERE field != 'size'
+----
+·                                  distribution  local
+·                                  vectorized    false
+sort                               ·             ·
+ │                                 order         +nspname
+ └── hash join (right outer)       ·             ·
+      │                            equality      (oid) = (nspowner)
+      ├── virtual table            ·             ·
+      │                            table         pg_roles@primary
+      └── hash join                ·             ·
+           │                       equality      (nspname) = (schema_name)
+           ├── virtual table       ·             ·
+           │                       table         pg_namespace@primary
+           └── filter              ·             ·
+                │                  filter        catalog_name = 'test'
+                └── virtual table  ·             ·
+·                                  table         schemata@primary
+
+query TTT
 SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE field != 'size'
 ----
 ·                   distribution  local
