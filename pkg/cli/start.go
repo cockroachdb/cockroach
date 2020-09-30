@@ -1126,16 +1126,26 @@ func setupAndInitializeLoggingAndProfiling(
 		// particularly to new users (made worse by it always printing as [n?]).
 		addr := startCtx.serverListenAddr
 		if addr == "" {
-			addr = "<all your IP addresses>"
+			addr = "any of your IP addresses"
 		}
 		log.Shoutf(context.Background(), log.Severity_WARNING,
-			"RUNNING IN INSECURE MODE!\n\n"+
-				"- Your cluster is open for any client that can access %s.\n"+
-				"- Any user, even root, can log in without providing a password.\n"+
-				"- Any user, connecting as root, can read or write any data in your cluster.\n"+
-				"- There is no network encryption nor authentication, and thus no confidentiality.\n\n"+
-				"Check out how to secure your cluster: %s",
-			addr, log.Safe(base.DocsURL("secure-a-cluster.html")))
+			"ALL SECURITY CONTROLS HAVE BEEN DISABLED!\n\n"+
+				"This mode is intended for non-production testing only.\n"+
+				"\n"+
+				"In this mode:\n"+
+				"- Your cluster is open to any client that can access %s.\n"+
+				"- Intruders with access to your machine or network can observe client-server traffic.\n"+
+				"- Intruders can log in without password and read or write any data in the cluster.\n"+
+				"- Intruders can consume all your server's resources and cause unavailability.",
+			addr)
+		log.Shoutf(context.Background(), log.Severity_INFO,
+			"To start a secure server without mandating TLS for clients,\n"+
+				"consider --accept-sql-without-tls instead. For other options, see:\n\n"+
+				"- %s\n"+
+				"- %s",
+			unimplemented.MakeURL(53404),
+			log.Safe(base.DocsURL("secure-a-cluster.html")),
+		)
 	}
 
 	maybeWarnMemorySizes(ctx)

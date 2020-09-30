@@ -15,7 +15,7 @@ eexpect $prompt
 
 start_test "Check that --insecure reports that the server is really insecure"
 send "$argv start-single-node --host=localhost --insecure\r"
-eexpect "WARNING: RUNNING IN INSECURE MODE"
+eexpect "WARNING: ALL SECURITY CONTROLS HAVE BEEN DISABLED"
 eexpect "node starting"
 interrupt
 eexpect $prompt
