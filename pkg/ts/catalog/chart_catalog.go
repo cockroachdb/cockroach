@@ -1754,6 +1754,19 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "SQL Memory"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Current",
+				Metrics: []string{"sql.mem.root.current"},
+			},
+			{
+				Title:   "Max",
+				Metrics: []string{"sql.mem.root.max"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL"}},
 		Charts: []chartDescription{
 			{
