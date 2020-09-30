@@ -1884,18 +1884,18 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params := base.TestServerArgs{}
-	// Disable external processing of mutations so that the final check of
-	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
-	// was never observed by a stress test, it is here for safety.
-	blockGC := make(chan struct{})
-	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }}
-
 	const numAccounts = 1000
 	_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 		InitNone, base.TestClusterArgs{ServerArgs: params})
 	defer cleanup()
 
 	dir = dir + "/foo"
+
+	// Create a user defined type and check that it is cleaned up after the
+	// failed restore.
+	sqlDB.Exec(t, `CREATE TYPE data.myenum AS ENUM ('hello')`)
+	// Do the same with a user defined schema.
+	sqlDB.Exec(t, `USE data; CREATE SCHEMA myschema`)
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
 	// Bugger the backup by removing the SST files.
@@ -1919,7 +1919,6 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 		t, `database "data" does not exist`,
 		`DROP DATABASE data`,
 	)
-	close(blockGC)
 }
 
 func TestBackupRestoreUserDefinedSchemas(t *testing.T) {
