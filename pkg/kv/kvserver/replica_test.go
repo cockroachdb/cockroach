@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -12972,12 +12973,13 @@ func TestRangeUnavailableMessage(t *testing.T) {
 		1: IsLiveMapEntry{IsLive: true},
 	}
 	rs := raft.Status{}
-	act := rangeUnavailableMessage(desc, lm, &rs, &ba, dur)
-	const exp = `have been waiting 60.00s for proposing command RequestLease [/Min,/Min).
+	var s redact.StringBuilder
+	rangeUnavailableMessage(&s, desc, lm, &rs, &ba, dur)
+	const exp = `have been waiting 60.00s for proposing command RequestLease [‹/Min›,‹/Min›).
 This range is likely unavailable.
 Please submit this message to Cockroach Labs support along with the following information:
 
-Descriptor:  r10:{-} [(n1,s10):1, (n2,s20):2, next=3, gen=0]
+Descriptor:  r10:‹{a-z}› [(n1,s10):1, (n2,s20):2, next=3, gen=0]
 Live:        (n1,s10):1
 Non-live:    (n2,s20):2
 Raft Status: {"id":"0","term":0,"vote":"0","commit":0,"lead":"0","raftState":"StateFollower","applied":0,"progress":{},"leadtransferee":"0"}
@@ -12989,8 +12991,9 @@ support contract. Otherwise, please open an issue at:
 
   https://github.com/cockroachdb/cockroach/issues/new/choose
 `
-
-	require.Equal(t, exp, act)
+	act := s.RedactableString()
+	t.Log(act)
+	require.EqualValues(t, exp, act)
 }
 
 // Test that, depending on the request's ClientRangeInfo, descriptor and lease
