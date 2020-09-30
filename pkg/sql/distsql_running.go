@@ -806,7 +806,10 @@ func (r *DistSQLReceiver) Types() []*types.T {
 }
 
 // PlanAndRunSubqueries returns false if an error was encountered and sets that
-// error in the provided receiver.
+// error in the provided receiver. Note that if false is returned, then this
+// function will have closed all the subquery plans because it assumes that the
+// caller will not try to run the main plan given that the subqueries'
+// evaluation failed.
 func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	ctx context.Context,
 	planner *planner,
@@ -827,6 +830,14 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			maybeDistribute,
 		); err != nil {
 			recv.SetError(err)
+			// Usually we leave the closure of subqueries to occur when the
+			// whole plan is being closed (i.e. planTop.close); however, since
+			// we've encountered an error, we might never get to the point of
+			// closing the whole plan, so we choose to defensively close the
+			// subqueries here.
+			for i := range subqueryPlans {
+				subqueryPlans[i].plan.Close(ctx)
+			}
 			return false
 		}
 	}
