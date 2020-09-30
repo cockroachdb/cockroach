@@ -972,15 +972,32 @@ func getServerEndpointCounter(method string) telemetry.Counter {
 	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
 }
 
-// Start starts the server on the specified port, starts gossip and initializes
-// the node using the engines from the server's context. This is complex since
-// it sets up the listeners and the associated port muxing, but especially since
-// it has to solve the "bootstrapping problem": nodes need to connect to Gossip
-// fairly early, but what drives Gossip connectivity are the first range
-// replicas in the kv store. This in turn suggests opening the Gossip server
-// early. However, naively doing so also serves most other services prematurely,
-// which exposes a large surface of potentially underinitialized services. This
-// is avoided with some additional complexity that can be summarized as follows:
+// Start calls PreStart() and AcceptClient() in sequence.
+// This is suitable for use e.g. in tests.
+func (s *Server) Start(ctx context.Context) error {
+	if err := s.PreStart(ctx); err != nil {
+		return err
+	}
+	return s.AcceptClients(ctx)
+}
+
+// PreStart starts the server on the specified port, starts gossip and
+// initializes the node using the engines from the server's context.
+//
+// It does not activate the pgwire listener over the network / unix
+// socket, which is done by the AcceptClients() method. The separation
+// between the two exists so that SQL initialization can take place
+// before the first client is accepted.
+//
+// PreStart is complex since it sets up the listeners and the associated
+// port muxing, but especially since it has to solve the
+// "bootstrapping problem": nodes need to connect to Gossip fairly
+// early, but what drives Gossip connectivity are the first range
+// replicas in the kv store. This in turn suggests opening the Gossip
+// server early. However, naively doing so also serves most other
+// services prematurely, which exposes a large surface of potentially
+// underinitialized services. This is avoided with some additional
+// complexity that can be summarized as follows:
 //
 // - before blocking trying to connect to the Gossip network, we already open
 //   the admin UI (so that its diagnostics are available)
@@ -990,7 +1007,7 @@ func getServerEndpointCounter(method string) telemetry.Counter {
 //
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
-func (s *Server) Start(ctx context.Context) error {
+func (s *Server) PreStart(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
 
 	// Start the time sanity checker.
@@ -1691,7 +1708,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent()
 
-	if err := s.sqlServer.start(
+	if err := s.sqlServer.preStart(
 		workersCtx,
 		s.stopper,
 		s.cfg.TestingKnobs,
@@ -1711,6 +1728,24 @@ func (s *Server) Start(ctx context.Context) error {
 	// started. At this point we know that all sqlmigrations have successfully
 	// been run so it is safe to upgrade to the binary's current version.
 	s.startAttemptUpgrade(ctx)
+
+	log.Event(ctx, "server initialized")
+	return nil
+}
+
+// AcceptClients starts listening for incoming SQL clients over the network.
+func (s *Server) AcceptClients(ctx context.Context) error {
+	workersCtx := s.AnnotateCtx(context.Background())
+
+	if err := s.sqlServer.startServeSQL(
+		workersCtx,
+		s.stopper,
+		s.sqlServer.connManager,
+		s.sqlServer.pgL,
+		s.cfg.SocketFile,
+	); err != nil {
+		return err
+	}
 
 	log.Event(ctx, "server ready")
 	return nil

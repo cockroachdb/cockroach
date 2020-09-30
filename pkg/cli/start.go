@@ -564,7 +564,7 @@ If problems persist, please see %s.`
 			}
 
 			// Attempt to start the server.
-			if err := s.Start(ctx); err != nil {
+			if err := s.PreStart(ctx); err != nil {
 				if le := (*server.ListenError)(nil); errors.As(err, &le) {
 					const errorPrefix = "consider changing the port via --%s"
 					if le.Addr == serverCfg.Addr {
@@ -593,6 +593,11 @@ If problems persist, please see %s.`
 			// TODO(knz): If/when we want auto-creation of an initial admin user,
 			// this can be achieved here.
 			if _, err := runInitialSQL(ctx, s, startSingleNode, "" /* adminUser */); err != nil {
+				return err
+			}
+
+			// Now let SQL clients in.
+			if err := s.AcceptClients(ctx); err != nil {
 				return err
 			}
 
