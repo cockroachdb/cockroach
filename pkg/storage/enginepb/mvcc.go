@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TxnEpoch is a zero-indexed epoch for a transaction. When a transaction
@@ -82,8 +83,8 @@ func TxnSeqIsIgnored(seq TxnSeq, ignored []IgnoredSeqNumRange) bool {
 }
 
 // Short returns a prefix of the transaction's ID.
-func (t TxnMeta) Short() string {
-	return t.ID.Short()
+func (t TxnMeta) Short() redact.SafeString {
+	return redact.SafeString(t.ID.Short())
 }
 
 // Total returns the range size as the sum of the key and value

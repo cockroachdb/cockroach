@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 //go:generate go run -tags gen-batch gen_batch.go
@@ -571,47 +572,53 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 	return parts
 }
 
-// String gives a brief summary of the contained requests and keys in the batch.
-// TODO(tschottdorf): the key range is useful information, but requires `keys`.
-// See #2198.
-func (ba BatchRequest) String() string {
-	var str []string
-	if ba.Txn != nil {
-		str = append(str, fmt.Sprintf("[txn: %s]", ba.Txn.Short()))
-	}
-	if ba.WaitPolicy != lock.WaitPolicy_Block {
-		str = append(str, fmt.Sprintf("[wait-policy: %s]", ba.WaitPolicy))
-	}
-	if ba.CanForwardReadTimestamp {
-		str = append(str, "[can-forward-ts]")
-	}
+// SafeFormat implements redact.SafeFormatter.
+// It gives a brief summary of the contained requests and keys in the batch.
+func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit
 		// a log message with a BatchRequest can be very long.
 		if count >= 20 && count < len(ba.Requests)-5 {
 			if count == 20 {
-				str = append(str, fmt.Sprintf("... %d skipped ...", len(ba.Requests)-25))
+				s.Printf(",... %d skipped ...", len(ba.Requests)-25)
 			}
 			continue
 		}
+		if count > 0 {
+			s.Print(redact.SafeString(", "))
+		}
+
 		req := arg.GetInner()
 		if et, ok := req.(*EndTxnRequest); ok {
 			h := req.Header()
-			str = append(str, fmt.Sprintf("%s(commit:%t) [%s] ",
-				req.Method(), et.Commit, h.Key))
+			s.Printf("%s(commit:%t) [%s]",
+				req.Method(), et.Commit, h.Key)
 		} else {
 			h := req.Header()
-			var s string
 			if req.Method() == PushTxn {
 				pushReq := req.(*PushTxnRequest)
-				s = fmt.Sprintf("PushTxn(%s->%s)", pushReq.PusherTxn.Short(), pushReq.PusheeTxn.Short())
+				s.Printf("PushTxn(%s->%s)", pushReq.PusherTxn.Short(), pushReq.PusheeTxn.Short())
 			} else {
-				s = req.Method().String()
+				s.Print(req.Method())
 			}
-			str = append(str, fmt.Sprintf("%s [%s,%s)", s, h.Key, h.EndKey))
+			s.Printf(" [%s,%s)", h.Key, h.EndKey)
 		}
 	}
-	return strings.Join(str, ", ")
+	{
+		if ba.Txn != nil {
+			s.Printf(", [txn: %s]", ba.Txn.Short())
+		}
+	}
+	if ba.WaitPolicy != lock.WaitPolicy_Block {
+		s.Printf(", [wait-policy: %s]", ba.WaitPolicy)
+	}
+	if ba.CanForwardReadTimestamp {
+		s.Printf(", [can-forward-ts]")
+	}
+}
+
+func (ba BatchRequest) String() string {
+	return redact.StringWithoutMarkers(ba)
 }
 
 // ValidateForEvaluation performs sanity checks on the batch when it's received

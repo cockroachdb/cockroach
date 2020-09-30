@@ -13,6 +13,9 @@ package roachpb
 // Method is the enumerated type for methods.
 type Method int
 
+// SafeValue implements redact.SafeValue.
+func (Method) SafeValue() {}
+
 //go:generate stringer -type=Method
 const (
 	// Get fetches the value for a key from the KV map, respecting a
