@@ -1121,43 +1121,43 @@ local
 statement ok
 ROLLBACK
 
-query TTT
+query TTTT
 SHOW ENUMS
 ----
-public as_bytes   bytes
-public dbs        postgres|mysql|spanner|cockroach
-public farewell   bye|seeya
-public greeting   hello|howdy|hi
-public greeting2  hello
-public int        Z|S of int
-public notbad     dup|DUP
+public  as_bytes   bytes                             root
+public  dbs        postgres|mysql|spanner|cockroach  root
+public  farewell   bye|seeya                         root
+public  greeting   hello|howdy|hi                    root
+public  greeting2  hello                             root
+public  int        Z|S of int                        root
+public  notbad     dup|DUP                           root
 
 query TTT
 SHOW TYPES
 ----
-public as_bytes   bytes
-public dbs        postgres|mysql|spanner|cockroach
-public farewell   bye|seeya
-public greeting   hello|howdy|hi
-public greeting2  hello
-public int        Z|S of int
-public notbad     dup|DUP
+public  as_bytes   root
+public  dbs        root
+public  farewell   root
+public  greeting   root
+public  greeting2  root
+public  int        root
+public  notbad     root
 
 statement ok
 CREATE SCHEMA uds;
 CREATE TYPE uds.typ AS ENUM ('schema')
 
-query TTT
+query TTTT
 SHOW ENUMS
 ----
-public as_bytes   bytes
-public dbs        postgres|mysql|spanner|cockroach
-public farewell   bye|seeya
-public greeting   hello|howdy|hi
-public greeting2  hello
-public int        Z|S of int
-public notbad     dup|DUP
-uds    typ        schema
+public  as_bytes   bytes                             root
+public  dbs        postgres|mysql|spanner|cockroach  root
+public  farewell   bye|seeya                         root
+public  greeting   hello|howdy|hi                    root
+public  greeting2  hello                             root
+public  int        Z|S of int                        root
+public  notbad     dup|DUP                           root
+uds     typ        schema                            root
 
 statement error pq: cannot create "fakedb.typ" because the target database or schema does not exist
 CREATE TYPE fakedb.typ AS ENUM ('schema')
