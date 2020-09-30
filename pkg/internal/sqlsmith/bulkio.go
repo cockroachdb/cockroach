@@ -71,7 +71,7 @@ func makeAsOf(s *Smither) tree.AsOfClause {
 	case 1:
 		expr = tree.NewStrVal("-2s")
 	case 2:
-		expr = tree.NewStrVal(timeutil.Now().Add(-2 * time.Second).Format(tree.TimestampTZOutputFormat))
+		expr = tree.NewStrVal(timeutil.Now().Add(-2 * time.Second).Format(timeutil.FullTimeFormat))
 	case 3:
 		expr = rowenc.RandDatum(s.rnd, types.Interval, false /* nullOk */)
 	case 4:

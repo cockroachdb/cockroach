@@ -526,7 +526,7 @@ const (
 	pgTimeTZFormat            = pgTimeFormat + "-07:00"
 	pgDateFormat              = "2006-01-02"
 	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
-	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00"
+	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00:00"
 	pgTime2400Format          = "24:00:00"
 )
 
