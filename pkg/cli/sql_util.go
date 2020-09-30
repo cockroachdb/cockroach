@@ -1159,7 +1159,7 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 	case time.Time:
 		// Since we do not know whether the datum is Timestamp or TimestampTZ,
 		// output the full format.
-		return t.Format(tree.TimestampTZOutputFormat)
+		return t.Format(timeutil.FullTimeFormat)
 	}
 
 	return fmt.Sprint(val)

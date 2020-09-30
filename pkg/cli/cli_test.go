@@ -626,7 +626,7 @@ func Example_sql_format() {
 	// INSERT 1
 	// sql -e select * from t.times
 	// bare	withtz
-	// 2016-01-25 10:10:10+00:00	2016-01-25 15:10:10+00:00
+	// 2016-01-25 10:10:10+00:00:00	2016-01-25 15:10:10+00:00:00
 }
 
 func Example_sql_column_labels() {
