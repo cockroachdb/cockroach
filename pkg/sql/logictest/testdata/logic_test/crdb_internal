@@ -79,11 +79,25 @@ SELECT * FROM crdb_internal.schema_changes
 table_id parent_id name type target_id target_name state direction
 
 # We don't select the modification time as it does not remain contant.
-query IITTITTTTTTT colnames
-SELECT table_id, parent_id, name, database_name, version, format_version, state, sc_lease_node_id, sc_lease_expiration_time, drop_time, audit_mode, schema_name FROM crdb_internal.tables WHERE NAME = 'descriptor'
+query IITTITTTTTTTI colnames
+SELECT
+  table_id,
+  parent_id,
+  name,
+  database_name,
+  version,
+  format_version,
+  state,
+  sc_lease_node_id,
+  sc_lease_expiration_time,
+  drop_time,
+  audit_mode,
+  schema_name,
+  parent_schema_id
+FROM crdb_internal.tables WHERE NAME = 'descriptor'
 ----
-table_id  parent_id  name       database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name
-3        1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public
+table_id  parent_id  name        database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name  parent_schema_id
+3         1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public       29
 
 # Verify that table names are not double escaped.
 

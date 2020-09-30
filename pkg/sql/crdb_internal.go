@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -255,7 +256,8 @@ CREATE TABLE crdb_internal.tables (
   sc_lease_expiration_time TIMESTAMP,
   drop_time                TIMESTAMP,
   audit_mode               STRING NOT NULL,
-  schema_name              STRING NOT NULL
+  schema_name              STRING NOT NULL,
+  parent_schema_id         INT NOT NULL
 )`,
 	generator: func(ctx context.Context, p *planner, dbDesc *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
@@ -265,10 +267,15 @@ CREATE TABLE crdb_internal.tables (
 				return err
 			}
 			dbNames := make(map[descpb.ID]string)
+			scNames := make(map[descpb.ID]string)
+			scNames[keys.PublicSchemaID] = sessiondata.PublicSchemaName
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
 				if dbDesc, ok := desc.(*dbdesc.Immutable); ok {
 					dbNames[dbDesc.GetID()] = dbDesc.GetName()
+				}
+				if scDesc, ok := desc.(*schemadesc.Immutable); ok {
+					scNames[scDesc.GetID()] = scDesc.GetName()
 				}
 			}
 
@@ -309,6 +316,7 @@ CREATE TABLE crdb_internal.tables (
 					dropTimeDatum,
 					tree.NewDString(table.GetAuditMode().String()),
 					tree.NewDString(scName),
+					tree.NewDInt(tree.DInt(int64(table.GetParentSchemaID()))),
 				)
 				return pusher.pushRow(row...)
 			}
@@ -328,7 +336,12 @@ CREATE TABLE crdb_internal.tables (
 					// effectively deleted.
 					dbName = fmt.Sprintf("[%d]", table.GetParentID())
 				}
-				if err := addDesc(table, tree.NewDString(dbName), "public"); err != nil {
+				schemaName := scNames[table.GetParentSchemaID()]
+				if schemaName == "" {
+					// The parent schema was deleted, possibly due to reasons mentioned above.
+					schemaName = fmt.Sprintf("[%d]", table.GetParentSchemaID())
+				}
+				if err := addDesc(table, tree.NewDString(dbName), schemaName); err != nil {
 					return err
 				}
 			}
