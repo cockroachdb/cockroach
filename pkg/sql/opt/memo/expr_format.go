@@ -790,7 +790,8 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	case opt.FiltersOp:
 		// Show empty Filters expression as "filters (true)".
 		if scalar.ChildCount() == 0 {
-			tp.Child("filters (true)")
+			f.Buffer.WriteString("filters (true)")
+			tp.Child(f.Buffer.String())
 			return
 		}
 

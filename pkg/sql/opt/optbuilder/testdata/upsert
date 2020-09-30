@@ -1954,8 +1954,7 @@ insert partial_indexes
       │    │         │    │    │         │    │         ├── secondary: filters
       │    │         │    │    │         │    │         │    └── c:10 = 'foo'
       │    │         │    │    │         │    │         └── secondary: filters
-      │    │         │    │    │         │    │              ├── a:8 > b:9
-      │    │         │    │    │         │    │              └── c:10 = 'bar'
+      │    │         │    │    │         │    │              └── (a:8 > b:9) AND (c:10 = 'bar')
       │    │         │    │    │         │    └── filters
       │    │         │    │    │         │         └── column1:5 = a:8
       │    │         │    │    │         └── filters
@@ -1971,8 +1970,7 @@ insert partial_indexes
       │    │         │    │         ├── secondary: filters
       │    │         │    │         │    └── c:14 = 'foo'
       │    │         │    │         └── secondary: filters
-      │    │         │    │              ├── a:12 > b:13
-      │    │         │    │              └── c:14 = 'bar'
+      │    │         │    │              └── (a:12 > b:13) AND (c:14 = 'bar')
       │    │         │    └── filters
       │    │         │         ├── column2:6 = b:13
       │    │         │         └── column3:7 = c:14
@@ -2029,8 +2027,7 @@ upsert partial_indexes
       │    │    │    │    │         ├── secondary: filters
       │    │    │    │    │         │    └── c:10 = 'foo'
       │    │    │    │    │         └── secondary: filters
-      │    │    │    │    │              ├── a:8 > b:9
-      │    │    │    │    │              └── c:10 = 'bar'
+      │    │    │    │    │              └── (a:8 > b:9) AND (c:10 = 'bar')
       │    │    │    │    └── filters
       │    │    │    │         ├── column2:6 = b:9
       │    │    │    │         └── column3:7 = c:10
@@ -2094,8 +2091,7 @@ upsert partial_indexes
       │    │    │    │         ├── secondary: filters
       │    │    │    │         │    └── c:10 = 'foo'
       │    │    │    │         └── secondary: filters
-      │    │    │    │              ├── a:8 > b:9
-      │    │    │    │              └── c:10 = 'bar'
+      │    │    │    │              └── (a:8 > b:9) AND (c:10 = 'bar')
       │    │    │    └── filters
       │    │    │         └── column1:5 = a:8
       │    │    └── projections
