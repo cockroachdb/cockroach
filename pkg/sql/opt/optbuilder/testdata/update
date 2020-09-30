@@ -1700,8 +1700,7 @@ update partial_indexes
       │    │    │         ├── secondary: filters
       │    │    │         │    └── c:7 = 'foo'
       │    │    │         └── secondary: filters
-      │    │    │              ├── a:5 > b:6
-      │    │    │              └── c:7 = 'bar'
+      │    │    │              └── (a:5 > b:6) AND (c:7 = 'bar')
       │    │    └── projections
       │    │         ├── c:7 = 'foo' [as=partial_index_del1:9]
       │    │         ├── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10]
@@ -1734,8 +1733,7 @@ update partial_indexes
       │    │    │         ├── secondary: filters
       │    │    │         │    └── c:7 = 'foo'
       │    │    │         └── secondary: filters
-      │    │    │              ├── a:5 > b:6
-      │    │    │              └── c:7 = 'bar'
+      │    │    │              └── (a:5 > b:6) AND (c:7 = 'bar')
       │    │    └── projections
       │    │         ├── c:7 = 'foo' [as=partial_index_del1:9]
       │    │         ├── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10]
@@ -1779,8 +1777,7 @@ update t
       │    │    │    │    ├── columns: t.partial_index_put1:5 t.partial_index_del1:6 rowid:7!null crdb_internal_mvcc_timestamp:8
       │    │    │    │    └── partial index predicates
       │    │    │    │         └── secondary: filters
-      │    │    │    │              ├── t.partial_index_put1:5 > 0
-      │    │    │    │              └── t.partial_index_del1:6 > 0
+      │    │    │    │              └── (t.partial_index_put1:5 > 0) AND (t.partial_index_del1:6 > 0)
       │    │    │    └── filters
       │    │    │         └── (t.partial_index_put1:5 = 10) AND (t.partial_index_del1:6 = 20)
       │    │    └── projections
