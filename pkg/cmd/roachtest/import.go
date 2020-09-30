@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,11 +35,7 @@ func registerImportTPCC(r *testRegistry) {
 		hc := NewHealthChecker(c, c.All())
 		m.Go(hc.Runner)
 
-		workloadStr := `./workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`
-		if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
-			workloadStr += " --deprecated-fk-indexes"
-		}
-
+		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
 			defer hc.Done()
