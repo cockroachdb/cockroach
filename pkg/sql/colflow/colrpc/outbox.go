@@ -299,8 +299,6 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 func (o *Outbox) runWithStream(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
 ) {
-	o.Input().Init()
-
 	waitCh := make(chan struct{})
 	go func() {
 		for {
@@ -323,7 +321,14 @@ func (o *Outbox) runWithStream(
 		close(waitCh)
 	}()
 
-	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, cancelFn)
+	var terminatedGracefully bool
+	var errToSend error
+	// We can encounter an expected error during Init (e.g. an operator
+	// attempts to allocate a batch, but the memory budget limit has been
+	// reached), so we need to wrap it with a catcher.
+	if errToSend = colexecerror.CatchVectorizedRuntimeError(o.Input().Init); errToSend == nil {
+		terminatedGracefully, errToSend = o.sendBatches(ctx, stream, cancelFn)
+	}
 	if terminatedGracefully || errToSend != nil {
 		o.moveToDraining(ctx)
 		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
