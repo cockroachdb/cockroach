@@ -394,9 +394,9 @@ func init() {
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
+		//
+		// NB: Insecure is deprecated. See #53404.
 		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
-		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
-			"For details, see: "+unimplemented.MakeURL(53404))
 
 		// Enable/disable various external storage endpoints.
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
@@ -561,9 +561,8 @@ func init() {
 		stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
+		// NB: Insecure is deprecated. See #53404.
 		boolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure)
-		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
-			"For details, see: "+unimplemented.MakeURL(53404))
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
@@ -667,7 +666,14 @@ func init() {
 	boolFlag(dumpCmd.Flags(), &dumpCtx.dumpAll, cliflags.DumpAll)
 
 	// Commands that establish a SQL connection.
-	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd, doctorClusterCmd}
+	sqlCmds := []*cobra.Command{
+		sqlShellCmd,
+		dumpCmd,
+		demoCmd,
+		doctorClusterCmd,
+		lsNodesCmd,
+		statusNodeCmd,
+	}
 	sqlCmds = append(sqlCmds, authCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	sqlCmds = append(sqlCmds, stmtDiagCmds...)
@@ -675,6 +681,9 @@ func init() {
 	sqlCmds = append(sqlCmds, userFileCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.Flags()
+		// The --echo-sql flag is special: it is a marker for CLI tests to
+		// recognize SQL-only commands. If/when adding this flag to non-SQL
+		// commands, ensure the isSQLCommand() predicate is updated accordingly.
 		boolFlag(f, &sqlCtx.echo, cliflags.EchoSQL)
 
 		if cmd != demoCmd {
@@ -744,8 +753,11 @@ func init() {
 		varFlag(f, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
 		varFlag(f, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
 		boolFlag(f, &demoCtx.insecure, cliflags.ClientInsecure)
-		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
-			"For details, see: "+unimplemented.MakeURL(53404))
+		// NB: Insecure for `cockroach demo` is deprecated. See #53404.
+		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name,
+			"to start a test server without any security, run start-single-node --insecure\n"+
+				"For details, see: "+unimplemented.MakeURL(53404))
+
 		boolFlag(f, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense)
 		// Mark the --global flag as hidden until we investigate it more.
 		boolFlag(f, &demoCtx.simulateLatency, cliflags.Global)
@@ -809,9 +821,8 @@ func init() {
 		// NB: serverInsecure populates baseCfg.{Insecure,SSLCertsDir} in this the following method
 		// (which is a PreRun for this command):
 		_ = extraServerFlagInit // guru assignment
+		// NB: Insecure is deprecated. See #53404.
 		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
-		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
-			"For details, see: "+unimplemented.MakeURL(53404))
 
 		stringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
