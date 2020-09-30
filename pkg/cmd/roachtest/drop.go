@@ -88,7 +88,7 @@ func registerDrop(r *testRegistry) {
 
 				t.l.Printf("Node %d space used: %s\n", j, humanizeutil.IBytes(int64(size)))
 
-				// Return if the size of the directory is less than 100mb
+				// Return if the size of the directory is less than expected.
 				if size < initDiskSpace {
 					t.Fatalf("Node %d space used: %s less than %s", j, humanizeutil.IBytes(int64(size)),
 						humanizeutil.IBytes(int64(initDiskSpace)))
@@ -160,9 +160,7 @@ func registerDrop(r *testRegistry) {
 
 	warehouses := 100
 	numNodes := 9
-
-	// 1GB
-	initDiskSpace := int(1e9)
+	initDiskSpace := 256 << 20 // 256 MB
 
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
@@ -175,9 +173,7 @@ func registerDrop(r *testRegistry) {
 			if local {
 				numNodes = 4
 				warehouses = 1
-
-				// 100 MB
-				initDiskSpace = 1e8
+				initDiskSpace = 5 << 20 // 5 MB
 				fmt.Printf("running with w=%d,nodes=%d in local mode\n", warehouses, numNodes)
 			}
 			runDrop(ctx, t, c, warehouses, numNodes, initDiskSpace)
