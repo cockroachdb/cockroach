@@ -1166,11 +1166,9 @@ func (t *TeeEngineIter) Key() MVCCKey {
 	return t.iter1.Key()
 }
 
-func (t *TeeEngineIter) unsafeRawKey() []byte {
-	type unsafeRawKeyGetter interface {
-		unsafeRawKey() []byte
-	}
-	return t.iter1.(unsafeRawKeyGetter).unsafeRawKey()
+// UnsafeRawKey implements the Iterator interface.
+func (t *TeeEngineIter) UnsafeRawKey() []byte {
+	return t.iter1.UnsafeRawKey()
 }
 
 // Value implements the Iterator interface.
