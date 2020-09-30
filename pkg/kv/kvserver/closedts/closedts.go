@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"google.golang.org/grpc"
 )
 
 // ReleaseFunc is a closure returned from Track which is used to record the
@@ -187,6 +188,16 @@ type RefreshFn func(...roachpb.RangeID)
 // A Dialer opens closed timestamp connections to receive updates from remote
 // nodes.
 type Dialer interface {
-	Dial(context.Context, roachpb.NodeID) (ctpb.Client, error)
+	Dial(context.Context, roachpb.NodeID) (BackwardsCompatibleClosedTimestampClient, error)
 	Ready(roachpb.NodeID) bool // if false, Dial is likely to fail
+}
+
+// BackwardsCompatibleClosedTimestampClient is the interface implemented by
+// closed-timestamp client connections. It exposes separate methods for talking
+// to 20.1 and to 19.2 servers.
+type BackwardsCompatibleClosedTimestampClient interface {
+	// Get starts an update stream.
+	Get(ctx context.Context, opts ...grpc.CallOption) (ctpb.Client, error)
+	// Get192 is like Get, but uses the RPC service exposed by 19.2 clients.
+	Get192(ctx context.Context, opts ...grpc.CallOption) (ctpb.Client, error)
 }
