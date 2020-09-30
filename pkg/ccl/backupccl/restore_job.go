@@ -768,7 +768,7 @@ func remapRelevantStatistics(
 }
 
 // isDatabaseEmpty checks if there exists any tables in the given database.
-// It pretends that the `ignoredTables` do not exist for the purposes of
+// It pretends that the ignoredChildren do not exist for the purposes of
 // checking if a database is empty.
 //
 // It is used to construct a transaction which deletes a set of tables as well
@@ -781,14 +781,14 @@ func isDatabaseEmpty(
 	ctx context.Context,
 	txn *kv.Txn,
 	dbDesc catalog.DatabaseDescriptor,
-	ignoredTables map[descpb.ID]struct{},
+	ignoredChildren map[descpb.ID]struct{},
 ) (bool, error) {
 	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, keys.SystemSQLCodec)
 	if err != nil {
 		return false, err
 	}
 	for _, desc := range allDescs {
-		if _, ok := ignoredTables[desc.GetID()]; ok {
+		if _, ok := ignoredChildren[desc.GetID()]; ok {
 			continue
 		}
 		if desc.GetParentID() == dbDesc.GetID() {
@@ -1583,25 +1583,34 @@ func (r *restoreResumer) dropDescriptors(
 	// database during the restore).
 	var isDBEmpty bool
 	var err error
-	ignoredTables := make(map[descpb.ID]struct{})
+	ignoredChildDescIDs := make(map[descpb.ID]struct{})
 	for _, table := range details.TableDescs {
-		ignoredTables[table.ID] = struct{}{}
+		ignoredChildDescIDs[table.ID] = struct{}{}
 	}
+	for _, typ := range details.TypeDescs {
+		ignoredChildDescIDs[typ.ID] = struct{}{}
+	}
+	for _, schema := range details.SchemaDescs {
+		ignoredChildDescIDs[schema.ID] = struct{}{}
+	}
+
 	deletedDBs := make(map[descpb.ID]struct{})
 	for _, dbDesc := range details.DatabaseDescs {
 		db := dbdesc.NewExistingMutable(*dbDesc)
-		// We need to ignore details.TableDescs since we haven't committed the txn that deletes these.
-		isDBEmpty, err = isDatabaseEmpty(ctx, txn, db, ignoredTables)
+		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
+		isDBEmpty, err = isDatabaseEmpty(ctx, txn, db, ignoredChildDescIDs)
 		if err != nil {
 			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", db.GetName())
 		}
 
-		if isDBEmpty {
-			descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, db.GetID())
-			b.Del(descKey)
-			b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(keys.SystemSQLCodec))
-			deletedDBs[db.GetID()] = struct{}{}
+		if !isDBEmpty {
+			log.Warningf(ctx, "preserving database %s on restore failure because it contains new child objects or schemas", db.GetName())
+			continue
 		}
+		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, db.GetID())
+		b.Del(descKey)
+		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(keys.SystemSQLCodec))
+		deletedDBs[db.GetID()] = struct{}{}
 	}
 
 	// For each database that had a child schema deleted (regardless of whether
