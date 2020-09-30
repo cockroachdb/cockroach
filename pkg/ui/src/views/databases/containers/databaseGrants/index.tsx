@@ -82,7 +82,7 @@ export class DatabaseSummaryGrants extends DatabaseSummaryBase {
             <SummaryCard>
                 <SummaryHeadlineStat
                   title="Total Users"
-                  tooltip="Total users that have been granted permissions on this table."
+                  tooltip="Total users that have been granted permissions on this database."
                   value={this.totalUsers()}
                 />
             </SummaryCard>
