@@ -20,9 +20,6 @@ import (
 
 // buildPartialIndexPredicate builds a memo.FiltersExpr from the given
 // tree.Expr. The expression must be of type Bool and it must be immutable.
-// Simple normalization is applied to the expression in order to facilitate
-// implication logic. See Factory.NormalizePartialIndexPredicate for more
-// details.
 //
 // Note: This function should only be used to build partial index predicate
 // expressions that have only a table's columns in scope and that are not part
@@ -50,7 +47,62 @@ func (b *Builder) buildPartialIndexPredicate(tableScope *scope, expr tree.Expr) 
 		panic(errors.AssertionFailedf("partial index predicate is not immutable"))
 	}
 
-	// Wrap the predicate filter expression in a FiltersExpr and normalize it.
+	// Wrap the expression in a FiltersExpr and normalize it by constructing a
+	// Select expression.
 	filters := memo.FiltersExpr{filter}
-	return b.factory.NormalizePartialIndexPredicate(filters)
+	selExpr := b.factory.ConstructSelect(tableScope.expr, filters)
+
+	// If the normalized relational expression is a Select, return the filters.
+	if sel, ok := selExpr.(*memo.SelectExpr); ok {
+		return sel.Filters
+	}
+
+	// Otherwise, the filters may be either true or false. Check the cardinality
+	// to determine which one.
+	if selExpr.Relational().Cardinality.IsZero() {
+		return memo.FiltersExpr{b.factory.ConstructFiltersItem(memo.FalseSingleton)}
+	}
+
+	return memo.TrueFilter
+}
+
+// buildArbiterPredicate performs specific normalization functions to
+// normalize an arbiter predicate. We cannot perform full normalization,
+// because different filters should be treated separately. For example,
+// x < 0 AND x > 0 is not a contradiction when used as an arbiter predicate.
+func (b *Builder) buildArbiterPredicate(tableScope *scope, expr tree.Expr) memo.FiltersExpr {
+	texpr := tableScope.resolveAndRequireType(expr, types.Bool)
+	scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
+
+	// Wrap the expression in a FiltersExpr.
+	pred := memo.FiltersExpr{b.factory.ConstructFiltersItem(scalar)}
+
+	// Run SimplifyFilters so that adjacent top-level AND expressions are
+	// flattened into individual FiltersItems, like they would be during
+	// normalization of a SELECT query. See the SimplifySelectFilters
+	// normalization rule.
+	//
+	// NOTE: We currently do not recursively simplify the filters like
+	// SimplifySelectFilters rule does. This could cause a false-negative when
+	// partialidx.Implicator tries to prove that a filter implies a partial
+	// index predicate. This trade-off avoids complexity until we find a
+	// real-world example that motivates the recursive normalization.
+	if !b.factory.CustomFuncs().IsFilterFalse(pred) {
+		pred = b.factory.CustomFuncs().SimplifyFilters(pred)
+	}
+
+	// Run ConsolidateFilters so that adjacent top-level FiltersItems that
+	// constrain a single variable are combined into a RangeExpr. See the
+	// ConsolidateSelectFilters normalization rule.
+	if b.factory.CustomFuncs().CanConsolidateFilters(pred) {
+		pred = b.factory.CustomFuncs().ConsolidateFilters(pred)
+	}
+
+	// Run InlineConstVar so that constant variables are inlined. See the
+	// InlineConstVar normalization rule.
+	if b.factory.CustomFuncs().CanInlineConstVar(pred) {
+		pred = b.factory.CustomFuncs().InlineConstVar(pred)
+	}
+
+	return pred
 }

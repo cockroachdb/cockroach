@@ -1370,3 +1370,20 @@ CREATE TABLE t54649_b (
 
 statement ok
 SELECT i FROM t54649_b WHERE c
+
+# Regression test for #54819. Ensure predicates are fully normalized.
+subtest regression_54819
+
+statement ok
+CREATE TABLE public.indexes_article (
+    id INT8 NOT NULL DEFAULT unique_rowid(),
+    headline VARCHAR(100) NOT NULL,
+    pub_date TIMESTAMPTZ NOT NULL,
+    published BOOL NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    INDEX indexes_article_headline_pub_date_b992dbba_idx (headline ASC, pub_date ASC),
+    FAMILY "primary" (id, headline, pub_date, published)
+)
+
+statement ok
+CREATE INDEX "recent_article_idx" ON "indexes_article" ("pub_date") WHERE "pub_date" IS NOT NULL

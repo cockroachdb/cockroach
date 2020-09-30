@@ -1242,10 +1242,20 @@ func (mb *mutationBuilder) arbiterIndexes(
 			return util.MakeFastIntSet(idx)
 		}
 
-		// Initialize tableScope once and only if needed.
+		// Initialize tableScope once and only if needed. We need to build a scan
+		// so we can use the logical properties of the scan to fully normalize the
+		// index predicates.
 		if tableScope == nil {
-			tableScope = mb.b.allocScope()
-			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+			tableScope = mb.b.buildScan(
+				tabMeta, tableOrdinals(tabMeta.Table, columnKinds{
+					includeMutations: false,
+					includeSystem:    false,
+					includeVirtual:   false,
+				}),
+				nil, /* indexFlags */
+				noRowLocking,
+				mb.b.allocScope(),
+			)
 		}
 
 		// If the index is a pseudo-partial index, it can always be an arbiter.
@@ -1266,7 +1276,7 @@ func (mb *mutationBuilder) arbiterIndexes(
 				im.Init(mb.b.factory, mb.md, mb.b.evalCtx)
 			}
 
-			arbiterFilter := mb.b.buildPartialIndexPredicate(tableScope, arbiterPredicate)
+			arbiterFilter := mb.b.buildArbiterPredicate(tableScope, arbiterPredicate)
 			if _, ok := im.FiltersImplyPredicate(arbiterFilter, predFilter); ok {
 				arbiters.Add(idx)
 			}
