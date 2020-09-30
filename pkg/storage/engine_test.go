@@ -719,7 +719,7 @@ func TestEngineTimeBound(t *testing.T) {
 	}
 }
 
-func TestFlushWithSSTables(t *testing.T) {
+func TestFlushNumSSTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -749,8 +749,11 @@ func TestFlushWithSSTables(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			ssts := engine.GetSSTables()
-			if len(ssts) == 0 {
+			m, err := engine.GetMetrics()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if m.NumSSTables == 0 {
 				t.Fatal("expected non-zero sstables, got 0")
 			}
 		})
@@ -1148,19 +1151,19 @@ func TestIngestDelayLimit(t *testing.T) {
 	max, ramp := time.Second*5, time.Second*5/10
 
 	for _, tc := range []struct {
-		exp   time.Duration
-		stats Stats
+		exp     time.Duration
+		metrics Metrics
 	}{
-		{0, Stats{}},
-		{0, Stats{L0FileCount: 19, L0SublevelCount: -1}},
-		{0, Stats{L0FileCount: 20, L0SublevelCount: -1}},
-		{ramp, Stats{L0FileCount: 21, L0SublevelCount: -1}},
-		{ramp * 2, Stats{L0FileCount: 22, L0SublevelCount: -1}},
-		{ramp * 2, Stats{L0FileCount: 22, L0SublevelCount: 22}},
-		{ramp * 2, Stats{L0FileCount: 55, L0SublevelCount: 22}},
-		{max, Stats{L0FileCount: 55, L0SublevelCount: -1}},
+		{0, Metrics{}},
+		{0, Metrics{L0FileCount: 19, L0SublevelCount: -1}},
+		{0, Metrics{L0FileCount: 20, L0SublevelCount: -1}},
+		{ramp, Metrics{L0FileCount: 21, L0SublevelCount: -1}},
+		{ramp * 2, Metrics{L0FileCount: 22, L0SublevelCount: -1}},
+		{ramp * 2, Metrics{L0FileCount: 22, L0SublevelCount: 22}},
+		{ramp * 2, Metrics{L0FileCount: 55, L0SublevelCount: 22}},
+		{max, Metrics{L0FileCount: 55, L0SublevelCount: -1}},
 	} {
-		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &tc.stats))
+		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &tc.metrics))
 	}
 }
 

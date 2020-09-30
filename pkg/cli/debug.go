@@ -736,47 +736,6 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var debugSSTablesCmd = &cobra.Command{
-	Use:   "sstables <directory>",
-	Short: "list the sstables in a store",
-	Long: `
-
-List the sstables in a store. The output format is 1 or more lines of:
-
-  level [ total size #files ]: file sizes
-
-Only non-empty levels are shown. For levels greater than 0, the files span
-non-overlapping ranges of the key space. Level-0 is special in that sstables
-are created there by flushing the mem-table, thus every level-0 sstable must be
-consulted to see if it contains a particular key. Within a level, the file
-sizes are displayed in decreasing order and bucketed by the number of files of
-that size. The following example shows 3-level output. In Level-3, there are 19
-total files and 14 files that are 129 MiB in size.
-
-  1 [   8M  3 ]: 7M 1M 63K
-  2 [ 110M  7 ]: 31M 30M 13M[2] 10M 8M 5M
-  3 [   2G 19 ]: 129M[14] 122M 93M 24M 18M 9M
-
-The suffixes K, M, G and T are used for terseness to represent KiB, MiB, GiB
-and TiB.
-`,
-	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugSSTables),
-}
-
-func runDebugSSTables(cmd *cobra.Command, args []string) error {
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-
-	db, err := OpenExistingStore(args[0], stopper, true /* readOnly */)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("%s", db.GetSSTables())
-	return nil
-}
-
 var debugGossipValuesCmd = &cobra.Command{
 	Use:   "gossip-values",
 	Short: "dump all the values in a node's gossip instance",
@@ -1235,7 +1194,6 @@ var DebugCmdsForRocksDB = []*cobra.Command{
 	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
-	debugSSTablesCmd,
 }
 
 // All other debug commands go here.
