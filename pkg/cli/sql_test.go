@@ -191,6 +191,8 @@ func TestIsEndOfStatement(t *testing.T) {
 func TestHandleCliCmdSqlAlias(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	initCLIDefaults()
+
 	clientSideCommandTestsTable := []struct {
 		commandString string
 		wantSQLStmt   string
@@ -217,6 +219,7 @@ func TestHandleCliCmdSqlAlias(t *testing.T) {
 func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	initCLIDefaults()
 
 	clientSideCommandTests := []string{`\d goodarg badarg`, `\dz`}
 
