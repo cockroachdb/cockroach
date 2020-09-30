@@ -37,3 +37,8 @@ query R
 SELECT sum(l_extendedprice) FROM lineitem WHERE l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR AND l_extendedprice < 100
 ----
 NULL
+
+# It's important to reduce the vmodule setting, otherwise this will stay on for
+# all subsequent tests.
+statement ok
+SELECT crdb_internal.set_vmodule('processorsbase=0')
