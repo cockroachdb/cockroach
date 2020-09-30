@@ -14,4 +14,3 @@ CREATE TABLE child_multi_2 (
   a INT,
   FOREIGN KEY (a,b,c) REFERENCES parent_multi(pa,pb,pc) ON DELETE CASCADE
 );
-
