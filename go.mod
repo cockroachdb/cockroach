@@ -36,17 +36,18 @@ require (
 	github.com/cockroachdb/cockroach-go v0.0.0-20200504194139-73ffeee90b62
 	github.com/cockroachdb/crlfmt v0.0.0-20200116191136-a78e1c207bc0
 	github.com/cockroachdb/datadriven v1.0.1-0.20200826112548-92602d883b11
-	github.com/cockroachdb/errors v1.7.4
+	github.com/cockroachdb/errors v1.7.5
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
-	github.com/cockroachdb/pebble v0.0.0-20200908153531-a9c6d3b6685c
-	github.com/cockroachdb/redact v1.0.5
+	github.com/cockroachdb/pebble v0.0.0-20200924231108-71cdee7c3cc7
+	github.com/cockroachdb/redact v1.0.7
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2
 	github.com/cockroachdb/stress v0.0.0-20170808184505-29b5d31b4c3a
 	github.com/cockroachdb/ttycolor v0.0.0-20180709150743-a1d5aaeb377d
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
+	github.com/coreos/go-oidc v2.2.1+incompatible
 	github.com/dave/dst v0.24.0
 	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
 	github.com/docker/distribution v2.7.0+incompatible
@@ -128,6 +129,7 @@ require (
 	github.com/pierrre/geohash v1.0.0
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
 	github.com/pmezard/go-difflib v1.0.0
+	github.com/pquerna/cachecontrol v0.0.0-20200819021114-67c6ae64274f // indirect
 	github.com/prometheus/client_golang v1.1.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1
@@ -145,9 +147,8 @@ require (
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
 	go.etcd.io/etcd v0.0.0-00010101000000-000000000000
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	golang.org/x/exp v0.0.0-20200901203048-c4f52b2c50aa
+	golang.org/x/exp v0.0.0-20200908183739-ae8ad444f925
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
-	golang.org/x/mod v0.3.0 // indirect
 	golang.org/x/net v0.0.0-20200602114024-627f9648deb9
 	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
@@ -161,6 +162,7 @@ require (
 	google.golang.org/grpc v1.29.1
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 	gopkg.in/jcmturner/gokrb5.v7 v7.5.0 // indirect
+	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	gotest.tools v2.2.0+incompatible // indirect
 	honnef.co/go/tools v0.0.0-20190530104931-1f0868a609b7
