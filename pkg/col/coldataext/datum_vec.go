@@ -11,6 +11,8 @@
 package coldataext
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -80,7 +82,9 @@ func (d *Datum) Cast(dVec interface{}, toType *types.T) (tree.Datum, error) {
 // Hash returns the hash of the datum as a byte slice.
 func (d *Datum) Hash(da *rowenc.DatumAlloc) []byte {
 	ed := rowenc.EncDatum{Datum: maybeUnwrapDatum(d)}
-	b, err := ed.Fingerprint(d.ResolvedType(), da, nil /* appendTo */)
+	// We know that we have tree.Datum, so there will definitely be no need to
+	// decode ed for fingerprinting, so we pass in nil memory account.
+	b, err := ed.Fingerprint(context.TODO(), d.ResolvedType(), da, nil /* appendTo */, nil /* acc */)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}

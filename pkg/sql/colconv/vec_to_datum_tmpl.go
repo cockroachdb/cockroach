@@ -123,13 +123,9 @@ func (c *VecToDatumConverter) ConvertVecs(vecs []coldata.Vec, inputLen int, sel 
 	requiredLength := inputLen
 	if sel != nil {
 		// When sel is non-nil, it might be something like sel = [1023], so we
-		// need to allocate up to the largest index mentioned in sel.
-		requiredLength = 0
-		for _, idx := range sel[:inputLen] {
-			if idx+1 > requiredLength {
-				requiredLength = idx + 1
-			}
-		}
+		// need to allocate up to the largest index mentioned in sel. Here, we
+		// rely on the fact that selection vectors are increasing sequences.
+		requiredLength = sel[inputLen-1] + 1
 	}
 	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < requiredLength {
 		for _, vecIdx := range c.vecIdxsToConvert {
