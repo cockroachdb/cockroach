@@ -1331,40 +1331,45 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 
+	updateStmt := `UPDATE system.jobs SET claim_session_id = $1 WHERE id = $2`
+
 	t.Run("set details works", func(t *testing.T) {
-		job, exp := createJob(jobs.Record{
-			Details:  jobspb.RestoreDetails{},
-			Progress: jobspb.RestoreProgress{},
-		})
-		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
-			t.Fatal(err)
-		}
-		newDetails := jobspb.RestoreDetails{URIs: []string{"new"}}
+		job, exp := startLeasedJob(t, defaultRecord)
+		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+		newDetails := jobspb.ImportDetails{URIs: []string{"new"}}
 		exp.Record.Details = newDetails
-		if err := job.SetDetails(ctx, newDetails); err != nil {
-			t.Fatal(err)
-		}
-		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, job.SetDetails(ctx, newDetails))
+		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+		require.NoError(t, job.SetDetails(ctx, newDetails))
+
+		// Now change job's session id and check that updates are rejected.
+		_, err := exp.DB.Exec(updateStmt, "!@#!@$!$@#", *job.ID())
+		require.NoError(t, err)
+		require.Error(
+			t,
+			job.SetDetails(ctx, newDetails),
+			fmt.Sprintf("no such job %d found with session !@#!@$!$@#", *job.ID()),
+		)
+		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 	})
 
 	t.Run("set progress works", func(t *testing.T) {
-		job, exp := createJob(jobs.Record{
-			Details:  jobspb.RestoreDetails{},
-			Progress: jobspb.RestoreProgress{},
-		})
-		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
-			t.Fatal(err)
-		}
-		newDetails := jobspb.RestoreProgress{HighWater: []byte{42}}
-		exp.Record.Progress = newDetails
-		if err := job.SetProgress(ctx, newDetails); err != nil {
-			t.Fatal(err)
-		}
-		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
-			t.Fatal(err)
-		}
+		job, exp := startLeasedJob(t, defaultRecord)
+		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+		newProgress := jobspb.ImportProgress{ResumePos: []int64{42}}
+		exp.Record.Progress = newProgress
+		require.NoError(t, job.SetProgress(ctx, newProgress))
+		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
+
+		// Now change job's session id and check that updates are rejected.
+		_, err := exp.DB.Exec(updateStmt, "!@#!@$!$@#", *job.ID())
+		require.NoError(t, err)
+		require.Error(
+			t,
+			job.SetDetails(ctx, newProgress),
+			fmt.Sprintf("no such job %d found with session !@#!@$!$@#", *job.ID()),
+		)
+		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 	})
 
 	t.Run("job with created by fields", func(t *testing.T) {

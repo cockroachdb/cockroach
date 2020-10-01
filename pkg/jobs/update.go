@@ -105,15 +105,26 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		const selectStmt = "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRowEx(
-			ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
-			selectStmt, *j.id)
+		selectStmt := "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
+		if j.sessionID != "" {
+			selectStmt = fmt.Sprintf("%s AND claim_session_id=$2", selectStmt)
+		}
+		var err error
+		var row tree.Datums
+		if j.sessionID == "" {
+			row, err = j.registry.ex.QueryRowEx(
+				ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
+				selectStmt, *j.id)
+		} else {
+			row, err = j.registry.ex.QueryRowEx(
+				ctx, "log-job", txn, sessiondata.InternalExecutorOverride{User: security.RootUser},
+				selectStmt, *j.id, j.sessionID.UnsafeBytes())
+		}
 		if err != nil {
 			return err
 		}
 		if row == nil {
-			return errors.Errorf("no such job %d found", *j.id)
+			return errors.Errorf("no such job %d found with session %s", *j.ID(), j.SessionIDString())
 		}
 
 		statusString, ok := row[0].(*tree.DString)

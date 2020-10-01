@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,6 +46,7 @@ type Job struct {
 	id        *int64
 	createdBy *CreatedByInfo
 	txn       *kv.Txn
+	sessionID sqlliveness.SessionID
 	mu        struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
@@ -203,6 +205,15 @@ func SimplifyInvalidStatusError(err error) error {
 // be nil if Created has not yet been called.
 func (j *Job) ID() *int64 {
 	return j.id
+}
+
+// SessionIDString returns the session of the job that this Job is currently
+// tracking. This will be "<empty>" if the job is created before version 20.1.
+func (j *Job) SessionIDString() string {
+	if j.sessionID == "" {
+		return "<empty>"
+	}
+	return string(j.sessionID)
 }
 
 // CreatedBy returns name/id of this job creator.  This will be nil if this information
@@ -824,6 +835,11 @@ func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err erro
 		return nil, errors.AssertionFailedf(
 			"StartableJob %d cannot be started more than once", *sj.ID())
 	}
+	if sj.registry.startUsingSQLLivenessAdoption(ctx) && sj.sessionID == "" {
+		return nil, errors.AssertionFailedf(
+			"StartableJob %d cannot be started without sqlliveness session", *sj.ID())
+	}
+
 	defer func() {
 		if err != nil {
 			sj.registry.unregister(*sj.ID())
