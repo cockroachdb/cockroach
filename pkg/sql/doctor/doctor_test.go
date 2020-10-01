@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -68,6 +69,10 @@ func toBytes(t *testing.T, pb protoutil.Message) []byte {
 func TestExamineDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	droppedValidTableDesc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
+	descpb.TableFromDescriptor(droppedValidTableDesc, hlc.Timestamp{WallTime: 1}).
+		State = descpb.DescriptorState_DROP
 
 	tests := []struct {
 		descTable      doctor.DescriptorTable
@@ -269,6 +274,24 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 			},
 			expected: `Examining 1 descriptors and 3 namespace entries...
 Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names found [{ParentID:0 ParentSchemaID:0 Name:db3}]
+`,
+		},
+		{
+			descTable: doctor.DescriptorTable{
+				{ID: 1, DescBytes: toBytes(t, droppedValidTableDesc)},
+				{
+					ID: 2,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+					}}),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+			},
+			expected: `Examining 2 descriptors and 2 namespace entries...
+   Table   1: ParentID   2, ParentSchemaID 29, Name 't': dropped but namespace entry(s) found: [{2 29 t}]
 `,
 		},
 	}
