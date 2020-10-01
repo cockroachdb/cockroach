@@ -15,7 +15,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 func (d *delegator) delegateShowEnums() (tree.Statement, error) {
 	query := `
 SELECT
-	schema, name, string_agg(label, '|'), owner AS value
+	schema, name, string_agg(label, '|') AS values, owner
 FROM
 	(
 		SELECT
