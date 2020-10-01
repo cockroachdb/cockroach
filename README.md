@@ -4,7 +4,7 @@
 
 ---
 
-CockroachDB is a cloud-native SQL database for building global, scalable cloud services that survive disasters.
+**CockroachDB is an elastic, indestructible SQL database for developers building modern applications. **
 
 - [What is CockroachDB?](#what-is-cockroachdb)
 - [Docs](#docs)
@@ -19,8 +19,8 @@ CockroachDB is a cloud-native SQL database for building global, scalable cloud s
 
 ## What is CockroachDB?
 
-CockroachDB is a distributed SQL database built on a transactional and
-strongly-consistent key-value store. It **scales** horizontally;
+**CockroachDB** is a **distributed SQL database** built on a **transactional** and
+**strongly-consistent key-value store**. It **scales** horizontally;
 **survives** disk, machine, rack, and even datacenter failures with
 minimal latency disruption and no manual intervention; supports
 **strongly-consistent** ACID transactions; and provides a familiar
