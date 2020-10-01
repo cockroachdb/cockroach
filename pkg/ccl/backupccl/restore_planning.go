@@ -323,13 +323,34 @@ func allocateDescriptorRewrites(
 			}
 		}
 
-		// TODO (rohany, pbardea): This method is becoming too large. We should
-		//  split the individual components out into helper methods.
+		// TODO (rohany, pbardea): These checks really need to be refactored.
 		// Construct rewrites for any user defined schemas.
 		for _, sc := range schemasByID {
 			var targetDB string
 			if renaming {
 				targetDB = overrideDB
+			} else if descriptorCoverage == tree.AllDescriptors && sc.ParentID < catalogkeys.MaxDefaultDescriptorID {
+				// This is a table that is in a database that already existed at
+				// cluster creation time.
+				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.DefaultDatabaseName)
+				if err != nil {
+					return err
+				}
+				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.PgDatabaseName)
+				if err != nil {
+					return err
+				}
+
+				if sc.ParentID == systemschema.SystemDB.GetID() {
+					// For full cluster backups, put the system tables in the temporary
+					// system table.
+					targetDB = restoreTempSystemDB
+					descriptorRewrites[sc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
+				} else if sc.ParentID == defaultDBID {
+					targetDB = catalogkeys.DefaultDatabaseName
+				} else if sc.ParentID == postgresDBID {
+					targetDB = catalogkeys.PgDatabaseName
+				}
 			} else {
 				database, ok := databasesByID[sc.ParentID]
 				if !ok {
@@ -475,6 +496,28 @@ func allocateDescriptorRewrites(
 			var targetDB string
 			if renaming {
 				targetDB = overrideDB
+			} else if descriptorCoverage == tree.AllDescriptors && typ.ParentID < catalogkeys.MaxDefaultDescriptorID {
+				// This is a table that is in a database that already existed at
+				// cluster creation time.
+				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.DefaultDatabaseName)
+				if err != nil {
+					return err
+				}
+				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.PgDatabaseName)
+				if err != nil {
+					return err
+				}
+
+				if typ.ParentID == systemschema.SystemDB.GetID() {
+					// For full cluster backups, put the system tables in the temporary
+					// system table.
+					targetDB = restoreTempSystemDB
+					descriptorRewrites[typ.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
+				} else if typ.ParentID == defaultDBID {
+					targetDB = catalogkeys.DefaultDatabaseName
+				} else if typ.ParentID == postgresDBID {
+					targetDB = catalogkeys.PgDatabaseName
+				}
 			} else {
 				database, ok := databasesByID[typ.ParentID]
 				if !ok {
