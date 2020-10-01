@@ -79,6 +79,11 @@ func makeGCSStorage(
 	// "specified": the JSON object for authentication is given by the CREDENTIALS param.
 	// "implicit": only use the environment data.
 	// "": if default key is in the settings use it; otherwise use environment data.
+	if ioConf.DisableImplicitCredentials && conf.Auth != authParamSpecified {
+		return nil, errors.New(
+			"implicit credentials disallowed for gs due to --external-io-disable-implicit-credentials flag")
+	}
+
 	switch conf.Auth {
 	case "", authParamDefault:
 		var key string
@@ -115,10 +120,6 @@ func makeGCSStorage(
 		}
 		opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
 	case authParamImplicit:
-		if ioConf.DisableImplicitCredentials {
-			return nil, errors.New(
-				"implicit credentials disallowed for gs due to --external-io-implicit-credentials flag")
-		}
 		// Do nothing; use implicit params:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
 	default:
