@@ -1028,8 +1028,15 @@ func (s *vectorizedFlowCreator) setupFlow(
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
 			}
-			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
-				result.Op = colexec.NewInvariantsChecker(result.Op)
+			if flowCtx.Cfg != nil {
+				if flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
+					result.Op = colexec.NewInvariantsChecker(result.Op)
+				}
+				if st := flowCtx.Cfg.Settings; st != nil {
+					if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
+						result.Op = colexec.NewPanicInjector(result.Op)
+					}
+				}
 			}
 			if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
 				!result.IsStreaming {

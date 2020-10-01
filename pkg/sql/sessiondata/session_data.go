@@ -107,6 +107,11 @@ type SessionData struct {
 	// VectorizeRowCountThreshold indicates the row count above which the
 	// vectorized execution engine will be used if possible.
 	VectorizeRowCountThreshold uint64
+	// TestingVectorizeInjectPanics indicates whether random panics are
+	// injected into the vectorized flow execution. The goal of such behavior
+	// is making sure that errors that are propagated as panics in the
+	// vectorized engine are caught in all scenarios.
+	TestingVectorizeInjectPanics bool
 	// ForceSavepointRestart overrides the default SAVEPOINT behavior
 	// for compatibility with certain ORMs. When this flag is set,
 	// the savepoint name will no longer be compared against the magic
