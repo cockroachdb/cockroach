@@ -30,10 +30,7 @@ var Setups = map[string]Setup{
 	"empty": stringSetup(""),
 	// seed is a SQL statement that creates a table with most data types
 	// and some sample rows.
-	"seed": stringSetup(seedTable),
-	// seed-vec is like seed except only types supported by vectorized
-	// execution are used.
-	"seed-vec":    stringSetup(vecSeedTable),
+	"seed":        stringSetup(seedTable),
 	"rand-tables": randTables,
 }
 
@@ -121,29 +118,6 @@ INSERT INTO seed DEFAULT VALUES;
 CREATE INDEX on seed (_int8, _float8, _date);
 CREATE INVERTED INDEX on seed (_jsonb);
 `
-
-	vecSeedTable = `
-CREATE TABLE IF NOT EXISTS seed_vec AS
-	SELECT
-		g::INT2 AS _int2,
-		g::INT4 AS _int4,
-		g::INT8 AS _int8,
-		g::FLOAT8 AS _float8,
-		'2001-01-01'::DATE + g AS _date,
-		'2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
-		'2001-01-01'::TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
-		g * '1 day'::INTERVAL AS _interval,
-		g % 2 = 1 AS _bool,
-		g::DECIMAL AS _decimal,
-		g::STRING AS _string,
-		g::STRING::BYTES AS _bytes,
-		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid
-	FROM
-		generate_series(1, 5) AS g;
-
-INSERT INTO seed_vec DEFAULT VALUES;
-CREATE INDEX on seed_vec (_int8, _float8, _date);
-`
 )
 
 // SettingFunc generates a Setting.
@@ -177,12 +151,6 @@ var Settings = map[string]SettingFunc{
 	"no-ddl+rand":       randSetting(NoParallel, DisableDDLs()),
 	"ddl-nodrop":        randSetting(NoParallel, OnlyNoDropDDLs()),
 }
-
-// SettingVectorize is the setting for vectorizable. It is not included in
-// Settings because it has type restrictions during CREATE TABLE, but Settings
-// is designed to be used with anything in Setups, which may violate that
-// restriction.
-var SettingVectorize = staticSetting(Parallel, Vectorizable())
 
 var settingNames = func() []string {
 	var ret []string

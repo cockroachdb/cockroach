@@ -121,11 +121,6 @@ var (
 		{1, makeValuesTable},
 		{2, makeSelectTable},
 	}
-	vectorizableTableExprs = []tableExprWeight{
-		{20, makeEquiJoinExpr},
-		{20, makeMergeJoinExpr},
-		{20, makeSchemaTable},
-	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
 
 	selectStmts = []selectStatementWeight{
