@@ -112,6 +112,11 @@ func ExamineDescriptors(
 	verbose bool,
 	stdout io.Writer,
 ) (ok bool, err error) {
+	const (
+		namespaceTableID  = 2
+		namespace2TableID = 30
+	)
+
 	fmt.Fprintf(
 		stdout, "Examining %d descriptors and %d namespace entries...\n",
 		len(descTable), len(namespaceTable))
@@ -170,7 +175,12 @@ func ExamineDescriptors(
 		// Process namespace entries pointing to this descriptor.
 		names, ok := nMap[row.ID]
 		if !ok {
-			if !desc.Dropped() {
+			// TODO(spaskob): this check is too crude, we need more fine grained
+			// approach depending on all the possible non-20.1 possibilities and emit
+			// a warning if one of those states is encountered without returning a
+			// nonzero exit status and fail otherwise.
+			// See https://github.com/cockroachdb/cockroach/issues/55237.
+			if !desc.Dropped() && desc.GetID() != namespaceTableID {
 				fmt.Fprint(stdout, reportMsg(desc, "not being dropped but no namespace entry found"))
 				problemsFound = true
 			}
@@ -210,7 +220,7 @@ func ExamineDescriptors(
 					break
 				}
 			}
-			if !foundInDraining {
+			if !foundInDraining && desc.GetID() != namespace2TableID {
 				fmt.Fprint(
 					stdout,
 					reportMsg(desc, "namespace entry %+v not found in draining names", n),
@@ -218,7 +228,7 @@ func ExamineDescriptors(
 				problemsFound = true
 			}
 		}
-		if !found {
+		if !found && desc.GetID() != namespace2TableID {
 			fmt.Fprint(stdout, reportMsg(desc, "could not find name in namespace table"))
 			problemsFound = true
 			continue
