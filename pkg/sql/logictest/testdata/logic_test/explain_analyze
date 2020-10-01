@@ -1,3 +1,4 @@
+# LogicTest: !backup-restore
 # Regression tests for weird explain analyze cases.
 
 statement ok

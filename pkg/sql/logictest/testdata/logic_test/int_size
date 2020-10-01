@@ -1,3 +1,5 @@
+# LogicTest: !backup-restore
+
 subtest defaults
 
 query T

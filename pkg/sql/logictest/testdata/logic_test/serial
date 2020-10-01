@@ -1,3 +1,4 @@
+# LogicTest: !backup-restore
 subtest serial_rowid
 
 statement ok

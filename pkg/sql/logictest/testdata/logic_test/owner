@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant(49854)
+# LogicTest: !3node-tenant(49854) !backup-restore
 
 statement ok
 GRANT CREATE ON DATABASE test TO testuser
