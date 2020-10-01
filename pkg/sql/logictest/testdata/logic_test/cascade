@@ -1,3 +1,5 @@
+# LogicTest: !backup-restore
+
 # Tests for the experimental opt-driven cascades.
 subtest OptDriven
 

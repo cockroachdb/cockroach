@@ -1,3 +1,5 @@
+# LogicTest: !backup-restore
+
 # Transaction involving schema changes.
 statement ok
 BEGIN TRANSACTION

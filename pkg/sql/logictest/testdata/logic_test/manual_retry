@@ -1,3 +1,5 @@
+# LogicTest: !backup-restore
+
 subtest automatic_retry
 
 statement ok
