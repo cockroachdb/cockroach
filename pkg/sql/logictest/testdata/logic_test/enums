@@ -1121,9 +1121,10 @@ local
 statement ok
 ROLLBACK
 
-query TTTT
+query TTTT colnames
 SHOW ENUMS
 ----
+schema  name       values                            owner
 public  as_bytes   bytes                             root
 public  dbs        postgres|mysql|spanner|cockroach  root
 public  farewell   bye|seeya                         root
@@ -1132,9 +1133,10 @@ public  greeting2  hello                             root
 public  int        Z|S of int                        root
 public  notbad     dup|DUP                           root
 
-query TTT
+query TTT colnames
 SHOW TYPES
 ----
+schema  name       owner
 public  as_bytes   root
 public  dbs        root
 public  farewell   root
@@ -1147,9 +1149,10 @@ statement ok
 CREATE SCHEMA uds;
 CREATE TYPE uds.typ AS ENUM ('schema')
 
-query TTTT
+query TTTT colnames
 SHOW ENUMS
 ----
+schema  name       values                            owner
 public  as_bytes   bytes                             root
 public  dbs        postgres|mysql|spanner|cockroach  root
 public  farewell   bye|seeya                         root
