@@ -38,7 +38,11 @@ type LateBoundDialer struct {
 	Wrapped *transporttestutils.ChanDialer
 }
 
-func (d *LateBoundDialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Client, error) {
+var _ closedts.Dialer = &LateBoundDialer{}
+
+func (d *LateBoundDialer) Dial(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (closedts.BackwardsCompatibleClosedTimestampClient, error) {
 	return d.Wrapped.Dial(ctx, nodeID)
 }
 

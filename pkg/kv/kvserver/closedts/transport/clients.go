@@ -12,6 +12,7 @@ package transport
 
 import (
 	"context"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -117,53 +118,78 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 	// blocking callers.
 	pr.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer pr.clients.Delete(int64(nodeID))
-
-		c, err := pr.cfg.Dialer.Dial(ctx, nodeID)
+		rawClient, err := pr.cfg.Dialer.Dial(ctx, nodeID)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "error opening closed timestamp stream to n%d: %+v", nodeID, err)
 			}
 			return
 		}
-		defer func() {
-			_ = c.CloseSend()
-		}()
-
-		ctx = c.Context()
-
-		ch := pr.cfg.Sink.Notify(nodeID)
-		defer close(ch)
-
-		reaction := &ctpb.Reaction{}
-		for {
-			if err := c.Send(reaction); err != nil {
-				return
+		processUpdates := func(ctx context.Context, fallback192 bool) error {
+			var c ctpb.Client
+			var err error
+			if !fallback192 {
+				c, err = rawClient.Get(ctx)
+			} else {
+				c, err = rawClient.Get192(ctx)
 			}
-			entry, err := c.Recv()
 			if err != nil {
-				return
+				return err
 			}
+			defer func() {
+				_ = c.CloseSend()
+			}()
 
-			select {
-			case ch <- *entry:
-			case <-ctx.Done():
-				return
-			case <-pr.cfg.Stopper.ShouldQuiesce():
-				return
-			}
+			ctx = c.Context()
 
-			var requested map[roachpb.RangeID]struct{}
-			cl.mu.Lock()
-			requested, cl.mu.requested = cl.mu.requested, map[roachpb.RangeID]struct{}{}
-			cl.mu.Unlock()
+			ch := pr.cfg.Sink.Notify(nodeID)
+			defer close(ch)
 
-			slice := make([]roachpb.RangeID, 0, len(requested))
-			for rangeID := range requested {
-				slice = append(slice, rangeID)
+			reaction := &ctpb.Reaction{}
+			for {
+				if err := c.Send(reaction); err != nil {
+					log.VEventf(ctx, 2, "closed timestamp connection to node %d lost: %s", nodeID, err)
+					return err
+				}
+				entry, err := c.Recv()
+				if err != nil {
+					log.VEventf(ctx, 2, "closed timestamp connection to node %d lost: %s (%T)", nodeID, err, err)
+					return err
+				}
+
+				select {
+				case ch <- *entry:
+				case <-ctx.Done():
+					return nil
+				case <-pr.cfg.Stopper.ShouldQuiesce():
+					return nil
+				}
+
+				var requested map[roachpb.RangeID]struct{}
+				cl.mu.Lock()
+				requested, cl.mu.requested = cl.mu.requested, map[roachpb.RangeID]struct{}{}
+				cl.mu.Unlock()
+
+				slice := make([]roachpb.RangeID, 0, len(requested))
+				for rangeID := range requested {
+					slice = append(slice, rangeID)
+				}
+				reaction = &ctpb.Reaction{
+					Requested: slice,
+				}
 			}
-			reaction = &ctpb.Reaction{
-				Requested: slice,
-			}
+		}
+
+		err = processUpdates(ctx, false)
+		// We've changed the name of an RPC service in 20.1, so when we try to
+		// connect to 19.2 nodes they don't know what we're talking about. Fallback
+		// to the old name.
+		if err != nil && strings.Contains(err.Error(), "unknown service") {
+			log.VEventf(ctx, 1, "falling back to 19.2-style closed ts conn for node: %d", nodeID)
+			err = processUpdates(ctx, true)
+		}
+		if err != nil {
+			log.VEventf(ctx, 2, "closed timestamp connection to node %d lost: %s", nodeID, err)
 		}
 	})
 

@@ -101,6 +101,8 @@ func (s delayedServer) Get(client ctpb.ClosedTimestamp_GetServer) error {
 func (c *Container) RegisterClosedTimestampServer(s *grpc.Server) {
 	c.delayedServer = &delayedServer{}
 	ctpb.RegisterClosedTimestampServer(s, c.delayedServer)
+	// Also register under the service name expected by 19.2 nodes.
+	ctpb.RegisterClosedTimestampServerUnder192Name(s, c.delayedServer)
 }
 
 // Start starts the Container. The Stopper used to create the Container is in

@@ -24,6 +24,8 @@ import (
 
 type noopEverything struct{}
 
+var _ closedts.Dialer = noopEverything{}
+
 // NoopContainer returns a Container for which all parts of the subsystem are
 // mocked out. This is for usage in testing where there just needs to be a
 // structure that stays out of the way.
@@ -78,7 +80,12 @@ func (noopEverything) MaxClosed(
 }
 func (noopEverything) Request(roachpb.NodeID, roachpb.RangeID) {}
 func (noopEverything) EnsureClient(roachpb.NodeID)             {}
-func (noopEverything) Dial(context.Context, roachpb.NodeID) (ctpb.Client, error) {
+
+// Dial implements the closedts.Dialer interface.
+func (noopEverything) Dial(
+	context.Context, roachpb.NodeID,
+) (closedts.BackwardsCompatibleClosedTimestampClient, error) {
 	return nil, errors.New("closed timestamps disabled")
 }
+
 func (noopEverything) Ready(roachpb.NodeID) bool { return false }

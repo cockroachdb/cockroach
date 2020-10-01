@@ -246,13 +246,35 @@ func (da *dialerAdapter) Ready(nodeID roachpb.NodeID) bool {
 	return (*Dialer)(da).GetCircuitBreaker(nodeID, rpc.DefaultClass).Ready()
 }
 
-func (da *dialerAdapter) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Client, error) {
-	c, err := (*Dialer)(da).Dial(ctx, nodeID, rpc.DefaultClass)
+func (da *dialerAdapter) Dial(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (closedts.BackwardsCompatibleClosedTimestampClient, error) {
+	conn, err := (*Dialer)(da).Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
 		return nil, err
 	}
-	return ctpb.NewClosedTimestampClient(c).Get(ctx)
+	return closedTimestampClientAdapter{c: ctpb.NewClosedTimestampClient(conn)}, nil
 }
+
+// closedTimestampClientAdapter adapts a ClosedTimestampClient to a
+// BackwardsCompatibleClosedTimestampClient.
+type closedTimestampClientAdapter struct {
+	c ctpb.ClosedTimestampClient
+}
+
+func (c closedTimestampClientAdapter) Get(
+	ctx context.Context, opts ...grpc.CallOption,
+) (ctpb.Client, error) {
+	return c.c.Get(ctx, opts...)
+}
+
+func (c closedTimestampClientAdapter) Get192(
+	ctx context.Context, opts ...grpc.CallOption,
+) (ctpb.Client, error) {
+	return c.c.(ctpb.ClosedTimestampClient192).Get192(ctx, opts...)
+}
+
+var _ closedts.BackwardsCompatibleClosedTimestampClient = closedTimestampClientAdapter{}
 
 var _ closedts.Dialer = (*Dialer)(nil).CTDialer()
 

@@ -14,10 +14,12 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"google.golang.org/grpc"
 )
 
 // ChanDialer is an implementation of closedts.Dialer that connects clients
@@ -50,7 +52,9 @@ func (d *ChanDialer) Transcript(nodeID roachpb.NodeID) []interface{} {
 }
 
 // Dial implements closedts.Dialer.
-func (d *ChanDialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Client, error) {
+func (d *ChanDialer) Dial(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (closedts.BackwardsCompatibleClosedTimestampClient, error) {
 	c := &client{
 		ctx:     ctx,
 		send:    make(chan *ctpb.Reaction),
@@ -69,9 +73,22 @@ func (d *ChanDialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (ctpb.Clie
 	d.stopper.RunWorker(ctx, func(ctx context.Context) {
 		_ = d.server.Get((*incomingClient)(c))
 	})
-	return c, nil
-
+	return chanWrapper{c}, nil
 }
+
+type chanWrapper struct {
+	c *client
+}
+
+func (c chanWrapper) Get(ctx context.Context, opts ...grpc.CallOption) (ctpb.Client, error) {
+	return c.c, nil
+}
+
+func (c chanWrapper) Get192(ctx context.Context, opts ...grpc.CallOption) (ctpb.Client, error) {
+	panic("unimplemented")
+}
+
+var _ closedts.BackwardsCompatibleClosedTimestampClient = chanWrapper{}
 
 // Ready implements closedts.Dialer by always returning true.
 func (d *ChanDialer) Ready(nodeID roachpb.NodeID) bool {
