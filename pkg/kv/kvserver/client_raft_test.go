@@ -903,6 +903,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	//        x      x
 	//      [1]<---->[2]
 	//
+	log.Infof(ctx, "test: installing unreliable Raft transports")
 	for _, s := range []int{0, 1, 2} {
 		h := &unreliableRaftHandler{rangeID: 1, RaftMessageHandler: mtc.stores[s]}
 		if s != partStore {
@@ -922,6 +923,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// not succeed before their context is canceled, but they will be appended
 	// to the partitioned replica's Raft log because it is currently the Raft
 	// leader.
+	log.Infof(ctx, "test: sending writes to partitioned replica")
 	g := ctxgroup.WithContext(ctx)
 	for i := 0; i < 32; i++ {
 		otherKey := roachpb.Key(fmt.Sprintf("other-%d", i))
@@ -942,26 +944,45 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	}
 
 	// Transfer the lease to one of the followers and perform a write. The
-	// partition ensures that this will require a Raft leadership change.
-	const newLeaderStore = partStore + 1
-	newLeaderRepl, err := mtc.stores[newLeaderStore].GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	newLeaderReplSender := mtc.stores[newLeaderStore].TestSender()
+	// partition ensures that this will require a Raft leadership change. It's
+	// unpredictable which one of the followers will become leader. Only the
+	// leader will be allowed to acquire the lease (see
+	// TestSnapshotAfterTruncationWithUncommittedTail), so it's also unpredictable
+	// who will get the lease. We try repeatedly sending requests to both
+	// candidates until one of them succeeds.
+	var nonPartitionedSenders [2]kv.Sender
+	nonPartitionedSenders[0] = mtc.stores[1].TestSender()
+	nonPartitionedSenders[1] = mtc.stores[2].TestSender()
 
+	log.Infof(ctx, "test: sending write to transfer lease")
 	incArgs = incrementArgs(key, incB)
+	var i int
+	var newLeaderRepl *kvserver.Replica
+	var newLeaderReplSender kv.Sender
 	testutils.SucceedsSoon(t, func() error {
 		mtc.advanceClock(ctx)
-		_, pErr := kv.SendWrapped(ctx, newLeaderReplSender, incArgs)
+		i++
+		sender := nonPartitionedSenders[i%2]
+		_, pErr := kv.SendWrapped(ctx, sender, incArgs)
 		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
 			return pErr.GoError()
 		} else if pErr != nil {
 			t.Fatal(pErr)
 		}
+
+		// A request succeeded, proving that there is a new leader and leaseholder.
+		// Remember who that is.
+		newLeaderStoreIdx := 1 + (i % 2)
+		newLeaderRepl, err = mtc.stores[newLeaderStoreIdx].GetReplica(1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newLeaderReplSender = mtc.stores[newLeaderStoreIdx].TestSender()
 		return nil
 	})
+	log.Infof(ctx, "test: waiting for values...")
 	mtc.waitForValues(key, []int64{incA, incAB, incAB})
+	log.Infof(ctx, "test: waiting for values... done")
 
 	index, err := newLeaderRepl.GetLastIndex()
 	if err != nil {
@@ -970,6 +991,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 
 	// Truncate the log at index+1 (log entries < N are removed, so this
 	// includes the increment).
+	log.Infof(ctx, "test: truncating log")
 	truncArgs := truncateLogArgs(index+1, 1)
 	testutils.SucceedsSoon(t, func() error {
 		mtc.advanceClock(ctx)
@@ -986,6 +1008,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	snapsBefore := snapsMetric.Count()
 
 	// Remove the partition. Snapshot should follow.
+	log.Infof(ctx, "test: removing the partition")
 	for _, s := range []int{0, 1, 2} {
 		mtc.transport.Listen(mtc.stores[s].Ident.StoreID, &unreliableRaftHandler{
 			rangeID:            1,
@@ -1022,6 +1045,145 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	mtc.waitForValues(key, []int64{incABC, incABC, incABC})
+}
+
+// TestRequestsOnLaggingReplica tests that requests sent to a replica that's behind in
+// log application don't block. The test indirectly verifies that a replica that's not
+// the leader does not attempt to acquire a lease and, thus, does not block until
+// it figures out that it cannot, in fact, take the lease.
+// !!! more words
+func TestRequestsOnLaggingReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	mtc := &multiTestContext{
+		// This test only cares about a single range.
+		startWithSingleRange: true,
+	}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	// Add replicas on all the stores.
+	mtc.replicateRange(1 /* rangeID */, 1, 2 /* dests */)
+
+	// Partition the original leader from its followers. We do this by installing
+	// unreliableRaftHandler listeners on all three Stores. The handler on the
+	// partitioned store filters out all messages while the handler on the other
+	// two stores only filters out messages from the partitioned store. The
+	// configuration looks like:
+	//
+	//           [0]
+	//          x  x
+	//         /    \
+	//        x      x
+	//      [1]<---->[2]
+	//
+	log.Infof(ctx, "test: installing unreliable Raft transports")
+	const partStoreIdx = 0
+	partStore := mtc.stores[partStoreIdx]
+	partRepl, err := partStore.GetReplica(1)
+	require.NoError(t, err)
+	partReplDesc, err := partRepl.GetReplicaDescriptor()
+	require.NoError(t, err)
+	partReplSender := partStore.TestSender()
+	const otherStoreIdx = 1
+	otherStore := mtc.stores[otherStoreIdx]
+	otherRepl, err := otherStore.GetReplica(1)
+	require.NoError(t, err)
+
+	for _, i := range []int{0, 1, 2} {
+		h := &unreliableRaftHandler{rangeID: 1, RaftMessageHandler: mtc.stores[i]}
+		if i != partStoreIdx {
+			// Only filter messages from the partitioned store on the other
+			// two stores.
+			h.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+				return req.FromReplica.StoreID == partRepl.StoreID()
+			}
+			h.dropHB = func(hb *kvserver.RaftHeartbeat) bool {
+				return hb.FromReplicaID == partReplDesc.ReplicaID
+			}
+		}
+		mtc.transport.Listen(mtc.stores[i].Ident.StoreID, h)
+	}
+	// Wait until the leadership is transferred away from the partitioned replica.
+	testutils.SucceedsSoon(t, func() error {
+		mtc.advanceClock(ctx)
+		lead := otherRepl.RaftStatus().Lead
+		if lead == raft.None {
+			return errors.New("no leader yet")
+		}
+		if roachpb.ReplicaID(lead) == partReplDesc.ReplicaID {
+			return errors.New("partitioned replica is still leader")
+		}
+		return nil
+	})
+
+	leaderReplicaID := roachpb.ReplicaID(otherRepl.RaftStatus().Lead)
+	log.Infof(ctx, "test: the leader is replica ID %d", leaderReplicaID)
+	if leaderReplicaID != 2 && leaderReplicaID != 3 {
+		t.Fatalf("expected leader to be 1 or 2, was: %d", leaderReplicaID)
+	}
+	leaderSender := mtc.stores[leaderReplicaID-1].TestSender()
+
+	// Write something to generate some Raft log entries and then truncate the log.
+	log.Infof(ctx, "test: incrementing")
+	keyA := roachpb.Key("a")
+	incArgs := incrementArgs(keyA, 1)
+	_, pErr := kv.SendWrapped(ctx, leaderSender, incArgs)
+	require.Nil(t, pErr)
+	log.Infof(ctx, "test: waiting for values...")
+	mtc.waitForValues(keyA, []int64{0, 1, 1})
+	log.Infof(ctx, "test: waiting for values... done")
+	index, err := otherRepl.GetLastIndex()
+	require.NoError(t, err)
+
+	// Truncate the log at index+1 (log entries < N are removed, so this includes
+	// the increment). This means that the partitioned replica will need a
+	// snapshot to catch up.
+	log.Infof(ctx, "test: truncating log...")
+	truncArgs := truncateLogArgs(index+1, 1)
+	testutils.SucceedsSoon(t, func() error {
+		mtc.advanceClock(ctx)
+		_, pErr := kv.SendWrapped(ctx, leaderSender, truncArgs)
+		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
+			return pErr.GoError()
+		} else if pErr != nil {
+			t.Fatal(pErr)
+		}
+		return nil
+	})
+	log.Infof(ctx, "test: truncating log... done")
+
+	// !!! assert lease expired
+
+	// Resolve the partition, but continue blocking snapshots destined for the
+	// previously-partitioned replica. The point of blocking the snapshots is to
+	// prevent the respective replica from catching up and becoming eligible to
+	// becoming the leader/leaseholder. The point of resolving the partition is to
+	// allow the replica in question to figure out that it's not the leader any
+	// more. As long as it is completely partitioned, the replica continues
+	// believing that it is the leader, and lease acquisition requests block.
+	slowSnapHandler := &slowSnapRaftHandler{
+		rangeID:            1,
+		waitCh:             make(chan struct{}),
+		RaftMessageHandler: partStore,
+	}
+	defer slowSnapHandler.unblock()
+	mtc.transport.Listen(partStore.Ident.StoreID, slowSnapHandler)
+
+	// Now we're going to send a request to the behind replica, and we expect it
+	// to not block; we expect a redirection to the leader.
+	log.Infof(ctx, "test: sending request")
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	getRequest := getArgs(keyA)
+	_, pErr = kv.SendWrapped(timeoutCtx, partReplSender, getRequest)
+	if pErr == nil {
+		t.Fatalf("unexpected success")
+	}
+	nlhe := pErr.Detail.GetNotLeaseHolder()
+	require.NotNil(t, nlhe, "expected NotLeaseholderError, got: %s", pErr)
+	require.Equal(t, leaderReplicaID, nlhe.LeaseHolder.ReplicaID)
 }
 
 type fakeSnapshotStream struct {

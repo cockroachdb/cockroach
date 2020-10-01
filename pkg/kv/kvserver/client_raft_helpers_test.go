@@ -22,7 +22,9 @@ import (
 )
 
 type unreliableRaftHandlerFuncs struct {
-	// If non-nil, can return false to avoid dropping a msg to rangeID.
+	// If non-nil, can return false to avoid dropping the msg to
+	// unreliableRaftHandler.rangeID. If nil, all messages pertaining to the
+	// respective range are dropped.
 	dropReq  func(*kvserver.RaftMessageRequest) bool
 	dropHB   func(*kvserver.RaftHeartbeat) bool
 	dropResp func(*kvserver.RaftMessageResponse) bool
