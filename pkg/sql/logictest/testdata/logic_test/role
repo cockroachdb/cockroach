@@ -1141,17 +1141,17 @@ GRANT GRANT,SELECT ON privatedb.publictable TO public
 
 user testuser
 
-query T
+query TT
 SHOW DATABASES
 ----
-publicdb
+publicdb   root
 
-query TTTI
+query TTTTI
 SHOW TABLES FROM publicdb
 ----
-public  publictable  table  NULL
+public  publictable  table  root  NULL
 
-query TTTI
+query TTTTI
 SHOW TABLES FROM privatedb
 ----
 
@@ -1194,7 +1194,7 @@ SELECT * FROM publicdb.publictable
 statement error user testuser does not have INSERT privilege on relation publictable
 INSERT INTO publicdb.publictable VALUES (1)
 
-query TTTI
+query TTTTI
 SHOW TABLES FROM publicdb
 ----
 

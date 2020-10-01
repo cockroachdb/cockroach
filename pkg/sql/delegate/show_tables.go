@@ -52,9 +52,11 @@ SELECT ns.nspname AS schema_name,
        WHEN pc.relkind = 'S' THEN 'sequence'
        ELSE 'table'
        END AS type,
+       rl.rolname AS owner,
        s.estimated_row_count AS estimated_row_count
        %[3]s
   FROM %[1]s.pg_catalog.pg_class AS pc
+  LEFT JOIN %[1]s.pg_catalog.pg_roles AS rl on (pc.relowner = rl.oid)
   JOIN %[1]s.pg_catalog.pg_namespace AS ns ON (ns.oid = pc.relnamespace)
   LEFT
   JOIN %[1]s.pg_catalog.pg_description AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0)

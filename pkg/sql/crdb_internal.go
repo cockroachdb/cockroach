@@ -224,7 +224,8 @@ var crdbInternalDatabasesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.databases (
 	id INT NOT NULL,
-	name STRING NOT NULL
+	name STRING NOT NULL,
+	owner NAME NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
@@ -232,6 +233,7 @@ CREATE TABLE crdb_internal.databases (
 				return addRow(
 					tree.NewDInt(tree.DInt(db.GetID())), // id
 					tree.NewDString(db.GetName()),       // name
+					tree.NewDName(getOwnerOfDesc(db)),   // owner
 				)
 			})
 	},

@@ -133,14 +133,14 @@ SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
 ----
 target  raw_config_sql
 
-query T colnames,rowsort
+query TT colnames,rowsort
 SELECT * FROM [SHOW DATABASES]
 ----
-database_name
-defaultdb
-postgres
-system
-test
+database_name  owner
+defaultdb      root
+postgres       root
+system         node
+test           root
 
 query TTTTT colnames,rowsort
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
@@ -169,88 +169,88 @@ SELECT * FROM [SHOW KEYS FROM system.descriptor]
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 descriptor  primary     false       1             id           ASC        false    false
 
-query T colnames,rowsort
+query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
 ----
-schema_name
-crdb_internal
-information_schema
-pg_catalog
-pg_extension
-public
+schema_name         owner
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
 
 query T colnames
 SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
 sequence_name
 
-query TTTT colnames,rowsort
+query TTTTI colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
-schema_name  table_name                       type   estimated_row_count
-public       namespace                        table  NULL
-public       descriptor                       table  NULL
-public       users                            table  NULL
-public       zones                            table  NULL
-public       settings                         table  NULL
-public       tenants                          table  NULL
-public       lease                            table  NULL
-public       eventlog                         table  NULL
-public       rangelog                         table  NULL
-public       ui                               table  NULL
-public       jobs                             table  NULL
-public       web_sessions                     table  NULL
-public       table_statistics                 table  NULL
-public       locations                        table  NULL
-public       role_members                     table  NULL
-public       comments                         table  NULL
-public       replication_constraint_stats     table  NULL
-public       replication_critical_localities  table  NULL
-public       replication_stats                table  NULL
-public       reports_meta                     table  NULL
-public       namespace2                       table  NULL
-public       protected_ts_meta                table  NULL
-public       protected_ts_records             table  NULL
-public       role_options                     table  NULL
-public       statement_bundle_chunks          table  NULL
-public       statement_diagnostics_requests   table  NULL
-public       statement_diagnostics            table  NULL
-public       scheduled_jobs                   table  NULL
-public       sqlliveness                      table  NULL
+schema_name  table_name                       type   owner  estimated_row_count
+public       namespace                        table  NULL   NULL
+public       descriptor                       table  NULL   NULL
+public       users                            table  NULL   NULL
+public       zones                            table  NULL   NULL
+public       settings                         table  NULL   NULL
+public       tenants                          table  NULL   NULL
+public       lease                            table  NULL   NULL
+public       eventlog                         table  NULL   NULL
+public       rangelog                         table  NULL   NULL
+public       ui                               table  NULL   NULL
+public       jobs                             table  NULL   NULL
+public       web_sessions                     table  NULL   NULL
+public       table_statistics                 table  NULL   NULL
+public       locations                        table  NULL   NULL
+public       role_members                     table  NULL   NULL
+public       comments                         table  NULL   NULL
+public       replication_constraint_stats     table  NULL   NULL
+public       replication_critical_localities  table  NULL   NULL
+public       replication_stats                table  NULL   NULL
+public       reports_meta                     table  NULL   NULL
+public       namespace2                       table  NULL   NULL
+public       protected_ts_meta                table  NULL   NULL
+public       protected_ts_records             table  NULL   NULL
+public       role_options                     table  NULL   NULL
+public       statement_bundle_chunks          table  NULL   NULL
+public       statement_diagnostics_requests   table  NULL   NULL
+public       statement_diagnostics            table  NULL   NULL
+public       scheduled_jobs                   table  NULL   NULL
+public       sqlliveness                      table  NULL   NULL
 
-query TTTTT colnames,rowsort
+query TTTTTT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
-schema_name  table_name                       type   estimated_row_count  comment
-public       namespace                        table  NULL                 ·
-public       descriptor                       table  NULL                 ·
-public       users                            table  NULL                 ·
-public       zones                            table  NULL                 ·
-public       settings                         table  NULL                 ·
-public       tenants                          table  NULL                 ·
-public       lease                            table  NULL                 ·
-public       eventlog                         table  NULL                 ·
-public       rangelog                         table  NULL                 ·
-public       ui                               table  NULL                 ·
-public       jobs                             table  NULL                 ·
-public       web_sessions                     table  NULL                 ·
-public       table_statistics                 table  NULL                 ·
-public       locations                        table  NULL                 ·
-public       role_members                     table  NULL                 ·
-public       comments                         table  NULL                 ·
-public       replication_constraint_stats     table  NULL                 ·
-public       replication_critical_localities  table  NULL                 ·
-public       replication_stats                table  NULL                 ·
-public       reports_meta                     table  NULL                 ·
-public       namespace2                       table  NULL                 ·
-public       protected_ts_meta                table  NULL                 ·
-public       protected_ts_records             table  NULL                 ·
-public       role_options                     table  NULL                 ·
-public       statement_bundle_chunks          table  NULL                 ·
-public       statement_diagnostics_requests   table  NULL                 ·
-public       statement_diagnostics            table  NULL                 ·
-public       scheduled_jobs                   table  NULL                 ·
-public       sqlliveness                      table  NULL                 ·
+schema_name  table_name                       type   owner  estimated_row_count  comment
+public       namespace                        table  NULL   NULL                 ·
+public       descriptor                       table  NULL   NULL                 ·
+public       users                            table  NULL   NULL                 ·
+public       zones                            table  NULL   NULL                 ·
+public       settings                         table  NULL   NULL                 ·
+public       tenants                          table  NULL   NULL                 ·
+public       lease                            table  NULL   NULL                 ·
+public       eventlog                         table  NULL   NULL                 ·
+public       rangelog                         table  NULL   NULL                 ·
+public       ui                               table  NULL   NULL                 ·
+public       jobs                             table  NULL   NULL                 ·
+public       web_sessions                     table  NULL   NULL                 ·
+public       table_statistics                 table  NULL   NULL                 ·
+public       locations                        table  NULL   NULL                 ·
+public       role_members                     table  NULL   NULL                 ·
+public       comments                         table  NULL   NULL                 ·
+public       replication_constraint_stats     table  NULL   NULL                 ·
+public       replication_critical_localities  table  NULL   NULL                 ·
+public       replication_stats                table  NULL   NULL                 ·
+public       reports_meta                     table  NULL   NULL                 ·
+public       namespace2                       table  NULL   NULL                 ·
+public       protected_ts_meta                table  NULL   NULL                 ·
+public       protected_ts_records             table  NULL   NULL                 ·
+public       role_options                     table  NULL   NULL                 ·
+public       statement_bundle_chunks          table  NULL   NULL                 ·
+public       statement_diagnostics_requests   table  NULL   NULL                 ·
+public       statement_diagnostics            table  NULL   NULL                 ·
+public       scheduled_jobs                   table  NULL   NULL                 ·
+public       sqlliveness                      table  NULL   NULL                 ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
@@ -267,21 +267,21 @@ node_id  user_name  query
 1        root       SELECT node_id, user_name, query FROM [SHOW CLUSTER QUERIES]
 
 
-query T colnames,rowsort
+query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS]
 ----
-schema_name
-crdb_internal
-information_schema
-pg_catalog
-pg_extension
-public
+schema_name         owner
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
 
-query TTTI colnames
+query TTTTI colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 ----
-schema_name  table_name  type   estimated_row_count
-public       foo         table  0
+schema_name  table_name  type   owner  estimated_row_count
+public       foo         table  root   0
 
 
 query T colnames

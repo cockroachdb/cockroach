@@ -6260,7 +6260,9 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		// first place. Right now we just settle for having some error reported, even
 		// if it's not the ideal error.
 
-		sqlDB.CheckQueryResults(t, `SHOW DATABASES`, [][]string{{"data"}, {"defaultdb"}, {"postgres"}, {"system"}})
+		sqlDB.CheckQueryResults(t, `SHOW DATABASES`, [][]string{
+			{"data", security.RootUser}, {"defaultdb", security.RootUser},
+			{"postgres", security.RootUser}, {"system", security.NodeUser}})
 
 		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `USE d`)
 
@@ -6356,7 +6358,8 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		sqlDB.CheckQueryResults(t, `SHOW TABLES`, [][]string{})
 		sqlDB.CheckQueryResults(t, `SHOW TYPES`, [][]string{})
 		sqlDB.CheckQueryResults(t, `SHOW SCHEMAS`, [][]string{
-			{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"},
+			{"crdb_internal", "NULL"}, {"information_schema", "NULL"}, {"pg_catalog", "NULL"}, {"pg_extension", "NULL"},
+			{"public", security.AdminRole},
 		})
 
 		sqlDB.ExpectErr(t, `target database or schema does not exist`, `SHOW TABLES FROM newdb.sc`)
