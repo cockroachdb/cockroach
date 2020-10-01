@@ -185,7 +185,7 @@ func (b *propBuf) LastAssignedLeaseIndexRLocked() uint64 {
 // It is also expected that the byte slice has sufficient capacity to marshal
 // the maximum lease index field into it. After adding the proposal to the
 // buffer, the assigned max lease index is returned.
-func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
+func (b *propBuf) Insert(ctx context.Context, p *ProposalData, data []byte) (uint64, error) {
 	// Request a new max lease applied index for any request that isn't itself
 	// a lease request. Lease requests don't need unique max lease index values
 	// because their max lease indexes are ignored. See checkForcedErr.
@@ -201,7 +201,7 @@ func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
 
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
-	res, err := b.handleCounterRequestRLocked(req, false /* wLocked */)
+	res, err := b.handleCounterRequestRLocked(ctx, req, false /* wLocked */)
 	if err != nil {
 		return 0, err
 	}
@@ -248,7 +248,7 @@ func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
 // ReinsertLocked inserts a command that has already passed through the proposal
 // buffer back into the buffer to be reproposed at a new Raft log index. Unlike
 // insert, it does not modify the command or assign a new maximum lease index.
-func (b *propBuf) ReinsertLocked(p *ProposalData) error {
+func (b *propBuf) ReinsertLocked(ctx context.Context, p *ProposalData) error {
 	// When re-inserting a command into the proposal buffer, the command never
 	// wants a new lease index. Simply add it back to the buffer and let it be
 	// reproposed.
@@ -256,7 +256,7 @@ func (b *propBuf) ReinsertLocked(p *ProposalData) error {
 
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
-	res, err := b.handleCounterRequestRLocked(req, true /* wLocked */)
+	res, err := b.handleCounterRequestRLocked(ctx, req, true /* wLocked */)
 	if err != nil {
 		return err
 	}
@@ -276,7 +276,7 @@ func (b *propBuf) ReinsertLocked(p *ProposalData) error {
 // held. It does not mandate which, but expects the caller to specify using
 // the wLocked argument.
 func (b *propBuf) handleCounterRequestRLocked(
-	req propBufCntReq, wLocked bool,
+	ctx context.Context, req propBufCntReq, wLocked bool,
 ) (propBufCntRes, error) {
 	// Repeatedly attempt to find an open index in the buffer's array.
 	for {
@@ -296,7 +296,7 @@ func (b *propBuf) handleCounterRequestRLocked(
 		} else if wLocked {
 			// The buffer is full and we're holding the exclusive lock. Flush
 			// the buffer before trying again.
-			if err := b.flushLocked(); err != nil {
+			if err := b.flushLocked(ctx); err != nil {
 				return 0, err
 			}
 		} else if idx == b.arr.len() {
@@ -304,7 +304,7 @@ func (b *propBuf) handleCounterRequestRLocked(
 			// potentially many requests holding the shared lock and trying to
 			// insert concurrently. Eagerly attempt to flush the buffer before
 			// trying again.
-			if err := b.flushRLocked(); err != nil {
+			if err := b.flushRLocked(ctx); err != nil {
 				return 0, err
 			}
 		} else {
@@ -330,7 +330,7 @@ func (b *propBuf) insertIntoArray(p *ProposalData, idx int) {
 	}
 }
 
-func (b *propBuf) flushRLocked() error {
+func (b *propBuf) flushRLocked(ctx context.Context) error {
 	// Upgrade the shared lock to an exclusive lock. After doing so, check again
 	// whether the proposer has been destroyed. If so, wake up other goroutines
 	// waiting for the flush.
@@ -342,12 +342,12 @@ func (b *propBuf) flushRLocked() error {
 		b.full.Broadcast()
 		return status.err
 	}
-	return b.flushLocked()
+	return b.flushLocked(ctx)
 }
 
-func (b *propBuf) flushLocked() error {
+func (b *propBuf) flushLocked(ctx context.Context) error {
 	return b.p.withGroupLocked(func(raftGroup *raft.RawNode) error {
-		_, err := b.FlushLockedWithRaftGroup(raftGroup)
+		_, err := b.FlushLockedWithRaftGroup(ctx, raftGroup)
 		return err
 	})
 }
@@ -360,7 +360,9 @@ func (b *propBuf) flushLocked() error {
 // proposed to the RawNode. This initiates Raft replication of the commands.
 //
 // Returns the number of proposals handed to the RawNode.
-func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) (int, error) {
+func (b *propBuf) FlushLockedWithRaftGroup(
+	ctx context.Context, raftGroup *raft.RawNode,
+) (int, error) {
 	// Before returning, make sure to forward the lease index base to at least
 	// the proposer's currently applied lease index. This ensures that if the
 	// lease applied index advances outside of this proposer's control (i.e.
@@ -524,9 +526,9 @@ func proposeBatch(raftGroup *raft.RawNode, replID roachpb.ReplicaID, ents []raft
 // into the proposals map so that they can all be manipulated in a single place.
 // The representative example of this is a caller that wants to flush the buffer
 // into the proposals map before canceling all proposals.
-func (b *propBuf) FlushLockedWithoutProposing() {
-	if _, err := b.FlushLockedWithRaftGroup(nil /* raftGroup */); err != nil {
-		log.Fatalf(context.Background(), "unexpected error: %+v", err)
+func (b *propBuf) FlushLockedWithoutProposing(ctx context.Context) {
+	if _, err := b.FlushLockedWithRaftGroup(ctx, nil /* raftGroup */); err != nil {
+		log.Fatalf(ctx, "unexpected error: %+v", err)
 	}
 }
 
