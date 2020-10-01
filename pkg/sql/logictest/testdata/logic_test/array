@@ -599,7 +599,7 @@ a  CREATE TABLE public.a (
    FAMILY "primary" (b, rowid)
 )
 
-statement error integer out of range for type int2 \(column "b"\)
+statement error integer out of range for type int2
 INSERT INTO a VALUES (ARRAY[100000])
 
 statement ok

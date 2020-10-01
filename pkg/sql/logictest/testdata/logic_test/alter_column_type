@@ -546,3 +546,10 @@ INSERT INTO t30 VALUES (e'a\\01');
 
 statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
 ALTER TABLE t30 ALTER COLUMN x TYPE BYTES
+
+statement ok
+CREATE TABLE regression_54844 (i int8);
+INSERT INTO regression_54844 VALUES (-9223372036854775807)
+
+statement error integer out of range for type int2
+ALTER TABLE regression_54844 ALTER COLUMN i TYPE int2
