@@ -84,10 +84,9 @@ func TestExportImportBank(t *testing.T) {
 	chunkSize := 13
 	for _, null := range []string{"", "NULL"} {
 		nullAs, nullIf := "", ", nullif = ''"
-		if null != "" {
-			nullAs = fmt.Sprintf(", nullas = '%s'", null)
-			nullIf = fmt.Sprintf(", nullif = '%s'", null)
-		}
+		nullAs = fmt.Sprintf(", nullas = '%s'", null)
+		nullIf = fmt.Sprintf(", nullif = '%s'", null)
+
 		t.Run("null="+null, func(t *testing.T) {
 			var files []string
 
@@ -120,6 +119,26 @@ func TestExportImportBank(t *testing.T) {
 			db.Exec(t, "DROP TABLE bank2")
 		})
 	}
+}
+
+// Tests if user does not specify nullas option and imports null data, an error is raised.
+func TestExportNullWithEmptyNullAs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	db, _, cleanup := setupExportableBank(t, 3, 100)
+	defer cleanup()
+
+	// Add some unicode to prove FmtExport works as advertised.
+	db.Exec(t, "UPDATE bank SET payload = payload || '✅' WHERE id = 5")
+	db.Exec(t, "UPDATE bank SET payload = NULL WHERE id % 2 = 0")
+
+	t.Run("export-null-with-empty-nullas", func(t *testing.T) {
+		db.ExpectErr(t, `null encountered but nullas value unspecified. please set null encoding using: WITH nullas="<null encoding>"`,
+			`EXPORT INTO CSV 'nodelocal://0/t' FROM SELECT * FROM bank`)
+
+	})
+
 }
 
 func TestMultiNodeExportStmt(t *testing.T) {
