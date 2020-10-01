@@ -635,15 +635,15 @@ var logicTestConfigs = []testClusterConfig{
 		isCCLConfig:       true,
 	},
 	{
-		// TODO: Change this comment.
-		// 3node-tenant is a config that runs the test as a SQL tenant. This config
-		// can only be run with a CCL binary, so is a noop if run through the normal
-		// logictest command.
+		// backup-restore is a config that periodically performs a cluster backup,
+		// and restores that backup into a new cluster before continuing the test.
+		// This config can only be run with a CCL binary, so is a noop if run
+		// through the normal logictest command.
 		// To run a logic test with this config as a directive, run:
-		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic//<test_name>
+		// make test PKG=./pkg/ccl/logictestccl TESTS=TestBackupRestoreLogic//<test_name>
 		name:                     "backup-restore",
 		numNodes:                 3,
-		backupRestoreProbability: 0.05,
+		backupRestoreProbability: 0.2,
 		isCCLConfig:              true,
 	},
 }
@@ -1774,9 +1774,19 @@ func maybeBackupRestore(t *logicTest, rng *rand.Rand, backupRestoreProbability f
 	// early if we can.
 	oldUser := t.user
 	users := make([]string, 0, len(t.clients))
+	//sessionVars := make(map[string]map[string]string, len(t.clients))
 	for user := range t.clients {
+		//sessionVars[user] = make(map[string]string)
 		users = append(users, user)
+		//t.setUser(user)
+		//existingSessionVars, err := t.db.Query("SHOW ALL", nil)
+		//if err != nil {
+		//	return err
+		//}
 	}
+
+	// TODO: Let's also save all the session variables of each session in a
+	// map[user]map[variable_key]variable_value (all strings).
 
 	if rng.Float32() > backupRestoreProbability {
 		return nil
@@ -1787,6 +1797,12 @@ func maybeBackupRestore(t *logicTest, rng *rand.Rand, backupRestoreProbability f
 
 	t.setUser(security.RootUser)
 	if _, err := t.db.Exec("BACKUP TO $1", backupLocation); err != nil {
+		if testutils.IsError(err,
+			"BACKUP cannot be used inside a transaction without DETACHED option") {
+			// TODO: Instead of giving up here, we might want to trigger the
+			// backup/restore after the txn is over?
+			return nil
+		}
 		return err
 	}
 
