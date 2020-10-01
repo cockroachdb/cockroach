@@ -201,6 +201,7 @@ CREATE TABLE constraint_db.t1 (
   h CHAR(12)[],
   i VARCHAR(20)[],
   j "char",
+  k VARCHAR(10) COLLATE sv,
   UNIQUE INDEX index_key(b, c)
 )
 
@@ -374,7 +375,7 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 relname       relistemp  relkind  relnatts  relchecks  relhasoids  relhaspkey
-t1            false      r        11        0          false       true
+t1            false      r        12        0          false       true
 primary       false      i        1         0          false       false
 t1_a_key      false      i        1         0          false       false
 index_key     false      i        2         0          false       false
@@ -430,6 +431,7 @@ attrelid    relname       attname   atttypid  attstattarget  attlen  attnum  att
 55          t1            h         1014      0              -1      9       0         -1
 55          t1            i         1015      0              -1      10      0         -1
 55          t1            j         18        0              1       11      0         -1
+55          t1            k         1043      0              -1      12      0         -1
 450499963   primary       p         701       0              8       1       0         -1
 450499960   t1_a_key      a         20        0              8       2       0         -1
 450499961   index_key     b         20        0              8       3       0         -1
@@ -472,6 +474,7 @@ t1            g         -1         NULL      NULL        NULL      false       f
 t1            h         16         NULL      NULL        NULL      false       false
 t1            i         24         NULL      NULL        NULL      false       false
 t1            j         -1         NULL      NULL        NULL      false       false
+t1            k         14         NULL      NULL        NULL      false       false
 primary       p         -1         NULL      NULL        NULL      true        false
 t1_a_key      a         -1         NULL      NULL        NULL      false       false
 index_key     b         -1         NULL      NULL        NULL      false       false
@@ -514,6 +517,7 @@ t1            g         false         true        0            NULL    NULL     
 t1            h         false         true        0            NULL    NULL        NULL
 t1            i         false         true        0            NULL    NULL        NULL
 t1            j         false         true        0            NULL    NULL        NULL
+t1            k         false         true        0            NULL    NULL        NULL
 primary       p         false         true        0            NULL    NULL        NULL
 t1_a_key      a         false         true        0            NULL    NULL        NULL
 index_key     b         false         true        0            NULL    NULL        NULL
@@ -595,6 +599,7 @@ t1       d        varchar   3903121477    en-US
 t1       h        _bpchar   3903121477    en-US
 t1       i        _varchar  3903121477    en-US
 t1       j        char      3903121477    en-US
+t1       k        varchar   999873346     sv
 t3       c        text      3903121477    en-US
 
 
