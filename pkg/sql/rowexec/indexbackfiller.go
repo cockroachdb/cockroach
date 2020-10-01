@@ -186,6 +186,13 @@ func (ib *indexBackfiller) runChunk(
 			return nil, ib.wrapDupError(ctx, err)
 		}
 	}
+
+	// After the index KVs have been copied to the underlying BulkAdder, we can
+	// free the memory which was accounted when building the index entries of the
+	// current chunk.
+	entries = nil
+	ib.Clear(ctx)
+
 	if knobs.RunAfterBackfillChunk != nil {
 		if err := ib.adder.Flush(ctx); err != nil {
 			return nil, ib.wrapDupError(ctx, err)
