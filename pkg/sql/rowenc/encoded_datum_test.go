@@ -689,3 +689,59 @@ func TestEncDatumSize(t *testing.T) {
 		t.Errorf("on %v\treceived %d, expected %d", testRow, receivedTotalSize, expectedTotalSize)
 	}
 }
+
+// TestEncDatumFingerprintMemory sanity-checks the memory accounting in
+// Fingerprint.
+func TestEncDatumFingerprintMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		asc   = descpb.DatumEncoding_ASCENDING_KEY
+		desc  = descpb.DatumEncoding_DESCENDING_KEY
+		value = descpb.DatumEncoding_VALUE
+
+		i = 123
+		s = "abcde"
+	)
+
+	testCases := []struct {
+		encDatum    EncDatum
+		typ         *types.T
+		newMemUsage int64
+	}{
+		{
+			encDatum: EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 0)),
+			typ:      types.Int,
+			// Fingerprint should reuse already existing encoded representation,
+			// so it shouldn't use any new memory.
+			newMemUsage: 0,
+		},
+		{
+			encDatum:    EncDatumFromEncoded(desc, encoding.EncodeVarintDescending(nil, i)),
+			typ:         types.Int,
+			newMemUsage: int64(unsafe.Sizeof(tree.DInt(i))),
+		},
+		{
+			encDatum:    EncDatumFromEncoded(value, encoding.EncodeBytesValue(nil, encoding.NoColumnID, []byte(s))),
+			typ:         types.String,
+			newMemUsage: int64(tree.NewDString(s).Size()),
+		},
+	}
+
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+	memAcc := evalCtx.Mon.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+	var da DatumAlloc
+	for _, c := range testCases {
+		memAcc.Clear(ctx)
+		_, err := c.encDatum.Fingerprint(ctx, c.typ, &da, nil /* appendTo */, &memAcc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if memAcc.Used() != c.newMemUsage {
+			t.Errorf("on %v\taccounted for %d, expected %d", c.encDatum, memAcc.Used(), c.newMemUsage)
+		}
+	}
+}
