@@ -419,6 +419,7 @@ func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting live session")
 	}
+	j.sessionID = s.ID()
 	jobID := r.makeJobID()
 	start := timeutil.Now()
 	if txn != nil {
@@ -507,11 +508,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		if _, alreadyRegistered := r.mu.adoptedJobs[*j.ID()]; alreadyRegistered {
 			log.Fatalf(ctx, "job %d: was just created but found in registered adopted jobs", *j.ID())
 		}
-		s, err := r.sqlInstance.Session(ctx)
-		if err != nil {
-			return nil, err
-		}
-		r.mu.adoptedJobs[*j.ID()] = &adoptedJob{sid: s.ID(), cancel: cancel}
+		r.mu.adoptedJobs[*j.ID()] = &adoptedJob{sid: j.sessionID, cancel: cancel}
 	} else {
 		// TODO(spaskob): remove in 20.2 as this code path is only needed while
 		// migrating to 20.2 cluster.
