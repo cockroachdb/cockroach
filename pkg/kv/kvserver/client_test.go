@@ -904,6 +904,8 @@ func (m *multiTestContext) addStore(idx int) {
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
+	ambient.AddLogTag("n", nodeID)
+
 	m.populateDB(idx, cfg.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = kvserver.NewNodeLiveness(
@@ -1235,7 +1237,8 @@ func (m *multiTestContext) changeReplicas(
 	return desc.NextReplicaID, nil
 }
 
-// replicateRange replicates the given range onto the given stores.
+// replicateRange replicates the given range onto the given destination stores. The destinations
+// are indicated by indexes within m.stores.
 func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int) {
 	m.t.Helper()
 	if err := m.replicateRangeNonFatal(rangeID, dests...); err != nil {
@@ -1360,9 +1363,9 @@ func (m *multiTestContext) waitForValuesT(t testing.TB, key roachpb.Key, expecte
 	})
 }
 
-// waitForValues waits up to the given duration for the integer values
-// at the given key to match the expected slice (across all engines).
-// Fails the test if they do not match.
+// waitForValues waits for the integer values at the given key to match the
+// expected slice (across all engines). Fails the test if they do not match
+// after the SucceedsSoon period.
 func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 	m.t.Helper()
 	m.waitForValuesT(m.t, key, expected)
