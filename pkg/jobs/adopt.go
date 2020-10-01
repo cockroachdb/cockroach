@@ -166,6 +166,7 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	job := &Job{id: &jobID, registry: r}
 	job.mu.payload = *payload
 	job.mu.progress = *progress
+	job.sessionID = s.ID()
 
 	resumer, err := r.createResumer(job, r.settings)
 	if err != nil {
