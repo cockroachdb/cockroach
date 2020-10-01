@@ -4,7 +4,7 @@
 
 ---
 
-**CockroachDB is an elastic, indestructible SQL database for developers building modern applications. **
+**CockroachDB is an elastic, indestructible SQL database for developers building modern applications.**
 
 - [What is CockroachDB?](#what-is-cockroachdb)
 - [Docs](#docs)
@@ -50,7 +50,7 @@ For guidance on installation, development, deployment, and administration, see o
 
 ## Client Drivers
 
-CockroachDB supports the PostgreSQL wire protocol, so you can use any available PostgreSQL client drivers to connect from various languages.
+CockroachDB supports the **PostgreSQL wire protocol**, so you can use any available PostgreSQL client drivers to connect from various languages.
 
 - For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/stable/install-client-drivers.html).
 - For tutorials using these drivers, as well as supported ORMs, see [Build an App with CockroachDB](https://www.cockroachlabs.com/docs/stable/build-an-app-with-cockroachdb.html).
