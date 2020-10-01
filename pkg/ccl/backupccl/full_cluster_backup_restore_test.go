@@ -19,6 +19,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -123,11 +124,11 @@ FROM system.jobs
 		sqlDBRestore.CheckQueryResults(t,
 			`SHOW DATABASES`,
 			[][]string{
-				{"data"},
-				{"data2"},
-				{"defaultdb"},
-				{"postgres"},
-				{"system"},
+				{"data", security.RootUser},
+				{"data2", security.RootUser},
+				{"defaultdb", security.RootUser},
+				{"postgres", security.RootUser},
+				{"system", security.NodeUser},
 			})
 	})
 

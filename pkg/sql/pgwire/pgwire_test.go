@@ -535,7 +535,10 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("isRole", "BOOL", false, false, "", "{}", false),
 		}},
 		{"SHOW DATABASES", []preparedQueryTest{
-			baseTest.Results("d").Results("defaultdb").Results("postgres").Results("system"),
+			baseTest.Results("d", security.RootUser).
+				Results("defaultdb", security.RootUser).
+				Results("postgres", security.RootUser).
+				Results("system", security.NodeUser),
 		}},
 		{"SHOW GRANTS ON system.users", []preparedQueryTest{
 			baseTest.Results("system", "public", "users", security.AdminRole, "DELETE").
@@ -553,10 +556,10 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
-			baseTest.Results("public", "comments", "table", gosql.NullString{}).Others(28),
+			baseTest.Results("public", "comments", "table", gosql.NullString{}, gosql.NullString{}).Others(28),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
-			baseTest.Results("crdb_internal").Others(4),
+			baseTest.Results("crdb_internal", gosql.NullString{}).Others(4),
 		}},
 		{"SHOW CONSTRAINTS FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", "PRIMARY KEY", "PRIMARY KEY (username ASC)", true),

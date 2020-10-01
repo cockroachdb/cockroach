@@ -1973,14 +1973,17 @@ CREATE TABLE pg_catalog.pg_namespace (
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
 				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
-					ownerDatum := tree.DNull
+					ownerOID := tree.DNull
 					if sc.Kind == catalog.SchemaUserDefined {
-						ownerDatum = getOwnerOID(sc.Desc)
+						ownerOID = getOwnerOID(sc.Desc)
+					} else if sc.Kind == catalog.SchemaPublic {
+						// admin is the owner of the public schema.
+						ownerOID = h.UserOid("admin")
 					}
 					return addRow(
 						h.NamespaceOid(db.GetID(), sc.Name), // oid
 						tree.NewDString(sc.Name),            // nspname
-						ownerDatum,                          // nspowner
+						ownerOID,                            // nspowner
 						tree.DNull,                          // nspacl
 					)
 				})

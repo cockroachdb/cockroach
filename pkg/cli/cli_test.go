@@ -475,18 +475,18 @@ func Example_demo() {
 	// 123
 	// 123
 	// demo startrek -e show databases
-	// database_name
-	// defaultdb
-	// postgres
-	// startrek
-	// system
+	// database_name	owner
+	// defaultdb	root
+	// postgres	root
+	// startrek	demo
+	// system	node
 	// demo startrek -e show databases --format=table
-	//   database_name
-	// -----------------
-	//   defaultdb
-	//   postgres
-	//   startrek
-	//   system
+	//   database_name | owner
+	// ----------------+--------
+	//   defaultdb     | root
+	//   postgres      | root
+	//   startrek      | demo
+	//   system        | node
 	// (4 rows)
 	// demo -e CREATE USER test WITH PASSWORD 'testpass'
 	// CREATE ROLE
@@ -547,11 +547,11 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql --execute=show databases
-	// database_name
-	// defaultdb
-	// postgres
-	// system
-	// t
+	// database_name	owner
+	// defaultdb	root
+	// postgres	root
+	// system	node
+	// t	root
 	// sql -e select 1 as "1"; select 2 as "2"
 	// 1
 	// 1
