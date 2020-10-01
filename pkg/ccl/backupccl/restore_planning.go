@@ -1554,10 +1554,10 @@ func doRestorePlan(
 			URIs:               defaultURIs,
 			BackupLocalityInfo: localityInfo,
 			TableDescs:         encodedTables,
+			Tenants:            tenants,
 			OverrideDB:         intoDB,
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,
-			Tenants:            tenants,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}

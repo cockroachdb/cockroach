@@ -1,0 +1,38 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+package cockroach.sql.sqlbase;
+option go_package = "descpb";
+
+import "gogoproto/gogo.proto";
+
+// TenantInfo represents a tenant in a multi-tenant cluster and is
+// stored in the "info" column of the "system.tenants" table. The
+// TenantInfo has a globally-unique ID.
+message TenantInfo {
+  option (gogoproto.equal) = true;
+
+  // The state of the tenant. Dictates whether SQL sessions for the tenant
+  // should be allowed, although this is currently not enforced.
+  enum State {
+    // Tenant is online and available for SQL sessions.
+    ACTIVE = 0;
+    // Tenant is being added. Not available for SQL sessions.
+    ADD = 1;
+    // Tenant is being dropped. Not available for SQL sessions.
+    DROP = 2;
+  }
+
+  optional uint64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  optional State state = 2 [(gogoproto.nullable) = false];
+
+  // TODO(nvanbenschoten): add per-tenant rate limits here.
+}

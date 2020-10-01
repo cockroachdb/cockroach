@@ -101,7 +101,7 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 				require.Equal(t, tc.message, decoded)
 
 				// Encode message as json
-				jsonb, err := MessageToJSON(decoded)
+				jsonb, err := MessageToJSON(decoded, false /* emitDefaults */)
 				require.NoError(t, err)
 
 				// Recreate message from json
@@ -118,7 +118,7 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 	t.Run("identity-round-trip", func(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.pbname, func(t *testing.T) {
-				jsonb, err := MessageToJSON(tc.message)
+				jsonb, err := MessageToJSON(tc.message, false /* emitDefaults */)
 				require.NoError(t, err)
 
 				fromJSON, err := NewMessage(tc.pbname)

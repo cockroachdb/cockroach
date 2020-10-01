@@ -13,7 +13,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -835,7 +834,7 @@ func CheckObjectExists(
 
 func fullClusterTargetsRestore(
 	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
-) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []jobspb.RestoreDetails_Tenant, error) {
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfo, error) {
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	if err != nil {
 		return nil, nil, nil, err
@@ -854,10 +853,7 @@ func fullClusterTargetsRestore(
 	}
 
 	// Restore all tenants during full-cluster restore.
-	var tenants []jobspb.RestoreDetails_Tenant
-	for _, tenant := range lastBackupManifest.Tenants {
-		tenants = append(tenants, jobspb.RestoreDetails_Tenant{ID: tenant.ID, Info: tenant.Info})
-	}
+	tenants := lastBackupManifest.Tenants
 
 	return filteredDescs, filteredDBs, tenants, nil
 }
@@ -869,7 +865,7 @@ func selectTargets(
 	targets tree.TargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
-) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []jobspb.RestoreDetails_Tenant, error) {
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfo, error) {
 	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
@@ -881,7 +877,7 @@ func selectTargets(
 			// TODO(dt): for now it is zero-or-one but when that changes, we should
 			// either keep it sorted or build a set here.
 			if tenant.ID == targets.Tenant.ToUint64() {
-				return nil, nil, []jobspb.RestoreDetails_Tenant{{ID: tenant.ID, Info: tenant.Info}}, nil
+				return nil, nil, []descpb.TenantInfo{tenant}, nil
 			}
 		}
 		return nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.Tenant.ToUint64())
