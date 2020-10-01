@@ -1124,26 +1124,34 @@ ROLLBACK
 query TTTT colnames
 SHOW ENUMS
 ----
-schema  name       values                            owner
-public  as_bytes   bytes                             root
-public  dbs        postgres|mysql|spanner|cockroach  root
-public  farewell   bye|seeya                         root
-public  greeting   hello|howdy|hi                    root
-public  greeting2  hello                             root
-public  int        Z|S of int                        root
-public  notbad     dup|DUP                           root
+schema  name        values                            owner
+public  _collision  NULL                              root
+public  as_bytes    bytes                             root
+public  collision   NULL                              root
+public  dbs         postgres|mysql|spanner|cockroach  root
+public  empty       NULL                              root
+public  farewell    bye|seeya                         root
+public  greeting    hello|howdy|hi                    root
+public  greeting2   hello                             root
+public  int         Z|S of int                        root
+public  notbad      dup|DUP                           root
+public  t           NULL                              root
 
 query TTT colnames
 SHOW TYPES
 ----
-schema  name       owner
-public  as_bytes   root
-public  dbs        root
-public  farewell   root
-public  greeting   root
-public  greeting2  root
-public  int        root
-public  notbad     root
+schema  name        owner
+public  _collision  root
+public  as_bytes    root
+public  collision   root
+public  dbs         root
+public  empty       root
+public  farewell    root
+public  greeting    root
+public  greeting2   root
+public  int         root
+public  notbad      root
+public  t           root
 
 statement ok
 CREATE SCHEMA uds;
@@ -1152,15 +1160,19 @@ CREATE TYPE uds.typ AS ENUM ('schema')
 query TTTT colnames
 SHOW ENUMS
 ----
-schema  name       values                            owner
-public  as_bytes   bytes                             root
-public  dbs        postgres|mysql|spanner|cockroach  root
-public  farewell   bye|seeya                         root
-public  greeting   hello|howdy|hi                    root
-public  greeting2  hello                             root
-public  int        Z|S of int                        root
-public  notbad     dup|DUP                           root
-uds     typ        schema                            root
+schema  name        values                            owner
+public  _collision  NULL                              root
+public  as_bytes    bytes                             root
+public  collision   NULL                              root
+public  dbs         postgres|mysql|spanner|cockroach  root
+public  empty       NULL                              root
+public  farewell    bye|seeya                         root
+public  greeting    hello|howdy|hi                    root
+public  greeting2   hello                             root
+public  int         Z|S of int                        root
+public  notbad      dup|DUP                           root
+public  t           NULL                              root
+uds     typ         schema                            root
 
 statement error pq: cannot create "fakedb.typ" because the target database or schema does not exist
 CREATE TYPE fakedb.typ AS ENUM ('schema')
