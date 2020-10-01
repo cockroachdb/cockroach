@@ -179,6 +179,7 @@ func (node *AlterTable) HoistAddColumnConstraints() {
 				}
 				normalizedCmds = append(normalizedCmds, constraint)
 				d.References.Table = nil
+				telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
 			}
 		}
 	}
