@@ -7907,7 +7907,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 
 	tc.repl.mu.Lock()
-	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	origIndexes := make([]int, 0, num)
@@ -7927,7 +7927,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	tc.repl.mu.Lock()
 	atomic.StoreInt32(&dropAll, 0)
 	tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonTicks)
-	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	tc.repl.mu.Unlock()
@@ -8031,7 +8031,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 			t.Error(pErr)
 		}
 		r.mu.Lock()
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		r.mu.Unlock()
@@ -8047,7 +8047,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 		var reproposed []*ProposalData
 		r.mu.Lock() // avoid data race - proposals belong to the Replica
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		dropProposals.Lock()
@@ -8172,7 +8172,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	repl.mu.Lock()
-	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeader)
@@ -12487,7 +12487,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
@@ -12582,11 +12582,11 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
