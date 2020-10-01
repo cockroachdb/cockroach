@@ -816,7 +816,6 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	evalCtxFactory func() *extendedEvalContext,
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
-	maybeDistribute bool,
 ) bool {
 	for planIdx, subqueryPlan := range subqueryPlans {
 		if err := dsp.planAndRunSubquery(
@@ -827,7 +826,6 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			evalCtxFactory(),
 			subqueryPlans,
 			recv,
-			maybeDistribute,
 		); err != nil {
 			recv.SetError(err)
 			// Usually we leave the closure of subqueries to occur when the
@@ -853,7 +851,6 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	evalCtx *extendedEvalContext,
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
-	maybeDistribute bool,
 ) error {
 	subqueryMonitor := mon.NewMonitor(
 		"subquery",
@@ -870,12 +867,9 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryMemAccount := subqueryMonitor.MakeBoundAccount()
 	defer subqueryMemAccount.Close(ctx)
 
-	var distributeSubquery bool
-	if maybeDistribute {
-		distributeSubquery = getPlanDistribution(
-			ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
-		).WillDistribute()
-	}
+	distributeSubquery := getPlanDistribution(
+		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
+	).WillDistribute()
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
 	subqueryPlanCtx.stmtType = tree.Rows
 	if planner.collectBundle {
@@ -1016,7 +1010,6 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	evalCtxFactory func() *extendedEvalContext,
 	plan *planComponents,
 	recv *DistSQLReceiver,
-	maybeDistribute bool,
 ) bool {
 	if len(plan.cascades) == 0 && len(plan.checkPlans) == 0 {
 		return false
@@ -1101,7 +1094,6 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			planner,
 			evalCtx,
 			recv,
-			maybeDistribute,
 		); err != nil {
 			recv.SetError(err)
 			return false
@@ -1131,7 +1123,6 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			planner,
 			evalCtxFactory(),
 			recv,
-			maybeDistribute,
 		); err != nil {
 			recv.SetError(err)
 			return false
@@ -1148,7 +1139,6 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	planner *planner,
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
-	maybeDistribute bool,
 ) error {
 	postqueryMonitor := mon.NewMonitor(
 		"postquery",
@@ -1165,12 +1155,9 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()
 	defer postqueryMemAccount.Close(ctx)
 
-	var distributePostquery bool
-	if maybeDistribute {
-		distributePostquery = getPlanDistribution(
-			ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
-		).WillDistribute()
-	}
+	distributePostquery := getPlanDistribution(
+		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
+	).WillDistribute()
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributePostquery)
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true

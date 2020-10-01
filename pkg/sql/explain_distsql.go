@@ -139,7 +139,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			params.extendedEvalCtx.copy,
 			n.plan.subqueryPlans,
 			recv,
-			willDistribute,
 		) {
 			if err := rw.Err(); err != nil {
 				return err
@@ -263,7 +262,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			params.extendedEvalCtx.copy,
 			&n.plan,
 			recv,
-			willDistribute,
 		) {
 			if err := rw.Err(); err != nil {
 				return err
