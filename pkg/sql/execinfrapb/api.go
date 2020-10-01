@@ -31,7 +31,7 @@ type FlowID struct {
 type DistSQLVersion uint32
 
 // MakeEvalContext serializes some of the fields of a tree.EvalContext into a
-// distsqlpb.EvalContext proto.
+// execinfrapb.EvalContext proto.
 func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 	var be BytesEncodeFormat
 	switch evalCtx.SessionData.DataConversion.BytesEncodeFormat {
@@ -45,16 +45,17 @@ func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 		panic("unknown format")
 	}
 	res := EvalContext{
-		StmtTimestampNanos:  evalCtx.StmtTimestamp.UnixNano(),
-		TxnTimestampNanos:   evalCtx.TxnTimestamp.UnixNano(),
-		Location:            evalCtx.GetLocation().String(),
-		Database:            evalCtx.SessionData.Database,
-		TemporarySchemaName: evalCtx.SessionData.SearchPath.GetTemporarySchemaName(),
-		User:                evalCtx.SessionData.User,
-		ApplicationName:     evalCtx.SessionData.ApplicationName,
-		BytesEncodeFormat:   be,
-		ExtraFloatDigits:    int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
-		Vectorize:           int32(evalCtx.SessionData.VectorizeMode),
+		StmtTimestampNanos:    evalCtx.StmtTimestamp.UnixNano(),
+		TxnTimestampNanos:     evalCtx.TxnTimestamp.UnixNano(),
+		Location:              evalCtx.GetLocation().String(),
+		Database:              evalCtx.SessionData.Database,
+		TemporarySchemaName:   evalCtx.SessionData.SearchPath.GetTemporarySchemaName(),
+		User:                  evalCtx.SessionData.User,
+		ApplicationName:       evalCtx.SessionData.ApplicationName,
+		BytesEncodeFormat:     be,
+		ExtraFloatDigits:      int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
+		Vectorize:             int32(evalCtx.SessionData.VectorizeMode),
+		VectorizeInjectPanics: evalCtx.SessionData.TestingVectorizeInjectPanics,
 	}
 
 	// Populate the search path. Make sure not to include the implicit pg_catalog,
