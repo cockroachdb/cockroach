@@ -115,6 +115,7 @@ func TestKVFeed(t *testing.T) {
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater,
+			keys.SystemSQLCodec,
 			&tf, sf, rangefeedFactory(ref.run), bufferFactory)
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)

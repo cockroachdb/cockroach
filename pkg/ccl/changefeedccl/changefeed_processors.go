@@ -254,6 +254,7 @@ func makeKVFeedCfg(
 		Sink:               buf,
 		Settings:           cfg.Settings,
 		DB:                 cfg.DB,
+		Codec:              cfg.Codec,
 		Clock:              cfg.DB.Clock(),
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
@@ -276,7 +277,7 @@ func makeKVFeedCfg(
 // higher layers mark each watch with the checkpointed resolved timestamp if no
 // initial scan is needed.
 //
-// TODO(ajwerner): Utilize this partial checkpointing, especially in the face of
+// TODO(zinger): Utilize this partial checkpointing, especially in the face of
 // of logical backfills of a single table while progress is made on others or
 // get rid of it. See https://github.com/cockroachdb/cockroach/issues/43896.
 func getKVFeedInitialParameters(
@@ -412,19 +413,19 @@ type schemaChangeBoundary struct {
 	timestampsBySpan map[string]hlc.Timestamp
 }
 
-func (scb *schemaChangeBoundary) SetForSpan(span roachpb.Span, boundary hlc.Timestamp) {
+func (scb *schemaChangeBoundary) setForSpan(span roachpb.Span, boundary hlc.Timestamp) {
 	scb.timestampsBySpan[string(span.Key)] = boundary
 }
 
-func (scb *schemaChangeBoundary) ClearForSpan(span roachpb.Span) {
+func (scb *schemaChangeBoundary) clearForSpan(span roachpb.Span) {
 	delete(scb.timestampsBySpan, string(span.Key))
 }
 
-func (scb *schemaChangeBoundary) ForSpan(span roachpb.Span) (boundary hlc.Timestamp) {
+func (scb *schemaChangeBoundary) forSpan(span roachpb.Span) (boundary hlc.Timestamp) {
 	return scb.timestampsBySpan[string(span.Key)]
 }
 
-func (scb *schemaChangeBoundary) ForAnySpanEquals(boundary hlc.Timestamp) bool {
+func (scb *schemaChangeBoundary) forAnySpanEquals(boundary hlc.Timestamp) bool {
 	for _, v := range scb.timestampsBySpan {
 		if v == boundary {
 			return true
@@ -433,7 +434,7 @@ func (scb *schemaChangeBoundary) ForAnySpanEquals(boundary hlc.Timestamp) bool {
 	return false
 }
 
-func (scb *schemaChangeBoundary) ArbitraryBoundary() (v hlc.Timestamp) {
+func (scb *schemaChangeBoundary) arbitraryBoundary() (v hlc.Timestamp) {
 	for _, v := range scb.timestampsBySpan {
 		return v
 	}
@@ -441,9 +442,7 @@ func (scb *schemaChangeBoundary) ArbitraryBoundary() (v hlc.Timestamp) {
 }
 
 func emptySchemaChangeBoundary() schemaChangeBoundary {
-	var scb schemaChangeBoundary
-	scb.timestampsBySpan = make(map[string]hlc.Timestamp)
-	return scb
+	return schemaChangeBoundary{make(map[string]hlc.Timestamp)}
 }
 
 type changeFrontier struct {
@@ -473,13 +472,13 @@ type changeFrontier struct {
 	// lastSlowSpanLog is the last time a slow span from `sf` was logged.
 	lastSlowSpanLog time.Time
 
-	// schemaChangeBoundary represents an hlc timestamp at which a schema change
+	// schemaChangeBoundary represents the hlc timestamps at which a schema change
 	// event occurred to a target watched by this frontier. If the changefeed is
 	// configured to stop on schema change then the changeFrontier will wait for
 	// the span frontier to reach the schemaChangeBoundary, will drain, and then
 	// will exit. If the changefeed is configured to backfill on schema changes,
 	// the changeFrontier will protect the scan timestamp in order to ensure that
-	// the scan complete. The protected timestamp will be released when a new scan
+	// the scan completes. The protected timestamp will be released when a new scan
 	// schemaChangeBoundary is created or the changefeed reaches a timestamp that
 	// is near the present.
 	//
@@ -673,7 +672,7 @@ func (cf *changeFrontier) closeMetrics() {
 // schemaChangeBoundaryReached returns true if the spanFrontier is at the
 // current schemaChangeBoundary.
 func (cf *changeFrontier) schemaChangeBoundaryReached() (r bool) {
-	return cf.schemaChangeBoundary.ForAnySpanEquals(cf.sf.Frontier())
+	return cf.schemaChangeBoundary.forAnySpanEquals(cf.sf.Frontier())
 }
 
 // shouldFailOnSchemaChange checks the job's spec to determine whether it should
@@ -700,10 +699,10 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		}
 
 		if cf.schemaChangeBoundaryReached() && cf.shouldFailOnSchemaChange() {
-			// TODO(ajwerner): make this more useful by at least informing the client
-			// of which tables changed.
+			// TODO(zinger): make this more useful by at least informing the client
+			// of which tables changed by decoding the span keys in the schemaChangeBoundary.
 			cf.MoveToDraining(pgerror.Newf(pgcode.SchemaChangeOccurred,
-				"schema change occurred at %v", cf.schemaChangeBoundary.ArbitraryBoundary().Next().AsOfSystemTime()))
+				"schema change occurred at %v", cf.schemaChangeBoundary.arbitraryBoundary().Next().AsOfSystemTime()))
 			break
 		}
 
@@ -766,13 +765,13 @@ func (cf *changeFrontier) noteResolvedSpan(d rowenc.EncDatum) error {
 
 	// We want to ensure that we mark the schemaChangeBoundary and then we want to detect when
 	// the frontier reaches to or past the schemaChangeBoundary.
-	boundaryForThisSpan := cf.schemaChangeBoundary.ForSpan(resolved.Span)
+	boundaryForThisSpan := cf.schemaChangeBoundary.forSpan(resolved.Span)
 	if resolved.BoundaryReached && (boundaryForThisSpan.IsEmpty() || resolved.Timestamp.Less(boundaryForThisSpan)) {
-		cf.schemaChangeBoundary.SetForSpan(resolved.Span, resolved.Timestamp)
+		cf.schemaChangeBoundary.setForSpan(resolved.Span, resolved.Timestamp)
 	}
 	// If we've moved past a schemaChangeBoundary, make sure to clear it.
 	if !resolved.BoundaryReached && !boundaryForThisSpan.IsEmpty() && boundaryForThisSpan.Less(resolved.Timestamp) {
-		cf.schemaChangeBoundary.ClearForSpan(resolved.Span)
+		cf.schemaChangeBoundary.clearForSpan(resolved.Span)
 	}
 
 	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
