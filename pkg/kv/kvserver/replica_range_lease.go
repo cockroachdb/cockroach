@@ -195,6 +195,32 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID))
 	}
 
+	// If we're not the leader and we know who is, we don't attempt to acquire the
+	// lease. Instead, we redirect to the leader and prefer that it acquires the
+	// lease (in fact, it might already have it). Not acquiring the lease on the
+	// follower saves a leadership transfer (the leadership follows the lease).
+	// More importantly, this prevents pathological behavior in case where this
+	// replica is far behind (for example, waiting for a snapshot) and there's
+	// another lease in effect. We don't want this lease acquisition attempt
+	// (which is bound to fail) to block all the traffic on this replica until we
+	// eventually hear that it failed.
+	//
+	// There is similar logic about rejecting lease acquisitions on followers in
+	// propBuf.FlushLockedWithRaftGroup(). We also do it here in order to prevent
+	// every request from making it too far down the proposal path - in particular
+	// to avoid the heartbeating of the liveness record done below.
+	leader := p.repl.mu.leaderID
+	leaderKnown := leader != 0
+	if leaderKnown && leader != p.repl.mu.replicaID {
+		rangeDesc := p.repl.mu.state.Desc
+		leaderRepl, _ /* ok */ := rangeDesc.GetReplicaDescriptorByID(leader)
+		speculativeLease := &roachpb.Lease{
+			Replica: leaderRepl,
+		}
+		return p.newResolvedHandle(roachpb.NewError(
+			newNotLeaseHolderError(speculativeLease, p.repl.store.StoreID(), rangeDesc)))
+	}
+
 	// No request in progress. Let's propose a Lease command asynchronously.
 	llHandle := p.newHandle()
 	reqHeader := roachpb.RequestHeader{
