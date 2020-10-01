@@ -214,9 +214,6 @@ func registerSQLSmith(r *testRegistry) {
 			register(setup, setting)
 		}
 	}
-	setups["seed-vec"] = sqlsmith.Setups["seed-vec"]
 	settings["ddl-nodrop"] = sqlsmith.Settings["ddl-nodrop"]
-	settings["vec"] = sqlsmith.SettingVectorize
-	register("seed-vec", "vec")
 	register("tpcc", "ddl-nodrop")
 }

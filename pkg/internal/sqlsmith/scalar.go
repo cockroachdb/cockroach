@@ -124,9 +124,6 @@ func makeCaseExpr(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool)
 }
 
 func makeCoalesceExpr(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.vectorizable {
-		return nil, false
-	}
 	typ = s.pickAnyType(typ)
 	firstExpr := makeScalar(s, typ, refs)
 	secondExpr := makeScalar(s, typ, refs)
@@ -155,9 +152,6 @@ func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 	var datum tree.Datum
 	s.lock.Lock()
 	nullChance := 6
-	if s.vectorizable {
-		nullChance = 0
-	}
 	datum = rowenc.RandDatumWithNullChance(s.rnd, typ, nullChance)
 	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.simpleDatums {
 		datum = rowenc.RandDatumSimple(s.rnd, typ)
@@ -229,9 +223,6 @@ func makeAnd(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeNot(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.vectorizable {
-		return nil, false
-	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -262,19 +253,9 @@ func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool
 	if _, ok := tree.CmpOps[op].LookupImpl(typ, typ); !ok {
 		return nil, false
 	}
-	if s.vectorizable && (op == tree.IsDistinctFrom || op == tree.IsNotDistinctFrom) {
-		return nil, false
-	}
 	left := makeScalar(s, typ, refs)
 	right := makeScalar(s, typ, refs)
 	return typedParen(tree.NewTypedComparisonExpr(op, left, right), typ), true
-}
-
-var vecBinOps = map[tree.BinaryOperator]bool{
-	tree.Plus:  true,
-	tree.Minus: true,
-	tree.Mult:  true,
-	tree.Div:   true,
 }
 
 func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -285,9 +266,6 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 	n := s.rnd.Intn(len(ops))
 	op := ops[n]
-	if s.vectorizable && !vecBinOps[op.Operator] {
-		return nil, false
-	}
 	if s.postgres {
 		if ignorePostgresBinOps[binOpTriple{
 			op.LeftType.Family(),
@@ -324,9 +302,6 @@ var ignorePostgresBinOps = map[binOpTriple]bool{
 }
 
 func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.vectorizable {
-		return nil, false
-	}
 	typ = s.pickAnyType(typ)
 
 	class := ctx.fnClass
@@ -519,9 +494,6 @@ func makeWindowFrame(s *Smither, refs colRefs, orderTypes []*types.T) *tree.Wind
 }
 
 func makeExists(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.vectorizable {
-		return nil, false
-	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -550,7 +522,7 @@ func makeIn(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 	t := s.randScalarType()
 	var rhs tree.TypedExpr
-	if s.vectorizable || s.coin() {
+	if s.coin() {
 		rhs = makeTuple(s, t, refs)
 	} else {
 		selectStmt, _, ok := s.makeSelect([]*types.T{t}, refs)
@@ -585,14 +557,6 @@ func makeIn(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 func makeStringComparison(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	stringComparison := s.randStringComparison()
-	if s.vectorizable {
-		// Vectorized supports only tree.Like and tree.NotLike.
-		if s.coin() {
-			stringComparison = tree.Like
-		} else {
-			stringComparison = tree.NotLike
-		}
-	}
 	switch typ.Family() {
 	case types.BoolFamily, types.AnyFamily:
 	default:
@@ -608,12 +572,12 @@ func makeStringComparison(s *Smither, typ *types.T, refs colRefs) (tree.TypedExp
 func makeTuple(s *Smither, typ *types.T, refs colRefs) *tree.Tuple {
 	n := s.rnd.Intn(5)
 	// Don't allow empty tuples in simple/postgres mode.
-	if n == 0 && (s.simpleDatums || s.vectorizable) {
+	if n == 0 && s.simpleDatums {
 		n++
 	}
 	exprs := make(tree.Exprs, n)
 	for i := range exprs {
-		if s.vectorizable || s.d9() == 1 {
+		if s.d9() == 1 {
 			exprs[i] = makeConstDatum(s, typ)
 		} else {
 			exprs[i] = makeScalar(s, typ, refs)
@@ -623,9 +587,6 @@ func makeTuple(s *Smither, typ *types.T, refs colRefs) *tree.Tuple {
 }
 
 func makeScalarSubquery(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if s.vectorizable {
-		return nil, false
-	}
 	if s.disableLimits {
 		// This query must use a LIMIT, so bail if they are disabled.
 		return nil, false
