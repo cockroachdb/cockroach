@@ -53,10 +53,26 @@ FROM system.jobs
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 	sqlDBRestore.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 
-	// Create some other databases and tables.
-	sqlDB.Exec(t, `CREATE TABLE defaultdb.foo (a int);`)
-	sqlDB.Exec(t, `CREATE DATABASE data2;`)
-	sqlDB.Exec(t, `CREATE TABLE data2.foo (a int);`)
+	// Create some other descriptors as well.
+	sqlDB.Exec(t, `
+USE data;
+CREATE SCHEMA test_data_schema;
+CREATE TABLE data.test_data_schema.test_table (a int);
+INSERT INTO data.test_data_schema.test_table VALUES (1), (2);
+
+USE defaultdb;
+CREATE SCHEMA test_schema;
+CREATE TABLE defaultdb.test_schema.test_table (a int);
+INSERT INTO defaultdb.test_schema.test_table VALUES (1), (2);
+CREATE TABLE defaultdb.foo (a int);
+CREATE TYPE greeting AS ENUM ('hi');
+CREATE TABLE welcomes (a greeting);
+
+CREATE DATABASE data2;
+USE data2;
+CREATE SCHEMA empty_schema;
+CREATE TABLE data2.foo (a int);
+`)
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
@@ -129,6 +145,19 @@ FROM system.jobs
 				{"postgres"},
 				{"system"},
 			})
+	})
+
+	t.Run("ensure all schemas are restored", func(t *testing.T) {
+		expectedSchemas := map[string][][]string{
+			"defaultdb": {{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"test_schema"}},
+			"data":      {{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"test_data_schema"}},
+			"data2":     {{"crdb_internal"}, {"empty_schema"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}},
+		}
+		for dbName, expectedSchemas := range expectedSchemas {
+			sqlDBRestore.CheckQueryResults(t,
+				fmt.Sprintf(`USE %s; SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name;`, dbName),
+				expectedSchemas)
+		}
 	})
 
 	t.Run("ensure system table data restored", func(t *testing.T) {
