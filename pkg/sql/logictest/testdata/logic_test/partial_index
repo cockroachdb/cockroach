@@ -892,6 +892,24 @@ INSERT INTO u VALUES (-1, -1) ON CONFLICT (a) WHERE b > 0 DO NOTHING
 statement ok
 INSERT INTO u VALUES (1, 2), (-1, -2) ON CONFLICT (a) WHERE b > 0 AND b < 0 DO NOTHING
 
+# It is not valid to use non-immutable functions in an arbiter predicate with a
+# partial index as the arbiter index.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 2)
+ON CONFLICT (a) WHERE b < (CASE WHEN now() > '1980-01-01' THEN 0 ELSE 100 END) DO NOTHING
+
+statement ok
+DROP INDEX i2
+
+statement ok
+CREATE UNIQUE INDEX i2 ON u (a) WHERE true;
+
+# Non-immutable functions in an arbiter predicate are ok if there is
+# a pseudo-partial index.
+statement ok
+INSERT INTO u VALUES (1, 2)
+ON CONFLICT (a) WHERE b < (CASE WHEN now() > '1980-01-01' THEN 0 ELSE 100 END) DO NOTHING
+
 statement ok
 DROP INDEX i2
 
@@ -1245,3 +1263,20 @@ CREATE TABLE t54649_b (
 
 statement ok
 SELECT i FROM t54649_b WHERE c
+
+# Regression test for #54819. Ensure predicates are fully normalized.
+subtest regression_54819
+
+statement ok
+CREATE TABLE public.indexes_article (
+    id INT8 NOT NULL DEFAULT unique_rowid(),
+    headline VARCHAR(100) NOT NULL,
+    pub_date TIMESTAMPTZ NOT NULL,
+    published BOOL NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    INDEX indexes_article_headline_pub_date_b992dbba_idx (headline ASC, pub_date ASC),
+    FAMILY "primary" (id, headline, pub_date, published)
+)
+
+statement ok
+CREATE INDEX "recent_article_idx" ON "indexes_article" ("pub_date") WHERE "pub_date" IS NOT NULL

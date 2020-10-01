@@ -1700,8 +1700,7 @@ update partial_indexes
       │    │    │         ├── secondary: filters
       │    │    │         │    └── c:7 = 'foo'
       │    │    │         └── secondary: filters
-      │    │    │              ├── a:5 > b:6
-      │    │    │              └── c:7 = 'bar'
+      │    │    │              └── (a:5 > b:6) AND (c:7 = 'bar')
       │    │    └── projections
       │    │         ├── c:7 = 'foo' [as=column9:9]
       │    │         ├── (a:5 > b:6) AND (c:7 = 'bar') [as=column10:10]
@@ -1734,8 +1733,7 @@ update partial_indexes
       │    │    │         ├── secondary: filters
       │    │    │         │    └── c:7 = 'foo'
       │    │    │         └── secondary: filters
-      │    │    │              ├── a:5 > b:6
-      │    │    │              └── c:7 = 'bar'
+      │    │    │              └── (a:5 > b:6) AND (c:7 = 'bar')
       │    │    └── projections
       │    │         ├── c:7 = 'foo' [as=column9:9]
       │    │         ├── (a:5 > b:6) AND (c:7 = 'bar') [as=column10:10]
