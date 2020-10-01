@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"context"
 	"math/rand"
 	"sync"
 	"testing"
@@ -87,6 +88,7 @@ func newPropData(leaseReq bool) (*ProposalData, []byte) {
 func TestProposalBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	var p testProposer
 	var b propBuf
@@ -97,7 +99,7 @@ func TestProposalBuffer(t *testing.T) {
 	for i := 0; i < num; i++ {
 		leaseReq := i == 3
 		pd, data := newPropData(leaseReq)
-		mlai, err := b.Insert(pd, data)
+		mlai, err := b.Insert(ctx, pd, data)
 		require.Nil(t, err)
 		if leaseReq {
 			expMlai := uint64(i)
@@ -119,7 +121,7 @@ func TestProposalBuffer(t *testing.T) {
 	// results in a lease applied index being skipped, which is harmless.
 	// Remember that the lease request above did not receive a lease index.
 	pd, data := newPropData(false)
-	mlai, err := b.Insert(pd, data)
+	mlai, err := b.Insert(ctx, pd, data)
 	require.Nil(t, err)
 	expMlai := uint64(num + 1)
 	require.Equal(t, expMlai, mlai)
@@ -134,7 +136,7 @@ func TestProposalBuffer(t *testing.T) {
 	// Increase the proposer's applied lease index and flush. The buffer's
 	// lease index offset should jump up.
 	p.lai = 10
-	require.Nil(t, b.flushLocked())
+	require.Nil(t, b.flushLocked(ctx))
 	require.Equal(t, 0, b.Len())
 	require.Equal(t, 2, p.enqueued)
 	require.Equal(t, num+1, p.registered)
@@ -142,7 +144,7 @@ func TestProposalBuffer(t *testing.T) {
 
 	// Insert one more proposal. The lease applied index should adjust to
 	// the increase accordingly.
-	mlai, err = b.Insert(pd, data)
+	mlai, err = b.Insert(ctx, pd, data)
 	require.Nil(t, err)
 	expMlai = p.lai + 1
 	require.Equal(t, expMlai, mlai)
@@ -156,7 +158,7 @@ func TestProposalBuffer(t *testing.T) {
 	// flushed once above, so start iterating at 1.
 	for i := 1; i < propBufArrayShrinkDelay; i++ {
 		require.Equal(t, 2*propBufArrayMinSize, b.arr.len())
-		require.Nil(t, b.flushLocked())
+		require.Nil(t, b.flushLocked(ctx))
 	}
 	require.Equal(t, propBufArrayMinSize, b.arr.len())
 }
@@ -166,6 +168,7 @@ func TestProposalBuffer(t *testing.T) {
 func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	var p testProposer
 	var b propBuf
@@ -181,7 +184,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 		g.Go(func() error {
 			for {
 				pd, data := newPropData(false)
-				mlai, err := b.Insert(pd, data)
+				mlai, err := b.Insert(ctx, pd, data)
 				if err != nil {
 					if errors.Is(err, dsErr) {
 						return nil
@@ -208,7 +211,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 				if !p.ds.IsAlive() {
 					return true, nil
 				}
-				if err := b.flushLocked(); err != nil {
+				if err := b.flushLocked(ctx); err != nil {
 					return true, errors.Wrap(err, "flushLocked")
 				}
 				return false, nil
@@ -236,6 +239,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	var p testProposer
 	var b propBuf
@@ -244,7 +248,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	num := propBufArrayMinSize
 	for i := 0; i < num; i++ {
 		pd, data := newPropData(false)
-		_, err := b.Insert(pd, data)
+		_, err := b.Insert(ctx, pd, data)
 		require.Nil(t, err)
 	}
 	require.Equal(t, num, b.Len())
@@ -259,7 +263,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 		}
 		return false, nil
 	}
-	err := b.flushLocked()
+	err := b.flushLocked(ctx)
 	require.Equal(t, propErr, err)
 	require.Equal(t, num, p.registered)
 }
@@ -270,6 +274,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	var p testProposer
 	var b propBuf
@@ -278,7 +283,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 	num := propBufArrayMinSize / 2
 	for i := 0; i < num; i++ {
 		pd, data := newPropData(i%2 == 0)
-		_, err := b.Insert(pd, data)
+		_, err := b.Insert(ctx, pd, data)
 		require.Nil(t, err)
 	}
 
@@ -289,12 +294,12 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 
 	for i := 0; i < num; i++ {
 		pd, data := newPropData(i%2 == 0)
-		_, err := b.Insert(pd, data)
+		_, err := b.Insert(ctx, pd, data)
 		require.Equal(t, insertErr, err)
 	}
 	require.Equal(t, 2*num, b.Len())
 
-	require.Nil(t, b.flushLocked())
+	require.Nil(t, b.flushLocked(ctx))
 
 	require.Equal(t, 0, b.Len())
 	require.Equal(t, num, p.registered)

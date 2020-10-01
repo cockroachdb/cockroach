@@ -329,7 +329,7 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 	//
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
-	maxLeaseIndex, err := r.mu.proposalBuf.Insert(p, data)
+	maxLeaseIndex, err := r.mu.proposalBuf.Insert(ctx, p, data)
 	if err != nil {
 		return 0, roachpb.NewError(err)
 	}
@@ -445,7 +445,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
-		numFlushed, err := r.mu.proposalBuf.FlushLockedWithRaftGroup(raftGroup)
+		numFlushed, err := r.mu.proposalBuf.FlushLockedWithRaftGroup(ctx, raftGroup)
 		if err != nil {
 			return false, err
 		}
@@ -1031,7 +1031,7 @@ func (r *Replica) refreshProposalsLocked(
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
-		if err := r.mu.proposalBuf.ReinsertLocked(p); err != nil {
+		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
 			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(ctx, proposalResult{
 				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err.Error())),
