@@ -178,7 +178,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 		writer := newCSVExporter(sp.spec)
 
-		nullsAs := ""
+		var nullsAs string
 		if sp.spec.Options.NullEncoding != nil {
 			nullsAs = *sp.spec.Options.NullEncoding
 		}
@@ -208,8 +208,13 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 				for i, ed := range row {
 					if ed.IsNull() {
-						csvRow[i] = nullsAs
-						continue
+						if sp.spec.Options.NullEncoding != nil {
+							csvRow[i] = nullsAs
+							continue
+						} else {
+							return errors.New("NULL value encountered during EXPORT, " +
+								"use `WITH nullas` to specify the string representation of NULL")
+						}
 					}
 					if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
 						return err
