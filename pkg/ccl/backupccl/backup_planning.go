@@ -769,19 +769,20 @@ func backupPlanHook(
 			}
 		}
 
-		var tenants []BackupManifest_Tenant
+		var tenants []descpb.TenantInfo
 		for _, row := range tenantRows {
 			// TODO isn't there a general problem here with tenant IDs > MaxInt64?
 			id := uint64(tree.MustBeDInt(row[0]))
 
-			var info []byte
-			if row[2] != tree.DNull {
-				info = []byte(tree.MustBeDBytes(row[2]))
+			info := descpb.TenantInfo{ID: id}
+			infoBytes := []byte(tree.MustBeDBytes(row[2]))
+			if err := protoutil.Unmarshal(infoBytes, &info); err != nil {
+				return err
 			}
+			tenants = append(tenants, info)
 
 			prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(id))
 			spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
-			tenants = append(tenants, BackupManifest_Tenant{ID: id, Info: info})
 		}
 
 		if len(tenants) > 0 && backupStmt.Options.CaptureRevisionHistory {
