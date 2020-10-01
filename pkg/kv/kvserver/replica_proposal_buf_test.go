@@ -71,6 +71,12 @@ func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
 }
 
+func (t *testProposer) rejectProposalWithRedirectLocked(
+	ctx context.Context, prop *ProposalData, redirectTo roachpb.ReplicaID,
+) {
+	panic("unimplemented")
+}
+
 func newPropData(leaseReq bool) (*ProposalData, []byte) {
 	var ba roachpb.BatchRequest
 	if leaseReq {
