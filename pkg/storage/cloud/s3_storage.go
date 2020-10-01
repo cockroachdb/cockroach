@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -134,7 +135,9 @@ func makeS3Storage(
 	if conf.Endpoint != "" {
 		sess.Config.S3ForcePathStyle = aws.Bool(true)
 	}
-	sess.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
+	if log.V(2) {
+		sess.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
+	}
 	maxRetries := 10
 	sess.Config.MaxRetries = &maxRetries
 
