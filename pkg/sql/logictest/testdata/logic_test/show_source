@@ -78,6 +78,7 @@ standard_conforming_strings                    on
 statement_timeout                              0
 synchronize_seqscans                           on
 synchronous_commit                             on
+testing_vectorize_inject_panics                off
 timezone                                       UTC
 tracing                                        off
 transaction_isolation                          serializable
