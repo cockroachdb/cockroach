@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -64,6 +65,7 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 }
 
 func (n *alterTypeNode) startExec(params runParams) error {
+	telemetry.Inc(n.n.Cmd.TelemetryCounter())
 	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:
