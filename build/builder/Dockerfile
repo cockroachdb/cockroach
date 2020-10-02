@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libncurses-dev \
     make \
     patch \
+    patchelf \
     texinfo \
     xz-utils \
  && apt-get clean
