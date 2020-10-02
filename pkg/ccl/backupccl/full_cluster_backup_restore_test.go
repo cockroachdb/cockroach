@@ -67,6 +67,7 @@ FROM system.jobs
 	}
 	for i := 0; i < numUsers; i++ {
 		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
+		sqlDB.Exec(t, fmt.Sprintf("ALTER USER maxroach%d CREATEDB", i))
 	}
 	// Populate system.zones.
 	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
@@ -139,6 +140,7 @@ FROM system.jobs
 			systemschema.CommentsTable.Name,
 			systemschema.LocationsTable.Name,
 			systemschema.RoleMembersTable.Name,
+			systemschema.RoleOptionsTable.Name,
 			systemschema.SettingsTable.Name,
 			systemschema.TableStatisticsTable.Name,
 			systemschema.UITable.Name,
@@ -478,6 +480,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"jobs"},
 				{"locations"},
 				{"role_members"},
+				{"role_options"},
 				{"scheduled_jobs"},
 				{"settings"},
 				{"ui"},
@@ -519,6 +522,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"jobs"},
 				{"locations"},
 				{"role_members"},
+				{"role_options"},
 				{"scheduled_jobs"},
 				{"settings"},
 				{"ui"},
