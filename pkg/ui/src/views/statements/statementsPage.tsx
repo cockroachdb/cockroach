@@ -30,7 +30,7 @@ import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import {
-  selectLastDiagnosticsReportPerStatement,
+  selectDiagnosticsReportsPerStatement,
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
@@ -42,8 +42,10 @@ import {
   trackStatementsSearchAction,
   trackTableSortAction,
 } from "src/redux/analyticsActions";
+import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 interface StatementsSummaryData {
   statement: string;
@@ -60,11 +62,11 @@ function keyByStatementAndImplicitTxn(stmt: ExecutionStatistics): string {
 export const selectStatements = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (_state: AdminUIState, props: RouteComponentProps) => props,
-  selectLastDiagnosticsReportPerStatement,
+  selectDiagnosticsReportsPerStatement,
   (
     state: CachedDataReducerState<StatementsResponseMessage>,
     props: RouteComponentProps<any>,
-    lastDiagnosticsReportPerStatement,
+    diagnosticsReportsPerStatement,
   ) => {
     if (!state.data) {
       return null;
@@ -108,7 +110,7 @@ export const selectStatements = createSelector(
         label: stmt.statement,
         implicitTxn: stmt.implicitTxn,
         stats: combineStatementStats(stmt.stats),
-        diagnosticsReport: lastDiagnosticsReportPerStatement[stmt.statement],
+        diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
       };
     });
   },
@@ -185,6 +187,7 @@ const StatementsPageConnected = withRouter(connect(
     onSearchComplete: (results: AggregateStatistics[]) => trackStatementsSearchAction(results.length),
     onPageChanged: trackStatementsPaginationAction,
     onSortingChange: trackTableSortAction,
+    onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) => trackDownloadDiagnosticsBundle(report.statement_fingerprint),
   },
 )(StatementsPage));
 

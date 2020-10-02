@@ -24,7 +24,7 @@ function mapDiagnosticsStatusToBadge(diagnosticsStatus: DiagnosticStatuses) {
   switch (diagnosticsStatus) {
     case "READY":
       return "success";
-    case "WAITING FOR QUERY":
+    case "WAITING":
       return "info";
     case "ERROR":
       return "danger";
@@ -50,7 +50,7 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
           </p>
         </div>
       );
-    case "WAITING FOR QUERY":
+    case "WAITING":
       return (
         <div className="tooltip__table--title">
           <p>
