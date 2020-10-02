@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -80,6 +82,8 @@ var (
 	// builtin functions.
 	SequenceNameArg = "sequence_name"
 )
+
+const defaultFollowerReadDuration = -4800 * time.Millisecond
 
 const maxAllocatedStringSize = 128 * 1024 * 1024
 
@@ -2152,7 +2156,7 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn:         followerReadTimestamp,
-			Info: `Returns a timestamp which is very likely to be safe to perform
+			Info: fmt.Sprintf(`Returns a timestamp which is very likely to be safe to perform
 against a follower replica.
 
 This function is intended to be used with an AS OF SYSTEM TIME clause to perform
@@ -2161,7 +2165,9 @@ to be performed against the closest replica as opposed to the currently
 leaseholder for a given range.
 
 Note that this function requires an enterprise license on a CCL distribution to
-return without an error.`,
+return a result that is less likely the closest replica. It is otherwise
+hardcoded as %s from the statement time, which may not result in reading from the
+nearest replica.`, defaultFollowerReadDuration),
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -6326,12 +6332,32 @@ var EvalFollowerReadOffset func(clusterID uuid.UUID, _ *cluster.Settings) (time.
 
 func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 	if EvalFollowerReadOffset == nil {
-		return time.Time{}, pgerror.New(pgcode.FeatureNotSupported,
-			tree.FollowerReadTimestampFunctionName+
-				" is only available in ccl distribution")
+		telemetry.Inc(sqltelemetry.FollowerReadDisabledCCLCounter)
+		ctx.ClientNoticeSender.BufferClientNotice(
+			ctx.Context,
+			pgnotice.Newf(
+				tree.FollowerReadTimestampFunctionName+
+					" does not returns a value that is less likely to read from the closest replica "+
+					"in a non-CCL distribution, using %s from statement time instead",
+				defaultFollowerReadDuration,
+			),
+		)
+		return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
 	}
 	offset, err := EvalFollowerReadOffset(ctx.ClusterID, ctx.Settings)
 	if err != nil {
+		if code := pgerror.GetPGCode(err); code == pgcode.CCLValidLicenseRequired {
+			telemetry.Inc(sqltelemetry.FollowerReadDisabledNoEnterpriseLicense)
+			ctx.ClientNoticeSender.BufferClientNotice(
+				ctx.Context,
+				pgnotice.Newf(
+					"%s: using %s from current statement time instead",
+					defaultFollowerReadDuration,
+					err.Error(),
+				),
+			)
+			return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
+		}
 		return time.Time{}, err
 	}
 	return ctx.StmtTimestamp.Add(offset), nil

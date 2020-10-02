@@ -179,10 +179,10 @@ pg_catalog          NULL
 pg_extension        NULL
 public              admin
 
-query T colnames
+query TT colnames
 SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
-sequence_name
+sequence_schema  sequence_name
 
 query TTTTI colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]

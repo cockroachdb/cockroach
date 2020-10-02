@@ -27,10 +27,9 @@ func (d *delegator) delegateShowSequences(n *tree.ShowSequences) (tree.Statement
 	}
 
 	getSequencesQuery := fmt.Sprintf(`
-	  SELECT sequence_name
+	  SELECT sequence_schema, sequence_name
 	    FROM %[1]s.information_schema.sequences
 	   WHERE sequence_catalog = %[2]s
-	     AND sequence_schema = 'public'
 	ORDER BY sequence_name`,
 		name.String(), // note: (tree.Name).String() != string(name)
 		lex.EscapeSQLString(string(name)),
