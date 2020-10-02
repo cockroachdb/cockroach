@@ -357,9 +357,10 @@ func descriptorsMatchingTargets(
 			if !found {
 				return ret, doesNotExistErr
 			}
-			tableDesc := descI.(catalog.TableDescriptor)
-			// If tableDesc is nil, then we resolved a type instead, so error out.
-			if tableDesc == nil {
+			tableDesc, isTable := descI.(catalog.TableDescriptor)
+			// If the type assertion didn't work, then we resolved a type instead, so
+			// error out.
+			if !isTable {
 				return ret, doesNotExistErr
 			}
 
