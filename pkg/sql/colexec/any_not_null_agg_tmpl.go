@@ -207,6 +207,11 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// current value is non-null, then we can pick the current value to be the
 		// output.
 		val := execgen.UNSAFEGET(col, i)
+		// {{if eq .LTyp.String "Bytes"}}
+		// a.curAgg might be holding on to val for a long time (in case of the
+		// hash aggregation), so we should account for it.
+		a.allocator.AdjustMemoryUsage(int64(len(val) - len(a.curAgg)))
+		// {{end}}
 		execgen.COPYVAL(a.curAgg, val)
 		a.foundNonNullForCurrentGroup = true
 	}

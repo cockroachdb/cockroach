@@ -236,6 +236,11 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
 			val := execgen.UNSAFEGET(col, i)
+			// {{if eq .LTyp.String "Bytes"}}
+			// a.curAgg might be holding on to val for a long time (in case of
+			// the hash aggregation), so we should account for it.
+			a.allocator.AdjustMemoryUsage(int64(len(val) - len(a.curAgg)))
+			// {{end}}
 			execgen.COPYVAL(a.curAgg, val)
 			a.foundNonNullForCurrentGroup = true
 		} else {
@@ -243,6 +248,11 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 			candidate := execgen.UNSAFEGET(col, i)
 			_ASSIGN_CMP(cmp, candidate, a.curAgg)
 			if cmp {
+				// {{if eq .LTyp.String "Bytes"}}
+				// a.curAgg might be holding on to candidate for a long time
+				// (in case of the hash aggregation), so we should account for it.
+				a.allocator.AdjustMemoryUsage(int64(len(candidate) - len(a.curAgg)))
+				// {{end}}
 				execgen.COPYVAL(a.curAgg, candidate)
 			}
 		}

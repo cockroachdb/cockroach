@@ -524,6 +524,7 @@ func (v *hashAggFuncs) compute(b coldata.Batch, aggCols [][]uint32) {
 // 'sum' aggregation on ints and decimals with varying group sizes (powers of 2
 // from 1 to 4096).
 const hashAggFuncsAllocSize = 64
+const hashAggFuncsSliceOverhead = int64(unsafe.Sizeof([]hashAggFuncs{}))
 
 // hashAggFuncsAlloc is a utility struct that batches allocations of
 // hashAggFuncs.
@@ -534,7 +535,7 @@ type hashAggFuncsAlloc struct {
 
 func (a *hashAggFuncsAlloc) newHashAggFuncs() *hashAggFuncs {
 	if len(a.buf) == 0 {
-		a.allocator.AdjustMemoryUsage(int64(hashAggFuncsAllocSize * sizeOfHashAggFuncs))
+		a.allocator.AdjustMemoryUsage(hashAggFuncsSliceOverhead + int64(hashAggFuncsAllocSize*sizeOfHashAggFuncs))
 		a.buf = make([]hashAggFuncs, hashAggFuncsAllocSize)
 	}
 	ret := &a.buf[0]
