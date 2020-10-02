@@ -499,10 +499,7 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 			callback: nil,
 		},
 		{
-			name: "with intervening lease transfer",
-			// TODO(aayush): Maybe allowlist `TransferLease` requests while a range is
-			// subsumed and use that here, instead of forcing a lease transfer by
-			// pausing heartbeats.
+			name:     "with intervening lease transfer",
 			callback: forceLeaseTransferOnSubsumedRange,
 		},
 	}
@@ -559,38 +556,15 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 				},
 			},
 		}
-		// If the initial phase of the merge txn takes longer than the closed
-		// timestamp target duration, its initial CPuts can have their write
-		// timestamps bumped due to an intervening closed timestamp update. This
-		// causes the entire merge txn to retry. So we use a long closed timestamp
-		// duration at the beginning of the test until we have the merge txn
-		// suspended at its commit trigger, and then change it back down to
-		// `testingTargetDuration`.
-		tc, db, leftDesc, rightDesc := initClusterWithSplitRanges(ctx, t, 5*time.Second,
+		tc, _, leftDesc, rightDesc := initClusterWithSplitRanges(ctx, t, testingTargetDuration,
 			testingCloseFraction, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 
 		leftLeaseholder := getCurrentLeaseholder(t, tc, leftDesc)
 		rightLeaseholder := getCurrentLeaseholder(t, tc, rightDesc)
-		if leftLeaseholder.StoreID == rightLeaseholder.StoreID {
-			// In this test, we may pause the heartbeats of the store that holds the
-			// lease for the right hand side range, in order to force a lease
-			// transfer. If the LHS and RHS share a leaseholder, this may cause a
-			// lease transfer for the left hand range as well. This can cause a merge
-			// txn retry and we'd like to avoid that, so we ensure that LHS and RHS
-			// have different leaseholders before beginning the test.
-			target := pickRandomTarget(tc, rightLeaseholder, leftDesc)
-			if err := tc.TransferRangeLease(leftDesc, target); err != nil {
-				t.Fatal(err)
-			}
-			leftLeaseholder = target
-		}
-		// Make sure that the new leaseholder for the left hand side range learns
-		// that it is indeed the leaseholder.
-		require.NoError(t, tc.(*testcluster.TestCluster).WaitForFullReplication())
 
 		g, ctx := errgroup.WithContext(ctx)
-		// Merge the ranges back together. The LHS rightLeaseholder should block right
+		// Merge the ranges back together. The LHS leaseholder should block right
 		// before the merge trigger request is sent.
 		leftLeaseholderStore := getTargetStoreOrFatal(t, tc, leftLeaseholder)
 		blocker := st.BlockNextMerge()
@@ -616,12 +590,6 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 			t.Fatal(err)
 		case <-time.After(45 * time.Second):
 			t.Fatal("did not receive merge commit trigger as expected")
-		}
-		// Reduce the closed timestamp target duration in order to make the rest of
-		// the test faster.
-		if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';`,
-			testingTargetDuration)); err != nil {
-			t.Fatal(err)
 		}
 		// inactiveClosedTSBoundary indicates the low water mark for closed
 		// timestamp updates beyond which we expect none of the followers to be able
