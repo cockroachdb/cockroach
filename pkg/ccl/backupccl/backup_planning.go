@@ -77,6 +77,7 @@ var fullClusterSystemTables = []string{
 	// Rest of system tables.
 	systemschema.LocationsTable.Name,
 	systemschema.RoleMembersTable.Name,
+	systemschema.RoleOptionsTable.Name,
 	systemschema.UITable.Name,
 	systemschema.CommentsTable.Name,
 	systemschema.JobsTable.Name,
