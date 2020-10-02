@@ -19,6 +19,7 @@ import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsMo
 import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { shortStatement } from "./statementsTable";
 import styles from "./statementsTableContent.module.styl";
+import { getDiagnosticsStatus } from "src/views/statements/diagnostics";
 
 export type NodeNames = { [nodeId: string]: string };
 
@@ -90,7 +91,7 @@ export const StatementTableTitle = {
               diagnostics
             </Anchor>
             {" for each statement. If activated, this displays the status of diagnostics collection ("}
-            <code>WAITING FOR QUERY</code>, <code>READY</code>, OR <code>ERROR</code>).
+            <code>WAITING</code>, <code>READY</code>, OR <code>ERROR</code>).
           </p>
         </div>
       }
@@ -202,7 +203,7 @@ export const StatementTableCell = {
   ),
   diagnostics: (activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>) => (stmt: any) => {
     if (stmt.diagnosticsReport) {
-      return <DiagnosticStatusBadge status={stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY"}/>;
+      return <DiagnosticStatusBadge status={getDiagnosticsStatus(stmt.diagnosticsReport)}/>;
     }
     return (
       <Anchor
