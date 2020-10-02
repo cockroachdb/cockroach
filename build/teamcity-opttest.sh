@@ -25,7 +25,6 @@ run_json_test build/builder.sh \
   GOTESTFLAGS=-json \
   TAGS=fast_int_set_large \
   PKG=./pkg/sql/opt... \
-  TESTTIMEOUT="${TESTTIMEOUT}" \
   TESTFLAGS='-v'
 tc_end_block "Run opt tests with fast_int_set_large"
 
@@ -37,6 +36,5 @@ run_json_test build/builder.sh \
   GOTESTFLAGS=-json \
   TAGS=fast_int_set_small \
   PKG=./pkg/sql/opt... \
-  TESTTIMEOUT="${TESTTIMEOUT}" \
   TESTFLAGS='-v'
 tc_end_block "Run opt tests with fast_int_set_small"
