@@ -122,7 +122,7 @@ func (c *CustomFuncs) canMapJoinOpEquivalenceGroup(
 	leftCols, rightCols opt.ColSet,
 	equivFD props.FuncDepSet,
 ) bool {
-	eqCols := c.GetEquivColsWithEquivType(col, equivFD)
+	eqCols := c.GetEquivColsWithEquivType(col, equivFD, false /* allowCompositeEncoding */)
 
 	// To map equality conditions, the equivalent columns must intersect
 	// both sides and must be fully bound by both sides.
@@ -201,7 +201,7 @@ func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
 	leftCols, rightCols opt.ColSet,
 	equivFD props.FuncDepSet,
 ) memo.FiltersExpr {
-	eqCols := c.GetEquivColsWithEquivType(col, equivFD)
+	eqCols := c.GetEquivColsWithEquivType(col, equivFD, false /* allowCompositeEncoding */)
 
 	// First remove all the equality conditions for this equivalence group.
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
@@ -289,10 +289,12 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 		return false
 	}
 
+	allowCompositeEncoding := !memo.CanBeCompositeSensitive(c.mem.Metadata(), src)
+
 	// For CanMapJoinOpFilter to be true, each column in src must map to at
 	// least one column in dst.
 	for i, ok := scalarProps.OuterCols.Next(0); ok; i, ok = scalarProps.OuterCols.Next(i + 1) {
-		eqCols := c.GetEquivColsWithEquivType(i, equivFD)
+		eqCols := c.GetEquivColsWithEquivType(i, equivFD, allowCompositeEncoding)
 		if !eqCols.Intersects(dstCols) {
 			return false
 		}
@@ -331,12 +333,13 @@ func (c *CustomFuncs) MapJoinOpFilter(
 		return src.Condition
 	}
 
+	allowCompositeEncoding := !memo.CanBeCompositeSensitive(c.mem.Metadata(), src)
 	// Map each column in src to one column in dst. We choose an arbitrary column
 	// (the one with the smallest ColumnID) if there are multiple choices.
 	var colMap util.FastIntMap
 	outerCols := src.ScalarProps().OuterCols
 	for srcCol, ok := outerCols.Next(0); ok; srcCol, ok = outerCols.Next(srcCol + 1) {
-		eqCols := c.GetEquivColsWithEquivType(srcCol, equivFD)
+		eqCols := c.GetEquivColsWithEquivType(srcCol, equivFD, allowCompositeEncoding)
 		eqCols.IntersectionWith(dstCols)
 		if eqCols.Contains(srcCol) {
 			colMap.Set(int(srcCol), int(srcCol))
@@ -404,14 +407,14 @@ func (c *CustomFuncs) MapJoinOpFilter(
 // TODO(rytaft): In the future, we may want to allow the mapping if the
 // filter involves a comparison operator, such as x < 5.
 func (c *CustomFuncs) GetEquivColsWithEquivType(
-	col opt.ColumnID, equivFD props.FuncDepSet,
+	col opt.ColumnID, equivFD props.FuncDepSet, allowCompositeEncoding bool,
 ) opt.ColSet {
 	var res opt.ColSet
 	colType := c.f.Metadata().ColumnMeta(col).Type
 
 	// Don't bother looking for equivalent columns if colType has a composite
 	// key encoding.
-	if colinfo.HasCompositeKeyEncoding(colType) {
+	if !allowCompositeEncoding && colinfo.HasCompositeKeyEncoding(colType) {
 		res.Add(col)
 		return res
 	}
