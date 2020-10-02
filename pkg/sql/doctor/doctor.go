@@ -176,6 +176,12 @@ func ExamineDescriptors(
 			}
 			continue
 		}
+
+		if desc.Dropped() {
+			fmt.Fprint(stdout, reportMsg(desc, "dropped but namespace entry(s) found: %v", names))
+			problemsFound = true
+		}
+
 		// We delete all pointed descriptors to leave what is missing in the
 		// descriptor table.
 		delete(nMap, row.ID)
