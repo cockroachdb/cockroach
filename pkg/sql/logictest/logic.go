@@ -643,7 +643,7 @@ var logicTestConfigs = []testClusterConfig{
 		// make test PKG=./pkg/ccl/logictestccl TESTS=TestBackupRestoreLogic//<test_name>
 		name:                     "backup-restore",
 		numNodes:                 3,
-		backupRestoreProbability: 0.2,
+		backupRestoreProbability: 1.0,
 		isCCLConfig:              true,
 	},
 }
