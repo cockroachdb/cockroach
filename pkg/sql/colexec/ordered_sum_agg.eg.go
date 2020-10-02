@@ -65,8 +65,6 @@ type sumInt16OrderedAgg struct {
 
 var _ aggregateFunc = &sumInt16OrderedAgg{}
 
-const sizeOfSumInt16OrderedAgg = int64(unsafe.Sizeof(sumInt16OrderedAgg{}))
-
 func (a *sumInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
@@ -249,9 +247,12 @@ type sumInt16OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumInt16OrderedAggAlloc{}
 
+const sizeOfSumInt16OrderedAgg = int64(unsafe.Sizeof(sumInt16OrderedAgg{}))
+const sumInt16OrderedAggSliceOverhead = int64(unsafe.Sizeof([]sumInt16OrderedAgg{}))
+
 func (a *sumInt16OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumInt16OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumInt16OrderedAggSliceOverhead + sizeOfSumInt16OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]sumInt16OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -275,8 +276,6 @@ type sumInt32OrderedAgg struct {
 }
 
 var _ aggregateFunc = &sumInt32OrderedAgg{}
-
-const sizeOfSumInt32OrderedAgg = int64(unsafe.Sizeof(sumInt32OrderedAgg{}))
 
 func (a *sumInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -460,9 +459,12 @@ type sumInt32OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumInt32OrderedAggAlloc{}
 
+const sizeOfSumInt32OrderedAgg = int64(unsafe.Sizeof(sumInt32OrderedAgg{}))
+const sumInt32OrderedAggSliceOverhead = int64(unsafe.Sizeof([]sumInt32OrderedAgg{}))
+
 func (a *sumInt32OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumInt32OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumInt32OrderedAggSliceOverhead + sizeOfSumInt32OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]sumInt32OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -486,8 +488,6 @@ type sumInt64OrderedAgg struct {
 }
 
 var _ aggregateFunc = &sumInt64OrderedAgg{}
-
-const sizeOfSumInt64OrderedAgg = int64(unsafe.Sizeof(sumInt64OrderedAgg{}))
 
 func (a *sumInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -671,9 +671,12 @@ type sumInt64OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumInt64OrderedAggAlloc{}
 
+const sizeOfSumInt64OrderedAgg = int64(unsafe.Sizeof(sumInt64OrderedAgg{}))
+const sumInt64OrderedAggSliceOverhead = int64(unsafe.Sizeof([]sumInt64OrderedAgg{}))
+
 func (a *sumInt64OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumInt64OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumInt64OrderedAggSliceOverhead + sizeOfSumInt64OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]sumInt64OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -696,8 +699,6 @@ type sumDecimalOrderedAgg struct {
 }
 
 var _ aggregateFunc = &sumDecimalOrderedAgg{}
-
-const sizeOfSumDecimalOrderedAgg = int64(unsafe.Sizeof(sumDecimalOrderedAgg{}))
 
 func (a *sumDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -874,9 +875,12 @@ type sumDecimalOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumDecimalOrderedAggAlloc{}
 
+const sizeOfSumDecimalOrderedAgg = int64(unsafe.Sizeof(sumDecimalOrderedAgg{}))
+const sumDecimalOrderedAggSliceOverhead = int64(unsafe.Sizeof([]sumDecimalOrderedAgg{}))
+
 func (a *sumDecimalOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumDecimalOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumDecimalOrderedAggSliceOverhead + sizeOfSumDecimalOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]sumDecimalOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -899,8 +903,6 @@ type sumFloat64OrderedAgg struct {
 }
 
 var _ aggregateFunc = &sumFloat64OrderedAgg{}
-
-const sizeOfSumFloat64OrderedAgg = int64(unsafe.Sizeof(sumFloat64OrderedAgg{}))
 
 func (a *sumFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -1065,9 +1067,12 @@ type sumFloat64OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumFloat64OrderedAggAlloc{}
 
+const sizeOfSumFloat64OrderedAgg = int64(unsafe.Sizeof(sumFloat64OrderedAgg{}))
+const sumFloat64OrderedAggSliceOverhead = int64(unsafe.Sizeof([]sumFloat64OrderedAgg{}))
+
 func (a *sumFloat64OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumFloat64OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumFloat64OrderedAggSliceOverhead + sizeOfSumFloat64OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]sumFloat64OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1090,8 +1095,6 @@ type sumIntervalOrderedAgg struct {
 }
 
 var _ aggregateFunc = &sumIntervalOrderedAgg{}
-
-const sizeOfSumIntervalOrderedAgg = int64(unsafe.Sizeof(sumIntervalOrderedAgg{}))
 
 func (a *sumIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -1236,9 +1239,12 @@ type sumIntervalOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumIntervalOrderedAggAlloc{}
 
+const sizeOfSumIntervalOrderedAgg = int64(unsafe.Sizeof(sumIntervalOrderedAgg{}))
+const sumIntervalOrderedAggSliceOverhead = int64(unsafe.Sizeof([]sumIntervalOrderedAgg{}))
+
 func (a *sumIntervalOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumIntervalOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumIntervalOrderedAggSliceOverhead + sizeOfSumIntervalOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]sumIntervalOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

@@ -99,8 +99,6 @@ type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 
 var _ aggregateFunc = &sum_SUMKIND_TYPE_AGGKINDAgg{}
 
-const sizeOfSum_SUMKIND_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(sum_SUMKIND_TYPE_AGGKINDAgg{}))
-
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -195,9 +193,12 @@ type sum_SUMKIND_TYPE_AGGKINDAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sum_SUMKIND_TYPE_AGGKINDAggAlloc{}
 
+const sizeOfSum_SUMKIND_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(sum_SUMKIND_TYPE_AGGKINDAgg{}))
+const sum_SUMKIND_TYPE_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]sum_SUMKIND_TYPE_AGGKINDAgg{}))
+
 func (a *sum_SUMKIND_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSum_SUMKIND_TYPE_AGGKINDAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sum_SUMKIND_TYPE_AGGKINDAggSliceOverhead + sizeOfSum_SUMKIND_TYPE_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]sum_SUMKIND_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

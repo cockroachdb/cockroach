@@ -41,8 +41,6 @@ type defaultHashAgg struct {
 
 var _ aggregateFunc = &defaultHashAgg{}
 
-const sizeOfDefaultHashAgg = int64(unsafe.Sizeof(defaultHashAgg{}))
-
 func (a *defaultHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -86,17 +84,15 @@ func (a *defaultHashAgg) Compute(
 }
 
 func (a *defaultHashAgg) Flush(outputIdx int) {
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		res, err := a.fn.Result()
-		if err != nil {
-			colexecerror.ExpectedError(err)
-		}
-		if res == tree.DNull {
-			a.nulls.SetNull(outputIdx)
-		} else {
-			coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
-		}
-	})
+	res, err := a.fn.Result()
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+	if res == tree.DNull {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
+	}
 }
 
 func newDefaultHashAggAlloc(
@@ -162,9 +158,12 @@ type defaultHashAggAlloc struct {
 var _ aggregateFuncAlloc = &defaultHashAggAlloc{}
 var _ Closer = &defaultHashAggAlloc{}
 
+const sizeOfDefaultHashAgg = int64(unsafe.Sizeof(defaultHashAgg{}))
+const defaultHashAggSliceOverhead = int64(unsafe.Sizeof([]defaultHashAggAlloc{}))
+
 func (a *defaultHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfDefaultHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(defaultHashAggSliceOverhead + sizeOfDefaultHashAgg*a.allocSize)
 		a.aggFuncs = make([]defaultHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
