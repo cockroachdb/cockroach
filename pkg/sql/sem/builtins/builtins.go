@@ -2984,6 +2984,43 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_array_length": makeBuiltin(jsonProps(), jsonArrayLengthImpl),
 
+	"jsonb_exists_any": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"json", types.Jsonb},
+				{"array", types.StringArray},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(e *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				j := tree.MustBeDJSON(args[0])
+
+				if j.Type() == json.ArrayJSONType {
+					return tree.DNull, nil
+				}
+
+				dArray := *tree.MustBeDArray(args[1])
+				if dArray.Len() == 0 {
+					return nil, pgerror.New(pgcode.IndeterminateDatatype,
+						"cannot determine type of empty array")
+				}
+
+				for _, datum := range dArray.Array {
+					if datum == tree.DNull {
+						continue
+					}
+					key, _ := j.FetchValKey(string(tree.MustBeDString(datum)))
+					if key != nil {
+						return tree.DBoolTrue, nil
+					}
+				}
+				return tree.DBoolFalse, nil
+			},
+			Info:       "Determine weather any keys are exist in the JSON",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"crdb_internal.pb_to_json": makeBuiltin(
 		jsonProps(),
 		tree.Overload{

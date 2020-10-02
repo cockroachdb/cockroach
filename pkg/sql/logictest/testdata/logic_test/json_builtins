@@ -1147,3 +1147,24 @@ query T
 SELECT '["a", {"b":1}]'::jsonb #- '{1,b}'
 ----
 ["a", {}]
+
+query BBBB
+select
+       jsonb_exists_any('{"id":12,"name":"Micheal","address": {"postcode":12,"state":"California"}}'::jsonb, array['id']),
+       jsonb_exists_any('{"id":12,"name":"Micheal","address": {"postcode":12,"state":"California"}}'::jsonb->'address', array['state']),
+       jsonb_exists_any('{"id":12,"name":"Micheal","address": {"postcode":12,"state":"California"}}'::jsonb, array[NULL,'id']),
+       jsonb_exists_any('{"id":12,"name":"Micheal","address": {"postcode":12,"state":"California"}}'::jsonb, array[NULL,'ids']);
+----
+true true true false
+
+query error pq: jsonb_exists_any\(\): cannot determine type of empty array
+select
+    jsonb_exists_any('{"id":12,"name":"Micheal","address": {"postcode":12,"state":"California"}}'::jsonb, array[]);
+
+query error pq: unknown signature: jsonb_exists_any\(jsonb, int\[\]\)
+select
+    jsonb_exists_any('{"id":12,"name":"Micheal","address": {"postcode":12,"state":"California"}}'::jsonb, array[1]);
+
+query error pq: jsonb_exists_any\(\): could not parse "id" as type int: strconv\.ParseInt: parsing "id": invalid syntax
+select
+    jsonb_exists_any('{"id":12,"name":"Micheal","address": {"postcode":12,"state":"California"}}'::jsonb, array['id',1]);
