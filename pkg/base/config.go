@@ -529,6 +529,8 @@ type TempStorageConfig struct {
 	Mon *mon.BytesMonitor
 	// Spec stores the StoreSpec this TempStorageConfig will use.
 	Spec StoreSpec
+	// Settings stores the cluster.Settings this TempStoreConfig will use.
+	Settings *cluster.Settings
 }
 
 // ExternalIODirConfig describes various configuration options pertaining
@@ -578,6 +580,7 @@ func TempStorageConfigFromEnv(
 		InMemory: inMem,
 		Mon:      monitor,
 		Spec:     useStore,
+		Settings: st,
 	}
 }
 

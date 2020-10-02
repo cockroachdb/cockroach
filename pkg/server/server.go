@@ -1171,7 +1171,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
 
-	s.node.startAssertEngineHealth(ctx, s.engines)
+	// Pebble does its own engine health checks, that call back into an event
+	// handler registered in storage/pebble.go when a slow disk event is
+	// detected. Starting a separate routine for Pebble is unnecessary.
+	if s.engines[0].Type() != enginepb.EngineTypePebble {
+		s.node.startAssertEngineHealth(ctx, s.engines, s.cfg.Settings)
+	}
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
