@@ -1538,13 +1538,13 @@ func (tc *Collection) getUncommittedDescriptorByID(id descpb.ID) catalog.Mutable
 }
 
 // GetAllDescriptors returns all descriptors visible by the transaction,
-// first checking the Collection's cached descriptors for validity
-// before defaulting to a key-value scan, if necessary.
+// first checking the Collection's cached descriptors for validity if validate
+// is set to true before defaulting to a key-value scan, if necessary.
 func (tc *Collection) GetAllDescriptors(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, validate bool,
 ) ([]catalog.Descriptor, error) {
 	if tc.allDescriptors == nil {
-		descs, err := catalogkv.GetAllDescriptors(ctx, txn, tc.codec())
+		descs, err := catalogkv.GetAllDescriptors(ctx, txn, tc.codec(), validate)
 		if err != nil {
 			return nil, err
 		}
@@ -1628,15 +1628,19 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 // transaction, first checking the Collection's cached descriptors for
 // validity before scanning system.namespace and looking up the descriptors
 // in the database cache, if necessary.
+// If the argument allowMissingDesc is true, the function will return nil-s for
+// missing database descriptors.
 func (tc *Collection) GetAllDatabaseDescriptors(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, allowMissingDesc bool,
 ) ([]*dbdesc.Immutable, error) {
 	if tc.allDatabaseDescriptors == nil {
 		dbDescIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
 		if err != nil {
 			return nil, err
 		}
-		dbDescs, err := catalogkv.GetDatabaseDescriptorsFromIDs(ctx, txn, tc.codec(), dbDescIDs)
+		dbDescs, err := catalogkv.GetDatabaseDescriptorsFromIDs(
+			ctx, txn, tc.codec(), dbDescIDs, allowMissingDesc,
+		)
 		if err != nil {
 			return nil, err
 		}

@@ -157,7 +157,7 @@ func GetDescriptorByID(
 	if mutable {
 		desc, err = unwrapDescriptorMutable(ctx, dg, ts, raw)
 	} else {
-		desc, err = unwrapDescriptor(ctx, dg, ts, raw)
+		desc, err = unwrapDescriptor(ctx, dg, ts, raw, true /* validate */)
 	}
 	if err != nil {
 		return nil, err
@@ -282,9 +282,14 @@ var _ catalog.DescGetter = (*oneLevelUncachedDescGetter)(nil)
 
 // unwrapDescriptor takes a descriptor retrieved using a transaction and unwraps
 // it into an immutable implementation of Descriptor. It ensures that
-// the ModificationTime is set properly.
+// the ModificationTime is set properly and will validate the descriptor if
+// validate is true.
 func unwrapDescriptor(
-	ctx context.Context, dg catalog.DescGetter, ts hlc.Timestamp, desc *descpb.Descriptor,
+	ctx context.Context,
+	dg catalog.DescGetter,
+	ts hlc.Timestamp,
+	desc *descpb.Descriptor,
+	validate bool,
 ) (catalog.Descriptor, error) {
 	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
 	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
@@ -295,14 +300,18 @@ func unwrapDescriptor(
 		if err != nil {
 			return nil, err
 		}
-		if err := immTable.Validate(ctx, dg); err != nil {
-			return nil, err
+		if validate {
+			if err := immTable.Validate(ctx, dg); err != nil {
+				return nil, err
+			}
 		}
 		return tabledesc.NewImmutable(*table), nil
 	case database != nil:
 		dbDesc := dbdesc.NewImmutable(*database)
-		if err := dbDesc.Validate(); err != nil {
-			return nil, err
+		if validate {
+			if err := dbDesc.Validate(); err != nil {
+				return nil, err
+			}
 		}
 		return dbDesc, nil
 	case typ != nil:
@@ -352,7 +361,7 @@ func unwrapDescriptorMutable(
 // CountUserDescriptors returns the number of descriptors present that were
 // created by the user (i.e. not present when the cluster started).
 func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) (int, error) {
-	allDescs, err := GetAllDescriptors(ctx, txn, codec)
+	allDescs, err := GetAllDescriptors(ctx, txn, codec, true /* validate */)
 	if err != nil {
 		return 0, err
 	}
@@ -367,9 +376,10 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec)
 	return count, nil
 }
 
-// GetAllDescriptors looks up and returns all available descriptors.
+// GetAllDescriptors looks up and returns all available descriptors. If validate
+// is set to true, it will also validate them.
 func GetAllDescriptors(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, validate bool,
 ) ([]catalog.Descriptor, error) {
 	log.Eventf(ctx, "fetching all descriptors")
 	descsKey := catalogkeys.MakeAllDescsMetadataKey(codec)
@@ -387,7 +397,7 @@ func GetAllDescriptors(
 			return nil, err
 		}
 		var err error
-		if descs[i], err = unwrapDescriptor(ctx, dg, kv.Value.Timestamp, desc); err != nil {
+		if descs[i], err = unwrapDescriptor(ctx, dg, kv.Value.Timestamp, desc, validate); err != nil {
 			return nil, err
 		}
 	}
@@ -547,7 +557,7 @@ func MustGetSchemaDescByID(
 }
 
 func getDescriptorsFromIDs(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID, allowMissingDesc bool,
 ) ([]catalog.Descriptor, error) {
 	b := txn.NewBatch()
 	for _, id := range ids {
@@ -574,11 +584,17 @@ func getDescriptorsFromIDs(
 		if err := result.Rows[0].ValueProto(desc); err != nil {
 			return nil, err
 		}
-		catalogDesc, err := unwrapDescriptor(ctx, nil /* descGetter */, result.Rows[0].Value.Timestamp, desc)
-		if err != nil {
-			return nil, err
+
+		var catalogDesc catalog.Descriptor
+		if desc.Union != nil {
+			var err error
+			catalogDesc, err = unwrapDescriptor(ctx, nil /* descGetter */, result.Rows[0].Value.Timestamp, desc, true)
+			if err != nil {
+				return nil, err
+			}
 		}
-		if catalogDesc == nil {
+
+		if catalogDesc == nil && !allowMissingDesc {
 			return nil, catalog.ErrDescriptorNotFound
 		}
 		results = append(results, catalogDesc)
@@ -590,16 +606,24 @@ func getDescriptorsFromIDs(
 // set of database IDs. It will return an error if any one of the IDs is not a
 // database. It attempts to perform this operation in a single request,
 // rather than making a round trip for each ID.
+// If the argument allowMissingDesc is true the function will tolerate nil
+// descriptors otherwise it will throw an error.
 func GetDatabaseDescriptorsFromIDs(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID, allowMissingDesc bool,
 ) ([]*dbdesc.Immutable, error) {
-	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids)
+	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids, allowMissingDesc)
 	if err != nil {
 		return nil, err
 	}
 	res := make([]*dbdesc.Immutable, len(descs))
 	for i := range descs {
 		desc := descs[i]
+		if desc == nil {
+			if allowMissingDesc {
+				continue
+			}
+			return nil, catalog.ErrDescriptorNotFound
+		}
 		db, ok := desc.(*dbdesc.Immutable)
 		if !ok {
 			return nil, errors.AssertionFailedf("%q is not a database", desc.GetName())
@@ -615,7 +639,7 @@ func GetDatabaseDescriptorsFromIDs(
 func GetSchemaDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
 ) ([]*schemadesc.Immutable, error) {
-	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids)
+	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids, false /* allowMissingDesc */)
 	if err != nil {
 		return nil, err
 	}
