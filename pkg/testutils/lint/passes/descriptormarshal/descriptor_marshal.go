@@ -18,6 +18,7 @@ import (
 	"go/ast"
 	"go/types"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/astutil"
@@ -95,18 +96,8 @@ func isAllowed(obj *types.Func) bool {
 	return false
 }
 
-func findContainingFile(pass *analysis.Pass, n ast.Node) *ast.File {
-	fPos := pass.Fset.File(n.Pos())
-	for _, f := range pass.Files {
-		if pass.Fset.File(f.Pos()) == fPos {
-			return f
-		}
-	}
-	panic(fmt.Errorf("cannot file file for %v", n))
-}
-
 func findContainingFunc(pass *analysis.Pass, n ast.Node) *types.Func {
-	stack, _ := astutil.PathEnclosingInterval(findContainingFile(pass, n), n.Pos(), n.End())
+	stack, _ := astutil.PathEnclosingInterval(passesutil.FindContainingFile(pass, n), n.Pos(), n.End())
 	for i := len(stack) - 1; i >= 0; i-- {
 		// If we stumble upon a func decl or func lit then we're in an interesting spot
 		funcDecl, ok := stack[i].(*ast.FuncDecl)

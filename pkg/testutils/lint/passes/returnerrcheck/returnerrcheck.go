@@ -18,8 +18,8 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/astutil"
@@ -31,16 +31,17 @@ const Doc = `check for return of nil in a conditional which check for non-nil er
 
 var errorType = types.Universe.Lookup("error").Type()
 
+const name = "returnerrcheck"
+
 // Analyzer is a linter that ensures that returns from functions which
 // return an error as their last return value which have returns inside
 // the body of if conditionals which check for an error to be non-nil do
 // not return a nil error without a `//nolint:returnerrcheck` comment.
 var Analyzer = &analysis.Analyzer{
-	Name:     "returnerrcheck",
+	Name:     name,
 	Doc:      Doc,
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run: func(pass *analysis.Pass) (interface{}, error) {
-
 		inspect := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 		inspect.Preorder([]ast.Node{
 			(*ast.IfStmt)(nil),
@@ -74,7 +75,7 @@ var Analyzer = &analysis.Analyzer{
 				if hasAcceptableAction(pass, errObj, ifStmt.Body.List[:i+1]) {
 					continue
 				}
-				if hasNoLintComment(pass, ifStmt, returnStmt) {
+				if passesutil.HasNolintComment(pass, returnStmt, name) {
 					continue
 				}
 				pass.Report(analysis.Diagnostic{
@@ -162,18 +163,6 @@ func hasAcceptableAction(pass *analysis.Pass, errObj types.Object, statements []
 	return false
 }
 
-func hasNoLintComment(pass *analysis.Pass, ifStmt, returnStmt ast.Node) bool {
-	f := findContainingFile(pass, ifStmt)
-	cm := ast.NewCommentMap(pass.Fset, ifStmt, f.Comments)
-	cm = cm.Filter(returnStmt)
-	for _, cg := range cm[returnStmt] {
-		if strings.Contains(cg.Text(), "nolint:returnerrcheck") {
-			return true
-		}
-	}
-	return false
-}
-
 func isNonNilErrCheck(pass *analysis.Pass, expr ast.Expr) (errObj types.Object, ok bool) {
 	// TODO(ajwerner): Maybe make this understand !(err == nil) and its variants.
 	binaryExpr, ok := expr.(*ast.BinaryExpr)
@@ -210,18 +199,8 @@ func funcReturnsErrorLast(f *types.Signature) bool {
 		results.At(results.Len()-1).Type() == errorType
 }
 
-func findContainingFile(pass *analysis.Pass, n ast.Node) *ast.File {
-	fPos := pass.Fset.File(n.Pos())
-	for _, f := range pass.Files {
-		if pass.Fset.File(f.Pos()) == fPos {
-			return f
-		}
-	}
-	panic(fmt.Errorf("cannot file file for %v", n))
-}
-
 func findContainingFunc(pass *analysis.Pass, n ast.Node) *types.Signature {
-	stack, _ := astutil.PathEnclosingInterval(findContainingFile(pass, n), n.Pos(), n.End())
+	stack, _ := astutil.PathEnclosingInterval(passesutil.FindContainingFile(pass, n), n.Pos(), n.End())
 	for _, n := range stack {
 		if funcDecl, ok := n.(*ast.FuncDecl); ok {
 			return pass.TypesInfo.ObjectOf(funcDecl.Name).(*types.Func).Type().(*types.Signature)
