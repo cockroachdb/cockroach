@@ -85,6 +85,10 @@ type providerOpts struct {
 	// on the geo flag being set. If no zones specified, defaultCreateZones are
 	// used. See defaultCreateZones.
 	CreateZones []string
+	// CreateRateLimit specifies the rate limit used for aws instance creation.
+	// The request limit from aws' side can vary across regions, as well as the
+	// size of cluster being created.
+	CreateRateLimit float64
 }
 
 const (
@@ -147,6 +151,10 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"of geo (default [%s])", strings.Join(defaultCreateZones, ",")))
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		"", "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
+	flags.Float64Var(&o.CreateRateLimit, ProviderName+"-create-rate-limit", 2, "aws"+
+		" rate limit (per second) for instance creation. This is used to avoid hitting the request"+
+		" limits from aws, which can vary based on the region, and the size of the cluster being"+
+		" created. Try lowering this limit when hitting 'Request limit exceeded' errors.")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -257,8 +265,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		}
 	}
 	var g errgroup.Group
-	const rateLimit = 2 // per second
-	limiter := rate.NewLimiter(rateLimit, 2 /* buckets */)
+	limiter := rate.NewLimiter(rate.Limit(p.opts.CreateRateLimit), 2 /* buckets */)
 	for i := range names {
 		capName := names[i]
 		placement := zones[i]
