@@ -442,7 +442,9 @@ historical reads against a time which is recent but sufficiently old for reads
 to be performed against the closest replica as opposed to the currently
 leaseholder for a given range.</p>
 <p>Note that this function requires an enterprise license on a CCL distribution to
-return without an error.</p>
+return a result that is less likely the closest replica. It is otherwise
+hardcoded as -4.8s from the statement time, which may not result in reading from the
+nearest replica.</p>
 </span></td></tr>
 <tr><td><a name="localtimestamp"></a><code>localtimestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
