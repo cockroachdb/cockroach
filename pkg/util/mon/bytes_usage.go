@@ -391,10 +391,12 @@ func (mm *BytesMonitor) Stop(ctx context.Context) {
 	mm.doStop(ctx, true)
 }
 
+const bytesMaxUsageLoggingThreshold = 100 * 1024
+
 func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	// NB: No need to lock mm.mu here, when StopMonitor() is called the
 	// monitor is not shared any more.
-	if log.V(1) {
+	if log.V(1) && mm.mu.maxAllocated >= bytesMaxUsageLoggingThreshold {
 		log.InfofDepth(ctx, 1, "%s, bytes usage max %s",
 			mm.name,
 			humanizeutil.IBytes(mm.mu.maxAllocated))
