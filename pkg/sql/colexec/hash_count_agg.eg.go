@@ -34,8 +34,6 @@ type countRowsHashAgg struct {
 
 var _ aggregateFunc = &countRowsHashAgg{}
 
-const sizeOfCountRowsHashAgg = int64(unsafe.Sizeof(countRowsHashAgg{}))
-
 func (a *countRowsHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Int64()
@@ -78,9 +76,12 @@ type countRowsHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &countRowsHashAggAlloc{}
 
+const sizeOfCountRowsHashAgg = int64(unsafe.Sizeof(countRowsHashAgg{}))
+const countRowsHashAggSliceOverhead = int64(unsafe.Sizeof([]countRowsHashAgg{}))
+
 func (a *countRowsHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfCountRowsHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(countRowsHashAggSliceOverhead + sizeOfCountRowsHashAgg*a.allocSize)
 		a.aggFuncs = make([]countRowsHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -105,8 +106,6 @@ type countHashAgg struct {
 }
 
 var _ aggregateFunc = &countHashAgg{}
-
-const sizeOfCountHashAgg = int64(unsafe.Sizeof(countHashAgg{}))
 
 func (a *countHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -164,9 +163,12 @@ type countHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &countHashAggAlloc{}
 
+const sizeOfCountHashAgg = int64(unsafe.Sizeof(countHashAgg{}))
+const countHashAggSliceOverhead = int64(unsafe.Sizeof([]countHashAgg{}))
+
 func (a *countHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfCountHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(countHashAggSliceOverhead + sizeOfCountHashAgg*a.allocSize)
 		a.aggFuncs = make([]countHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

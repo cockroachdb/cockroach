@@ -68,8 +68,6 @@ type avgInt16OrderedAgg struct {
 
 var _ aggregateFunc = &avgInt16OrderedAgg{}
 
-const sizeOfAvgInt16OrderedAgg = int64(unsafe.Sizeof(avgInt16OrderedAgg{}))
-
 func (a *avgInt16OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
@@ -282,9 +280,12 @@ type avgInt16OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgInt16OrderedAggAlloc{}
 
+const sizeOfAvgInt16OrderedAgg = int64(unsafe.Sizeof(avgInt16OrderedAgg{}))
+const avgInt16OrderedAggSliceOverhead = int64(unsafe.Sizeof([]avgInt16OrderedAgg{}))
+
 func (a *avgInt16OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgInt16OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgInt16OrderedAggSliceOverhead + sizeOfAvgInt16OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]avgInt16OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -312,8 +313,6 @@ type avgInt32OrderedAgg struct {
 }
 
 var _ aggregateFunc = &avgInt32OrderedAgg{}
-
-const sizeOfAvgInt32OrderedAgg = int64(unsafe.Sizeof(avgInt32OrderedAgg{}))
 
 func (a *avgInt32OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -527,9 +526,12 @@ type avgInt32OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgInt32OrderedAggAlloc{}
 
+const sizeOfAvgInt32OrderedAgg = int64(unsafe.Sizeof(avgInt32OrderedAgg{}))
+const avgInt32OrderedAggSliceOverhead = int64(unsafe.Sizeof([]avgInt32OrderedAgg{}))
+
 func (a *avgInt32OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgInt32OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgInt32OrderedAggSliceOverhead + sizeOfAvgInt32OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]avgInt32OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -557,8 +559,6 @@ type avgInt64OrderedAgg struct {
 }
 
 var _ aggregateFunc = &avgInt64OrderedAgg{}
-
-const sizeOfAvgInt64OrderedAgg = int64(unsafe.Sizeof(avgInt64OrderedAgg{}))
 
 func (a *avgInt64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -772,9 +772,12 @@ type avgInt64OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgInt64OrderedAggAlloc{}
 
+const sizeOfAvgInt64OrderedAgg = int64(unsafe.Sizeof(avgInt64OrderedAgg{}))
+const avgInt64OrderedAggSliceOverhead = int64(unsafe.Sizeof([]avgInt64OrderedAgg{}))
+
 func (a *avgInt64OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgInt64OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgInt64OrderedAggSliceOverhead + sizeOfAvgInt64OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]avgInt64OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -801,8 +804,6 @@ type avgDecimalOrderedAgg struct {
 }
 
 var _ aggregateFunc = &avgDecimalOrderedAgg{}
-
-const sizeOfAvgDecimalOrderedAgg = int64(unsafe.Sizeof(avgDecimalOrderedAgg{}))
 
 func (a *avgDecimalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -1009,9 +1010,12 @@ type avgDecimalOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgDecimalOrderedAggAlloc{}
 
+const sizeOfAvgDecimalOrderedAgg = int64(unsafe.Sizeof(avgDecimalOrderedAgg{}))
+const avgDecimalOrderedAggSliceOverhead = int64(unsafe.Sizeof([]avgDecimalOrderedAgg{}))
+
 func (a *avgDecimalOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgDecimalOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgDecimalOrderedAggSliceOverhead + sizeOfAvgDecimalOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]avgDecimalOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1038,8 +1042,6 @@ type avgFloat64OrderedAgg struct {
 }
 
 var _ aggregateFunc = &avgFloat64OrderedAgg{}
-
-const sizeOfAvgFloat64OrderedAgg = int64(unsafe.Sizeof(avgFloat64OrderedAgg{}))
 
 func (a *avgFloat64OrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -1214,9 +1216,12 @@ type avgFloat64OrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgFloat64OrderedAggAlloc{}
 
+const sizeOfAvgFloat64OrderedAgg = int64(unsafe.Sizeof(avgFloat64OrderedAgg{}))
+const avgFloat64OrderedAggSliceOverhead = int64(unsafe.Sizeof([]avgFloat64OrderedAgg{}))
+
 func (a *avgFloat64OrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgFloat64OrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgFloat64OrderedAggSliceOverhead + sizeOfAvgFloat64OrderedAgg*a.allocSize)
 		a.aggFuncs = make([]avgFloat64OrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1243,8 +1248,6 @@ type avgIntervalOrderedAgg struct {
 }
 
 var _ aggregateFunc = &avgIntervalOrderedAgg{}
-
-const sizeOfAvgIntervalOrderedAgg = int64(unsafe.Sizeof(avgIntervalOrderedAgg{}))
 
 func (a *avgIntervalOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -1399,9 +1402,12 @@ type avgIntervalOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &avgIntervalOrderedAggAlloc{}
 
+const sizeOfAvgIntervalOrderedAgg = int64(unsafe.Sizeof(avgIntervalOrderedAgg{}))
+const avgIntervalOrderedAggSliceOverhead = int64(unsafe.Sizeof([]avgIntervalOrderedAgg{}))
+
 func (a *avgIntervalOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAvgIntervalOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(avgIntervalOrderedAggSliceOverhead + sizeOfAvgIntervalOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]avgIntervalOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

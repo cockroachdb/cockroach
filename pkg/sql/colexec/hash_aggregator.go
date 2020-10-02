@@ -256,13 +256,15 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 		case hashAggregatorOutputting:
 			op.output.ResetInternalBatch()
 			curOutputIdx := 0
-			for curOutputIdx < op.output.Capacity() && curOutputIdx < len(op.buckets) {
-				bucket := op.buckets[curOutputIdx]
-				for _, fn := range bucket.fns {
-					fn.Flush(curOutputIdx)
+			op.allocator.PerformOperation(op.output.ColVecs(), func() {
+				for curOutputIdx < op.output.Capacity() && curOutputIdx < len(op.buckets) {
+					bucket := op.buckets[curOutputIdx]
+					for _, fn := range bucket.fns {
+						fn.Flush(curOutputIdx)
+					}
+					curOutputIdx++
 				}
-				curOutputIdx++
-			}
+			})
 			op.buckets = op.buckets[curOutputIdx:]
 			if len(op.buckets) == 0 {
 				op.state = hashAggregatorDone

@@ -38,8 +38,6 @@ type boolAndOrderedAgg struct {
 
 var _ aggregateFunc = &boolAndOrderedAgg{}
 
-const sizeOfBoolAndOrderedAgg = int64(unsafe.Sizeof(boolAndOrderedAgg{}))
-
 func (a *boolAndOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Bool()
@@ -172,9 +170,12 @@ type boolAndOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &boolAndOrderedAggAlloc{}
 
+const sizeOfBoolAndOrderedAgg = int64(unsafe.Sizeof(boolAndOrderedAgg{}))
+const boolAndOrderedAggSliceOverhead = int64(unsafe.Sizeof([]boolAndOrderedAgg{}))
+
 func (a *boolAndOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfBoolAndOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(boolAndOrderedAggSliceOverhead + sizeOfBoolAndOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]boolAndOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -199,8 +200,6 @@ type boolOrOrderedAgg struct {
 }
 
 var _ aggregateFunc = &boolOrOrderedAgg{}
-
-const sizeOfBoolOrOrderedAgg = int64(unsafe.Sizeof(boolOrOrderedAgg{}))
 
 func (a *boolOrOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -334,9 +333,12 @@ type boolOrOrderedAggAlloc struct {
 
 var _ aggregateFuncAlloc = &boolOrOrderedAggAlloc{}
 
+const sizeOfBoolOrOrderedAgg = int64(unsafe.Sizeof(boolOrOrderedAgg{}))
+const boolOrOrderedAggSliceOverhead = int64(unsafe.Sizeof([]boolOrOrderedAgg{}))
+
 func (a *boolOrOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfBoolOrOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(boolOrOrderedAggSliceOverhead + sizeOfBoolOrOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]boolOrOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

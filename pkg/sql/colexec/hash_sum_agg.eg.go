@@ -65,8 +65,6 @@ type sumInt16HashAgg struct {
 
 var _ aggregateFunc = &sumInt16HashAgg{}
 
-const sizeOfSumInt16HashAgg = int64(unsafe.Sizeof(sumInt16HashAgg{}))
-
 func (a *sumInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.scratch.vec = vec.Decimal()
@@ -148,9 +146,12 @@ type sumInt16HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumInt16HashAggAlloc{}
 
+const sizeOfSumInt16HashAgg = int64(unsafe.Sizeof(sumInt16HashAgg{}))
+const sumInt16HashAggSliceOverhead = int64(unsafe.Sizeof([]sumInt16HashAgg{}))
+
 func (a *sumInt16HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumInt16HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumInt16HashAggSliceOverhead + sizeOfSumInt16HashAgg*a.allocSize)
 		a.aggFuncs = make([]sumInt16HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -174,8 +175,6 @@ type sumInt32HashAgg struct {
 }
 
 var _ aggregateFunc = &sumInt32HashAgg{}
-
-const sizeOfSumInt32HashAgg = int64(unsafe.Sizeof(sumInt32HashAgg{}))
 
 func (a *sumInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -258,9 +257,12 @@ type sumInt32HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumInt32HashAggAlloc{}
 
+const sizeOfSumInt32HashAgg = int64(unsafe.Sizeof(sumInt32HashAgg{}))
+const sumInt32HashAggSliceOverhead = int64(unsafe.Sizeof([]sumInt32HashAgg{}))
+
 func (a *sumInt32HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumInt32HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumInt32HashAggSliceOverhead + sizeOfSumInt32HashAgg*a.allocSize)
 		a.aggFuncs = make([]sumInt32HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -284,8 +286,6 @@ type sumInt64HashAgg struct {
 }
 
 var _ aggregateFunc = &sumInt64HashAgg{}
-
-const sizeOfSumInt64HashAgg = int64(unsafe.Sizeof(sumInt64HashAgg{}))
 
 func (a *sumInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -368,9 +368,12 @@ type sumInt64HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumInt64HashAggAlloc{}
 
+const sizeOfSumInt64HashAgg = int64(unsafe.Sizeof(sumInt64HashAgg{}))
+const sumInt64HashAggSliceOverhead = int64(unsafe.Sizeof([]sumInt64HashAgg{}))
+
 func (a *sumInt64HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumInt64HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumInt64HashAggSliceOverhead + sizeOfSumInt64HashAgg*a.allocSize)
 		a.aggFuncs = make([]sumInt64HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -393,8 +396,6 @@ type sumDecimalHashAgg struct {
 }
 
 var _ aggregateFunc = &sumDecimalHashAgg{}
-
-const sizeOfSumDecimalHashAgg = int64(unsafe.Sizeof(sumDecimalHashAgg{}))
 
 func (a *sumDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -472,9 +473,12 @@ type sumDecimalHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumDecimalHashAggAlloc{}
 
+const sizeOfSumDecimalHashAgg = int64(unsafe.Sizeof(sumDecimalHashAgg{}))
+const sumDecimalHashAggSliceOverhead = int64(unsafe.Sizeof([]sumDecimalHashAgg{}))
+
 func (a *sumDecimalHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumDecimalHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumDecimalHashAggSliceOverhead + sizeOfSumDecimalHashAgg*a.allocSize)
 		a.aggFuncs = make([]sumDecimalHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -497,8 +501,6 @@ type sumFloat64HashAgg struct {
 }
 
 var _ aggregateFunc = &sumFloat64HashAgg{}
-
-const sizeOfSumFloat64HashAgg = int64(unsafe.Sizeof(sumFloat64HashAgg{}))
 
 func (a *sumFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -570,9 +572,12 @@ type sumFloat64HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumFloat64HashAggAlloc{}
 
+const sizeOfSumFloat64HashAgg = int64(unsafe.Sizeof(sumFloat64HashAgg{}))
+const sumFloat64HashAggSliceOverhead = int64(unsafe.Sizeof([]sumFloat64HashAgg{}))
+
 func (a *sumFloat64HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumFloat64HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumFloat64HashAggSliceOverhead + sizeOfSumFloat64HashAgg*a.allocSize)
 		a.aggFuncs = make([]sumFloat64HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -595,8 +600,6 @@ type sumIntervalHashAgg struct {
 }
 
 var _ aggregateFunc = &sumIntervalHashAgg{}
-
-const sizeOfSumIntervalHashAgg = int64(unsafe.Sizeof(sumIntervalHashAgg{}))
 
 func (a *sumIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -658,9 +661,12 @@ type sumIntervalHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &sumIntervalHashAggAlloc{}
 
+const sizeOfSumIntervalHashAgg = int64(unsafe.Sizeof(sumIntervalHashAgg{}))
+const sumIntervalHashAggSliceOverhead = int64(unsafe.Sizeof([]sumIntervalHashAgg{}))
+
 func (a *sumIntervalHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfSumIntervalHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sumIntervalHashAggSliceOverhead + sizeOfSumIntervalHashAgg*a.allocSize)
 		a.aggFuncs = make([]sumIntervalHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
