@@ -250,6 +250,7 @@ project
  ├── columns: f:3 r:7
  ├── cardinality: [0 - 5]
  ├── immutable
+ ├── fd: (3)-->(7)
  ├── ordering: +3
  ├── limit
  │    ├── columns: i:2 f:3
@@ -375,6 +376,7 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET
 project
  ├── columns: f:3 r:7
  ├── immutable
+ ├── fd: (3)-->(7)
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2 f:3
@@ -434,6 +436,7 @@ project
  ├── columns: f:3 r:7
  ├── cardinality: [0 - 10]
  ├── immutable
+ ├── fd: (3)-->(7)
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2 f:3

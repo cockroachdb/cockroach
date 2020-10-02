@@ -308,6 +308,7 @@ SELECT f, f+1.1 AS r FROM (SELECT f, k FROM a GROUP BY f, k HAVING sum(k)=100) a
 project
  ├── columns: f:3 r:7
  ├── immutable
+ ├── fd: (3)-->(7)
  ├── select
  │    ├── columns: k:1!null f:3 sum:6!null
  │    ├── immutable
@@ -436,6 +437,7 @@ project
  ├── columns: f:3 r:6
  ├── cardinality: [0 - 5]
  ├── immutable
+ ├── fd: (3)-->(6)
  ├── limit
  │    ├── columns: f:3 s:4
  │    ├── cardinality: [0 - 5]
@@ -678,6 +680,7 @@ project
  ├── columns: f:3 r:6
  ├── cardinality: [0 - 5]
  ├── immutable
+ ├── fd: (3)-->(6)
  ├── offset
  │    ├── columns: f:3 s:4
  │    ├── cardinality: [0 - 5]

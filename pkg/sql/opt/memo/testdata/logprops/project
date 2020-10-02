@@ -359,6 +359,26 @@ project
       └── cast: STRING [as=d:6, type=string, outer=(4), immutable]
            └── variable: xysd.d:4 [type=decimal]
 
+# We have the FD d --> d+1.
+build
+SELECT d, d+1 FROM xysd
+----
+project
+ ├── columns: d:4(decimal!null) "?column?":6(decimal!null)
+ ├── immutable
+ ├── fd: (4)-->(6)
+ ├── prune: (4,6)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+ │    ├── prune: (1-5)
+ │    └── interesting orderings: (+1) (-3,+4,+1)
+ └── projections
+      └── plus [as="?column?":6, type=decimal, outer=(4), immutable]
+           ├── variable: d:4 [type=decimal]
+           └── const: 1 [type=decimal]
+
 # We have the equality relation between the synthesized column and the column
 # it refers to.
 norm
