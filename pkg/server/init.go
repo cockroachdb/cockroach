@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -155,6 +157,43 @@ func (s *initServer) needsInitLocked() bool {
 type joinResult struct {
 	state *initState
 	err   error
+}
+
+// storeSettingsKVs stores settings locally. This helps in restoring the node
+// restart with the at least the same settings with which it died.
+func storeSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roachpb.KeyValue) error {
+	for _, kv := range kvs {
+		if err := storage.MVCCPut(
+			ctx, eng, nil, keys.StoreSettingsKey(kv.Key), hlc.Timestamp{}, kv.Value, nil,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// loadSettingsKVs loads settings which are locally stored in the store.
+func loadSettingsKVs(ctx context.Context, eng storage.Engine) ([]roachpb.KeyValue, error) {
+	var settingsKVs []roachpb.KeyValue
+	if err := eng.Iterate(
+		keys.LocalStoreSettingsKeyMin,
+		keys.LocalStoreSettingsKeyMax,
+		func(kv storage.MVCCKeyValue) (stop bool, err error) {
+			var settingKey roachpb.Key
+			settingKey, err = keys.DecodeStoreSettingsKey(kv.Key.Key)
+			if err != nil {
+				return true, err
+			}
+			settingsKVs = append(settingsKVs, roachpb.KeyValue{
+				Key:   settingKey,
+				Value: roachpb.MakeValueFromBytes(kv.Value),
+			})
+			return false, nil
+		},
+	); err != nil {
+		return nil, err
+	}
+	return settingsKVs, nil
 }
 
 // ServeAndWait waits until the server is initialized, i.e. has a cluster ID,

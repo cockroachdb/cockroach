@@ -110,6 +110,24 @@ func DecodeStoreSuggestedCompactionKey(key roachpb.Key) (start, end roachpb.Key,
 	return start, end, nil
 }
 
+// StoreSettingsKey returns a store-local key for store's settings.
+func StoreSettingsKey(settingKey roachpb.Key) roachpb.Key {
+	return MakeStoreKey(localStoreSettingsSuffix, roachpb.RKey(settingKey))
+}
+
+// DecodeStoreSettingsKey returns the setting's key of the settings kvs.
+func DecodeStoreSettingsKey(key roachpb.Key) (settingKey roachpb.Key, err error) {
+	var suffix, detail roachpb.RKey
+	suffix, detail, err = DecodeStoreKey(key)
+	if err != nil {
+		return nil, err
+	}
+	if !suffix.Equal(localStoreSettingsSuffix) {
+		return nil, errors.Errorf("key with suffix %q != %q", suffix, localStoreSettingsSuffix)
+	}
+	return detail.AsRawKey(), nil
+}
+
 // NodeLivenessKey returns the key for the node liveness record.
 func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
 	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)
