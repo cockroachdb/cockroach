@@ -41,8 +41,6 @@ type defaultOrderedAgg struct {
 
 var _ aggregateFunc = &defaultOrderedAgg{}
 
-const sizeOfDefaultOrderedAgg = int64(unsafe.Sizeof(defaultOrderedAgg{}))
-
 func (a *defaultOrderedAgg) Init(groups []bool, vec coldata.Vec) {
 	a.orderedAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -126,17 +124,15 @@ func (a *defaultOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		res, err := a.fn.Result()
-		if err != nil {
-			colexecerror.ExpectedError(err)
-		}
-		if res == tree.DNull {
-			a.nulls.SetNull(outputIdx)
-		} else {
-			coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
-		}
-	})
+	res, err := a.fn.Result()
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+	if res == tree.DNull {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
+	}
 }
 
 func newDefaultOrderedAggAlloc(
@@ -202,9 +198,12 @@ type defaultOrderedAggAlloc struct {
 var _ aggregateFuncAlloc = &defaultOrderedAggAlloc{}
 var _ Closer = &defaultOrderedAggAlloc{}
 
+const sizeOfDefaultOrderedAgg = int64(unsafe.Sizeof(defaultOrderedAgg{}))
+const defaultOrderedAggSliceOverhead = int64(unsafe.Sizeof([]defaultOrderedAggAlloc{}))
+
 func (a *defaultOrderedAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfDefaultOrderedAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(defaultOrderedAggSliceOverhead + sizeOfDefaultOrderedAgg*a.allocSize)
 		a.aggFuncs = make([]defaultOrderedAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
