@@ -55,6 +55,7 @@ sort
       ├── project
       │    ├── columns: column20:20!null column22:22!null l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_returnflag:9!null l_linestatus:10!null
       │    ├── immutable
+      │    ├── fd: (6,7)-->(20)
       │    ├── select
       │    │    ├── columns: l_quantity:5!null l_extendedprice:6!null l_discount:7!null l_tax:8!null l_returnflag:9!null l_linestatus:10!null l_shipdate:11!null
       │    │    ├── scan lineitem

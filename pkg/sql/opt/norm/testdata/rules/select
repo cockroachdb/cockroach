@@ -548,6 +548,7 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING sum(f)=10.0) 
 project
  ├── columns: f:3 r:8
  ├── immutable
+ ├── fd: (3)-->(8)
  ├── select
  │    ├── columns: i:2 f:3 sum:7!null
  │    ├── key: (2,3)
