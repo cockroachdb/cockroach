@@ -63,10 +63,10 @@ type SessionData struct {
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of namespaces to search builtins in.
 	SearchPath SearchPath
-	// TemporarySchemaID is the ID of the current session's temporary schema,
-	// if it exists. It is a descpb.ID, but cannot be stored as one due to
-	// packaging dependencies.
-	TemporarySchemaID uint32
+	// DatabaseIDToTempSchemaID stores the temp schema ID for every database that
+	// has created a temporary schema. The mapping is from descpb.ID -> desscpb.ID,
+	// but cannot be stored as such due to package dependencies.
+	DatabaseIDToTempSchemaID map[uint32]uint32
 	// StmtTimeout is the duration a query is permitted to run before it is
 	// canceled by the session. If set to 0, there is no timeout.
 	StmtTimeout time.Duration
@@ -150,6 +150,25 @@ type SessionData struct {
 	SynchronousCommit bool
 	// EnableSeqScan is a dummy setting for the enable_seqscan var.
 	EnableSeqScan bool
+}
+
+// IsTemporarySchemaID returns true if the given ID refers to any of the temp
+// schemas created by the session.
+func (s *SessionData) IsTemporarySchemaID(ID uint32) bool {
+	for _, tempSchemaID := range s.DatabaseIDToTempSchemaID {
+		if tempSchemaID == ID {
+			return true
+		}
+	}
+	return false
+}
+
+// GetTemporarySchemaIDForDb returns the schemaID for the temporary schema if
+// one exists for the DB. The second return value communicates the existence of
+// the temp schema for that DB.
+func (s *SessionData) GetTemporarySchemaIDForDb(dbID uint32) (uint32, bool) {
+	schemaID, found := s.DatabaseIDToTempSchemaID[dbID]
+	return schemaID, found
 }
 
 // DataConversionConfig contains the parameters that influence
