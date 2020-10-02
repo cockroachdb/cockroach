@@ -427,6 +427,7 @@ endif
 
 target-is-windows := $(findstring w64,$(TARGET_TRIPLE))
 target-is-macos := $(findstring darwin,$(TARGET_TRIPLE))
+target-is-linux := $(findstring linux,$(TARGET_TRIPLE))
 
 # CMAKE_TARGET_MESSAGES=OFF prevents CMake from printing progress messages
 # whenever a target is fully built to prevent spammy output from make when
@@ -778,6 +779,9 @@ ifdef is-cross-compile
 ifdef target-is-macos
 geos_require_install_name_tool := 1
 endif
+ifdef target-is-linux
+geos_require_patchelf := 1
+endif
 endif
 
 # For dlopen to work with OSX from any location, we need the @rpath directory prefix.
@@ -790,6 +794,14 @@ $(LIBGEOS): libgeos_inner .ALWAYS_REBUILD
 	$(TARGET_TRIPLE)-install_name_tool -id @rpath/libgeos.3.8.1.dylib lib/libgeos.dylib
 	$(TARGET_TRIPLE)-install_name_tool -id @rpath/libgeos_c.1.dylib lib/libgeos_c.dylib
 	$(TARGET_TRIPLE)-install_name_tool -change "$(GEOS_NATIVE_LIB_DIR)/libgeos.3.8.1.dylib" "@rpath/libgeos.3.8.1.dylib" lib.docker_amd64/libgeos_c.dylib
+else ifdef geos_require_patchelf
+# We apply a similar fix for linux, allowing one to dlopen libgeos_c.so without
+# dlopening libgeos.so. Setting the rpath in the CMakeLists.txt does not work
+# for cross compilation.
+$(LIBGEOS): libgeos_inner .ALWAYS_REBUILD
+	patchelf --set-rpath '/usr/local/lib/cockroach/' lib/libgeos_c.so
+	patchelf --set-soname libgeos.so lib/libgeos.so
+	patchelf --replace-needed libgeos.so.3.8.1 libgeos.so lib/libgeos_c.so
 else
 $(LIBGEOS): libgeos_inner .ALWAYS_REBUILD
 endif
