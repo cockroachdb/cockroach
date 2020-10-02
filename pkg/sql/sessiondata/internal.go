@@ -23,6 +23,9 @@ type InternalExecutorOverride struct {
 	ApplicationName string
 	// SearchPath represents the namespaces to search in.
 	SearchPath *SearchPath
+	// DatabaseIDToTempSchemaID represents the mapping for temp schemas used which
+	// allows temporary schema resolution by ID.
+	DatabaseIDToTempSchemaID map[uint32]uint32
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
