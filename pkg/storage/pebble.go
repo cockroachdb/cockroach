@@ -25,10 +25,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -40,18 +40,27 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+const (
+	maxSyncDurationDefault                = 60 * time.Second
+	maxSyncDurationFatalOnExceededDefault = true
+)
+
 // MaxSyncDuration is the threshold above which an observed engine sync duration
 // triggers either a warning or a fatal error.
-var MaxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION", 30*time.Second)
+var MaxSyncDuration = settings.RegisterDurationSetting(
+	"storage.max_sync_duration",
+	"maximum duration for disk operations; any operations that take longer"+
+		" than this setting trigger a warning log entry or process crash",
+	maxSyncDurationDefault,
+)
 
-// MaxSyncDurationFatalOnExceeded defaults to false due to issues such as
-// https://github.com/cockroachdb/cockroach/issues/34860#issuecomment-469262019.
-// Similar problems have been known to occur during index backfill and, possibly,
-// IMPORT/RESTORE.
-//
-// TODO(bilal): Switch this back to true, as Pebble now has more holistic disk
-// stall detection checks.
-var MaxSyncDurationFatalOnExceeded = envutil.EnvOrDefaultBool("COCKROACH_ENGINE_MAX_SYNC_DURATION_FATAL", false)
+// MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than
+// MaxSyncDuration fatal the Cockroach process. Defaults to true.
+var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
+	"storage.max_sync_duration.fatal.enabled",
+	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
+	maxSyncDurationFatalOnExceededDefault,
+)
 
 // MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
 func MVCCKeyCompare(a, b []byte) int {
@@ -537,13 +546,15 @@ func newTeeInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64)
 	// Note that we use the same unmodified directories for both pebble and
 	// rocksdb. This is to make sure the file paths match up, and that we're
 	// able to write to both and ingest from both memory filesystems.
-	pebbleInMem := newPebbleInMem(ctx, attrs, cacheSize)
+	pebbleInMem := newPebbleInMem(ctx, attrs, cacheSize, nil /* settings */)
 	rocksDBInMem := newRocksDBInMem(attrs, cacheSize)
 	tee := NewTee(ctx, rocksDBInMem, pebbleInMem)
 	return tee
 }
 
-func newPebbleInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) *Pebble {
+func newPebbleInMem(
+	ctx context.Context, attrs roachpb.Attributes, cacheSize int64, settings *cluster.Settings,
+) *Pebble {
 	opts := DefaultPebbleOptions()
 	opts.Cache = pebble.NewCache(cacheSize)
 	defer opts.Cache.Unref()
@@ -556,7 +567,8 @@ func newPebbleInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int
 				Attrs: attrs,
 				// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
 				// https://github.com/cockroachdb/cockroach/issues/16750
-				MaxSize: 512 << 20, /* 512 MiB */
+				MaxSize:  512 << 20, /* 512 MiB */
+				Settings: settings,
 			},
 			Opts: opts,
 		})
@@ -571,11 +583,17 @@ func (p *Pebble) connectEventMetrics(ctx context.Context, eventListener *pebble.
 
 	eventListener.DiskSlow = func(info pebble.DiskSlowInfo) {
 		oldDiskSlow(info)
-		if info.Duration.Seconds() >= MaxSyncDuration.Seconds() {
+		maxSyncDuration := maxSyncDurationDefault
+		fatalOnExceeded := maxSyncDurationFatalOnExceededDefault
+		if p.settings != nil {
+			maxSyncDuration = MaxSyncDuration.Get(&p.settings.SV)
+			fatalOnExceeded = MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
+		}
+		if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
 			atomic.AddUint64(&p.diskStallCount, 1)
 			// Note that the below log messages go to the main cockroach log, not
 			// the pebble-specific log.
-			if MaxSyncDurationFatalOnExceeded {
+			if fatalOnExceeded {
 				log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
 					info.Path, redact.Safe(info.Duration.Seconds()))
 			} else {

@@ -31,7 +31,7 @@ func NewInMem(
 	case enginepb.EngineTypeDefault:
 		fallthrough
 	case enginepb.EngineTypePebble:
-		return newPebbleInMem(ctx, attrs, cacheSize)
+		return newPebbleInMem(ctx, attrs, cacheSize, nil /* settings */)
 	case enginepb.EngineTypeRocksDB:
 		return newRocksDBInMem(attrs, cacheSize)
 	}

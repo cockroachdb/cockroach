@@ -1477,7 +1477,7 @@ func TestSupportsPrev(t *testing.T) {
 		})
 	}
 	t.Run("pebble", func(t *testing.T) {
-		eng := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20)
+		eng := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
 		defer eng.Close()
 		runTest(t, eng, engineTest{
 			engineIterSupportsPrev:   true,
