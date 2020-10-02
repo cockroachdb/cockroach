@@ -104,42 +104,6 @@ func (a *default_AGGKINDAgg) Compute(
 	})
 }
 
-// {{/*
-// _ADD_TUPLE aggregates the tuple that is at position 'tupleIdx' in the
-// original batch and has the converted tree.Datum values at the same position.
-func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupleIdx int) { // */}}
-	// {{define "addTuple" -}}
-
-	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[tupleIdx] {
-		res, err := a.fn.Result()
-		if err != nil {
-			colexecerror.ExpectedError(err)
-		}
-		if res == tree.DNull {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
-		}
-		a.curIdx++
-		a.fn.Reset(a.ctx)
-	}
-	// {{end}}
-	// Note that the only function that takes no arguments is COUNT_ROWS, and
-	// it has an optimized implementation, so we don't need to check whether
-	// len(inputIdxs) is at least 1.
-	firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[tupleIdx]
-	for j, colIdx := range inputIdxs[1:] {
-		a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
-	}
-	if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
-		colexecerror.ExpectedError(err)
-	}
-
-	// {{end}}
-	// {{/*
-} // */}}
-
 func (a *default_AGGKINDAgg) Flush(outputIdx int) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	// Go around "argument overwritten before first use" linter error.
@@ -251,3 +215,39 @@ func (a *default_AGGKINDAggAlloc) Close(ctx context.Context) error {
 	a.returnedFns = nil
 	return nil
 }
+
+// {{/*
+// _ADD_TUPLE aggregates the tuple that is at position 'tupleIdx' in the
+// original batch and has the converted tree.Datum values at the same position.
+func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupleIdx int) { // */}}
+	// {{define "addTuple" -}}
+
+	// {{if eq "_AGGKIND" "Ordered"}}
+	if a.groups[tupleIdx] {
+		res, err := a.fn.Result()
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+		if res == tree.DNull {
+			a.nulls.SetNull(a.curIdx)
+		} else {
+			coldata.SetValueAt(a.vec, a.resultConverter(res), a.curIdx)
+		}
+		a.curIdx++
+		a.fn.Reset(a.ctx)
+	}
+	// {{end}}
+	// Note that the only function that takes no arguments is COUNT_ROWS, and
+	// it has an optimized implementation, so we don't need to check whether
+	// len(inputIdxs) is at least 1.
+	firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[tupleIdx]
+	for j, colIdx := range inputIdxs[1:] {
+		a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
+	}
+	if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
+		colexecerror.ExpectedError(err)
+	}
+
+	// {{end}}
+	// {{/*
+} // */}}
