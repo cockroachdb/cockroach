@@ -246,13 +246,15 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 					ctx, batch.ColVecs(), batchLength, batch.Selection(), &a.bucket, a.groupCol,
 				)
 			} else {
-				for _, fn := range a.bucket.fns {
-					// The aggregate function itself is responsible for
-					// tracking the output index, so we pass in an invalid
-					// index which will allow us to catch cases when the
-					// implementation is misbehaving.
-					fn.Flush(-1 /* outputIdx */)
-				}
+				a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
+					for _, fn := range a.bucket.fns {
+						// The aggregate function itself is responsible for
+						// tracking the output index, so we pass in an invalid
+						// index which will allow us to catch cases when the
+						// implementation is misbehaving.
+						fn.Flush(-1 /* outputIdx */)
+					}
+				})
 			}
 			a.scratch.resumeIdx = a.bucket.fns[0].CurrentOutputIndex()
 		}

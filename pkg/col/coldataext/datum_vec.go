@@ -92,6 +92,15 @@ func (d *Datum) Hash(da *rowenc.DatumAlloc) []byte {
 	return b
 }
 
+// Size returns a lower bound on the total size of the receiver in bytes,
+// including memory that is pointed at (even if shared between Datum
+// instances) but excluding allocation overhead.
+//
+// It is assumed that d was obtained via datumVec.Get().
+func (d *Datum) Size() uintptr {
+	return d.Datum.Size()
+}
+
 // Get implements coldata.DatumVec interface.
 func (dv *datumVec) Get(i int) coldata.Datum {
 	dv.maybeSetDNull(i)

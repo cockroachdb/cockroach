@@ -109,8 +109,6 @@ type minBoolHashAgg struct {
 
 var _ aggregateFunc = &minBoolHashAgg{}
 
-const sizeOfminBoolHashAgg = int64(unsafe.Sizeof(minBoolHashAgg{}))
-
 func (a *minBoolHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -214,9 +212,6 @@ func (a *minBoolHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -228,9 +223,12 @@ type minBoolHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minBoolHashAggAlloc{}
 
+const sizeOfminBoolHashAgg = int64(unsafe.Sizeof(minBoolHashAgg{}))
+const minBoolHashAggSliceOverhead = int64(unsafe.Sizeof([]minBoolHashAgg{}))
+
 func (a *minBoolHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminBoolHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minBoolHashAggSliceOverhead + sizeOfminBoolHashAgg*a.allocSize)
 		a.aggFuncs = make([]minBoolHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -257,8 +255,6 @@ type minBytesHashAgg struct {
 
 var _ aggregateFunc = &minBytesHashAgg{}
 
-const sizeOfminBytesHashAgg = int64(unsafe.Sizeof(minBytesHashAgg{}))
-
 func (a *minBytesHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -274,6 +270,7 @@ func (a *minBytesHashAgg) Reset() {
 func (a *minBytesHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation(
@@ -337,6 +334,8 @@ func (a *minBytesHashAgg) Compute(
 			}
 		},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *minBytesHashAgg) Flush(outputIdx int) {
@@ -346,11 +345,11 @@ func (a *minBytesHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	a.curAgg = nil
 }
 
 type minBytesHashAggAlloc struct {
@@ -360,9 +359,12 @@ type minBytesHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minBytesHashAggAlloc{}
 
+const sizeOfminBytesHashAgg = int64(unsafe.Sizeof(minBytesHashAgg{}))
+const minBytesHashAggSliceOverhead = int64(unsafe.Sizeof([]minBytesHashAgg{}))
+
 func (a *minBytesHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminBytesHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minBytesHashAggSliceOverhead + sizeOfminBytesHashAgg*a.allocSize)
 		a.aggFuncs = make([]minBytesHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -388,8 +390,6 @@ type minDecimalHashAgg struct {
 }
 
 var _ aggregateFunc = &minDecimalHashAgg{}
-
-const sizeOfminDecimalHashAgg = int64(unsafe.Sizeof(minDecimalHashAgg{}))
 
 func (a *minDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -478,9 +478,6 @@ func (a *minDecimalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx].Set(&a.curAgg)
 	}
 }
@@ -492,9 +489,12 @@ type minDecimalHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minDecimalHashAggAlloc{}
 
+const sizeOfminDecimalHashAgg = int64(unsafe.Sizeof(minDecimalHashAgg{}))
+const minDecimalHashAggSliceOverhead = int64(unsafe.Sizeof([]minDecimalHashAgg{}))
+
 func (a *minDecimalHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminDecimalHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minDecimalHashAggSliceOverhead + sizeOfminDecimalHashAgg*a.allocSize)
 		a.aggFuncs = make([]minDecimalHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -520,8 +520,6 @@ type minInt16HashAgg struct {
 }
 
 var _ aggregateFunc = &minInt16HashAgg{}
-
-const sizeOfminInt16HashAgg = int64(unsafe.Sizeof(minInt16HashAgg{}))
 
 func (a *minInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -632,9 +630,6 @@ func (a *minInt16HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -646,9 +641,12 @@ type minInt16HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minInt16HashAggAlloc{}
 
+const sizeOfminInt16HashAgg = int64(unsafe.Sizeof(minInt16HashAgg{}))
+const minInt16HashAggSliceOverhead = int64(unsafe.Sizeof([]minInt16HashAgg{}))
+
 func (a *minInt16HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminInt16HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minInt16HashAggSliceOverhead + sizeOfminInt16HashAgg*a.allocSize)
 		a.aggFuncs = make([]minInt16HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -674,8 +672,6 @@ type minInt32HashAgg struct {
 }
 
 var _ aggregateFunc = &minInt32HashAgg{}
-
-const sizeOfminInt32HashAgg = int64(unsafe.Sizeof(minInt32HashAgg{}))
 
 func (a *minInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -786,9 +782,6 @@ func (a *minInt32HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -800,9 +793,12 @@ type minInt32HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minInt32HashAggAlloc{}
 
+const sizeOfminInt32HashAgg = int64(unsafe.Sizeof(minInt32HashAgg{}))
+const minInt32HashAggSliceOverhead = int64(unsafe.Sizeof([]minInt32HashAgg{}))
+
 func (a *minInt32HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminInt32HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minInt32HashAggSliceOverhead + sizeOfminInt32HashAgg*a.allocSize)
 		a.aggFuncs = make([]minInt32HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -828,8 +824,6 @@ type minInt64HashAgg struct {
 }
 
 var _ aggregateFunc = &minInt64HashAgg{}
-
-const sizeOfminInt64HashAgg = int64(unsafe.Sizeof(minInt64HashAgg{}))
 
 func (a *minInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -940,9 +934,6 @@ func (a *minInt64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -954,9 +945,12 @@ type minInt64HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minInt64HashAggAlloc{}
 
+const sizeOfminInt64HashAgg = int64(unsafe.Sizeof(minInt64HashAgg{}))
+const minInt64HashAggSliceOverhead = int64(unsafe.Sizeof([]minInt64HashAgg{}))
+
 func (a *minInt64HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminInt64HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minInt64HashAggSliceOverhead + sizeOfminInt64HashAgg*a.allocSize)
 		a.aggFuncs = make([]minInt64HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -982,8 +976,6 @@ type minFloat64HashAgg struct {
 }
 
 var _ aggregateFunc = &minFloat64HashAgg{}
-
-const sizeOfminFloat64HashAgg = int64(unsafe.Sizeof(minFloat64HashAgg{}))
 
 func (a *minFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -1110,9 +1102,6 @@ func (a *minFloat64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -1124,9 +1113,12 @@ type minFloat64HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minFloat64HashAggAlloc{}
 
+const sizeOfminFloat64HashAgg = int64(unsafe.Sizeof(minFloat64HashAgg{}))
+const minFloat64HashAggSliceOverhead = int64(unsafe.Sizeof([]minFloat64HashAgg{}))
+
 func (a *minFloat64HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminFloat64HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minFloat64HashAggSliceOverhead + sizeOfminFloat64HashAgg*a.allocSize)
 		a.aggFuncs = make([]minFloat64HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1152,8 +1144,6 @@ type minTimestampHashAgg struct {
 }
 
 var _ aggregateFunc = &minTimestampHashAgg{}
-
-const sizeOfminTimestampHashAgg = int64(unsafe.Sizeof(minTimestampHashAgg{}))
 
 func (a *minTimestampHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -1256,9 +1246,6 @@ func (a *minTimestampHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -1270,9 +1257,12 @@ type minTimestampHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minTimestampHashAggAlloc{}
 
+const sizeOfminTimestampHashAgg = int64(unsafe.Sizeof(minTimestampHashAgg{}))
+const minTimestampHashAggSliceOverhead = int64(unsafe.Sizeof([]minTimestampHashAgg{}))
+
 func (a *minTimestampHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminTimestampHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minTimestampHashAggSliceOverhead + sizeOfminTimestampHashAgg*a.allocSize)
 		a.aggFuncs = make([]minTimestampHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1298,8 +1288,6 @@ type minIntervalHashAgg struct {
 }
 
 var _ aggregateFunc = &minIntervalHashAgg{}
-
-const sizeOfminIntervalHashAgg = int64(unsafe.Sizeof(minIntervalHashAgg{}))
 
 func (a *minIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -1388,9 +1376,6 @@ func (a *minIntervalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -1402,9 +1387,12 @@ type minIntervalHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minIntervalHashAggAlloc{}
 
+const sizeOfminIntervalHashAgg = int64(unsafe.Sizeof(minIntervalHashAgg{}))
+const minIntervalHashAggSliceOverhead = int64(unsafe.Sizeof([]minIntervalHashAgg{}))
+
 func (a *minIntervalHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminIntervalHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minIntervalHashAggSliceOverhead + sizeOfminIntervalHashAgg*a.allocSize)
 		a.aggFuncs = make([]minIntervalHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1431,8 +1419,6 @@ type minDatumHashAgg struct {
 
 var _ aggregateFunc = &minDatumHashAgg{}
 
-const sizeOfminDatumHashAgg = int64(unsafe.Sizeof(minDatumHashAgg{}))
-
 func (a *minDatumHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -1448,6 +1434,10 @@ func (a *minDatumHashAgg) Reset() {
 func (a *minDatumHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation(
@@ -1515,6 +1505,11 @@ func (a *minDatumHashAgg) Compute(
 			}
 		},
 	)
+	var newCurAggSize uintptr
+	if a.curAgg != nil {
+		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	}
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *minDatumHashAgg) Flush(outputIdx int) {
@@ -1524,11 +1519,13 @@ func (a *minDatumHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	// Release the reference to curAgg eagerly.
+	if d, ok := a.curAgg.(*coldataext.Datum); ok {
+		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
+	}
+	a.curAgg = nil
 }
 
 type minDatumHashAggAlloc struct {
@@ -1538,9 +1535,12 @@ type minDatumHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &minDatumHashAggAlloc{}
 
+const sizeOfminDatumHashAgg = int64(unsafe.Sizeof(minDatumHashAgg{}))
+const minDatumHashAggSliceOverhead = int64(unsafe.Sizeof([]minDatumHashAgg{}))
+
 func (a *minDatumHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfminDatumHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(minDatumHashAggSliceOverhead + sizeOfminDatumHashAgg*a.allocSize)
 		a.aggFuncs = make([]minDatumHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1566,8 +1566,6 @@ type maxBoolHashAgg struct {
 }
 
 var _ aggregateFunc = &maxBoolHashAgg{}
-
-const sizeOfmaxBoolHashAgg = int64(unsafe.Sizeof(maxBoolHashAgg{}))
 
 func (a *maxBoolHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -1672,9 +1670,6 @@ func (a *maxBoolHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -1686,9 +1681,12 @@ type maxBoolHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxBoolHashAggAlloc{}
 
+const sizeOfmaxBoolHashAgg = int64(unsafe.Sizeof(maxBoolHashAgg{}))
+const maxBoolHashAggSliceOverhead = int64(unsafe.Sizeof([]maxBoolHashAgg{}))
+
 func (a *maxBoolHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxBoolHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxBoolHashAggSliceOverhead + sizeOfmaxBoolHashAgg*a.allocSize)
 		a.aggFuncs = make([]maxBoolHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1715,8 +1713,6 @@ type maxBytesHashAgg struct {
 
 var _ aggregateFunc = &maxBytesHashAgg{}
 
-const sizeOfmaxBytesHashAgg = int64(unsafe.Sizeof(maxBytesHashAgg{}))
-
 func (a *maxBytesHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -1732,6 +1728,7 @@ func (a *maxBytesHashAgg) Reset() {
 func (a *maxBytesHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation(
@@ -1795,6 +1792,8 @@ func (a *maxBytesHashAgg) Compute(
 			}
 		},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *maxBytesHashAgg) Flush(outputIdx int) {
@@ -1804,11 +1803,11 @@ func (a *maxBytesHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	a.curAgg = nil
 }
 
 type maxBytesHashAggAlloc struct {
@@ -1818,9 +1817,12 @@ type maxBytesHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxBytesHashAggAlloc{}
 
+const sizeOfmaxBytesHashAgg = int64(unsafe.Sizeof(maxBytesHashAgg{}))
+const maxBytesHashAggSliceOverhead = int64(unsafe.Sizeof([]maxBytesHashAgg{}))
+
 func (a *maxBytesHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxBytesHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxBytesHashAggSliceOverhead + sizeOfmaxBytesHashAgg*a.allocSize)
 		a.aggFuncs = make([]maxBytesHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1846,8 +1848,6 @@ type maxDecimalHashAgg struct {
 }
 
 var _ aggregateFunc = &maxDecimalHashAgg{}
-
-const sizeOfmaxDecimalHashAgg = int64(unsafe.Sizeof(maxDecimalHashAgg{}))
 
 func (a *maxDecimalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -1936,9 +1936,6 @@ func (a *maxDecimalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx].Set(&a.curAgg)
 	}
 }
@@ -1950,9 +1947,12 @@ type maxDecimalHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxDecimalHashAggAlloc{}
 
+const sizeOfmaxDecimalHashAgg = int64(unsafe.Sizeof(maxDecimalHashAgg{}))
+const maxDecimalHashAggSliceOverhead = int64(unsafe.Sizeof([]maxDecimalHashAgg{}))
+
 func (a *maxDecimalHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxDecimalHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxDecimalHashAggSliceOverhead + sizeOfmaxDecimalHashAgg*a.allocSize)
 		a.aggFuncs = make([]maxDecimalHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -1978,8 +1978,6 @@ type maxInt16HashAgg struct {
 }
 
 var _ aggregateFunc = &maxInt16HashAgg{}
-
-const sizeOfmaxInt16HashAgg = int64(unsafe.Sizeof(maxInt16HashAgg{}))
 
 func (a *maxInt16HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -2090,9 +2088,6 @@ func (a *maxInt16HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -2104,9 +2099,12 @@ type maxInt16HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxInt16HashAggAlloc{}
 
+const sizeOfmaxInt16HashAgg = int64(unsafe.Sizeof(maxInt16HashAgg{}))
+const maxInt16HashAggSliceOverhead = int64(unsafe.Sizeof([]maxInt16HashAgg{}))
+
 func (a *maxInt16HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxInt16HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxInt16HashAggSliceOverhead + sizeOfmaxInt16HashAgg*a.allocSize)
 		a.aggFuncs = make([]maxInt16HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -2132,8 +2130,6 @@ type maxInt32HashAgg struct {
 }
 
 var _ aggregateFunc = &maxInt32HashAgg{}
-
-const sizeOfmaxInt32HashAgg = int64(unsafe.Sizeof(maxInt32HashAgg{}))
 
 func (a *maxInt32HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -2244,9 +2240,6 @@ func (a *maxInt32HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -2258,9 +2251,12 @@ type maxInt32HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxInt32HashAggAlloc{}
 
+const sizeOfmaxInt32HashAgg = int64(unsafe.Sizeof(maxInt32HashAgg{}))
+const maxInt32HashAggSliceOverhead = int64(unsafe.Sizeof([]maxInt32HashAgg{}))
+
 func (a *maxInt32HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxInt32HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxInt32HashAggSliceOverhead + sizeOfmaxInt32HashAgg*a.allocSize)
 		a.aggFuncs = make([]maxInt32HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -2286,8 +2282,6 @@ type maxInt64HashAgg struct {
 }
 
 var _ aggregateFunc = &maxInt64HashAgg{}
-
-const sizeOfmaxInt64HashAgg = int64(unsafe.Sizeof(maxInt64HashAgg{}))
 
 func (a *maxInt64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -2398,9 +2392,6 @@ func (a *maxInt64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -2412,9 +2403,12 @@ type maxInt64HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxInt64HashAggAlloc{}
 
+const sizeOfmaxInt64HashAgg = int64(unsafe.Sizeof(maxInt64HashAgg{}))
+const maxInt64HashAggSliceOverhead = int64(unsafe.Sizeof([]maxInt64HashAgg{}))
+
 func (a *maxInt64HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxInt64HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxInt64HashAggSliceOverhead + sizeOfmaxInt64HashAgg*a.allocSize)
 		a.aggFuncs = make([]maxInt64HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -2440,8 +2434,6 @@ type maxFloat64HashAgg struct {
 }
 
 var _ aggregateFunc = &maxFloat64HashAgg{}
-
-const sizeOfmaxFloat64HashAgg = int64(unsafe.Sizeof(maxFloat64HashAgg{}))
 
 func (a *maxFloat64HashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -2568,9 +2560,6 @@ func (a *maxFloat64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -2582,9 +2571,12 @@ type maxFloat64HashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxFloat64HashAggAlloc{}
 
+const sizeOfmaxFloat64HashAgg = int64(unsafe.Sizeof(maxFloat64HashAgg{}))
+const maxFloat64HashAggSliceOverhead = int64(unsafe.Sizeof([]maxFloat64HashAgg{}))
+
 func (a *maxFloat64HashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxFloat64HashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxFloat64HashAggSliceOverhead + sizeOfmaxFloat64HashAgg*a.allocSize)
 		a.aggFuncs = make([]maxFloat64HashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -2610,8 +2602,6 @@ type maxTimestampHashAgg struct {
 }
 
 var _ aggregateFunc = &maxTimestampHashAgg{}
-
-const sizeOfmaxTimestampHashAgg = int64(unsafe.Sizeof(maxTimestampHashAgg{}))
 
 func (a *maxTimestampHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -2714,9 +2704,6 @@ func (a *maxTimestampHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -2728,9 +2715,12 @@ type maxTimestampHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxTimestampHashAggAlloc{}
 
+const sizeOfmaxTimestampHashAgg = int64(unsafe.Sizeof(maxTimestampHashAgg{}))
+const maxTimestampHashAggSliceOverhead = int64(unsafe.Sizeof([]maxTimestampHashAgg{}))
+
 func (a *maxTimestampHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxTimestampHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxTimestampHashAggSliceOverhead + sizeOfmaxTimestampHashAgg*a.allocSize)
 		a.aggFuncs = make([]maxTimestampHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -2756,8 +2746,6 @@ type maxIntervalHashAgg struct {
 }
 
 var _ aggregateFunc = &maxIntervalHashAgg{}
-
-const sizeOfmaxIntervalHashAgg = int64(unsafe.Sizeof(maxIntervalHashAgg{}))
 
 func (a *maxIntervalHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -2846,9 +2834,6 @@ func (a *maxIntervalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col[outputIdx] = a.curAgg
 	}
 }
@@ -2860,9 +2845,12 @@ type maxIntervalHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxIntervalHashAggAlloc{}
 
+const sizeOfmaxIntervalHashAgg = int64(unsafe.Sizeof(maxIntervalHashAgg{}))
+const maxIntervalHashAggSliceOverhead = int64(unsafe.Sizeof([]maxIntervalHashAgg{}))
+
 func (a *maxIntervalHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxIntervalHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxIntervalHashAggSliceOverhead + sizeOfmaxIntervalHashAgg*a.allocSize)
 		a.aggFuncs = make([]maxIntervalHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -2889,8 +2877,6 @@ type maxDatumHashAgg struct {
 
 var _ aggregateFunc = &maxDatumHashAgg{}
 
-const sizeOfmaxDatumHashAgg = int64(unsafe.Sizeof(maxDatumHashAgg{}))
-
 func (a *maxDatumHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -2906,6 +2892,10 @@ func (a *maxDatumHashAgg) Reset() {
 func (a *maxDatumHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation(
@@ -2973,6 +2963,11 @@ func (a *maxDatumHashAgg) Compute(
 			}
 		},
 	)
+	var newCurAggSize uintptr
+	if a.curAgg != nil {
+		newCurAggSize = a.curAgg.(*coldataext.Datum).Size()
+	}
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *maxDatumHashAgg) Flush(outputIdx int) {
@@ -2982,11 +2977,13 @@ func (a *maxDatumHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// TODO(yuzefovich): think about whether it is ok for this SET call to
-		// not be registered with the allocator on types with variable sizes
-		// (e.g. Bytes).
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	// Release the reference to curAgg eagerly.
+	if d, ok := a.curAgg.(*coldataext.Datum); ok {
+		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
+	}
+	a.curAgg = nil
 }
 
 type maxDatumHashAggAlloc struct {
@@ -2996,9 +2993,12 @@ type maxDatumHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &maxDatumHashAggAlloc{}
 
+const sizeOfmaxDatumHashAgg = int64(unsafe.Sizeof(maxDatumHashAgg{}))
+const maxDatumHashAggSliceOverhead = int64(unsafe.Sizeof([]maxDatumHashAgg{}))
+
 func (a *maxDatumHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfmaxDatumHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(maxDatumHashAggSliceOverhead + sizeOfmaxDatumHashAgg*a.allocSize)
 		a.aggFuncs = make([]maxDatumHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

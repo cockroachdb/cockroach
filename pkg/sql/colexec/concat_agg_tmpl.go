@@ -101,17 +101,14 @@ func (a *concat_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	a.allocator.PerformOperation(
-		[]coldata.Vec{a.vec}, func() {
-			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(outputIdx)
-			} else {
-				a.col.Set(outputIdx, a.curAgg)
-			}
-			a.allocator.AdjustMemoryUsage(-a.aggValMemoryUsage())
-			// Release the reference to curAgg eagerly.
-			a.curAgg = nil
-		})
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		a.col.Set(outputIdx, a.curAgg)
+	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-a.aggValMemoryUsage())
+	a.curAgg = nil
 }
 
 func (a *concat_AGGKINDAgg) aggValMemoryUsage() int64 {
@@ -120,7 +117,7 @@ func (a *concat_AGGKINDAgg) aggValMemoryUsage() int64 {
 
 func (a *concat_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfConcat_AGGKINDAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(concat_AGGKINDAggSliceOverhead + sizeOfConcat_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]concat_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -130,6 +127,7 @@ func (a *concat_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 }
 
 const sizeOfConcat_AGGKINDAgg = int64(unsafe.Sizeof(concat_AGGKINDAgg{}))
+const concat_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]concat_AGGKINDAgg{}))
 
 func newConcat_AGGKINDAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
 	return &concat_AGGKINDAggAlloc{aggAllocBase: aggAllocBase{
