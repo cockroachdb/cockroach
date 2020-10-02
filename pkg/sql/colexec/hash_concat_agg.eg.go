@@ -16,6 +16,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 )
 
+func newConcatHashAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
+	return &concatHashAggAlloc{aggAllocBase: aggAllocBase{
+		allocator: allocator,
+		allocSize: allocSize,
+	}}
+}
+
+type concatHashAgg struct {
+	hashAggregateFuncBase
+	allocator *colmem.Allocator
+	// curAgg holds the running total.
+	curAgg []byte
+	// col points to the output vector we are updating.
+	col *coldata.Bytes
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+}
+
 func (a *concatHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec
@@ -32,12 +53,12 @@ func (a *concatHashAgg) Reset() {
 func (a *concatHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			previousAggValMemoryUsage := a.aggValMemoryUsage()
 			{
 				sel = sel[:inputLen]
 				if nulls.MaybeHasNulls() {
@@ -62,10 +83,10 @@ func (a *concatHashAgg) Compute(
 					}
 				}
 			}
-			currentAggValMemoryUsage := a.aggValMemoryUsage()
-			a.allocator.AdjustMemoryUsage(currentAggValMemoryUsage - previousAggValMemoryUsage)
 		},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *concatHashAgg) Flush(outputIdx int) {
@@ -75,13 +96,19 @@ func (a *concatHashAgg) Flush(outputIdx int) {
 		a.col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
-	a.allocator.AdjustMemoryUsage(-a.aggValMemoryUsage())
+	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
 
-func (a *concatHashAgg) aggValMemoryUsage() int64 {
-	return int64(len(a.curAgg))
+type concatHashAggAlloc struct {
+	aggAllocBase
+	aggFuncs []concatHashAgg
 }
+
+var _ aggregateFuncAlloc = &concatHashAggAlloc{}
+
+const sizeOfConcatHashAgg = int64(unsafe.Sizeof(concatHashAgg{}))
+const concatHashAggSliceOverhead = int64(unsafe.Sizeof([]concatHashAgg{}))
 
 func (a *concatHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
@@ -92,33 +119,4 @@ func (a *concatHashAggAlloc) newAggFunc() aggregateFunc {
 	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
-}
-
-const sizeOfConcatHashAgg = int64(unsafe.Sizeof(concatHashAgg{}))
-const concatHashAggSliceOverhead = int64(unsafe.Sizeof([]concatHashAgg{}))
-
-func newConcatHashAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
-	return &concatHashAggAlloc{aggAllocBase: aggAllocBase{
-		allocator: allocator,
-		allocSize: allocSize,
-	}}
-}
-
-type concatHashAggAlloc struct {
-	aggAllocBase
-	aggFuncs []concatHashAgg
-}
-
-type concatHashAgg struct {
-	hashAggregateFuncBase
-	allocator *colmem.Allocator
-	// curAgg holds the running total.
-	curAgg []byte
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
 }

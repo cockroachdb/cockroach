@@ -26,6 +26,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 )
 
+func newConcat_AGGKINDAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
+	return &concat_AGGKINDAggAlloc{aggAllocBase: aggAllocBase{
+		allocator: allocator,
+		allocSize: allocSize,
+	}}
+}
+
+type concat_AGGKINDAgg struct {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	orderedAggregateFuncBase
+	// {{else}}
+	hashAggregateFuncBase
+	// {{end}}
+	allocator *colmem.Allocator
+	// curAgg holds the running total.
+	curAgg []byte
+	// col points to the output vector we are updating.
+	col *coldata.Bytes
+	// vec is the same as col before conversion from coldata.Vec.
+	vec coldata.Vec
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+}
+
 func (a *concat_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -50,12 +75,12 @@ func (a *concat_AGGKINDAgg) Reset() {
 func (a *concat_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	oldCurAggSize := len(a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
-			previousAggValMemoryUsage := a.aggValMemoryUsage()
 			// {{if eq "_AGGKIND" "Ordered"}}
 			groups := a.groups
 			// {{/*
@@ -88,10 +113,10 @@ func (a *concat_AGGKINDAgg) Compute(
 					}
 				}
 			}
-			currentAggValMemoryUsage := a.aggValMemoryUsage()
-			a.allocator.AdjustMemoryUsage(currentAggValMemoryUsage - previousAggValMemoryUsage)
 		},
 	)
+	newCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 }
 
 func (a *concat_AGGKINDAgg) Flush(outputIdx int) {
@@ -107,13 +132,19 @@ func (a *concat_AGGKINDAgg) Flush(outputIdx int) {
 		a.col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
-	a.allocator.AdjustMemoryUsage(-a.aggValMemoryUsage())
+	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
 
-func (a *concat_AGGKINDAgg) aggValMemoryUsage() int64 {
-	return int64(len(a.curAgg))
+type concat_AGGKINDAggAlloc struct {
+	aggAllocBase
+	aggFuncs []concat_AGGKINDAgg
 }
+
+var _ aggregateFuncAlloc = &concat_AGGKINDAggAlloc{}
+
+const sizeOfConcat_AGGKINDAgg = int64(unsafe.Sizeof(concat_AGGKINDAgg{}))
+const concat_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]concat_AGGKINDAgg{}))
 
 func (a *concat_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
@@ -124,39 +155,6 @@ func (a *concat_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
-}
-
-const sizeOfConcat_AGGKINDAgg = int64(unsafe.Sizeof(concat_AGGKINDAgg{}))
-const concat_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]concat_AGGKINDAgg{}))
-
-func newConcat_AGGKINDAggAlloc(allocator *colmem.Allocator, allocSize int64) aggregateFuncAlloc {
-	return &concat_AGGKINDAggAlloc{aggAllocBase: aggAllocBase{
-		allocator: allocator,
-		allocSize: allocSize,
-	}}
-}
-
-type concat_AGGKINDAggAlloc struct {
-	aggAllocBase
-	aggFuncs []concat_AGGKINDAgg
-}
-
-type concat_AGGKINDAgg struct {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	orderedAggregateFuncBase
-	// {{else}}
-	hashAggregateFuncBase
-	// {{end}}
-	allocator *colmem.Allocator
-	// curAgg holds the running total.
-	curAgg []byte
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
 }
 
 // {{/*
