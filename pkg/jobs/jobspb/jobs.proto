@@ -17,6 +17,7 @@ import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/descpb/tenant.proto";
 import "util/hlc/timestamp.proto";
 
 message Lease {
@@ -152,11 +153,7 @@ message RestoreDetails {
   // Like TypeDescs, it does not include existing schema descriptors in the
   // cluster that backed up schemas are remapped to.
   repeated sqlbase.SchemaDescriptor schema_descs = 15;
-  message Tenant {
-    uint64 id = 1 [(gogoproto.customname) = "ID"];
-    bytes info = 2;
-  }
-  repeated Tenant tenants = 13 [(gogoproto.nullable) = false];
+  repeated sqlbase.TenantInfo tenants = 13 [(gogoproto.nullable) = false];
 
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
 

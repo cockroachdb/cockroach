@@ -74,7 +74,7 @@ func tryDecodeValue(s, protoName string) (ok bool, val string, err error) {
 	if err != nil {
 		return false, "", nil //nolint:returnerrcheck
 	}
-	j, err := protoreflect.MessageToJSON(msg)
+	j, err := protoreflect.MessageToJSON(msg, true /* emitDefaults */)
 	if err != nil {
 		// Unexpected error: the data was valid protobuf, but does not
 		// reflect back to JSON. We report the protobuf struct in the
