@@ -11,7 +11,6 @@
 package norm
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -20,15 +19,30 @@ import (
 
 // CanMapOnSetOp determines whether the filter can be mapped to either
 // side of a set operator.
-func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
-	filterProps := src.ScalarProps()
-	for i, ok := filterProps.OuterCols.Next(0); ok; i, ok = filterProps.OuterCols.Next(i + 1) {
-		colType := c.f.Metadata().ColumnMeta(i).Type
-		if colinfo.HasCompositeKeyEncoding(colType) {
-			return false
-		}
+func (c *CustomFuncs) CanMapOnSetOp(filter *memo.FiltersItem) bool {
+	if memo.CanBeCompositeSensitive(c.mem.Metadata(), filter) {
+		// In general, it is not safe to remap a composite-sensitive filter.
+		// For example:
+		//  - the set operation is Except
+		//  - the left side has the decimal 1.0
+		//  - the right side has the decimal 1.00
+		//  - the filter is d::string != '1.00'
+		//
+		// If we push the filter to the right side, we will incorrectly remove 1.00,
+		// causing the overall Except operation to return a result.
+		//
+		// TODO(radu): we can do better on a case-by-case basis. For example, it is
+		// OK to push the filter for Union, and it is OK to push it to the left side
+		// of an Except.
+		return false
 	}
-	return !filterProps.HasCorrelatedSubquery
+
+	if filter.ScalarProps().HasCorrelatedSubquery {
+		// If the filter has a correlated subquery, we want to try to hoist it up as
+		// much as possible to decorrelate it.
+		return false
+	}
+	return true
 }
 
 // MapSetOpFilterLeft maps the filter onto the left expression by replacing
