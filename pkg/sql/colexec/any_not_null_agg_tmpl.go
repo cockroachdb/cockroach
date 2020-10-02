@@ -126,7 +126,12 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(a.curIdx)
 		} else {
-			execgen.SET(a.col, a.curIdx, a.curAgg)
+			a.allocator.PerformOperation(
+				[]coldata.Vec{a.vec},
+				func() {
+					execgen.SET(a.col, a.curIdx, a.curAgg)
+				},
+			)
 		}
 		a.curIdx++
 		a.done = true
@@ -134,7 +139,9 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TemplateType(), vec.Nulls()
-
+	// {{if eq .LTyp.String "Bytes"}}
+	oldCurAggSize := len(a.curAgg)
+	// {{end}}
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
@@ -165,6 +172,9 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		},
 	)
+	// {{if eq .LTyp.String "Bytes"}}
+	a.allocator.AdjustMemoryUsage(int64(len(a.curAgg) - oldCurAggSize))
+	// {{end}}
 }
 
 func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {
