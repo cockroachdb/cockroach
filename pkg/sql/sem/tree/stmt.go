@@ -174,7 +174,7 @@ var _ CCLOnlyStatement = &ScheduledBackup{}
 func (*AlterDatabaseOwner) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterDatabaseOwner) StatementTag() string { return "ALTER DATABSE OWNER" }
+func (*AlterDatabaseOwner) StatementTag() string { return "ALTER DATABASE OWNER" }
 
 func (*AlterDatabaseOwner) hiddenFromShowQueries() {}
 

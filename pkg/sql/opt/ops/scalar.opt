@@ -89,7 +89,7 @@ define Exists {
 
 # Variable is the typed scalar value of a column in the query. The Col field is
 # a metadata ColumnID value that references the column by index.
-[Scalar]
+[Scalar, CompositeInsensitive]
 define Variable {
     Col ColumnID
 }
@@ -316,49 +316,49 @@ define IsTupleNotNull {
     Input ScalarExpr
 }
 
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define Eq {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define Lt {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define Gt {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define Le {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define Ge {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define Ne {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define In {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define NotIn {
     Left ScalarExpr
     Right ScalarExpr
@@ -426,7 +426,7 @@ define NotRegIMatch {
 
 # Is maps to the IS NOT DISTINCT FROM operator which is equivalent to IS for
 # non-tuples. See IsTupleNull for the tuple-specific IS NULL operator.
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define Is {
     Left ScalarExpr
     Right ScalarExpr
@@ -435,13 +435,13 @@ define Is {
 # IsNot is the inverse of Is. It maps to the IS DISTINCT FROM operator which is
 # equivalent to IS NOT for non-tuples. See IsTupleNotNull for the
 # tuple-specific IS NOT NULL operator.
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define IsNot {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Bool, Comparison]
+[Scalar, Bool, Comparison, CompositeInsensitive]
 define Contains {
     Left ScalarExpr
     Right ScalarExpr
@@ -514,43 +514,43 @@ define Bitxor {
     Right ScalarExpr
 }
 
-[Scalar, Binary]
+[Scalar, Binary, CompositeInsensitive]
 define Plus {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Binary]
+[Scalar, Binary, CompositeInsensitive]
 define Minus {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Binary]
+[Scalar, Binary, CompositeInsensitive]
 define Mult {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Binary]
+[Scalar, Binary, CompositeInsensitive]
 define Div {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Binary]
+[Scalar, Binary, CompositeInsensitive]
 define FloorDiv {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Binary]
+[Scalar, Binary, CompositeInsensitive]
 define Mod {
     Left ScalarExpr
     Right ScalarExpr
 }
 
-[Scalar, Binary]
+[Scalar, Binary, CompositeInsensitive]
 define Pow {
     Left ScalarExpr
     Right ScalarExpr
@@ -598,7 +598,7 @@ define FetchTextPath {
     Path ScalarExpr
 }
 
-[Scalar, Unary]
+[Scalar, Unary, CompositeInsensitive]
 define UnaryMinus {
     Input ScalarExpr
 }
@@ -608,12 +608,12 @@ define UnaryComplement {
     Input ScalarExpr
 }
 
-[Scalar, Unary]
+[Scalar, Unary, CompositeInsensitive]
 define UnarySqrt {
     Input ScalarExpr
 }
 
-[Scalar, Unary]
+[Scalar, Unary, CompositeInsensitive]
 define UnaryCbrt {
     Input ScalarExpr
 }
