@@ -95,6 +95,29 @@ func (ex *connExecutor) execStmt(
 	switch ex.machine.CurState().(type) {
 	case stateNoTxn:
 		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
+		if _, ok := ev.(eventTxnStart); ok && ex.executorType != executorTypeInternal {
+			// Only limit non-internal txns.
+			if maxOpenTxns := MaxOpenTxns.Get(&ex.server.cfg.Settings.SV); maxOpenTxns != 0 &&
+				ex.metrics.OpenTxns.Value() >= maxOpenTxns {
+				// There are too many open transactions. Any users without an admin role
+				// will be rejected. Note that this HasAdminRole check is done after the
+				// metrics check because it's relatively more expensive.
+				if hasAdminRole, err := HasAdminRole(ctx, ex.server.cfg.InternalExecutor, ex.sessionData.User); err != nil {
+					// Unexpected error.
+					ev, payload = ex.makeErrEvent(err, stmt.AST)
+				} else if !hasAdminRole {
+					ev, payload = ex.makeErrEvent(
+						errors.WithHint(
+							pgerror.New(pgcode.ConfigurationLimitExceeded, "sorry, too many active transactions"),
+							fmt.Sprintf(
+								"maximum open transaction limit is %d, consider increasing %s", maxOpenTxns, maxOpenTxnsClusterSettingName,
+							),
+						),
+						stmt.AST,
+					)
+				}
+			}
+		}
 	case stateOpen:
 		if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 			remoteAddr := "internal"
@@ -1435,10 +1458,12 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.transactionStatementsHash = fnv.New128()
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
+	ex.metrics.OpenTxns.Inc(1)
 
 	onTxnFinish = func(ev txnEvent) {
 		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
 		ex.recordTransaction(ev, implicit, txnStart)
+		ex.metrics.OpenTxns.Dec(1)
 	}
 	onTxnRestart = func() {
 		ex.phaseTimes[sessionMostRecentStartExecTransaction] = timeutil.Now()

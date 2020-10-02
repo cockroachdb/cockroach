@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -897,6 +900,136 @@ func TestShowLastQueryStatistics(t *testing.T) {
 	if rows.Next() {
 		t.Fatalf("unexpected number of rows returned by last query statistics: %v", err)
 	}
+}
+
+func TestMaxOpenTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	require.Zero(t, sql.MaxOpenTxns.Get(&st.SV), "expected default max_open_txns to be 0")
+
+	var (
+		params = base.TestServerArgs{
+			Settings: st,
+		}
+		s, rootDB, _ = serverutils.StartServer(t, params)
+		ctx          = context.Background()
+	)
+
+	defer s.Stopper().Stop(ctx)
+	defer func() {
+		_ = rootDB.Close()
+	}()
+
+	const (
+		testUser  = server.TestUser
+		adminUser = "staff"
+	)
+
+	_, err := rootDB.Exec(
+		fmt.Sprintf(
+			"CREATE USER %[1]s WITH PASSWORD %[1]s; GRANT ADMIN TO %[1]s; CREATE USER %[2]s", adminUser, testUser,
+		),
+	)
+	require.NoError(t, err)
+
+	openDBWithUser := func(t *testing.T, user string) (*gosql.DB, func()) {
+		pgURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
+			t, s.ServingSQLAddr(), t.Name(), url.User(user), user == server.TestUser || user == security.RootUser,
+		)
+		if user == adminUser {
+			pgURL.User = url.UserPassword(adminUser, adminUser)
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return db, func() {
+			_ = db.Close()
+			cleanup()
+		}
+	}
+
+	nonAdminDB, nonAdminCleanup := openDBWithUser(t, testUser)
+	defer nonAdminCleanup()
+	adminDB, adminCleanup := openDBWithUser(t, adminUser)
+	defer adminCleanup()
+
+	var openTxns []*gosql.Tx
+
+	openTx := func(db *gosql.DB) error {
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		openTxns = append(openTxns, tx)
+		return nil
+	}
+
+	closeOpenTxns := func() error {
+		for _, tx := range openTxns {
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+		}
+		openTxns = nil
+		return nil
+	}
+
+	defer func() {
+		_ = closeOpenTxns()
+	}()
+
+	assertTxnLimitExceededError := func(t *testing.T, err error) {
+		t.Helper()
+		pqErr := (*pq.Error)(nil)
+		require.True(t, errors.As(err, &pqErr), "unexpected error %v", err)
+		require.Equal(t, pgcode.ConfigurationLimitExceeded.String(), string(pqErr.Code))
+	}
+
+	// Override max open txns to 1.
+	sql.MaxOpenTxns.Override(&st.SV, 1)
+
+	t.Run("NonAdminTxnWithNoOpenTxns", func(t *testing.T) {
+		defer closeOpenTxns()
+		require.NoError(t, openTx(nonAdminDB))
+	})
+
+	t.Run("NonAdminTxnWithOpenTxn", func(t *testing.T) {
+		defer closeOpenTxns()
+		require.NoError(t, openTx(nonAdminDB))
+		assertTxnLimitExceededError(t, openTx(nonAdminDB))
+
+		require.NoError(t, closeOpenTxns())
+		// Now that the txn was committed, testUser should be able to open a new
+		// txn.
+		require.NoError(t, openTx(nonAdminDB))
+	})
+
+	t.Run("AdminUsersAreNotAffected", func(t *testing.T) {
+		defer closeOpenTxns()
+		require.NoError(t, openTx(nonAdminDB))
+		require.NoError(t, openTx(adminDB))
+		require.NoError(t, openTx(rootDB))
+	})
+
+	t.Run("AdminUsersCountTowardsTheLimit", func(t *testing.T) {
+		defer closeOpenTxns()
+		require.NoError(t, openTx(adminDB))
+		assertTxnLimitExceededError(t, openTx(nonAdminDB))
+	})
+
+	t.Run("InternalTxnsAreNotLimited", func(t *testing.T) {
+		defer closeOpenTxns()
+		require.NoError(t, openTx(adminDB))
+
+		// Try to run an internal query on testUser's behalf. Even though there is
+		// an open txn, this should succeed.
+		ie := s.InternalExecutor().(*sql.InternalExecutor)
+		_, err := ie.QueryRowEx(
+			ctx, "internal-test-query", nil /* txn */, sessiondata.InternalExecutorOverride{User: testUser}, "SELECT 1",
+		)
+		require.NoError(t, err)
+	})
 }
 
 // dynamicRequestFilter exposes a filter method which is a

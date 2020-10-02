@@ -629,6 +629,11 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaOpenTxns = metric.Metadata{
+		Name: "sql.txn.active",
+		Help: "Number of active transactions",
+		Unit: metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {

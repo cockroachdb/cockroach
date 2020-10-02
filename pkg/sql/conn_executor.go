@@ -65,6 +65,18 @@ import (
 // logging overall usage growth in the log.
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_SESSION_MEMORY_USAGE", 1024*1024)
 
+const maxOpenTxnsClusterSettingName = "sql.max_open_txns"
+
+// MaxOpenTxns is a cluster setting that specifies the maximum number of open
+// txns allowed per node.
+var MaxOpenTxns = settings.RegisterPublicNonNegativeIntSetting(
+	maxOpenTxnsClusterSettingName,
+	"the maximum number of open SQL transactions allowed on a gateway server "+
+		"at once, disabled if 0. Note that this limit does not affect admin users "+
+		"and internal transactions.",
+	0,
+)
+
 // A connExecutor is in charge of executing queries received on a given client
 // connection. The connExecutor implements a state machine (dictated by the
 // Postgres/pgwire session semantics). The state machine is supposed to run
@@ -281,6 +293,9 @@ type Metrics struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements.
 	ExecutedStatementCounters StatementCounters
+
+	// OpenTxns is a gauge that tracks the number of active txns at a given time.
+	OpenTxns *metric.Gauge
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -325,6 +340,7 @@ func makeMetrics(internal bool) Metrics {
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
+		OpenTxns:                  metric.NewGauge(MetaOpenTxns),
 	}
 }
 
