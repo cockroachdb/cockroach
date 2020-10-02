@@ -24,6 +24,7 @@ retrieving SQL data for crdb_internal.kv_store_status... writing: debug/crdb_int
 retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_internal.schema_changes.txt
 retrieving SQL data for crdb_internal.partitions... writing: debug/crdb_internal.partitions.txt
 retrieving SQL data for crdb_internal.zones... writing: debug/crdb_internal.zones.txt
+retrieving SQL data for crdb_internal.invalid_objects... writing: debug/crdb_internal.invalid_objects.txt
 requesting nodes... writing: debug/nodes.json
 requesting liveness... writing: debug/liveness.json
 writing: debug/nodes/1/status.json

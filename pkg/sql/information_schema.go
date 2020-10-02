@@ -1605,7 +1605,7 @@ CREATE TABLE information_schema.views (
 func forEachSchema(
 	ctx context.Context, p *planner, db *dbdesc.Immutable, fn func(sc catalog.ResolvedSchema) error,
 ) error {
-	schemaNames, err := getSchemaNames(ctx, p, db)
+	schemaNames, err := getSchemaNames(ctx, p, db, false /* allowMissingDesc */)
 	if err != nil {
 		return err
 	}
@@ -1684,7 +1684,9 @@ func forEachDatabaseDesc(
 ) error {
 	var dbDescs []*dbdesc.Immutable
 	if dbContext == nil {
-		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
+		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(
+			ctx, p.txn, false, /* allowMissingDesc */
+		)
 		if err != nil {
 			return err
 		}
@@ -1692,7 +1694,9 @@ func forEachDatabaseDesc(
 	} else {
 		// We can't just use dbContext here because we need to fetch the descriptor
 		// with privileges from kv.
-		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, []descpb.ID{dbContext.GetID()})
+		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(
+			ctx, p.txn, p.ExecCfg().Codec, []descpb.ID{dbContext.GetID()}, false, /* allowMissingDesc */
+		)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return pgerror.Newf(pgcode.UndefinedDatabase, "database %s does not exist", dbContext.GetName())
@@ -1723,15 +1727,16 @@ func forEachTypeDesc(
 	dbContext *dbdesc.Immutable,
 	fn func(db *dbdesc.Immutable, sc string, typ *typedesc.Immutable) error,
 ) error {
-	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, true /* validate */)
 	if err != nil {
 		return err
 	}
-	schemaNames, err := getSchemaNames(ctx, p, dbContext)
+	schemaNames, err := getSchemaNames(ctx, p, dbContext, false /* allowMissingDesc */)
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(ctx, descs, dbContext)
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 	for _, id := range lCtx.typIDs {
 		typ := lCtx.typDescs[id]
 		dbDesc, parentExists := lCtx.dbDescs[typ.ParentID]
@@ -1769,7 +1774,6 @@ func forEachTableDesc(
 	p *planner,
 	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
-	// TODO(ajwerner): Introduce TableDescriptor.
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor) error,
 ) error {
 	return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts, func(
@@ -1803,7 +1807,7 @@ func forEachTableDescAll(
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor) error,
 ) error {
 	return forEachTableDescAllWithTableLookup(ctx,
-		p, dbContext, virtualOpts,
+		p, dbContext, virtualOpts, true, /* validate */
 		func(
 			db *dbdesc.Immutable,
 			scName string,
@@ -1815,16 +1819,19 @@ func forEachTableDescAll(
 }
 
 // forEachTableDescAllWithTableLookup is like forEachTableDescAll, but it also
-// provides a tableLookupFn like forEachTableDescWithTableLookup.
+// provides a tableLookupFn like forEachTableDescWithTableLookup. If validate is
+// set to false descriptors will not be validated for existence or consistency
+// hence fn should be able to handle nil-s.
 func forEachTableDescAllWithTableLookup(
 	ctx context.Context,
 	p *planner,
 	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
+	validate bool,
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	return forEachTableDescWithTableLookupInternal(ctx,
-		p, dbContext, virtualOpts, true /* allowAdding */, fn)
+		p, dbContext, virtualOpts, true /* allowAdding */, validate, fn)
 }
 
 // forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
@@ -1843,21 +1850,29 @@ func forEachTableDescWithTableLookup(
 	virtualOpts virtualOpts,
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOpts, false /* allowAdding */, fn)
+	return forEachTableDescWithTableLookupInternal(
+		ctx, p, dbContext, virtualOpts, false /* allowAdding */, true, fn,
+	)
 }
 
 func getSchemaNames(
-	ctx context.Context, p *planner, dbContext *dbdesc.Immutable,
+	ctx context.Context, p *planner, dbContext *dbdesc.Immutable, allowMissingDesc bool,
 ) (map[descpb.ID]string, error) {
 	if dbContext != nil {
 		return p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbContext.GetID())
 	}
 	ret := make(map[descpb.ID]string)
-	dbs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
+	dbs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn, allowMissingDesc)
 	if err != nil {
 		return nil, err
 	}
 	for _, db := range dbs {
+		if db == nil {
+			if allowMissingDesc {
+				continue
+			}
+			return nil, catalog.ErrDescriptorNotFound
+		}
 		schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, db.GetID())
 		if err != nil {
 			return nil, err
@@ -1874,19 +1889,23 @@ func getSchemaNames(
 //
 // The allowAdding argument if true includes newly added tables that
 // are not yet public.
+// The validate argument if false turns off checking if the descriptor ids exist
+// and if they are valid.
 func forEachTableDescWithTableLookupInternal(
 	ctx context.Context,
 	p *planner,
 	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
 	allowAdding bool,
+	validate bool,
 	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
-	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, validate)
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(ctx, descs, dbContext)
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 
 	if virtualOpts == virtualMany || virtualOpts == virtualOnce {
 		// Virtual descriptors first.
@@ -1922,7 +1941,7 @@ func forEachTableDescWithTableLookupInternal(
 	}
 
 	// Generate all schema names, and keep a mapping.
-	schemaNames, err := getSchemaNames(ctx, p, dbContext)
+	schemaNames, err := getSchemaNames(ctx, p, dbContext, !validate)
 	if err != nil {
 		return err
 	}
@@ -1930,13 +1949,17 @@ func forEachTableDescWithTableLookupInternal(
 	// Physical descriptors next.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
-		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
-		if table.Dropped() || !userCanSeeDescriptor(ctx, p, table, allowAdding) || !parentExists {
+		if table.Dropped() || !userCanSeeDescriptor(ctx, p, table, allowAdding) {
 			continue
 		}
-		scName, ok := schemaNames[table.GetParentSchemaID()]
-		if !ok {
-			return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
+		var scName string
+		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
+		if parentExists {
+			var ok bool
+			scName, ok = schemaNames[table.GetParentSchemaID()]
+			if !ok && validate {
+				return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
+			}
 		}
 		if err := fn(dbDesc, scName, table, lCtx); err != nil {
 			return err
