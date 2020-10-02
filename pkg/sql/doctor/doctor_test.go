@@ -197,14 +197,26 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 `,
 		},
 		{
+			descTable: doctor.DescriptorTable{
+				{ID: 1, DescBytes: toBytes(t, validTableDesc)},
+				{
+					ID: 2,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+					}}),
+				},
+			},
 			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: keys.PublicSchemaID, Name: "t"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
 				{NameInfo: descpb.NameInfo{Name: "foo"}, ID: keys.PublicSchemaID},
 				{NameInfo: descpb.NameInfo{Name: "bar"}, ID: keys.PublicSchemaID},
-				{NameInfo: descpb.NameInfo{Name: "pg_temp_foo"}, ID: 1},
-				{NameInfo: descpb.NameInfo{Name: "causes_error"}, ID: 2},
+				{NameInfo: descpb.NameInfo{Name: "pg_temp_foo"}, ID: 101},
+				{NameInfo: descpb.NameInfo{Name: "t"}, ID: 102}, // same table name as validTableDesc
 			},
-			expected: `Examining 0 descriptors and 4 namespace entries...
-Descriptor 2: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:causes_error}] but no descriptor
+			expected: `Examining 2 descriptors and 6 namespace entries...
+Descriptor 102: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:t}] but no descriptor
+   Table   1: ParentID   2, ParentSchemaID 29, Name 't': has the same name as dangling namespace row {0 0 t}
 `,
 		},
 		{

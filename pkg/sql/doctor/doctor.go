@@ -122,6 +122,8 @@ func ExamineDescriptors(
 	nMap := newNamespaceMap(namespaceTable)
 
 	var problemsFound bool
+	// A map from all seen names to a list of descriptors that share this name.
+	descNameMap := make(map[string][]catalog.Descriptor)
 	for _, row := range descTable {
 		desc, ok := descGetter[descpb.ID(row.ID)]
 		if !ok {
@@ -133,6 +135,16 @@ func ExamineDescriptors(
 			fmt.Fprint(stdout, reportMsg(desc, "different id in descriptor table: %d", row.ID))
 			problemsFound = true
 			continue
+		}
+
+		// We collect all seen descriptor names in a map to better inform problems
+		// with dangling names in the namespace table.
+		descName := desc.GetName()
+		l, ok := descNameMap[descName]
+		if !ok {
+			descNameMap[descName] = []catalog.Descriptor{desc}
+		} else {
+			descNameMap[descName] = append(l, desc)
 		}
 
 		_, parentExists := descGetter[desc.GetParentID()]
@@ -249,6 +261,14 @@ func ExamineDescriptors(
 		}
 		fmt.Fprintf(
 			stdout, "Descriptor %d: has namespace row(s) %+v but no descriptor\n", id, ni)
+		for _, namespaceRow := range ni {
+			if descs, ok := descNameMap[namespaceRow.Name]; ok {
+				for _, d := range descs {
+					fmt.Fprint(stdout, reportMsg(
+						d, "has the same name as dangling namespace row %v", namespaceRow))
+				}
+			}
+		}
 		problemsFound = true
 	}
 	return !problemsFound, err
