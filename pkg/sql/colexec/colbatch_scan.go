@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -36,6 +37,9 @@ import (
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type colBatchScan struct {
 	ZeroInputNode
+	// mu protects from concurrent DrainMeta and Next calls. This is unfortunate
+	// behavior present in 20.1 but fixed in 20.2.
+	mu        syncutil.Mutex
 	spans     roachpb.Spans
 	flowCtx   *execinfra.FlowCtx
 	rf        *cFetcher
@@ -65,6 +69,8 @@ func (s *colBatchScan) Init() {
 }
 
 func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	bat, err := s.rf.NextBatch(ctx)
 	if err != nil {
 		execerror.VectorizedInternalPanic(err)
@@ -77,6 +83,8 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 
 // DrainMeta is part of the MetadataSource interface.
 func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.init {
 		// In some pathological queries like `SELECT 1 FROM t HAVING true`, Init()
 		// and Next() may never get called. Return early to avoid using an
