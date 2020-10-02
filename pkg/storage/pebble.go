@@ -42,16 +42,11 @@ import (
 
 // MaxSyncDuration is the threshold above which an observed engine sync duration
 // triggers either a warning or a fatal error.
-var MaxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION", 30*time.Second)
+var MaxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION", 60*time.Second)
 
-// MaxSyncDurationFatalOnExceeded defaults to false due to issues such as
-// https://github.com/cockroachdb/cockroach/issues/34860#issuecomment-469262019.
-// Similar problems have been known to occur during index backfill and, possibly,
-// IMPORT/RESTORE.
-//
-// TODO(bilal): Switch this back to true, as Pebble now has more holistic disk
-// stall detection checks.
-var MaxSyncDurationFatalOnExceeded = envutil.EnvOrDefaultBool("COCKROACH_ENGINE_MAX_SYNC_DURATION_FATAL", false)
+// MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than
+// MaxSyncDuration fatal the Cockroach process. Defaults to true.
+var MaxSyncDurationFatalOnExceeded = envutil.EnvOrDefaultBool("COCKROACH_ENGINE_MAX_SYNC_DURATION_FATAL", true)
 
 // MVCCKeyCompare compares cockroach keys, including the MVCC timestamps.
 func MVCCKeyCompare(a, b []byte) int {
