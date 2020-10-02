@@ -38,8 +38,6 @@ type boolAndHashAgg struct {
 
 var _ aggregateFunc = &boolAndHashAgg{}
 
-const sizeOfBoolAndHashAgg = int64(unsafe.Sizeof(boolAndHashAgg{}))
-
 func (a *boolAndHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
 	a.vec = vec.Bool()
@@ -101,9 +99,12 @@ type boolAndHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &boolAndHashAggAlloc{}
 
+const sizeOfBoolAndHashAgg = int64(unsafe.Sizeof(boolAndHashAgg{}))
+const boolAndHashAggSliceOverhead = int64(unsafe.Sizeof([]boolAndHashAgg{}))
+
 func (a *boolAndHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfBoolAndHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(boolAndHashAggSliceOverhead + sizeOfBoolAndHashAgg*a.allocSize)
 		a.aggFuncs = make([]boolAndHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
@@ -128,8 +129,6 @@ type boolOrHashAgg struct {
 }
 
 var _ aggregateFunc = &boolOrHashAgg{}
-
-const sizeOfBoolOrHashAgg = int64(unsafe.Sizeof(boolOrHashAgg{}))
 
 func (a *boolOrHashAgg) Init(groups []bool, vec coldata.Vec) {
 	a.hashAggregateFuncBase.Init(groups, vec)
@@ -192,9 +191,12 @@ type boolOrHashAggAlloc struct {
 
 var _ aggregateFuncAlloc = &boolOrHashAggAlloc{}
 
+const sizeOfBoolOrHashAgg = int64(unsafe.Sizeof(boolOrHashAgg{}))
+const boolOrHashAggSliceOverhead = int64(unsafe.Sizeof([]boolOrHashAgg{}))
+
 func (a *boolOrHashAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfBoolOrHashAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(boolOrHashAggSliceOverhead + sizeOfBoolOrHashAgg*a.allocSize)
 		a.aggFuncs = make([]boolOrHashAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]

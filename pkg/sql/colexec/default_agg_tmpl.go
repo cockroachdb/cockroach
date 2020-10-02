@@ -55,8 +55,6 @@ type default_AGGKINDAgg struct {
 
 var _ aggregateFunc = &default_AGGKINDAgg{}
 
-const sizeOfDefault_AGGKINDAgg = int64(unsafe.Sizeof(default_AGGKINDAgg{}))
-
 func (a *default_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Init(groups, vec)
@@ -149,17 +147,15 @@ func (a *default_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		res, err := a.fn.Result()
-		if err != nil {
-			colexecerror.ExpectedError(err)
-		}
-		if res == tree.DNull {
-			a.nulls.SetNull(outputIdx)
-		} else {
-			coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
-		}
-	})
+	res, err := a.fn.Result()
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+	if res == tree.DNull {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		coldata.SetValueAt(a.vec, a.resultConverter(res), outputIdx)
+	}
 }
 
 func newDefault_AGGKINDAggAlloc(
@@ -225,9 +221,12 @@ type default_AGGKINDAggAlloc struct {
 var _ aggregateFuncAlloc = &default_AGGKINDAggAlloc{}
 var _ Closer = &default_AGGKINDAggAlloc{}
 
+const sizeOfDefault_AGGKINDAgg = int64(unsafe.Sizeof(default_AGGKINDAgg{}))
+const default_AGGKINDAggSliceOverhead = int64(unsafe.Sizeof([]default_AGGKINDAggAlloc{}))
+
 func (a *default_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfDefault_AGGKINDAgg * a.allocSize)
+		a.allocator.AdjustMemoryUsage(default_AGGKINDAggSliceOverhead + sizeOfDefault_AGGKINDAgg*a.allocSize)
 		a.aggFuncs = make([]default_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
