@@ -583,3 +583,10 @@ func (c *CustomFuncs) CommuteJoinFlags(p *memo.JoinPrivate) *memo.JoinPrivate {
 	res.Flags = f
 	return &res
 }
+
+// ConstructContinuationColumnForPairedLeftJoin constructs a continuation
+// column ID for the paired-joiners used for left joins when the first join
+// generates false positives (due to inverted index or non-covering index).
+func (c *CustomFuncs) ConstructContinuationColumnForPairedLeftJoin() opt.ColumnID {
+	return c.f.Metadata().AddColumn("continuation", c.BoolType())
+}
