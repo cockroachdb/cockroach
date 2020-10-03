@@ -3758,11 +3758,13 @@ func computeCapacity(path string, maxSizeBytes int64) (roachpb.StoreCapacity, er
 			Available: maxSizeBytes,
 		}, nil
 	}
+
+	var err error
 	// Eval directory if it is a symbolic links.
 	if dir, err = filepath.EvalSymlinks(dir); err != nil {
 		return roachpb.StoreCapacity{}, err
 	}
-	if err := fileSystemUsage.Get(dir); err != nil {
+	if err = fileSystemUsage.Get(dir); err != nil {
 		return roachpb.StoreCapacity{}, err
 	}
 
