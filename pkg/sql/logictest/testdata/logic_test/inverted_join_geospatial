@@ -1,3 +1,5 @@
+# LogicTest: local
+
 statement ok
 CREATE TABLE ltable(
   lk int primary key,
@@ -183,6 +185,13 @@ ORDER BY rk
 13
 16
 
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUk2P0zAQvfMrRnNqtYY2SeHgk4HNSlmVZkmDBFpFq5CMSmhqB9tBXVX97yhxxZJKjehxxu_N-5APaH7VyHEdLsOPKbS6hrsk_gSP4deH5ftoBZPbaJ2uPy-ncILUWwZ661C1zb_XBMvwLoX7OFqBdot4BcY-VdKSNlRYM3HANxtSO4-dUP00hTi5DRP48A0m7vI0Q4ZSlbTKd2SQP6KHGcNGq4KMUbpbHXpAVO6RzxlWsmltt84YFkoT8gPaytaEHNNOKaG8JD2bI8OSbF7V_VnnSTS62uX6GRmum1waDq-RYdxaDsJjwsfsyFC19kXC2HxDyL0j-38bkfxN2lJ5rypJeuYNnaTPDXHXYvwlDZO-S2ToehJdT0-VLGmP7O-lcN_os5KFz0AspgP7TARMvL0Ywr8mRGf-VKV_VYCXipdKbdsGfqpKgpIcRNC5Pf8tfZB3gyDBxQjBNRHWSlvSs2BoX3g3TPg3yHCX2-IH1CQ5eBcVF9coJmQaJQ0NFC9dnh8zhlRuyH1yo1pd0INWRS_jxrjn9YuSjHWvnhsi6Z46g_-SvVGyP072R8nBODkYJS_OyNnx1Z8AAAD__628eLY=
+
+
 # Left join is supported by having the optimizer convert it to an inner join.
 query II
 SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
@@ -197,6 +206,12 @@ SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable
 5  12
 5  16
 6  NULL
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkkFv00AQhe_8itGcGnVoYjsgtCcX6kiuTFwcI4EqqzLxKDVxds16Dami_Hdkb0QbUCxynNl58-Z72h02PyoUuAii4EMKra5glsQf4T74chddh3O4uAkX6eJTNILDSLUm0Gs7VZn8W8UQBbMUbuNwDto24jk05qH4VZrHUl7YqasVq41Dh5G-InBHECc3QQLvv8KF3TzKkFCqguf5hhsU9-hgRlhrteSmUbpr7fqBsNiimBCWsm5N184Il0ozih2a0lSMAtPOLOG8YD2eIGHBJi-rfq09y691ucn1ExIu6lw2Al4jYdwaAb5DvovZnlC15tmiMfmKUTh7-v8zQvmTteHiVpWS9dg5viR9qlnYFOPPaZD0WSKhjcrvonooZcFbpD-bgm2tX4bsuwT-lMC9mgghZlF8nb4bHZGQ75H_5iSPew5Px3FI1T2L5TntSKl1W8N3VUpQUoDvddfO_2F6O8DknaTxzqFZKG1Yj71jEt-5JN-9RMJNbpaPULEU4Jx0nJ7jmHBTK9nwkeOpzZN9RsjFiu3Xb1Srl3yn1bK3sWXc6_pGwY2xr44tQmmfugNfip1BsTssdgfF3rDYGxRP_xJn-1e_AwAA___1gXu9
 
 query II
 SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
@@ -215,6 +230,13 @@ SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_DWithin(ltable.geom1, rtable.ge
 5  12
 5  16
 6  NULL
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFvmzAUhd_3K6z7lKheAyYPk5_oVqJRsdABkzZVaGJwlaISzGyjrYry3yfsSg2odEoffe_5OEeHewD1uwEOaRAFnzLSy4ZskvgLuQu-30ZX4ZYsrsM0S79GS_IkaR4okQ9W1ejiV4MkCjYZuYnDLZF2EG-J0j_rVqNUWGq1sPPLHYo9faLMw12SOBm01Z9a39ft4nRHyQhjg_Y6SMjHH2RhUyxzoNCKCrfFHhXwO3Ahp9BJUaJSQg6jgxGE1V_gDoW67Xo9jHMKpZAI_AC61g0Ch2wwS7CoUK4coFChLurGfNbG8jtZ7wv5CBTSrmgVJ--BQtxrTnyX-gzyIwXR62cLpYsdAneP9G0x3HEMORtjzpnNOj8b9q2QFUqsRmb5QP5P8kL8z4W6vxF1i3LFxumzxw65PZb4WxYk5mSGAqfX4q8p8dn0NHxGybBhlw7nfBPFV9mH5Wn_3mwL3jn9p0JqlCtvHN53L6jPLmYt1udYJKg60SqcFv7il52hZax2aP-aEr0s8VaK0tjYZ2w4M6hQabtl9hG2ZmVu8BR2z4DZFGavwt4Idqaw9yq8nsD58d2_AAAA__-qyYGY
 
 query II
 SELECT lk, rk FROM ltable LEFT JOIN rtable
@@ -263,6 +285,13 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.g
 4  NULL
 5  NULL
 6  NULL
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable
+ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJycktFrnEAQxt_7VwzzdEe2ybleoOyTaeNRgz1TtdASpFgdLhLPtbsrbTjufy-6gZw2l3J93JnvN98w--1Q_6xRYOKH_ocUOlXDKo4-wZ3_9Ta8CtYwuw6SNPkczuFJUj8wUA9WVZv8R00Q-qsUbqJgDcoWojVo871qDClNhdEzKzzfkNw67Ek1vOYQxb22_FWZ-6qZHbQYHFCcAe-1134M77_BzG4xz5BhI0ta51vSKO7QwYxhq2RBWkvVl3aDICh_o1gwrJq2M305Y1hIRSh2aCpTEwpMe7eY8pLUxQIZlmTyqh7G2k28VlXbXD0iw6TNGy3gLWZ7hrIzz1O1yTeEwtmz_3N2xs7qZGd-1PnZsGukKklROTLLevJfkhfW_5jr-xtZNaQu-Hj79LElYfMRfUn9eEgJMvwrIB5n4F1O0-BdMvBcBvx8IYRYhdFV-m7e450R4DnMWx69gnvK_ROpDKkLd7y855wxj58dtVieYhGTbmWjaXrwFycv-itTuSH7a1p2qqBbJYvBxj6jgRsKJWlju9w-gmZoDRk8hJ0TYD6F-auwO4IXU9h9FV5O4Gz_5k8AAAD__x_Rfow=
 
 query II
 SELECT lk, rk FROM ltable LEFT JOIN rtable

@@ -273,7 +273,7 @@
 # these are supported by first converting them to InnerJoin using the rules
 # ConvertSemiToInnerJoin, ConvertLeftToInnerJoin, and ConvertAntiToLeftJoin.
 [GenerateInvertedJoins, Explore]
-(InnerJoin
+(InnerJoin | LeftJoin
     $left:*
     (Scan $scanPrivate:*) &
         (IsCanonicalScan $scanPrivate) &
