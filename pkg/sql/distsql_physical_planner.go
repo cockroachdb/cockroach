@@ -954,7 +954,7 @@ func initTableReaderSpec(
 	return s, post, nil
 }
 
-// scanNodeOrdinal returns the index of a column with the given ID.
+// tableOrdinal returns the index of a column with the given ID.
 func tableOrdinal(
 	desc *tabledesc.Immutable, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
 ) int {
@@ -981,6 +981,14 @@ func tableOrdinal(
 	}
 
 	panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
+}
+
+func highestTableOrdinal(desc *tabledesc.Immutable, visibility execinfrapb.ScanVisibility) int {
+	highest := len(desc.Columns) - 1
+	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
+		highest = len(desc.Columns) + len(desc.MutationColumns()) - 1
+	}
+	return highest
 }
 
 // toTableOrdinals returns a mapping from column ordinals in cols to table
@@ -1984,13 +1992,14 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:             *n.table.desc.TableDesc(),
-		Type:              n.joinType,
-		Visibility:        n.table.colCfg.visibility,
-		LockingStrength:   n.table.lockingStrength,
-		LockingWaitPolicy: n.table.lockingWaitPolicy,
-		MaintainOrdering:  len(n.reqOrdering) > 0,
-		HasSystemColumns:  n.table.containsSystemColumns,
+		Table:                    *n.table.desc.TableDesc(),
+		Type:                     n.joinType,
+		Visibility:               n.table.colCfg.visibility,
+		LockingStrength:          n.table.lockingStrength,
+		LockingWaitPolicy:        n.table.lockingWaitPolicy,
+		MaintainOrdering:         len(n.reqOrdering) > 0,
+		HasSystemColumns:         n.table.containsSystemColumns,
+		LeftJoinWithPairedJoiner: n.isSecondJoinInPairedJoiner,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
 	if err != nil {
@@ -2006,7 +2015,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	joinReaderSpec.LookupColumnsAreKey = n.eqColsAreKey
 
 	numInputNodeCols, planToStreamColMap, post, types :=
-		mappingHelperForLookupJoins(plan, n.input, n.table)
+		mappingHelperForLookupJoins(plan, n.input, n.table, false /* addContinuationCol */)
 
 	// Set the ON condition.
 	if n.onCond != nil {
@@ -2026,7 +2035,10 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 			numInputNodeCols, planToStreamColMap, post.OutputColumns, types)
 	}
 
-	// Instantiate one join reader for every stream.
+	// Instantiate one join reader for every stream. This is also necessary for
+	// correctness of paired-joins where this join is the second join -- it is
+	// necessary to have a one-to-one relationship between the first and second
+	// join processor.
 	plan.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 		post,
@@ -2041,7 +2053,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 // lookup-style joins (that involve an input that is used to lookup from a
 // table).
 func mappingHelperForLookupJoins(
-	plan *PhysicalPlan, input planNode, table *scanNode,
+	plan *PhysicalPlan, input planNode, table *scanNode, addContinuationCol bool,
 ) (
 	numInputNodeCols int,
 	planToStreamColMap []int,
@@ -2051,9 +2063,12 @@ func mappingHelperForLookupJoins(
 	// The n.table node can be configured with an arbitrary set of columns. Apply
 	// the corresponding projection.
 	// The internal schema of the join reader is:
-	//    <input columns>... <table columns>...
+	//    <input columns>... <table columns>...[continuation col]
 	numLeftCols := len(plan.ResultTypes)
 	numOutCols := numLeftCols + len(table.cols)
+	if addContinuationCol {
+		numOutCols++
+	}
 	post = execinfrapb.PostProcessSpec{Projection: true}
 
 	post.OutputColumns = make([]uint32, numOutCols)
@@ -2068,14 +2083,26 @@ func mappingHelperForLookupJoins(
 		ord := tableOrdinal(table.desc, table.cols[i].ID, table.colCfg.visibility)
 		post.OutputColumns[numLeftCols+i] = uint32(numLeftCols + ord)
 	}
+	if addContinuationCol {
+		outTypes[numOutCols-1] = types.Bool
+		post.OutputColumns[numOutCols-1] =
+			uint32(numLeftCols + highestTableOrdinal(table.desc, table.colCfg.visibility) + 1)
+	}
 
 	// Map the columns of the lookupJoinNode to the result streams of the
 	// JoinReader.
 	numInputNodeCols = len(planColumns(input))
-	planToStreamColMap = makePlanToStreamColMap(numInputNodeCols + len(table.cols))
+	lenPlanToStreamColMap := numInputNodeCols + len(table.cols)
+	if addContinuationCol {
+		lenPlanToStreamColMap++
+	}
+	planToStreamColMap = makePlanToStreamColMap(lenPlanToStreamColMap)
 	copy(planToStreamColMap, plan.PlanToStreamColMap)
 	for i := range table.cols {
 		planToStreamColMap[numInputNodeCols+i] = numLeftCols + i
+	}
+	if addContinuationCol {
+		planToStreamColMap[lenPlanToStreamColMap-1] = numLeftCols + len(table.cols)
 	}
 	return numInputNodeCols, planToStreamColMap, post, outTypes
 }
@@ -2114,9 +2141,10 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	}
 
 	invertedJoinerSpec := execinfrapb.InvertedJoinerSpec{
-		Table:            *n.table.desc.TableDesc(),
-		Type:             n.joinType,
-		MaintainOrdering: len(n.reqOrdering) > 0,
+		Table:                             *n.table.desc.TableDesc(),
+		Type:                              n.joinType,
+		MaintainOrdering:                  len(n.reqOrdering) > 0,
+		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 	}
 	invertedJoinerSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
 	if err != nil {
@@ -2124,7 +2152,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	}
 
 	numInputNodeCols, planToStreamColMap, post, types :=
-		mappingHelperForLookupJoins(plan, n.input, n.table)
+		mappingHelperForLookupJoins(plan, n.input, n.table, n.isFirstJoinInPairedJoiner)
 
 	indexVarMap := makeIndexVarMapForLookupJoins(numInputNodeCols, n.table, plan, &post)
 	if invertedJoinerSpec.InvertedExpr, err = physicalplan.MakeExpression(

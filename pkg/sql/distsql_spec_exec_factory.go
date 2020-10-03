@@ -625,6 +625,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	eqColsAreKey bool,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
+	isSecondJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 	locking *tree.LockingItem,
 ) (exec.Node, error) {
@@ -640,6 +641,7 @@ func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 	index cat.Index,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
+	isFirstJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: geo lookup join")

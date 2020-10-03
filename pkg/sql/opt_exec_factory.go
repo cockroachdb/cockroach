@@ -574,6 +574,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	eqColsAreKey bool,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
+	isSecondJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 	locking *tree.LockingItem,
 ) (exec.Node, error) {
@@ -596,11 +597,12 @@ func (ef *execFactory) ConstructLookupJoin(
 	}
 
 	n := &lookupJoinNode{
-		input:        input.(planNode),
-		table:        tableScan,
-		joinType:     joinType,
-		eqColsAreKey: eqColsAreKey,
-		reqOrdering:  ReqOrdering(reqOrdering),
+		input:                      input.(planNode),
+		table:                      tableScan,
+		joinType:                   joinType,
+		eqColsAreKey:               eqColsAreKey,
+		isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
+		reqOrdering:                ReqOrdering(reqOrdering),
 	}
 	n.eqCols = make([]int, len(eqCols))
 	for i, c := range eqCols {
@@ -686,6 +688,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	index cat.Index,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
+	isFirstJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
@@ -704,11 +707,12 @@ func (ef *execFactory) ConstructInvertedJoin(
 	tableScan.index = indexDesc
 
 	n := &invertedJoinNode{
-		input:        input.(planNode),
-		table:        tableScan,
-		joinType:     joinType,
-		invertedExpr: invertedExpr,
-		reqOrdering:  ReqOrdering(reqOrdering),
+		input:                     input.(planNode),
+		table:                     tableScan,
+		joinType:                  joinType,
+		invertedExpr:              invertedExpr,
+		isFirstJoinInPairedJoiner: isFirstJoinInPairedJoiner,
+		reqOrdering:               ReqOrdering(reqOrdering),
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onExpr = onCond
@@ -719,9 +723,16 @@ func (ef *execFactory) ConstructInvertedJoin(
 	if joinType != descpb.LeftSemiJoin && joinType != descpb.LeftAntiJoin {
 		scanCols = planColumns(tableScan)
 	}
-	n.columns = make(colinfo.ResultColumns, 0, len(inputCols)+len(scanCols))
+	numCols := len(inputCols) + len(scanCols)
+	if isFirstJoinInPairedJoiner {
+		numCols++
+	}
+	n.columns = make(colinfo.ResultColumns, 0, numCols)
 	n.columns = append(n.columns, inputCols...)
 	n.columns = append(n.columns, scanCols...)
+	if isFirstJoinInPairedJoiner {
+		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
+	}
 	return n, nil
 }
 
