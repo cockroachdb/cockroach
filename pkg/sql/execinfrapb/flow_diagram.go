@@ -156,7 +156,7 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (jr *JoinReaderSpec) summary() (string, []string) {
-	details := make([]string, 0, 4)
+	details := make([]string, 0, 5)
 	if jr.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(jr.Type))
 	}
@@ -166,6 +166,9 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	}
 	if !jr.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", jr.OnExpr))
+	}
+	if jr.LeftJoinWithPairedJoiner {
+		details = append(details, "second join in paired-join")
 	}
 	return "JoinReader", details
 }
@@ -269,7 +272,7 @@ func (zj *ZigzagJoinerSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (ij *InvertedJoinerSpec) summary() (string, []string) {
-	details := make([]string, 0, 4)
+	details := make([]string, 0, 5)
 	if ij.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(ij.Type))
 	}
@@ -277,6 +280,9 @@ func (ij *InvertedJoinerSpec) summary() (string, []string) {
 	details = append(details, fmt.Sprintf("InvertedExpr %s", ij.InvertedExpr))
 	if !ij.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", ij.OnExpr))
+	}
+	if ij.OutputGroupContinuationForLeftRow {
+		details = append(details, "first join in paired-join")
 	}
 	return "InvertedJoiner", details
 }
