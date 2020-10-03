@@ -2035,27 +2035,36 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		// columns from it.
 		indexCols := pkCols.ToSet()
 
-		lookupJoin := memo.InvertedJoinExpr{Input: input}
-		lookupJoin.JoinPrivate = *joinPrivate
-		lookupJoin.JoinType = joinType
-		lookupJoin.Table = scanPrivate.Table
-		lookupJoin.Index = iter.IndexOrdinal()
-		lookupJoin.InvertedExpr = invertedExpr
-		lookupJoin.InvertedCol = scanPrivate.Table.IndexColumnID(iter.Index(), 0)
-		lookupJoin.Cols = indexCols.Union(inputCols)
+		continuationCol := opt.ColumnID(0)
+		if joinType == opt.LeftJoinOp {
+			continuationCol = c.ConstructContinuationColumnForPairedLeftJoin()
+		}
+		invertedJoin := memo.InvertedJoinExpr{Input: input}
+		invertedJoin.JoinPrivate = *joinPrivate
+		invertedJoin.JoinType = joinType
+		invertedJoin.Table = scanPrivate.Table
+		invertedJoin.Index = iter.IndexOrdinal()
+		invertedJoin.InvertedExpr = invertedExpr
+		invertedJoin.InvertedCol = scanPrivate.Table.IndexColumnID(iter.Index(), 0)
+		invertedJoin.Cols = indexCols.Union(inputCols)
+		if joinType == opt.LeftJoinOp {
+			invertedJoin.Cols.Add(continuationCol)
+			invertedJoin.IsFirstJoinInPairedJoiner = true
+			invertedJoin.ContinuationCol = continuationCol
+		}
 
 		var indexJoin memo.LookupJoinExpr
 
 		// ON may have some conditions that are bound by the columns in the index
 		// and some conditions that refer to other columns. We can put the former
 		// in the InvertedJoin and the latter in the index join.
-		lookupJoin.On = c.ExtractBoundConditions(on, lookupJoin.Cols)
-		indexJoin.On = c.ExtractUnboundConditions(on, lookupJoin.Cols)
+		invertedJoin.On = c.ExtractBoundConditions(on, invertedJoin.Cols)
+		indexJoin.On = c.ExtractUnboundConditions(on, invertedJoin.Cols)
 
 		indexJoin.Input = c.e.f.ConstructInvertedJoin(
-			lookupJoin.Input,
-			lookupJoin.On,
-			&lookupJoin.InvertedJoinPrivate,
+			invertedJoin.Input,
+			invertedJoin.On,
+			&invertedJoin.InvertedJoinPrivate,
 		)
 		indexJoin.JoinType = joinType
 		indexJoin.Table = scanPrivate.Table
@@ -2063,6 +2072,9 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols.Union(inputCols)
 		indexJoin.LookupColsAreTableKey = true
+		if joinType == opt.LeftJoinOp {
+			indexJoin.IsSecondJoinInPairedJoiner = true
+		}
 
 		// Create the LookupJoin for the index join in the same group.
 		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
@@ -2878,7 +2890,7 @@ func (c *CustomFuncs) MapFilterCols(
 // CanGenerateInvertedJoin is a best-effort check that returns true if it
 // may be possible to generate an inverted join with the given right-side input
 // and on conditions. It may return some false positives, but it is used to
-// avoid applying certain rules such as ConvertLeftToInnerJoin in cases where
+// avoid applying certain rules such as ConvertAntiToLeftJoin in cases where
 // they may not be beneficial.
 func (c *CustomFuncs) CanGenerateInvertedJoin(rightInput memo.RelExpr, on memo.FiltersExpr) bool {
 	// The right-side input must be either a canonical Scan or a Select wrapping a

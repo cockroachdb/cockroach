@@ -839,8 +839,9 @@ type inputBatchGroupingState struct {
 type groupState struct {
 	// Whether the group matched.
 	matched bool
-	// The first row index in the group. Only valid when doGrouping = true.
-	firstRow int
+	// The last row index in the group. Only valid when doGrouping = true.
+	// TODO: add test that exercises the bug.
+	lastRow int
 }
 
 func (ib *inputBatchGroupingState) reset() {
@@ -857,10 +858,12 @@ func (ib *inputBatchGroupingState) addContinuationValForRow(cont bool) {
 		// First row in input batch or the start of a new group. We need to
 		// add entries in the group indexed slices.
 		ib.groupState = append(ib.groupState,
-			groupState{matched: false, firstRow: len(ib.batchRowToGroupIndex)})
+			groupState{matched: false, lastRow: len(ib.batchRowToGroupIndex)})
 	}
 	if ib.doGrouping {
-		ib.batchRowToGroupIndex = append(ib.batchRowToGroupIndex, len(ib.groupState)-1)
+		groupIndex := len(ib.groupState) - 1
+		ib.groupState[groupIndex].lastRow = len(ib.batchRowToGroupIndex)
+		ib.batchRowToGroupIndex = append(ib.batchRowToGroupIndex, groupIndex)
 	}
 }
 
@@ -902,7 +905,7 @@ func (ib *inputBatchGroupingState) isUnmatched(rowIndex int) bool {
 		// the next batch may continue the group.
 		return false
 	}
-	// Group is complete -- return true for the first row index in a group that
+	// Group is complete -- return true for the last row index in a group that
 	// is matched.
-	return !ib.groupState[groupIndex].matched && ib.groupState[groupIndex].firstRow == rowIndex
+	return !ib.groupState[groupIndex].matched && ib.groupState[groupIndex].lastRow == rowIndex
 }

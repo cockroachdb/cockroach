@@ -739,3 +739,5 @@ project         ·                    ·                                        
 ·               estimated row count  1000 (missing stats)                                                ·          ·
 ·               table                geo_table@primary                                                   ·          ·
 ·               spans                FULL SCAN                                                           ·          ·
+
+# TODO: add tests for spatial left outer/semi/anti joins.

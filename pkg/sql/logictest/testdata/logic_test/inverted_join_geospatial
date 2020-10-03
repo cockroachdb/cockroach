@@ -185,7 +185,7 @@ ORDER BY rk
 
 # Left join is supported by having the optimizer convert it to an inner join.
 query II
-SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
 ----
 1  13
 1  16
@@ -199,7 +199,7 @@ SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable
 6  NULL
 
 query II
-SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
 ----
 1  12
 1  13
@@ -217,7 +217,7 @@ SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_DWithin(ltable.geom1, rtable.ge
 6  NULL
 
 query II
-SELECT lk, rk FROM ltable LEFT JOIN rtable
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
 ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
 ----
 1  12
@@ -236,7 +236,7 @@ ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.g
 6  NULL
 
 query II
-SELECT lk, rk FROM ltable LEFT JOIN rtable
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)
 ----
 1  13
@@ -251,7 +251,7 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.g
 6  NULL
 
 query II
-SELECT lk, rk FROM ltable LEFT JOIN rtable
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
 ----
 1  13
@@ -265,7 +265,7 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.g
 6  NULL
 
 query II
-SELECT lk, rk FROM ltable LEFT JOIN rtable
+SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
 ----
 1  12
@@ -295,7 +295,7 @@ WITH q AS (
 SELECT lk, count(*), (SELECT count(*) FROM q) FROM (
   SELECT lk, rk
   FROM q
-  LEFT JOIN rtable ON ST_Intersects(q.geom1, rtable.geom)
+  LEFT JOIN rtable@geom_index ON ST_Intersects(q.geom1, rtable.geom)
 ) GROUP BY lk ORDER BY lk
 ----
 3  2  4
@@ -306,7 +306,7 @@ SELECT lk, count(*), (SELECT count(*) FROM q) FROM (
 # Anti-join is supported by having the optimizer convert it to a left join,
 # which is then converted to an inner join.
 query I
-SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
+SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable@geom_index WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ORDER BY lk
 ----
 5
@@ -324,8 +324,8 @@ ORDER BY rk
 query I
 SELECT lk FROM ltable
 WHERE NOT EXISTS (
-  SELECT * FROM rtable WHERE ST_Covers(ltable.geom2, rtable.geom) AND lk > 1 AND rk > 12
-)
+  SELECT * FROM rtable@geom_index WHERE ST_Covers(ltable.geom2, rtable.geom) AND lk > 1 AND rk > 12
+) ORDER BY lk
 ----
 1
 5
