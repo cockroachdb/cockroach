@@ -217,6 +217,7 @@ define LookupJoin {
     EqColsAreKey bool
     LookupCols exec.TableColumnOrdinalSet
     OnCond tree.TypedExpr
+    SecondJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
     Locking *tree.LockingItem
 }
@@ -238,6 +239,7 @@ define InvertedJoin {
     Index cat.Index
     LookupCols exec.TableColumnOrdinalSet
     OnCond tree.TypedExpr
+    FirstJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
 }
 

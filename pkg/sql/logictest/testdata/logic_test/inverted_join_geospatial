@@ -1,3 +1,5 @@
+# LogicTest: local
+
 statement ok
 CREATE TABLE ltable(
   lk int primary key,
@@ -183,6 +185,13 @@ ORDER BY rk
 13
 16
 
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUk2P0zAQvfMrRnNqtYY2SeHgk4HNSlmVZkmDBFpFq5CMSmhqB9tBXVX97yhxxZJKjehxxu_N-5APaH7VyHEdLsOPKbS6hrsk_gSP4deH5ftoBZPbaJ2uPy-ncILUWwZ661C1zb_XBMvwLoX7OFqBdot4BcY-VdKSNlRYM3HANxtSO4-dUP00hTi5DRP48A0m7vI0Q4ZSlbTKd2SQP6KHGcNGq4KMUbpbHXpAVO6RzxlWsmltt84YFkoT8gPaytaEHNNOKaG8JD2bI8OSbF7V_VnnSTS62uX6GRmum1waDq-RYdxaDsJjwsfsyFC19kXC2HxDyL0j-38bkfxN2lJ5rypJeuYNnaTPDXHXYvwlDZO-S2ToehJdT0-VLGmP7O-lcN_os5KFz0AspgP7TARMvL0Ywr8mRGf-VKV_VYCXipdKbdsGfqpKgpIcRNC5Pf8tfZB3gyDBxQjBNRHWSlvSs2BoX3g3TPg3yHCX2-IH1CQ5eBcVF9coJmQaJQ0NFC9dnh8zhlRuyH1yo1pd0INWRS_jxrjn9YuSjHWvnhsi6Z46g_-SvVGyP072R8nBODkYJS_OyNnx1Z8AAAD__628eLY=
+
+
 # Left join is supported by having the optimizer convert it to an inner join.
 query II
 SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
@@ -197,6 +206,12 @@ SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable
 5  12
 5  16
 6  NULL
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkkFv00AQhe_8itGcGnVoYjsgtCcX6kiuTFwcI4EqqzLxKDVxds16Dami_Hdkb0QbUCxynNl58-Z72h02PyoUuAii4EMKra5glsQf4T74chddh3O4uAkX6eJTNILDSLUm0Gs7VZn8W8UQBbMUbuNwDto24jk05qH4VZrHUl7YqasVq41Dh5G-InBHECc3QQLvv8KF3TzKkFCqguf5hhsU9-hgRlhrteSmUbpr7fqBsNiimBCWsm5N184Il0ozih2a0lSMAtPOLOG8YD2eIGHBJi-rfq09y691ucn1ExIu6lw2Al4jYdwaAb5DvovZnlC15tmiMfmKUTh7-v8zQvmTteHiVpWS9dg5viR9qlnYFOPPaZD0WSKhjcrvonooZcFbpD-bgm2tX4bsuwT-lMC9mgghZlF8nb4bHZGQ75H_5iSPew5Px3FI1T2L5TntSKl1W8N3VUpQUoDvddfO_2F6O8DknaTxzqFZKG1Yj71jEt-5JN-9RMJNbpaPULEU4Jx0nJ7jmHBTK9nwkeOpzZN9RsjFiu3Xb1Srl3yn1bK3sWXc6_pGwY2xr44tQmmfugNfip1BsTssdgfF3rDYGxRP_xJn-1e_AwAA___1gXu9
 
 query II
 SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
@@ -216,10 +231,19 @@ SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_DWithin(ltable.geom1, rtable.ge
 5  16
 6  NULL
 
+# TODO: wrong result because sorter is interposed between InvertedJoiner and JoinReader.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable
+ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU9Fu00AQfOcrTvuUqEsb26VC93SFupIrExfHSKDKqky8CibOnbk7Q6oo_47si2gTiEUeb3Znd2bW3oD5UQOHWRiH7zPW6prdpskH9hB-vo-voykb3USzbPYxHrNdS71Eppeuq7bF15pYHN5m7C6Jpkw7IJkyYx8raUkbmlszcvj5gtQKd6z-4Y1Zkna95a_Kfqvk6GUN2R7N73pvwpS9-8JGTsU4BwSpSpoWKzLAH8CDHKHRak7GKN1Bm74hKtfAJwiVbFrbwTnCXGkCvgFb2ZqAQ9YtS6koSV9MAKEkW1R1P9bJEo2uVoV-AoRZU0jD2WtASFrLmfBQ-JBvEVRrn1cYWywIuLfF_5cRyZ-kLZV3qpKkL7x9JdlTQ9wlnnzKwrTPHRBcVKKL6rGSJa0B_0wK140-OIjwkYnLw_Qdisw_n3DOb-PkOns73rOIIkDx5qhR_xSjM6Ut6Qt_36DwzlAEZ0dXBKes6DLcXTQ4KcfnS8dKLduGfVeVZEpyJrpBf33g4gqZ8P-Z59VAnsFRm5en2EzJNEoa2rN4bPJkmyNQuSD3dxjV6jndazXv17hn0vN6oCRjXdVzj0i6UifwJdkbJPvDZH-QHAyTg0Hy5QE53776HQAA__8PJZcI
+
 query II
 SELECT lk, rk FROM ltable LEFT JOIN rtable
 ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
 ----
+1  11
 1  12
 1  13
 1  14
@@ -229,7 +253,6 @@ ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.g
 3  11
 3  12
 3  16
-4  NULL
 5  11
 5  12
 5  16
@@ -264,10 +287,19 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.g
 5  NULL
 6  NULL
 
+# TODO: wrong result because sorter is interposed between InvertedJoiner and JoinReader.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable LEFT JOIN rtable
+ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk29v0zAQxt_zKax71WrH1vyBIb_yYJmUKTQjDRJoiqbQnEZYagfbgU5VvztKXLG2qBV96fPz3Pn5XbIC87MBDrMoiT7krNMNu8nSj-w--nKXXMVTNrqOZ_nsUzJmG0nzhEw_OVVjy28NsSS6ydltGk-ZdoV0yox9qKUlbWhuzcgJzx9JLTzcqIbTmKVZr61-1_Z7LUdbV8i2XD4yv9deRxl7_5WN3CvGBSBIVdG0XJABfg8eFAitVnMyRum-tBoEcbUEPkGoZdvZvlwgzJUm4CuwtW0IOOT9tIzKivTFBBAqsmXdDG3dS0Sr60WpnwFh1pbScPYaijWC6uxLV2PLRwLurfH_J8fyF2lL1a2qJekLb3d4_twSd5DTz3mUDagBwbESPZ6HWla0BPzbKVq2em8Hwkcm3uwDF0FfReafTzjnN0l6lb8bA0LaWc6Eh8JHEaAIUbw9mNU_JetMaUv6wt_NKLwzFOHZwRHBKSN6jJs9BiehfNlvotRT17IfqpZMSc5E2DPZ_6wHpJf_IL1E1mM9iDQ8GDM8JWZGplXS0E7EQ50n6wKBqkdy_4RRnZ7TnVbzYYw7poNvKFRkrLv13CGW7qp_4LbZO2r2j5v9o-bguDk4ag73zMX61Z8AAAD__2bElKI=
+
 query II
 SELECT lk, rk FROM ltable LEFT JOIN rtable
 ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
 ----
+1  11
 1  12
 1  13
 1  14
