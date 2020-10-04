@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -194,10 +195,11 @@ func (ex *connExecutor) recordStatementSummary(
 			ex.extraTxnState.transactionStatementIDs, stmtID)
 	}
 	// Add the current statement's ID to the hash. We don't track queries issued
-	// by the internal executor, in which case the hash function may be nil, and
+	// by the internal executor, in which case the hash is uninitialized (=0), and
 	// can therefore be safely ignored.
-	if ex.extraTxnState.transactionStatementsHash != nil {
-		ex.extraTxnState.transactionStatementsHash.Write([]byte(stmtID))
+	if ex.extraTxnState.transactionStatementsHash != 0 {
+		ex.extraTxnState.transactionStatementsHash = util.FNV64AddToHash(
+			ex.extraTxnState.transactionStatementsHash, uint64(stmtID))
 	}
 	ex.extraTxnState.numRows += rowsAffected
 

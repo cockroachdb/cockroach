@@ -24,3 +24,20 @@ func CRC32(data []byte) uint32 {
 	}
 	return hash.Sum32()
 }
+
+// Magic FNV Base constant as suitable for a FNV-64 hash.
+const fnvBase = uint64(14695981039346656037)
+const fnvPrime = 1099511628211
+
+// FNV64Init initializes a new hash function.
+func FNV64Init() uint64 {
+	return fnvBase
+}
+
+// FNV64AddToHash returns the state after hashing a new integer to the state
+// accumulated so far.
+func FNV64AddToHash(s0 uint64, c uint64) uint64 {
+	s0 *= fnvPrime
+	s0 ^= c
+	return s0
+}

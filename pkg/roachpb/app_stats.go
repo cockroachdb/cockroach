@@ -11,28 +11,34 @@
 package roachpb
 
 import (
-	"fmt"
-	"hash/fnv"
 	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // StmtID is the type of a Statement ID.
-type StmtID string
+type StmtID uint64
 
 // ConstructStatementID constructs an ID by hashing an anonymized query, it's
 // failure status, and if it was part of an implicit txn. At the time of writing,
 // these are the axis' we use to bucket queries for stats collection
 // (see stmtKey).
 func ConstructStatementID(anonymizedStmt string, failed bool, implicitTxn bool) StmtID {
-	h := fnv.New128()
-	h.Write([]byte(anonymizedStmt))
+	hash := util.FNV64Init()
+	for _, c := range anonymizedStmt {
+		hash = util.FNV64AddToHash(hash, uint64(c))
+	}
 	if failed {
-		h.Write([]byte("failed"))
+		hash = util.FNV64AddToHash(hash, 'F')
+	} else {
+		hash = util.FNV64AddToHash(hash, 'S')
 	}
 	if implicitTxn {
-		h.Write([]byte("implicit_txn"))
+		hash = util.FNV64AddToHash(hash, 'I')
+	} else {
+		hash = util.FNV64AddToHash(hash, 'E')
 	}
-	return StmtID(fmt.Sprintf("%x", h.Sum(nil)))
+	return StmtID(hash)
 }
 
 // GetVariance retrieves the variance of the values.

@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -952,7 +953,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				}
 				stmtIDsDatum := tree.NewDArray(types.String)
 				for _, stmtID := range s.statementIDs {
-					if err := stmtIDsDatum.Append(tree.NewDString(string(stmtID))); err != nil {
+					if err := stmtIDsDatum.Append(tree.NewDString(strconv.FormatUint(uint64(stmtID), 10))); err != nil {
 						return err
 					}
 				}
@@ -962,7 +963,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				err := addRow(
 					tree.NewDInt(tree.DInt(nodeID)),
 					tree.NewDString(appName),
-					tree.NewDString(string(txnKey)),
+					tree.NewDString(strconv.FormatUint(uint64(txnKey), 10)),
 					stmtIDsDatum,
 					tree.NewDInt(tree.DInt(s.mu.data.Count)),
 					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),
