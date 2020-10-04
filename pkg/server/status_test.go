@@ -1649,7 +1649,7 @@ func TestStatusAPITransactions(t *testing.T) {
 		// linked to StatementIDs for statements in the response.
 		for _, stmtID := range respTransaction.StatsData.StatementIDs {
 			if _, found := statementIDs[stmtID]; !found {
-				t.Fatalf("app: %s, expected stmtID: %s not found in StatementResponse.", appName, stmtID)
+				t.Fatalf("app: %s, expected stmtID: %d not found in StatementResponse.", appName, stmtID)
 			}
 		}
 		stats := respTransaction.StatsData.Stats

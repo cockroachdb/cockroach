@@ -85,7 +85,7 @@ func (m *StatementStatistics) Reset()         { *m = StatementStatistics{} }
 func (m *StatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*StatementStatistics) ProtoMessage()    {}
 func (*StatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{0}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{0}
 }
 func (m *StatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -134,7 +134,7 @@ func (m *TransactionStatistics) Reset()         { *m = TransactionStatistics{} }
 func (m *TransactionStatistics) String() string { return proto.CompactTextString(m) }
 func (*TransactionStatistics) ProtoMessage()    {}
 func (*TransactionStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{1}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{1}
 }
 func (m *TransactionStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -174,7 +174,7 @@ func (m *SensitiveInfo) Reset()         { *m = SensitiveInfo{} }
 func (m *SensitiveInfo) String() string { return proto.CompactTextString(m) }
 func (*SensitiveInfo) ProtoMessage()    {}
 func (*SensitiveInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{2}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{2}
 }
 func (m *SensitiveInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -216,7 +216,7 @@ func (m *NumericStat) Reset()         { *m = NumericStat{} }
 func (m *NumericStat) String() string { return proto.CompactTextString(m) }
 func (*NumericStat) ProtoMessage()    {}
 func (*NumericStat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{3}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{3}
 }
 func (m *NumericStat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -255,7 +255,7 @@ func (m *StatementStatisticsKey) Reset()         { *m = StatementStatisticsKey{}
 func (m *StatementStatisticsKey) String() string { return proto.CompactTextString(m) }
 func (*StatementStatisticsKey) ProtoMessage()    {}
 func (*StatementStatisticsKey) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{4}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{4}
 }
 func (m *StatementStatisticsKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -286,7 +286,7 @@ type CollectedStatementStatistics struct {
 	// ID is a hash of the statement key (query fingerprint, failure status,
 	// implicit txn or not) which can be used to identify the statement
 	// for instance in transaction statistics.
-	ID    StmtID                 `protobuf:"bytes,3,opt,name=id,casttype=StmtID" json:"id"`
+	ID    StmtID                 `protobuf:"varint,3,opt,name=id,casttype=StmtID" json:"id"`
 	Key   StatementStatisticsKey `protobuf:"bytes,1,opt,name=key" json:"key"`
 	Stats StatementStatistics    `protobuf:"bytes,2,opt,name=stats" json:"stats"`
 }
@@ -295,7 +295,7 @@ func (m *CollectedStatementStatistics) Reset()         { *m = CollectedStatement
 func (m *CollectedStatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedStatementStatistics) ProtoMessage()    {}
 func (*CollectedStatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{5}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{5}
 }
 func (m *CollectedStatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -325,7 +325,7 @@ var xxx_messageInfo_CollectedStatementStatistics proto.InternalMessageInfo
 type CollectedTransactionStatistics struct {
 	// StatementIDs is the IDs of the statements which this transaction comprises,
 	// in order.
-	StatementIDs []StmtID `protobuf:"bytes,1,rep,name=statement_ids,json=statementIds,casttype=StmtID" json:"statement_ids,omitempty"`
+	StatementIDs []StmtID `protobuf:"varint,1,rep,name=statement_ids,json=statementIds,casttype=StmtID" json:"statement_ids,omitempty"`
 	// App is the name of the app which executed the transaction.
 	App   string                `protobuf:"bytes,2,opt,name=app" json:"app"`
 	Stats TransactionStatistics `protobuf:"bytes,3,opt,name=stats" json:"stats"`
@@ -335,7 +335,7 @@ func (m *CollectedTransactionStatistics) Reset()         { *m = CollectedTransac
 func (m *CollectedTransactionStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedTransactionStatistics) ProtoMessage()    {}
 func (*CollectedTransactionStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{6}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{6}
 }
 func (m *CollectedTransactionStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -375,7 +375,7 @@ func (m *ExplainTreePlanNode) Reset()         { *m = ExplainTreePlanNode{} }
 func (m *ExplainTreePlanNode) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode) ProtoMessage()    {}
 func (*ExplainTreePlanNode) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{7}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{7}
 }
 func (m *ExplainTreePlanNode) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -409,7 +409,7 @@ func (m *ExplainTreePlanNode_Attr) Reset()         { *m = ExplainTreePlanNode_At
 func (m *ExplainTreePlanNode_Attr) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode_Attr) ProtoMessage()    {}
 func (*ExplainTreePlanNode_Attr) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{7, 0}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{7, 0}
 }
 func (m *ExplainTreePlanNode_Attr) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -448,7 +448,7 @@ func (m *TxnStats) Reset()         { *m = TxnStats{} }
 func (m *TxnStats) String() string { return proto.CompactTextString(m) }
 func (*TxnStats) ProtoMessage()    {}
 func (*TxnStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_ba11ef7e1d77017c, []int{8}
+	return fileDescriptor_app_stats_6c6ddfe12bf47ebd, []int{8}
 }
 func (m *TxnStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -908,10 +908,9 @@ func (m *CollectedStatementStatistics) MarshalTo(dAtA []byte) (int, error) {
 		return 0, err
 	}
 	i += n17
-	dAtA[i] = 0x1a
+	dAtA[i] = 0x18
 	i++
-	i = encodeVarintAppStats(dAtA, i, uint64(len(m.ID)))
-	i += copy(dAtA[i:], m.ID)
+	i = encodeVarintAppStats(dAtA, i, uint64(m.ID))
 	return i, nil
 }
 
@@ -931,18 +930,10 @@ func (m *CollectedTransactionStatistics) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.StatementIDs) > 0 {
-		for _, s := range m.StatementIDs {
-			dAtA[i] = 0xa
+		for _, num := range m.StatementIDs {
+			dAtA[i] = 0x8
 			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
+			i = encodeVarintAppStats(dAtA, i, uint64(num))
 		}
 	}
 	dAtA[i] = 0x12
@@ -1183,8 +1174,7 @@ func (m *CollectedStatementStatistics) Size() (n int) {
 	n += 1 + l + sovAppStats(uint64(l))
 	l = m.Stats.Size()
 	n += 1 + l + sovAppStats(uint64(l))
-	l = len(m.ID)
-	n += 1 + l + sovAppStats(uint64(l))
+	n += 1 + sovAppStats(uint64(m.ID))
 	return n
 }
 
@@ -1195,9 +1185,8 @@ func (m *CollectedTransactionStatistics) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.StatementIDs) > 0 {
-		for _, s := range m.StatementIDs {
-			l = len(s)
-			n += 1 + l + sovAppStats(uint64(l))
+		for _, e := range m.StatementIDs {
+			n += 1 + sovAppStats(uint64(e))
 		}
 	}
 	l = len(m.App)
@@ -2422,10 +2411,10 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx = postIndex
 		case 3:
-			if wireType != 2 {
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
 			}
-			var stringLen uint64
+			m.ID = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowAppStats
@@ -2435,21 +2424,11 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				m.ID |= (StmtID(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthAppStats
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ID = StmtID(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAppStats(dAtA[iNdEx:])
@@ -2501,34 +2480,78 @@ func (m *CollectedTransactionStatistics) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StatementIDs", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowAppStats
+			if wireType == 0 {
+				var v StmtID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAppStats
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= (StmtID(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
 				}
-				if iNdEx >= l {
+				m.StatementIDs = append(m.StatementIDs, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAppStats
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthAppStats
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
 				}
+				elementCount = count
+				if elementCount != 0 && len(m.StatementIDs) == 0 {
+					m.StatementIDs = make([]StmtID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v StmtID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowAppStats
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= (StmtID(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.StatementIDs = append(m.StatementIDs, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field StatementIDs", wireType)
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthAppStats
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.StatementIDs = append(m.StatementIDs, StmtID(dAtA[iNdEx:postIndex]))
-			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field App", wireType)
@@ -3100,9 +3123,9 @@ var (
 	ErrIntOverflowAppStats   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_ba11ef7e1d77017c) }
+func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_6c6ddfe12bf47ebd) }
 
-var fileDescriptor_app_stats_ba11ef7e1d77017c = []byte{
+var fileDescriptor_app_stats_6c6ddfe12bf47ebd = []byte{
 	// 1113 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x56, 0xbd, 0x6e, 0x1b, 0x47,
 	0x17, 0xd5, 0xf2, 0x47, 0x24, 0x2f, 0x49, 0xc9, 0xdf, 0xf8, 0x6f, 0x3f, 0x42, 0x20, 0x15, 0xc2,
@@ -3155,10 +3178,10 @@ var fileDescriptor_app_stats_ba11ef7e1d77017c = []byte{
 	0x4a, 0x60, 0x80, 0xae, 0x1e, 0xcb, 0x13, 0x81, 0x01, 0xba, 0xcd, 0x1f, 0x2d, 0xd8, 0x38, 0x88,
 	0x7c, 0x1f, 0xd5, 0x08, 0x5a, 0xf4, 0xee, 0xed, 0x42, 0xf6, 0x02, 0xcd, 0x49, 0xcb, 0x3b, 0x8f,
 	0xe7, 0x47, 0xd1, 0xc2, 0xfa, 0xa4, 0xfa, 0x17, 0x38, 0x22, 0xcf, 0x20, 0xaf, 0xdf, 0xe8, 0x5b,
-	0x6c, 0xb5, 0x40, 0x20, 0x2d, 0xa7, 0xa6, 0x91, 0x47, 0x90, 0x61, 0x9e, 0xae, 0x58, 0xa9, 0x7d,
+	0x6c, 0xb5, 0x40, 0x20, 0x2d, 0xa7, 0xa6, 0x91, 0x47, 0x90, 0x61, 0x9e, 0xae, 0x58, 0xae, 0x7d,
 	0x4f, 0x25, 0xc6, 0xd7, 0x8d, 0x4c, 0xe7, 0xf0, 0xaf, 0xeb, 0xc6, 0xea, 0xb1, 0x0c, 0x64, 0xe7,
 	0xb0, 0x9b, 0x61, 0x5e, 0xf3, 0x07, 0x0b, 0xea, 0x93, 0x53, 0x2c, 0x1e, 0x36, 0x7b, 0x50, 0x15,
-	0xe9, 0x62, 0x0e, 0xf3, 0x84, 0x6d, 0x6d, 0x66, 0xb7, 0x4a, 0xed, 0xda, 0xf8, 0xba, 0x51, 0x99,
+	0xe9, 0x62, 0x0e, 0xf3, 0x84, 0x6d, 0x6d, 0x66, 0xb7, 0x72, 0xed, 0xda, 0xf8, 0xba, 0x51, 0x99,
 	0xec, 0xa2, 0x73, 0x28, 0xa6, 0x94, 0x2b, 0x13, 0x42, 0xc7, 0x13, 0xb7, 0x5e, 0xec, 0xf3, 0xf4,
 	0x84, 0xc6, 0xcf, 0x8f, 0xe6, 0x4e, 0xb8, 0x70, 0x37, 0x33, 0x67, 0x6c, 0xfe, 0x69, 0xc1, 0xdd,
 	0x05, 0xfd, 0xa5, 0x6c, 0x1c, 0xd2, 0x00, 0x67, 0x5c, 0xa6, 0x23, 0x64, 0x17, 0xf2, 0x54, 0x4a,
@@ -3173,5 +3196,5 @@ var fileDescriptor_app_stats_ba11ef7e1d77017c = []byte{
 	0x14, 0xba, 0x9a, 0xe6, 0x34, 0xb8, 0xfd, 0xf4, 0xea, 0xf7, 0xfa, 0xca, 0xd5, 0xb8, 0x6e, 0xbd,
 	0x1d, 0xd7, 0xad, 0x77, 0xe3, 0xba, 0xf5, 0xdb, 0xb8, 0x6e, 0xbd, 0xb9, 0xa9, 0xaf, 0xbc, 0xbd,
 	0xa9, 0xaf, 0xbc, 0xbb, 0xa9, 0xaf, 0x7c, 0x5b, 0x48, 0x3e, 0x5e, 0xff, 0x0e, 0x00, 0x00, 0xff,
-	0xff, 0xf7, 0xd0, 0x18, 0x82, 0xc6, 0x0a, 0x00, 0x00,
+	0xff, 0xea, 0x08, 0x8c, 0xbf, 0xc6, 0x0a, 0x00, 0x00,
 }

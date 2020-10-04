@@ -44,11 +44,11 @@ type stmtKey struct {
 	implicitTxn    bool
 }
 
-const invalidStmtID = ""
+const invalidStmtID = 0
 
 // txnKey is the hashed string constructed using the individual statement IDs
 // that comprise the transaction.
-type txnKey string
+type txnKey uint64
 
 // appStats holds per-application statistics.
 type appStats struct {
@@ -240,21 +240,18 @@ func (a *appStats) getStatsForStmt(
 		key.anonymizedStmt = anonymizeStmt(stmt.AST)
 	}
 
-	stmtID := constructStatementIDFromStmtKey(key)
-
-	return a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent)
+	return a.getStatsForStmtWithKey(key, createIfNonexistent)
 }
 
-func (a *appStats) getStatsForStmtWithKey(
-	key stmtKey, ID roachpb.StmtID, createIfNonexistent bool,
-) *stmtStats {
+func (a *appStats) getStatsForStmtWithKey(key stmtKey, createIfNonexistent bool) *stmtStats {
 	a.Lock()
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
 	s, ok := a.stmts[key]
 	if !ok && createIfNonexistent {
+		stmtID := constructStatementIDFromStmtKey(key)
 		s = &stmtStats{}
-		s.ID = ID
+		s.ID = stmtID
 		a.stmts[key] = s
 	}
 	a.Unlock()
@@ -299,7 +296,7 @@ func (a *appStats) Add(other *appStats) {
 
 	// Merge the statement stats.
 	for k, v := range statMap {
-		s := a.getStatsForStmtWithKey(k, v.ID, true)
+		s := a.getStatsForStmtWithKey(k, true /* createIfNonexistent */)
 		s.mu.Lock()
 		// Note that we don't need to take a lock on v because
 		// no other thread knows about v yet.
