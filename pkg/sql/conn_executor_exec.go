@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"hash/fnv"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -1431,7 +1431,7 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.phaseTimes[sessionTransactionReceived] = ex.phaseTimes[sessionQueryReceived]
 	ex.phaseTimes[sessionFirstStartExecTransaction] = timeutil.Now()
 	ex.phaseTimes[sessionMostRecentStartExecTransaction] = ex.phaseTimes[sessionFirstStartExecTransaction]
-	ex.extraTxnState.transactionStatementsHash = fnv.New128()
+	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
 
@@ -1442,7 +1442,7 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	onTxnRestart = func() {
 		ex.phaseTimes[sessionMostRecentStartExecTransaction] = timeutil.Now()
 		ex.extraTxnState.transactionStatementIDs = nil
-		ex.extraTxnState.transactionStatementsHash = fnv.New128()
+		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 		ex.extraTxnState.numRows = 0
 	}
 	return onTxnFinish, onTxnRestart
@@ -1457,10 +1457,8 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 	txnRetryLat := ex.phaseTimes.getTransactionRetryLatency()
 	commitLat := ex.phaseTimes.getCommitLatency()
 
-	key := txnKey(fmt.Sprintf("%x", ex.extraTxnState.transactionStatementsHash.Sum(nil)))
-
 	ex.statsCollector.recordTransaction(
-		key,
+		txnKey(ex.extraTxnState.transactionStatementsHash.Sum()),
 		txnTime.Seconds(),
 		ev,
 		implicit,
