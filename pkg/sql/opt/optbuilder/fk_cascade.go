@@ -322,8 +322,9 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	on := make(memo.FiltersExpr, numFKCols)
 	for i := range on {
 		tabOrd := fk.OriginColumnOrdinal(childTable, i)
+		col := outScope.getColumnForTableOrdinal(tabOrd)
 		on[i] = b.factory.ConstructFiltersItem(b.factory.ConstructEq(
-			b.factory.ConstructVariable(outScope.cols[tabOrd].id),
+			b.factory.ConstructVariable(col.id),
 			b.factory.ConstructVariable(outCols[i]),
 		))
 	}
@@ -629,8 +630,9 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	on := make(memo.FiltersExpr, numFKCols)
 	for i := range on {
 		tabOrd := fk.OriginColumnOrdinal(childTable, i)
+		col := outScope.getColumnForTableOrdinal(tabOrd)
 		on[i] = f.ConstructFiltersItem(f.ConstructEq(
-			f.ConstructVariable(outScope.cols[tabOrd].id),
+			f.ConstructVariable(col.id),
 			f.ConstructVariable(outColsOld[i]),
 		))
 	}

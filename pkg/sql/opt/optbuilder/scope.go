@@ -316,6 +316,17 @@ func (s *scope) getColumn(col opt.ColumnID) *scopeColumn {
 	return nil
 }
 
+// getColumnForTableOrdinal returns the column with a specific tableOrdinal
+// value, or nil if it doesn't exist.
+func (s *scope) getColumnForTableOrdinal(tabOrd int) *scopeColumn {
+	for i := range s.cols {
+		if s.cols[i].tableOrdinal == tabOrd {
+			return &s.cols[i]
+		}
+	}
+	return nil
+}
+
 func (s *scope) makeColumnTypes() []*types.T {
 	res := make([]*types.T, len(s.cols))
 	for i := range res {
