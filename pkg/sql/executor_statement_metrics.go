@@ -194,10 +194,10 @@ func (ex *connExecutor) recordStatementSummary(
 			ex.extraTxnState.transactionStatementIDs, stmtID)
 	}
 	// Add the current statement's ID to the hash. We don't track queries issued
-	// by the internal executor, in which case the hash function may be nil, and
+	// by the internal executor, in which case the hash is uninitialized, and
 	// can therefore be safely ignored.
-	if ex.extraTxnState.transactionStatementsHash != nil {
-		ex.extraTxnState.transactionStatementsHash.Write([]byte(stmtID))
+	if ex.extraTxnState.transactionStatementsHash.IsInitialized() {
+		ex.extraTxnState.transactionStatementsHash.Add(uint64(stmtID))
 	}
 	ex.extraTxnState.numRows += rowsAffected
 
