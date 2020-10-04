@@ -240,9 +240,15 @@ func (a *appStats) getStatsForStmt(
 		key.anonymizedStmt = anonymizeStmt(stmt.AST)
 	}
 
-	stmtID := constructStatementIDFromStmtKey(key)
-
-	return a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent)
+	// We first try and see if we can get by without creating a new entry for this
+	// key, as this allows us to not construct the statementID from scratch (which
+	// is an expensive operation).
+	s := a.getStatsForStmtWithKey(key, "", false /* createIfNonexistent */)
+	if s == nil && createIfNonexistent {
+		stmtID := constructStatementIDFromStmtKey(key)
+		s = a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent)
+	}
+	return s
 }
 
 func (a *appStats) getStatsForStmtWithKey(
@@ -299,7 +305,7 @@ func (a *appStats) Add(other *appStats) {
 
 	// Merge the statement stats.
 	for k, v := range statMap {
-		s := a.getStatsForStmtWithKey(k, v.ID, true)
+		s := a.getStatsForStmtWithKey(k, v.ID, true /* createIfNonexistent */)
 		s.mu.Lock()
 		// Note that we don't need to take a lock on v because
 		// no other thread knows about v yet.

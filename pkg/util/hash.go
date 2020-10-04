@@ -24,3 +24,27 @@ func CRC32(data []byte) uint32 {
 	}
 	return hash.Sum32()
 }
+
+// Magic FNV Base constant as suitable for a FNV-64 hash.
+const fnvBase = uint64(14695981039346656037)
+const fnvPrime = 1099511628211
+
+func FNV64Init() uint64 {
+	return fnvBase
+}
+
+func FNV64AddToHash(s0 uint64, c int32) uint64 {
+	s0 *= fnvPrime
+	s0 ^= uint64(c)
+	return s0
+}
+
+func FNV64ToByteArray(s0 uint64) []byte {
+	b := make([]byte, 16)
+	const hex = "0123456789abcdef"
+	for i := 0; i < 16; i++ {
+		b[i] = hex[s0&0xf]
+		s0 = s0 >> 4
+	}
+	return b
+}
