@@ -1908,7 +1908,7 @@ values
  ├── key: ()
  └── fd: ()-->(1)
 
-norm expect=(SimplifySameVarInequalities,SimplifyJoinFilters)
+norm expect=(SimplifySameVarInequalities,DetectJoinContradiction)
 SELECT a.k FROM a FULL OUTER JOIN xy ON a.k != a.k
 ----
 full-join (cross)
@@ -1920,7 +1920,7 @@ full-join (cross)
  └── filters
       └── false [constraints=(contradiction; tight)]
 
-norm expect=(SimplifySameVarInequalities,SimplifyJoinFilters)
+norm expect=(SimplifySameVarInequalities,DetectJoinContradiction)
 SELECT a.k FROM a FULL OUTER JOIN xy ON a.k > a.k
 ----
 full-join (cross)
@@ -1932,7 +1932,7 @@ full-join (cross)
  └── filters
       └── false [constraints=(contradiction; tight)]
 
-norm expect=(SimplifySameVarInequalities,SimplifyJoinFilters)
+norm expect=(SimplifySameVarInequalities,DetectJoinContradiction)
 SELECT a.k FROM a FULL OUTER JOIN xy ON a.k < a.k
 ----
 full-join (cross)
