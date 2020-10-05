@@ -1016,6 +1016,12 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaClosedTimestampFailuresToClose = metric.Metadata{
+		Name:        "kv.closed_timestamp.failures_to_close",
+		Help:        "Number of times the min prop tracker failed to close timestamps due to epoch mismatch or pending evaluations",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1208,7 +1214,8 @@ type StoreMetrics struct {
 	RangeFeedMetrics *rangefeed.Metrics
 
 	// Closed timestamp metrics.
-	ClosedTimestampMaxBehindNanos *metric.Gauge
+	ClosedTimestampMaxBehindNanos  *metric.Gauge
+	ClosedTimestampFailuresToClose *metric.Gauge
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -1583,7 +1590,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeFeedMetrics: rangefeed.NewMetrics(),
 
 		// Closed timestamp metrics.
-		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),
+		ClosedTimestampMaxBehindNanos:  metric.NewGauge(metaClosedTimestampMaxBehindNanos),
+		ClosedTimestampFailuresToClose: metric.NewGauge(metaClosedTimestampFailuresToClose),
 	}
 	storeRegistry.AddMetricStruct(sm)
 

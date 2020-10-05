@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -83,6 +84,7 @@ type Tracker struct {
 		leftRef, rightRef     int
 		leftEpoch, rightEpoch ctpb.Epoch
 	}
+	failedAttempts int64
 }
 
 var _ closedts.TrackerI = (*Tracker)(nil)
@@ -189,6 +191,13 @@ func (t *Tracker) String() string {
 func (t *Tracker) Close(
 	next hlc.Timestamp, expCurEpoch ctpb.Epoch,
 ) (ts hlc.Timestamp, mlai map[roachpb.RangeID]ctpb.LAI, ok bool) {
+	defer func() {
+		if mlai == nil {
+			// Record if our attempt to close a timestamp fails.
+			atomic.AddInt64(&t.failedAttempts, 1)
+		}
+	}()
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -291,6 +300,12 @@ func (t *Tracker) Track(ctx context.Context) (hlc.Timestamp, closedts.ReleaseFun
 	}
 
 	return minProp, release
+}
+
+// FailedAttempts returns the numbers of attempts by the tracker that failed to
+// close a timestamp due to an epoch mismatch or pending evaluations.
+func (t *Tracker) FailedAttempts() int64 {
+	return atomic.LoadInt64(&t.failedAttempts)
 }
 
 // release is the business logic to release properly account for the release of

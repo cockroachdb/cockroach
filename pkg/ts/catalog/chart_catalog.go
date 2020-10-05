@@ -599,6 +599,10 @@ var charts = []sectionDescription{
 				Title:   "Count",
 				Metrics: []string{"follower_reads.success_count"},
 			},
+			{
+				Title:   "Failures To Close Timestamps",
+				Metrics: []string{"kv.closed_timestamp.failures_to_close"},
+			},
 		},
 	},
 	{
