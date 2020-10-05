@@ -258,7 +258,10 @@ type zigzagJoiner struct {
 // at a time. Increasing this will improve performance for when matched rows
 // are grouped together, but increasing this too much will result in fetching
 // too many rows and therefore skipping less rows.
-const zigzagJoinerBatchSize = 5
+var zigzagJoinerBatchSize = int64(util.ConstantWithMetamorphicTestValue(
+	5, /* defaultValue */
+	1, /* metamorphicValue */
+))
 
 var _ execinfra.Processor = &zigzagJoiner{}
 var _ execinfra.RowSource = &zigzagJoiner{}
