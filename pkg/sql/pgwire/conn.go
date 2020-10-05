@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerrordoc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1243,8 +1244,8 @@ func writeErr(
 func writeErrFields(
 	ctx context.Context, sv *settings.Values, err error, msgBuilder *writeBuffer, w io.Writer,
 ) error {
-	// Now send the error to the client.
-	pgErr := pgerror.Flatten(err)
+	// Now send the error to the client, appending useful docs links if applicable.
+	pgErr := pgerror.Flatten(pgerrordoc.WithRelevantLinks(err))
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
 	msgBuilder.writeTerminatedString(pgErr.Severity)
