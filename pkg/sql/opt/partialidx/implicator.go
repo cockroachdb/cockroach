@@ -147,6 +147,11 @@ func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.Eval
 	im.evalCtx = evalCtx
 }
 
+// ClearCache empties the Implicator's constraint cache.
+func (im *Implicator) ClearCache() {
+	im.constraintCache = nil
+}
+
 // FiltersImplyPredicate attempts to prove that a partial index predicate is
 // implied by the given filters. If implication is proven, the function returns
 // the remaining filters (which when applied on top of a partial index scan,
