@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
 )
@@ -75,14 +76,31 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 
 // IndexElem represents a column with a direction in a CREATE INDEX statement.
 type IndexElem struct {
-	Column     Name
+	// Column is set if this is a simple column reference (the common case).
+	Column Name
+	// Expr is set if the index element is an expression (part of an
+	// expression-based index). If set, Column is empty.
+	Expr       Expr
 	Direction  Direction
 	NullsOrder NullsOrder
 }
 
 // Format implements the NodeFormatter interface.
 func (node *IndexElem) Format(ctx *FmtCtx) {
-	ctx.FormatNode(&node.Column)
+	if node.Expr == nil {
+		ctx.FormatNode(&node.Column)
+	} else {
+		// Expressions in indexes need an extra set of parens, unless they are a
+		// simple function call.
+		_, isFunc := node.Expr.(*FuncExpr)
+		if !isFunc {
+			ctx.WriteByte('(')
+		}
+		ctx.FormatNode(node.Expr)
+		if !isFunc {
+			ctx.WriteByte(')')
+		}
+	}
 	if node.Direction != DefaultDirection {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.Direction.String())
@@ -91,6 +109,27 @@ func (node *IndexElem) Format(ctx *FmtCtx) {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.NullsOrder.String())
 	}
+}
+
+func (node *IndexElem) doc(p *PrettyCfg) pretty.Doc {
+	var d pretty.Doc
+	if node.Expr == nil {
+		d = p.Doc(&node.Column)
+	} else {
+		// Expressions in indexes need an extra set of parens, unless they are a
+		// simple function call.
+		d = p.Doc(node.Expr)
+		if _, isFunc := node.Expr.(*FuncExpr); !isFunc {
+			d = p.bracket("(", d, ")")
+		}
+	}
+	if node.Direction != DefaultDirection {
+		d = pretty.ConcatSpace(d, pretty.Keyword(node.Direction.String()))
+	}
+	if node.NullsOrder != DefaultNullsOrder {
+		d = pretty.ConcatSpace(d, pretty.Keyword(node.NullsOrder.String()))
+	}
+	return d
 }
 
 // IndexElemList is list of IndexElem.
@@ -105,6 +144,18 @@ func (l *IndexElemList) Format(ctx *FmtCtx) {
 		}
 		ctx.FormatNode(&(*l)[i])
 	}
+}
+
+// doc is part of the docer interface.
+func (l *IndexElemList) doc(p *PrettyCfg) pretty.Doc {
+	if l == nil || len(*l) == 0 {
+		return pretty.Nil
+	}
+	d := make([]pretty.Doc, len(*l))
+	for i := range *l {
+		d[i] = p.Doc(&(*l)[i])
+	}
+	return p.commaSeparated(d...)
 }
 
 // CreateIndex represents a CREATE INDEX statement.
