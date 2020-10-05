@@ -61,6 +61,9 @@ func (noopEverything) Close(
 func (noopEverything) Track(ctx context.Context) (hlc.Timestamp, closedts.ReleaseFunc) {
 	return hlc.Timestamp{}, func(context.Context, ctpb.Epoch, roachpb.RangeID, ctpb.LAI) {}
 }
+func (noopEverything) FailedCloseAttempts() int64 {
+	return 0
+}
 func (noopEverything) VisitAscending(roachpb.NodeID, func(ctpb.Entry) (done bool))  {}
 func (noopEverything) VisitDescending(roachpb.NodeID, func(ctpb.Entry) (done bool)) {}
 func (noopEverything) Add(roachpb.NodeID, ctpb.Entry)                               {}
