@@ -291,8 +291,13 @@ func TestPGIntervalSyntax(t *testing.T) {
 		{`1yr`, `1 year`, ``},
 		{`1yrs`, `1 year`, ``},
 		{`1.5y`, `1 year 6 mons`, ``},
-		{`1.1y`, `1 year 1 mon 6 days`, ``},
-		{`1.11y`, `1 year 1 mon 9 days 14:24:00`, ``},
+		{`1.1y`, `1 year 1 mon`, ``},
+		{`1.19y`, `1 year 2 mons`, ``},
+		{`1.11y`, `1 year 1 mon`, ``},
+		{`-1.5y`, `-1 years -6 mons`, ``},
+		{`-1.1y`, `-1 years -1 mons`, ``},
+		{`-1.19y`, `-1 years -2 mons`, ``},
+		{`-1.11y`, `-1 years -1 mons`, ``},
 
 		// Mixed unit/HH:MM:SS formats
 		{`1:2:3`, `01:02:03`, ``},
