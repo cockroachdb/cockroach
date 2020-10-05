@@ -29,7 +29,9 @@ import (
 // On a single node, 1000 was enough to avoid any performance degradation. On
 // multi-node clusters, we want bigger chunks to make up for the higher latency.
 // TODO(radu): parameters like this should be configurable
-var kvBatchSize int64 = 10000
+var kvBatchSize int64 = int64(util.ConstantWithTestValue(10000, /* production */
+	1, /* test */
+))
 
 // TestingSetKVBatchSize changes the kvBatchFetcher batch size, and returns a function that restores it.
 // This is to be used only in tests - we have no test coverage for arbitrary kv batch sizes at this time.

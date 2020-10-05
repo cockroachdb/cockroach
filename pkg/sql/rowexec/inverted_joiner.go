@@ -41,7 +41,10 @@ import (
 // higher scan throughput of larger batches and the cost of spilling the
 // scanned rows to disk. The spilling cost will probably be dominated by
 // the de-duping cost, since it incurs a read.
-const invertedJoinerBatchSize = 100
+var invertedJoinerBatchSize = util.ConstantWithTestValue(
+	100, /* production */
+	1,   /* test */
+)
 
 // invertedJoinerState represents the state of the processor.
 type invertedJoinerState int
@@ -170,6 +173,9 @@ func newInvertedJoiner(
 		datumsToInvertedExpr: datumsToInvertedExpr,
 		joinType:             spec.Type,
 		batchSize:            invertedJoinerBatchSize,
+	}
+	if util.TestConstants {
+		ij.batchSize = 1
 	}
 	ij.colIdxMap = ij.desc.ColumnIdxMap()
 

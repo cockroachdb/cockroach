@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -223,7 +224,9 @@ type DatumRowConverter struct {
 	FractionFn     func() float32
 }
 
-var kvDatumRowConverterBatchSize = 5000
+var kvDatumRowConverterBatchSize = util.ConstantWithTestValue(5000, /* production */
+	1, /* test */
+)
 
 // TestingSetDatumRowConverterBatchSize sets kvDatumRowConverterBatchSize and returns function to
 // reset this setting back to its old value.

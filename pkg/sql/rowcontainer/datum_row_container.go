@@ -100,6 +100,10 @@ func NewRowContainerWithCapacity(
 	return c
 }
 
+var rowsPerChunkShift = uint(util.ConstantWithTestValue(6, /* production */
+	1, /* test */
+))
+
 // Init can be used instead of NewRowContainer if we have a RowContainer that is
 // already part of an on-heap structure.
 func (c *RowContainer) Init(acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCapacity int) {
@@ -117,7 +121,11 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCap
 		c.rowsPerChunkShift = 64 - uint(bits.LeadingZeros64(uint64(rowCapacity-1)))
 	} else if nCols != 0 {
 		// If the rows have columns, we use 64 rows per chunk.
-		c.rowsPerChunkShift = 6
+		c.rowsPerChunkShift = rowsPerChunkShift
+		if util.TestConstants {
+			// Test with a tiny chunk size to catch bugs.
+			c.rowsPerChunkShift = 1
+		}
 	} else {
 		// If there are no columns, every row gets mapped to the first chunk,
 		// which ends up being a zero-length slice because each row contains no
