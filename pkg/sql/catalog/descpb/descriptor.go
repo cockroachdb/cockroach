@@ -209,6 +209,7 @@ func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
 // this way, this function should be retired and similar or better safeguards
 // for all descriptors should be pursued.
 func TableFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TableDescriptor {
+	//nolint:descriptormarshal
 	t := desc.GetTable()
 	if t != nil {
 		MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.TODO(), desc, ts)

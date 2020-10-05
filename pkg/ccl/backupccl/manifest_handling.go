@@ -256,6 +256,8 @@ func readBackupManifest(
 		// the ModificationTime for table descriptors. When performing a restore
 		// we no longer have access to that MVCC timestamp but we can set it
 		// to a value we know will be safe.
+		//
+		// nolint:descriptormarshal
 		if t := d.GetTable(); t == nil {
 			continue
 		} else if t.Version == 1 && t.ModificationTime.IsEmpty() {
