@@ -279,13 +279,14 @@ func BenchmarkImplicator(b *testing.B) {
 		}
 
 		im := partialidx.Implicator{}
+		im.Init(&f, md, &evalCtx)
 		b.Run(tc.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				// Reset the implicator every 10 iterations to simulate its
 				// cache being used multiple times during repetitive calls to
 				// FiltersImplyPredicate during xform rules.
 				if i%10 == 0 {
-					im.Init(&f, md, &evalCtx)
+					im.ClearCache()
 				}
 				_, _ = im.FiltersImplyPredicate(filters, pred)
 			}
