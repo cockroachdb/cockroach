@@ -38,15 +38,6 @@ values
  └── fd: ()-->(1-5)
 
 norm expect=SimplifyJoinFilters
-SELECT * FROM a INNER JOIN xy ON NULL
-----
-values
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:7!null y:8!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1-5,7,8)
-
-norm expect=SimplifyJoinFilters
 SELECT * FROM a INNER JOIN xy ON x=1 OR NULL
 ----
 inner-join (cross)
