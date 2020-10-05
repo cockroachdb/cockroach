@@ -2577,6 +2577,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		nanos := timeutil.Since(minMaxClosedTS.GoTime()).Nanoseconds()
 		s.metrics.ClosedTimestampMaxBehindNanos.Update(nanos)
 	}
+	s.metrics.ClosedTimestampFailuresToClose.Update(
+		s.cfg.ClosedTimestamp.Tracker.FailedCloseAttempts(),
+	)
 
 	return nil
 }

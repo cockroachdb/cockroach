@@ -64,6 +64,7 @@ type ReleaseFunc func(context.Context, ctpb.Epoch, roachpb.RangeID, ctpb.LAI)
 type TrackerI interface {
 	Close(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool)
 	Track(ctx context.Context) (hlc.Timestamp, ReleaseFunc)
+	FailedCloseAttempts() int64
 }
 
 // A Storage holds the closed timestamps and associated MLAIs for each node. It
