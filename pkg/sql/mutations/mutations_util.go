@@ -14,11 +14,16 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 var maxBatchSize int64 = defaultMaxBatchSize
 
-const defaultMaxBatchSize = 10000
+var defaultMaxBatchSize = int64(util.ConstantWithMetamorphicTestRange(
+	10000, /* defaultValue */
+	1,     /* min */
+	10000, /* max */
+))
 
 // MaxBatchSize returns the max number of entries in the KV batch for a
 // mutation operation (delete, insert, update, upsert) - including secondary
