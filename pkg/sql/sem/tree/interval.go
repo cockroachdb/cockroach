@@ -528,7 +528,11 @@ func parseDuration(s string, itm types.IntervalTypeMetadata) (duration.Duration,
 			// A regular number followed by a unit, such as "9 day".
 			d = d.Add(unit.Mul(v))
 			if hasDecimal {
-				d = addFrac(d, unit, vp)
+				var err error
+				d, err = addFrac(d, unit, vp)
+				if err != nil {
+					return d, err
+				}
 			}
 			continue
 		}
@@ -622,14 +626,23 @@ func (l *intervalLexer) parseShortDuration(
 // given as second argument multiplied by the factor in the third
 // argument. For computing fractions there are 30 days to a month and
 // 24 hours to a day.
-func addFrac(d duration.Duration, unit duration.Duration, f float64) duration.Duration {
+func addFrac(d duration.Duration, unit duration.Duration, f float64) (duration.Duration, error) {
 	if unit.Months > 0 {
 		f = f * float64(unit.Months)
 		d.Months += int64(f)
-		f = math.Mod(f, 1) * 30
-		d.Days += int64(f)
-		f = math.Mod(f, 1) * 24
-		d.SetNanos(d.Nanos() + int64(float64(time.Hour.Nanoseconds())*f))
+		switch unit.Months {
+		case 1:
+			f = math.Mod(f, 1) * 30
+			d.Days += int64(f)
+			f = math.Mod(f, 1) * 24
+			d.SetNanos(d.Nanos() + int64(float64(time.Hour.Nanoseconds())*f))
+		case 12:
+			// Nothing to do: Postgres limits the precision of fractional years to
+			// months. Do not continue to add precision to the interval.
+			// See issue #55226 for more details on this.
+		default:
+			return duration.Duration{}, errors.AssertionFailedf("unhandled unit type %v", unit)
+		}
 	} else if unit.Days > 0 {
 		f = f * float64(unit.Days)
 		d.Days += int64(f)
@@ -638,7 +651,7 @@ func addFrac(d duration.Duration, unit duration.Duration, f float64) duration.Du
 	} else {
 		d.SetNanos(d.Nanos() + int64(float64(unit.Nanos())*f))
 	}
-	return d
+	return d, nil
 }
 
 // floatToNanos converts a fractional number representing nanoseconds to the
