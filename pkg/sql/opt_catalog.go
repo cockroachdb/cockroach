@@ -737,7 +737,7 @@ func newOptTable(
 			// read data directly into a DBytes (i.e., don't call
 			// encoding.DecodeBytesAscending).
 			typ := ot.Column(invertedSourceColOrdinal).DatumType()
-			virtualCol.InitVirtual(
+			virtualCol.InitVirtualInverted(
 				virtualColOrd,
 				tree.Name(string(ot.Column(invertedSourceColOrdinal).ColName())+"_inverted_key"),
 				typ,

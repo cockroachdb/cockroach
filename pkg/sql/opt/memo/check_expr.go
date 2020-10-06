@@ -196,7 +196,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			if (kind == cat.Ordinary || kind == cat.WriteOnly) && t.InsertCols[i] == 0 {
 				panic(errors.AssertionFailedf("insert values not provided for all table columns"))
 			}
-			if (kind == cat.System || kind == cat.Virtual) && t.InsertCols[i] != 0 {
+			if (kind == cat.System || kind.IsVirtual()) && t.InsertCols[i] != 0 {
 				panic(errors.AssertionFailedf("system or virtual column found in insertion columns"))
 			}
 		}
