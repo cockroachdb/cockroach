@@ -566,11 +566,11 @@ func (w *schemaChangeWorker) createTable(tx *pgx.Tx) (string, error) {
 }
 
 func (w *schemaChangeWorker) createEnum(tx *pgx.Tx) (string, error) {
-	schemaName, typName, err := w.randEnum(tx, w.existingPct)
+	typName, err := w.randEnum(tx, w.existingPct)
 	if err != nil {
 		return "", err
 	}
-	stmt := rowenc.RandCreateType(w.rng, fmt.Sprintf("%s.%s", schemaName, typName), "asdf")
+	stmt := rowenc.RandCreateType(w.rng, typName.String(), "asdf")
 	return tree.Serialize(stmt), nil
 }
 
@@ -1007,13 +1007,13 @@ ORDER BY random()
 	return name, nil
 }
 
-func (w *schemaChangeWorker) randEnum(tx *pgx.Tx, pctExisting int) (string, string, error) {
+func (w *schemaChangeWorker) randEnum(tx *pgx.Tx, pctExisting int) (tree.UnresolvedName, error) {
 	if w.rng.Intn(100) >= pctExisting {
-		randSchema, err := w.randSchema(tx, pctExisting)
+		randSchema, err := w.randSchema(tx, 90)
 		if err != nil {
-			return "", "", err
+			return tree.MakeUnresolvedName(), err
 		}
-		return randSchema, fmt.Sprintf("enum%d", atomic.AddInt64(w.seqNum, 1)), nil
+		return tree.MakeUnresolvedName(randSchema, fmt.Sprintf("enum%d", atomic.AddInt64(w.seqNum, 1))), nil
 	}
 	const q = `
   SELECT schema, name
@@ -1025,9 +1025,9 @@ ORDER BY random()
 	var schemaName string
 	var typName string
 	if err := tx.QueryRow(q).Scan(&schemaName, &typName); err != nil {
-		return "", "", err
+		return tree.MakeUnresolvedName(), err
 	}
-	return schemaName, typName, nil
+	return tree.MakeUnresolvedName(schemaName, typName), nil
 }
 
 // randTable returns a schema name along with a table name
@@ -1122,12 +1122,11 @@ FROM [SHOW COLUMNS FROM "%s"];
 func (w *schemaChangeWorker) randType(tx *pgx.Tx) (tree.ResolvableTypeReference, error) {
 	if w.rng.Intn(100) <= w.enumPct {
 		// TODO(ajwerner): Support arrays of enums.
-		schemaName, typName, err := w.randEnum(tx, 100)
+		typName, err := w.randEnum(tx, 100)
 		if err != nil {
 			return nil, err
 		}
-		n := tree.MakeUnresolvedName(schemaName, typName)
-		return n.ToUnresolvedObjectName(tree.NoAnnotation)
+		return typName.ToUnresolvedObjectName(tree.NoAnnotation)
 	}
 	return rowenc.RandSortingType(w.rng), nil
 }
