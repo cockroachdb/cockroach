@@ -31,7 +31,7 @@ type tpchBenchSpec struct {
 	url             string
 	numRunsPerQuery int
 	// minVersion specifies the minimum version of CRDB nodes. If omitted, it
-	// will default to maybeMinVersionForFixturesImport.
+	// will default to v19.1.0.
 	minVersion string
 	// maxLatency is the expected maximum time that a query will take to execute
 	// needed to correctly initialize histograms.
@@ -159,7 +159,7 @@ func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 	numNodes := b.Nodes + 1
 	minVersion := b.minVersion
 	if minVersion == `` {
-		minVersion = maybeMinVersionForFixturesImport(cloud)
+		minVersion = "v19.1.0" // needed for import
 	}
 
 	r.Add(testSpec{
