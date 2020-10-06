@@ -241,7 +241,25 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		}
 	}
 
-	return p.renameDatabase(ctx, dbDesc, n.newName, tree.AsStringWithFQNames(n.n, params.Ann()))
+	if err := p.renameDatabase(ctx, dbDesc, n.newName, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
+		return err
+	}
+
+	// Log Rename Database event. This is an auditable log event and is recorded
+	// in the same transaction as the table descriptor update.
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		ctx,
+		p.txn,
+		EventLogRenameDatabase,
+		int32(n.dbDesc.GetID()),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			DatabaseName    string
+			Statement       string
+			User            string
+			NewDatabaseName string
+		}{n.n.Name.String(), n.n.String(), p.SessionData().User, n.newName},
+	)
 }
 
 // isAllowedDependentDescInRename determines when rename database is allowed with

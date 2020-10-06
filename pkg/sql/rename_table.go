@@ -205,7 +205,25 @@ func (n *renameTableNode) startExec(params runParams) error {
 	newTbKey := catalogkv.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
 		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
 
-	return p.writeNameKey(ctx, newTbKey, descID)
+	if err := p.writeNameKey(ctx, newTbKey, descID); err != nil {
+		return err
+	}
+
+	// Log Rename Table event. This is an auditable log event and is recorded
+	// in the same transaction as the table descriptor update.
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		EventLogRenameTable,
+		int32(tableDesc.ID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+		struct {
+			TableName    string
+			Statement    string
+			User         string
+			NewTableName string
+		}{oldTn.FQString(), n.n.String(), params.SessionData().User, newTn.FQString()},
+	)
 }
 
 func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }
