@@ -65,10 +65,14 @@ type tpccOptions struct {
 
 // tpccImportCmd generates the command string to load tpcc data for the
 // specified warehouse count into a cluster.
+//
+// The command uses `cockroach workload` instead of `workload` so the tpcc
+// workload-versions match on release branches. Similarly, the command does not
+// specify pgurl to ensure that it is run on a node with a running cockroach
+// instance to ensure that the workload version matches the gateway version in a
+// mixed version cluster.
 func tpccImportCmd(t *test, warehouses int, extraArgs string) string {
-	// Use `cockroach workload` instead of `workload` so the tpcc
-	// workload-versions match on release branches.
-	return fmt.Sprintf("./cockroach workload fixtures import tpcc --warehouses=%d %s {pgurl:1}",
+	return fmt.Sprintf("./cockroach workload fixtures import tpcc --warehouses=%d %s",
 		warehouses, extraArgs)
 }
 
@@ -121,7 +125,7 @@ func setupTPCC(
 		switch opts.SetupType {
 		case usingImport:
 			t.Status("loading fixture")
-			c.Run(ctx, workloadNode, tpccImportCmd(t, opts.Warehouses, opts.ExtraSetupArgs))
+			c.Run(ctx, crdbNodes[:1], tpccImportCmd(t, opts.Warehouses, opts.ExtraSetupArgs))
 		case usingInit:
 			t.Status("initializing tables")
 			extraArgs := opts.ExtraSetupArgs
@@ -665,7 +669,7 @@ func loadTPCCBench(
 	t.l.Printf("restoring tpcc fixture\n")
 	waitForFullReplication(t, db)
 	cmd := tpccImportCmd(t, b.LoadWarehouses, loadArgs)
-	if err := c.RunE(ctx, loadNode, cmd); err != nil {
+	if err := c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err
 	}
 	if rebalanceWait == 0 || len(roachNodes) <= 3 {
