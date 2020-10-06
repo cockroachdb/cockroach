@@ -9,7 +9,7 @@ CREATE TABLE kv (
   i INTERVAL
 )
 
-# Aggregate functions return NULL if there are no rows.
+# Aggregate functions return NULLif there are no rows.
 query IIIIRRRRRRRRBBTII
 SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), stddev_pop(1), var_samp(1), variance(1), var_pop(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
 ----
