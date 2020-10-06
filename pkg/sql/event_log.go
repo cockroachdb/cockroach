@@ -29,6 +29,8 @@ const (
 	EventLogCreateDatabase EventLogType = "create_database"
 	// EventLogDropDatabase is recorded when a database is dropped.
 	EventLogDropDatabase EventLogType = "drop_database"
+	// EventLogDropDatabase is recorded when a database is renamed.
+	EventLogRenameDatabase EventLogType = "rename_database"
 
 	// EventLogDropSchema is recorded when a schema is dropped.
 	EventLogDropSchema EventLogType = "drop_schema"

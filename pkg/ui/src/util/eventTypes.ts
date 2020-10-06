@@ -20,6 +20,8 @@ type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
 export const CREATE_DATABASE = "create_database";
 // Recorded when a database is dropped.
 export const DROP_DATABASE = "drop_database";
+// Recorded when a database is renamed.
+export const RENAME_DATABASE = "rename_database";
 // Recorded when a table is created.
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
