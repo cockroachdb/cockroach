@@ -3011,6 +3011,22 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_array_length": makeBuiltin(jsonProps(), jsonArrayLengthImpl),
 
+	"jsonb_exists_any": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"json", types.Jsonb},
+				{"array", types.StringArray},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(e *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.JSONExistsAny(e, tree.MustBeDJSON(args[0]), tree.MustBeDArray(args[1]))
+			},
+			Info:       "Returns whether any of the strings in the text array exist as top-level keys or array elements",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"crdb_internal.pb_to_json": makeBuiltin(
 		jsonProps(),
 		tree.Overload{

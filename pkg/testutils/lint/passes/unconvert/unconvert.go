@@ -17,6 +17,7 @@ import (
 	"go/token"
 	"go/types"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
@@ -25,9 +26,11 @@ import (
 // Doc documents this pass.
 const Doc = `check for unnecessary type conversions`
 
+const name = "unconvert"
+
 // Analyzer defines this pass.
 var Analyzer = &analysis.Analyzer{
-	Name:     "unconvert",
+	Name:     name,
 	Doc:      Doc,
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
@@ -80,6 +83,9 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			if ident.Name == "_cgoCheckPointer" {
 				return
 			}
+		}
+		if passesutil.HasNolintComment(pass, call, name) {
+			return
 		}
 		pass.Reportf(call.Pos(), "unnecessary conversion")
 	})
