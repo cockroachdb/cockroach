@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var _ catalog.SchemaDescriptor = (*Immutable)(nil)
@@ -37,6 +38,24 @@ type Immutable struct {
 	isUncommittedVersion bool
 }
 
+// SafeMessage makes Immutable a SafeMessager.
+func (desc *Immutable) SafeMessage() string {
+	return formatSafeMessage("schemadesc.Immutable", desc)
+}
+
+// SafeMessage makes Mutable a SafeMessager.
+func (desc *Mutable) SafeMessage() string {
+	return formatSafeMessage("schemadesc.Mutable", desc)
+}
+
+func formatSafeMessage(typeName string, desc catalog.SchemaDescriptor) string {
+	var buf redact.StringBuilder
+	buf.Printf(typeName + ": {")
+	catalog.FormatSafeDescriptorProperties(&buf, desc)
+	buf.Printf("}")
+	return buf.String()
+}
+
 // Mutable is a mutable reference to a SchemaDescriptor.
 //
 // Note: Today this isn't actually ever mutated but rather exists for a future
@@ -50,6 +69,8 @@ type Mutable struct {
 
 	ClusterVersion *Immutable
 }
+
+var _ redact.SafeMessager = (*Immutable)(nil)
 
 // NewMutableExisting returns a Mutable from the
 // given schema descriptor with the cluster version also set to the descriptor.
