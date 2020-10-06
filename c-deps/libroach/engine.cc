@@ -136,11 +136,13 @@ DBStatus DBImpl::AssertPreClose() {
 
 DBStatus DBImpl::Put(DBKey key, DBSlice value) {
   rocksdb::WriteOptions options;
+  options.sync = true;
   return ToDBStatus(rep->Put(options, EncodeKey(key), ToSlice(value)));
 }
 
 DBStatus DBImpl::Merge(DBKey key, DBSlice value) {
   rocksdb::WriteOptions options;
+  options.sync = true;
   return ToDBStatus(rep->Merge(options, EncodeKey(key), ToSlice(value)));
 }
 
@@ -152,16 +154,19 @@ DBStatus DBImpl::Get(DBKey key, DBString* value) {
 
 DBStatus DBImpl::Delete(DBKey key) {
   rocksdb::WriteOptions options;
+  options.sync = true;
   return ToDBStatus(rep->Delete(options, EncodeKey(key)));
 }
 
 DBStatus DBImpl::SingleDelete(DBKey key) {
   rocksdb::WriteOptions options;
+  options.sync = true;
   return ToDBStatus(rep->SingleDelete(options, EncodeKey(key)));
 }
 
 DBStatus DBImpl::DeleteRange(DBKey start, DBKey end) {
   rocksdb::WriteOptions options;
+  options.sync = true;
   return ToDBStatus(
       rep->DeleteRange(options, rep->DefaultColumnFamily(), EncodeKey(start), EncodeKey(end)));
 }
