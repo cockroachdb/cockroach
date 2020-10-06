@@ -1771,8 +1771,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 func maybeBackupRestore(t *logicTest, rng *rand.Rand, backupRestoreProbability float32) error {
 	// Let's dip our toe in the water and attempt to put up a savepoint
 	// to see if we're inside a txn.
-	if _, err := t.db.Exec("SET TRANSACTION PRIORITY NORMAL;"); err == nil ||
-		testutils.IsError(err, "current transaction is aborted") {
+	if _, err := t.db.Exec("SET TRANSACTION PRIORITY NORMAL;"); !testutils.IsError(err, "there is no transaction in progress") {
 		// I am in a transaction. Don't continue.
 		return nil
 	}
@@ -1789,7 +1788,9 @@ func maybeBackupRestore(t *logicTest, rng *rand.Rand, backupRestoreProbability f
 		userSessionVars := make(map[string]string)
 		existingSessionVars, err := t.db.Query("SHOW ALL")
 		if err != nil {
-			return errors.Wrap(err, "fetching all session varaibles")
+			// ignore any errors we get here.
+			sessionVars[user] = userSessionVars
+			continue
 		}
 		for existingSessionVars.Next() {
 			key, value := "", ""
