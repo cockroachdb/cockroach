@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -484,7 +485,7 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 - running the 'cockroach init' command if you are trying to initialize a new cluster.
 
 If problems persist, please see %s.`
-		docLink := base.DocsURL("cluster-setup-troubleshooting.html")
+		docLink := docs.URL("cluster-setup-troubleshooting.html")
 		if !startCtx.inBackground {
 			log.Shoutf(context.Background(), log.Severity_WARNING, msg, docLink)
 		} else {
@@ -1151,7 +1152,7 @@ func setupAndInitializeLoggingAndProfiling(
 				"- %s\n"+
 				"- %s",
 			unimplemented.MakeURL(53404),
-			log.Safe(base.DocsURL("secure-a-cluster.html")),
+			log.Safe(docs.URL("secure-a-cluster.html")),
 		)
 	}
 
