@@ -2774,9 +2774,14 @@ func (s *Store) GetClusterVersion(ctx context.Context) (clusterversion.ClusterVe
 
 // WriteClusterVersion writes the given cluster version to the store-local cluster version key.
 func WriteClusterVersion(
-	ctx context.Context, writer storage.ReadWriter, cv clusterversion.ClusterVersion,
+	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
-	return storage.MVCCPutProto(ctx, writer, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+	if err := storage.MVCCPutProto(
+		ctx, eng, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv,
+	); err != nil {
+		return err
+	}
+	return eng.Flush() // make it durable
 }
 
 // ReadClusterVersion reads the the cluster version from the store-local version key.
