@@ -18,7 +18,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -98,7 +98,7 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 		Function: f.String(),
 		HelpMessageBody: HelpMessageBody{
 			Category: d.Category,
-			SeeAlso:  base.DocsURL("functions-and-operators.html"),
+			SeeAlso:  docs.URL("functions-and-operators.html"),
 		},
 	}
 
@@ -172,7 +172,7 @@ var HelpMessages = func(h map[string]HelpMessageBody) map[string]HelpMessageBody
 	reformatSeeAlso := func(seeAlso string) string {
 		return strings.Replace(
 			strings.Replace(seeAlso, ", ", "\n  ", -1),
-			"WEBDOCS", base.DocsURLBase, -1)
+			"WEBDOCS", docs.URLBase, -1)
 	}
 	srcMsg := h["<SOURCE>"]
 	srcMsg.SeeAlso = reformatSeeAlso(strings.TrimSpace(srcMsg.SeeAlso))
