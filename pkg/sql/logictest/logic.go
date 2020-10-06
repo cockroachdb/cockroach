@@ -1770,19 +1770,36 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 // passed in probability of doing this.
 // TODO: Consider if we want this as a method on logicTest?
 func maybeBackupRestore(t *logicTest, rng *rand.Rand, backupRestoreProbability float32) error {
+	// Let's dip our toe in the water and attempt to put up a savepoint
+	// to see if we're inside a txn.
+	if _, err := t.db.Exec("SET TRANSACTION PRIORITY NORMAL;"); err == nil ||
+		testutils.IsError(err, "current transaction is aborted") {
+		// I am in a transaction. Don't continue.
+		return nil
+	}
+
 	// Check if we should not do the backup/restore operation, so we can return
 	// early if we can.
 	oldUser := t.user
 	users := make([]string, 0, len(t.clients))
-	//sessionVars := make(map[string]map[string]string, len(t.clients))
+	sessionVars := make(map[string]map[string]string, len(t.clients))
 	for user := range t.clients {
 		//sessionVars[user] = make(map[string]string)
 		users = append(users, user)
-		//t.setUser(user)
-		//existingSessionVars, err := t.db.Query("SHOW ALL", nil)
-		//if err != nil {
-		//	return err
-		//}
+		t.setUser(user)
+		userSessionVars := make(map[string]string)
+		existingSessionVars, err := t.db.Query("SHOW ALL")
+		if err != nil {
+			return errors.Wrap(err, "fetching all session varaibles")
+		}
+		for existingSessionVars.Next() {
+			key, value := "", ""
+			if err := existingSessionVars.Scan(&key, &value); err != nil {
+				return errors.Wrap(err, "scanning session variables")
+			}
+			userSessionVars[key] = value
+		}
+		sessionVars[user] = userSessionVars
 	}
 
 	// TODO: Let's also save all the session variables of each session in a
@@ -1797,13 +1814,13 @@ func maybeBackupRestore(t *logicTest, rng *rand.Rand, backupRestoreProbability f
 
 	t.setUser(security.RootUser)
 	if _, err := t.db.Exec("BACKUP TO $1", backupLocation); err != nil {
-		if testutils.IsError(err,
-			"BACKUP cannot be used inside a transaction without DETACHED option") {
-			// TODO: Instead of giving up here, we might want to trigger the
-			// backup/restore after the txn is over?
-			return nil
-		}
-		return err
+		//if testutils.IsError(err,
+		//	"BACKUP cannot be used inside a transaction without DETACHED option") {
+		//	// TODO: Instead of giving up here, we might want to trigger the
+		//	// backup/restore after the txn is over?
+		//	return nil
+		//}
+		return errors.Wrap(err, "backing up cluster")
 	}
 
 	t.resetCluster()
@@ -1811,12 +1828,20 @@ func maybeBackupRestore(t *logicTest, rng *rand.Rand, backupRestoreProbability f
 	// Run the restore as root.
 	t.setUser(security.RootUser)
 	if _, err := t.db.Exec("RESTORE FROM $1", backupLocation); err != nil {
-		return err
+		return errors.Wrap(err, "restoring cluster")
 	}
 
 	// Create new connections for the existing users.
 	for _, user := range users {
+		userSessionVars := sessionVars[user]
 		t.setUser(user)
+		for key, value := range userSessionVars {
+			setCmd := fmt.Sprintf("SET %s=%s", key, value)
+			if _, err := t.db.Exec(setCmd); err != nil {
+				// Some cannot be changed. Shrug. Ignore.
+				// return errors.Wrapf(err, "setting session variables: %q", setCmd)
+			}
+		}
 	}
 	t.setUser(oldUser)
 
