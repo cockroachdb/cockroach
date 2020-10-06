@@ -1150,7 +1150,8 @@ func (w *schemaChangeWorker) createSchema(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	stmt := rowenc.MakeSchemaName(w.rng.Intn(2) == 0, schemaName, "root")
+	// TODO(jayshrivastava): Support authorization
+	stmt := rowenc.MakeSchemaName(w.rng.Intn(2) == 0, schemaName, "")
 	return tree.Serialize(stmt), nil
 }
 
@@ -1159,8 +1160,8 @@ func (w *schemaChangeWorker) randSchema(tx *pgx.Tx, pctExisting int) (string, er
 		return fmt.Sprintf("schema%d", atomic.AddInt64(w.seqNum, 1)), nil
 	}
 	const q = `
-  SELECT *
-    FROM [information_schema.schemata]
+  SELECT schema_name
+    FROM information_schema.schemata
    WHERE schema_name
     LIKE 'schema%'
       OR schema_name = 'public'
