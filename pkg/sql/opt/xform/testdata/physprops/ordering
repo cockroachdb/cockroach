@@ -173,13 +173,13 @@ sort (segmented)
  ├── columns: x:1!null computed:6!null y:2!null
  ├── immutable
  ├── key: (1,2)
- ├── fd: (1,2)-->(6)
+ ├── fd: (2)-->(6)
  ├── ordering: +1,+6
  └── project
       ├── columns: computed:6!null x:1!null y:2!null
       ├── immutable
       ├── key: (1,2)
-      ├── fd: (1,2)-->(6)
+      ├── fd: (2)-->(6)
       ├── ordering: +1
       ├── scan a
       │    ├── columns: x:1!null y:2!null

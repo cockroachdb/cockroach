@@ -539,6 +539,7 @@ SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING sum(f)=10.0) 
 project
  ├── columns: f:3 r:8
  ├── immutable
+ ├── fd: (3)-->(8)
  ├── select
  │    ├── columns: i:2 f:3 sum:7!null
  │    ├── key: (2,3)
@@ -1884,8 +1885,9 @@ except
       └── filters
            └── (1 / 0) > 0 [immutable]
 
-norm
-SELECT * FROM ((values (1.0::decimal)) EXCEPT (values (1.00::decimal))) WHERE column1::string != '1.00';
+# The filter is composite-sensitive.
+norm expect-not=PushFilterIntoSetOp
+SELECT * FROM ((VALUES (1.0::DECIMAL)) EXCEPT (VALUES (1.00::DECIMAL))) WHERE column1::STRING != '1.00';
 ----
 select
  ├── columns: column1:1!null
@@ -1912,3 +1914,26 @@ select
  │         └── (1.00,)
  └── filters
       └── column1:1::STRING != '1.00' [outer=(1), immutable]
+
+# The filter is not composite-sensitive (even if it involves decimals) and can be pushed down.
+norm expect=PushFilterIntoSetOp
+SELECT * FROM ((VALUES (1.0::DECIMAL)) EXCEPT (VALUES (1.00::DECIMAL))) WHERE column1 > 0;
+----
+except
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
+ ├── cardinality: [0 - 1]
+ ├── key: (1)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1.0,)
+ └── values
+      ├── columns: column1:2!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      └── (1.00,)

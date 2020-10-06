@@ -62,6 +62,7 @@ sort
       │    ├── columns: column20:20(float!null) column22:22(float!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null)
       │    ├── immutable
       │    ├── stats: [rows=5909394.86, distinct(5)=50, null(5)=0, distinct(6)=925955, null(6)=0, distinct(7)=11, null(7)=0, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(20)=5909394.86, null(20)=0, distinct(22)=5909394.86, null(22)=0, distinct(9,10)=6, null(9,10)=0]
+      │    ├── fd: (6,7)-->(20)
       │    ├── select
       │    │    ├── save-table-name: q1_select_4
       │    │    ├── columns: l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null)
