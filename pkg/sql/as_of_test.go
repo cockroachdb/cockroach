@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -344,6 +345,72 @@ func TestAsOfRetry(t *testing.T) {
 	} else if i != val2 {
 		t.Fatalf("unexpected val: %v", i)
 	}
+}
+
+// TestSelectAsOfAfterDrop verifies that reads against dropped schema artifacts
+// using AS OF SYSTEM TIME works.
+func TestSelectAsOfAfterDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, "CREATE DATABASE db_to_drop")
+	tdb.Exec(t, "CREATE DATABASE db_to_not_drop")
+	tdb.Exec(t, "USE db_to_drop")
+	tdb.Exec(t, "CREATE SCHEMA sc")
+	tdb.Exec(t, "USE db_to_not_drop")
+	tdb.Exec(t, "CREATE SCHEMA sc")
+
+	tables := []string{
+		"db_to_drop.t",
+		"db_to_not_drop.t",
+		"db_to_drop.sc.t",
+		"db_to_not_drop.sc.t",
+	}
+
+	for _, table := range tables {
+		tdb.Exec(t, "CREATE TABLE "+table+" (i INT PRIMARY KEY)")
+	}
+	for _, table := range tables {
+		tdb.Exec(t, "INSERT INTO "+table+" VALUES (1), (2)")
+	}
+	var beforeDropStr string
+	tdb.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&beforeDropStr)
+
+	for _, table := range tables {
+		tdb.CheckQueryResults(t,
+			"SELECT * FROM "+table+" AS OF SYSTEM TIME "+beforeDropStr,
+			[][]string{{"1"}, {"2"}})
+	}
+
+	t.Run("dropped table", func(t *testing.T) {
+		tdb.Exec(t, "DROP TABLE db_to_not_drop.t")
+		tdb.CheckQueryResults(t,
+			"SELECT * FROM db_to_not_drop.t AS OF SYSTEM TIME "+beforeDropStr,
+			[][]string{{"1"}, {"2"}})
+	})
+	t.Run("dropped database", func(t *testing.T) {
+		// Should be able to read from
+		tdb.Exec(t, "DROP DATABASE db_to_drop CASCADE")
+		tdb.CheckQueryResults(t,
+			"SELECT * FROM db_to_drop.t AS OF SYSTEM TIME "+beforeDropStr,
+			[][]string{{"1"}, {"2"}})
+		tdb.CheckQueryResults(t,
+			"SELECT * FROM db_to_drop.sc.t AS OF SYSTEM TIME "+beforeDropStr,
+			[][]string{{"1"}, {"2"}})
+	})
+	t.Run("dropped schema", func(t *testing.T) {
+		// Should be able to read from
+		tdb.Exec(t, "USE db_to_not_drop")
+		tdb.Exec(t, "DROP SCHEMA sc CASCADE")
+		tdb.CheckQueryResults(t,
+			"SELECT * FROM db_to_not_drop.sc.t AS OF SYSTEM TIME "+beforeDropStr,
+			[][]string{{"1"}, {"2"}})
+	})
 }
 
 // Test that tracing works with SELECT ... AS OF SYSTEM TIME.
