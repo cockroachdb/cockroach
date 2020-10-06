@@ -14,13 +14,12 @@
 package descriptormarshal
 
 import (
-	"fmt"
 	"go/ast"
 	"go/types"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
-	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/ast/inspector"
 )
 
@@ -34,10 +33,12 @@ const Doc = `check for correct unmarshaling of descpb descriptors`
 
 const descpbPkg = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 
+const name = "descriptormarshal"
+
 // Analyzer is a linter that ensures there are no calls to
 // descpb.Descriptor.GetTable() except where appropriate.
 var Analyzer = &analysis.Analyzer{
-	Name:     "descriptormarshal",
+	Name:     name,
 	Doc:      Doc,
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run: func(pass *analysis.Pass) (interface{}, error) {
@@ -64,57 +65,17 @@ var Analyzer = &analysis.Analyzer{
 			if !isMethodForNamedType(f, "Descriptor") {
 				return
 			}
-			containing := findContainingFunc(pass, n)
-			if isAllowed(containing) {
+
+			if passesutil.HasNolintComment(pass, sel, name) {
 				return
 			}
 			pass.Report(analysis.Diagnostic{
-				Pos: n.Pos(),
-				Message: fmt.Sprintf("Illegal call to Descriptor.GetTable() in %s, see descpb.TableFromDescriptor()",
-					containing.Name()),
+				Pos:     n.Pos(),
+				Message: "Illegal call to Descriptor.GetTable(), see descpb.TableFromDescriptor()",
 			})
 		})
 		return nil, nil
 	},
-}
-
-var allowedFunctions = []string{
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.TableFromDescriptor",
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc_test.TestDefaultExprNil",
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl.readBackupManifest",
-}
-
-func isAllowed(obj *types.Func) bool {
-	str := obj.FullName()
-	for _, allowed := range allowedFunctions {
-		if allowed == str {
-			return true
-		}
-	}
-	return false
-}
-
-func findContainingFile(pass *analysis.Pass, n ast.Node) *ast.File {
-	fPos := pass.Fset.File(n.Pos())
-	for _, f := range pass.Files {
-		if pass.Fset.File(f.Pos()) == fPos {
-			return f
-		}
-	}
-	panic(fmt.Errorf("cannot file file for %v", n))
-}
-
-func findContainingFunc(pass *analysis.Pass, n ast.Node) *types.Func {
-	stack, _ := astutil.PathEnclosingInterval(findContainingFile(pass, n), n.Pos(), n.End())
-	for i := len(stack) - 1; i >= 0; i-- {
-		// If we stumble upon a func decl or func lit then we're in an interesting spot
-		funcDecl, ok := stack[i].(*ast.FuncDecl)
-		if !ok {
-			continue
-		}
-		return pass.TypesInfo.ObjectOf(funcDecl.Name).(*types.Func)
-	}
-	return nil
 }
 
 func isMethodForNamedType(f *types.Func, name string) bool {

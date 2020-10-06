@@ -12,6 +12,7 @@ package a
 
 import (
 	"errors"
+	"fmt"
 	"log"
 )
 
@@ -55,6 +56,27 @@ func SingleReturn() error {
 	if err != nil {
 		//nolint:returnerrcheck
 		return nil
+	}
+	if err != nil {
+		// nolint:returnerrcheck
+		return nil
+	}
+	if err != nil {
+		return nil // nolint:returnerrcheck
+	}
+
+	// The below nolint comments is not close enough to the return statement.
+
+	// nolint:returnerrcheck
+	if err != nil {
+		return nil // want `unexpected nil error return after checking for a non-nil error`
+	}
+
+	if err != nil {
+		// nolint:returnerrcheck
+		fmt.Println("hmm")
+
+		return nil // want `unexpected nil error return after checking for a non-nil error`
 	}
 	if err != nil {
 		return nil //nolint:returnerrcheck

@@ -1234,4 +1234,4 @@ DROP DATABASE to_drop CASCADE;
 # descriptors, including dropped ones, and hydrate them, causing a panic as
 # the referenced type no longer exists.
 statement ok
-SELECT * FROM crdb_internal.tables;
+SELECT * FROM crdb_internal.tables
