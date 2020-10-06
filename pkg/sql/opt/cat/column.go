@@ -31,8 +31,8 @@ type Column struct {
 	datumType                   *types.T
 	nullable                    bool
 	hidden                      bool
-	defaultExpr                 *string
-	computedExpr                *string
+	defaultExpr                 string
+	computedExpr                string
 	invertedSourceColumnOrdinal int
 }
 
@@ -98,7 +98,7 @@ func (c *Column) IsHidden() bool {
 // HasDefault returns true if the column has a default value. DefaultExprStr
 // will be set to the SQL expression string in that case.
 func (c *Column) HasDefault() bool {
-	return c.defaultExpr != nil
+	return c.defaultExpr != ""
 }
 
 // DefaultExprStr is set to the SQL expression string that describes the
@@ -106,13 +106,13 @@ func (c *Column) HasDefault() bool {
 // the column when inserting a row. Default values cannot depend on other
 // columns.
 func (c *Column) DefaultExprStr() string {
-	return *c.defaultExpr
+	return c.defaultExpr
 }
 
 // IsComputed returns true if the column is a computed value. ComputedExprStr
 // will be set to the SQL expression string in that case.
 func (c *Column) IsComputed() bool {
-	return c.computedExpr != nil
+	return c.computedExpr != ""
 }
 
 // ComputedExprStr is set to the SQL expression string that describes the
@@ -121,7 +121,7 @@ func (c *Column) IsComputed() bool {
 // columns, but they can depend on all other columns, including columns with
 // default values.
 func (c *Column) ComputedExprStr() string {
-	return *c.computedExpr
+	return c.computedExpr
 }
 
 // InvertedSourceColumnOrdinal is used for virtual columns that are part
@@ -186,8 +186,16 @@ func (c *Column) InitNonVirtual(
 	c.datumType = datumType
 	c.nullable = nullable
 	c.hidden = hidden
-	c.defaultExpr = defaultExpr
-	c.computedExpr = computedExpr
+	if defaultExpr != nil {
+		c.defaultExpr = *defaultExpr
+	} else {
+		c.defaultExpr = ""
+	}
+	if computedExpr != nil {
+		c.computedExpr = *computedExpr
+	} else {
+		c.computedExpr = ""
+	}
 	c.invertedSourceColumnOrdinal = -1
 }
 
@@ -203,7 +211,7 @@ func (c *Column) InitVirtual(
 	c.datumType = datumType
 	c.nullable = nullable
 	c.hidden = true
-	c.defaultExpr = nil
-	c.computedExpr = nil
+	c.defaultExpr = ""
+	c.computedExpr = ""
 	c.invertedSourceColumnOrdinal = invertedSourceColumnOrdinal
 }
