@@ -95,18 +95,19 @@ func findNodesInBlock(f *ast.File, n ast.Node) (relevant []ast.Node, containing 
 	ast.Walk(funcVisitor(func(node ast.Node) {
 		relevant = append(relevant, node)
 	}), n)
-	// Reverse the order.
-	for i := 0; i < len(relevant)/2; i++ {
-		relevant[i], relevant[len(relevant)-i-1] = relevant[len(relevant)-i-1], relevant[i]
-	}
+
+	// Nodes were just added with the parent at the beginning and children at the
+	// end. Reverse it.
+	reverseNodes(relevant)
+
+	// Add the parents up to the enclosing block or declaration block and discover
+	// that containing node.
 	containing = f // worst-case
 	for _, n := range stack {
 		switch n.(type) {
 		case *ast.GenDecl, *ast.BlockStmt:
 			containing = n
 			return relevant, containing
-		case nil:
-			// Do nothing.
 		default:
 			// Add all of the parents of n up to the containing BlockStmt or GenDecl
 			// to the set of relevant nodes.
@@ -116,11 +117,19 @@ func findNodesInBlock(f *ast.File, n ast.Node) (relevant []ast.Node, containing 
 	return relevant, containing
 }
 
+func reverseNodes(n []ast.Node) {
+	for i := 0; i < len(n)/2; i++ {
+		n[i], n[len(n)-i-1] = n[len(n)-i-1], n[i]
+	}
+}
+
 type funcVisitor func(node ast.Node)
 
 var _ ast.Visitor = (funcVisitor)(nil)
 
 func (f funcVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	f(node)
+	if node != nil {
+		f(node)
+	}
 	return f
 }
