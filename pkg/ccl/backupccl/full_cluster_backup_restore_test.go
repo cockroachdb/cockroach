@@ -54,10 +54,26 @@ FROM system.jobs
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 	sqlDBRestore.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 
-	// Create some other databases and tables.
-	sqlDB.Exec(t, `CREATE TABLE defaultdb.foo (a int);`)
-	sqlDB.Exec(t, `CREATE DATABASE data2;`)
-	sqlDB.Exec(t, `CREATE TABLE data2.foo (a int);`)
+	// Create some other descriptors as well.
+	sqlDB.Exec(t, `
+USE data;
+CREATE SCHEMA test_data_schema;
+CREATE TABLE data.test_data_schema.test_table (a int);
+INSERT INTO data.test_data_schema.test_table VALUES (1), (2);
+
+USE defaultdb;
+CREATE SCHEMA test_schema;
+CREATE TABLE defaultdb.test_schema.test_table (a int);
+INSERT INTO defaultdb.test_schema.test_table VALUES (1), (2);
+CREATE TABLE defaultdb.foo (a int);
+CREATE TYPE greeting AS ENUM ('hi');
+CREATE TABLE welcomes (a greeting);
+
+CREATE DATABASE data2;
+USE data2;
+CREATE SCHEMA empty_schema;
+CREATE TABLE data2.foo (a int);
+`)
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
@@ -67,6 +83,7 @@ FROM system.jobs
 	}
 	for i := 0; i < numUsers; i++ {
 		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
+		sqlDB.Exec(t, fmt.Sprintf("ALTER USER maxroach%d CREATEDB", i))
 	}
 	// Populate system.zones.
 	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
@@ -132,6 +149,19 @@ FROM system.jobs
 			})
 	})
 
+	t.Run("ensure all schemas are restored", func(t *testing.T) {
+		expectedSchemas := map[string][][]string{
+			"defaultdb": {{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"test_schema"}},
+			"data":      {{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"test_data_schema"}},
+			"data2":     {{"crdb_internal"}, {"empty_schema"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}},
+		}
+		for dbName, expectedSchemas := range expectedSchemas {
+			sqlDBRestore.CheckQueryResults(t,
+				fmt.Sprintf(`USE %s; SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY schema_name;`, dbName),
+				expectedSchemas)
+		}
+	})
+
 	t.Run("ensure system table data restored", func(t *testing.T) {
 		// Note the absence of the jobs table. Jobs are tested by another test as
 		// jobs are created during the RESTORE process.
@@ -139,6 +169,7 @@ FROM system.jobs
 			systemschema.CommentsTable.Name,
 			systemschema.LocationsTable.Name,
 			systemschema.RoleMembersTable.Name,
+			systemschema.RoleOptionsTable.Name,
 			systemschema.SettingsTable.Name,
 			systemschema.TableStatisticsTable.Name,
 			systemschema.UITable.Name,
@@ -478,6 +509,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"jobs"},
 				{"locations"},
 				{"role_members"},
+				{"role_options"},
 				{"scheduled_jobs"},
 				{"settings"},
 				{"ui"},
@@ -519,6 +551,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"jobs"},
 				{"locations"},
 				{"role_members"},
+				{"role_options"},
 				{"scheduled_jobs"},
 				{"settings"},
 				{"ui"},
