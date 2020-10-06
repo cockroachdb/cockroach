@@ -307,8 +307,10 @@ func formatColumn(col *Column, buf *bytes.Buffer) {
 		fmt.Fprintf(buf, " [mutation]")
 	case System:
 		fmt.Fprintf(buf, " [system]")
-	case Virtual:
-		fmt.Fprintf(buf, " [virtual]")
+	case VirtualInverted:
+		fmt.Fprintf(buf, " [virtual-inverted]")
+	case VirtualComputed:
+		fmt.Fprintf(buf, " [virtual-computed]")
 	}
 }
 

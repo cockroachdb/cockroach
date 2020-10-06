@@ -254,9 +254,10 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	scanScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations: true,
-			includeSystem:    true,
-			includeVirtual:   false,
+			includeMutations:       true,
+			includeSystem:          true,
+			includeVirtualInverted: false,
+			includeVirtualComputed: false,
 		}),
 		indexFlags,
 		noRowLocking,
@@ -364,9 +365,10 @@ func (mb *mutationBuilder) buildInputForDelete(
 	scanScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations: true,
-			includeSystem:    true,
-			includeVirtual:   false,
+			includeMutations:       true,
+			includeSystem:          true,
+			includeVirtualInverted: false,
+			includeVirtualComputed: false,
 		}),
 		indexFlags,
 		noRowLocking,
@@ -563,7 +565,7 @@ func (mb *mutationBuilder) addSynthesizedCols(colIDs opt.ColList, addCol func(co
 			continue
 		}
 		// Skip system and virtual columns.
-		if kind == cat.System || kind == cat.Virtual {
+		if kind == cat.System || kind.IsVirtual() {
 			continue
 		}
 		// Skip columns that are already specified.

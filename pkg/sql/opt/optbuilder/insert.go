@@ -373,7 +373,7 @@ func (mb *mutationBuilder) needExistingRows() bool {
 			// #1: Don't consider key columns.
 			continue
 		}
-		if kind := mb.tab.Column(i).Kind(); kind == cat.System || kind == cat.Virtual {
+		if kind := mb.tab.Column(i).Kind(); kind == cat.System || kind.IsVirtual() {
 			// #2: Don't consider system or virtual columns.
 			continue
 		}
@@ -701,9 +701,10 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 		fetchScope := mb.b.buildScan(
 			mb.b.addTable(mb.tab, &mb.alias),
 			tableOrdinals(mb.tab, columnKinds{
-				includeMutations: false,
-				includeSystem:    false,
-				includeVirtual:   false,
+				includeMutations:       false,
+				includeSystem:          false,
+				includeVirtualInverted: false,
+				includeVirtualComputed: false,
 			}),
 			nil, /* indexFlags */
 			noRowLocking,
@@ -903,9 +904,10 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	fetchScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations: true,
-			includeSystem:    true,
-			includeVirtual:   false,
+			includeMutations:       true,
+			includeSystem:          true,
+			includeVirtualInverted: false,
+			includeVirtualComputed: false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -1248,9 +1250,10 @@ func (mb *mutationBuilder) arbiterIndexes(
 		if tableScope == nil {
 			tableScope = mb.b.buildScan(
 				tabMeta, tableOrdinals(tabMeta.Table, columnKinds{
-					includeMutations: false,
-					includeSystem:    false,
-					includeVirtual:   false,
+					includeMutations:       false,
+					includeSystem:          false,
+					includeVirtualInverted: false,
+					includeVirtualComputed: false,
 				}),
 				nil, /* indexFlags */
 				noRowLocking,
