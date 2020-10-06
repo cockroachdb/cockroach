@@ -1,5 +1,3 @@
-# LogicTest: !backup-restore
-
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
