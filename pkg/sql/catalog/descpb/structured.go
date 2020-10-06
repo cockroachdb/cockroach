@@ -305,3 +305,18 @@ var AnonymousTable = tree.TableName{}
 func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
 	return !opts.SequenceOwner.Equal(TableDescriptor_SequenceOpts_SequenceOwner{})
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (ConstraintValidity) SafeValue() {}
+
+// SafeValue implements the redact.SafeValue interface.
+func (DescriptorMutation_Direction) SafeValue() {}
+
+// SafeValue implements the redact.SafeValue interface.
+func (DescriptorMutation_State) SafeValue() {}
+
+// SafeValue implements the redact.SafeValue interface.
+func (DescriptorState) SafeValue() {}
+
+// SafeValue implements the redact.SafeValue interface.
+func (ConstraintType) SafeValue() {}
