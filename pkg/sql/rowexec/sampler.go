@@ -69,10 +69,6 @@ type samplerProcessor struct {
 	sketchCol    int
 	invColIdxCol int
 	invIdxKeyCol int
-
-	// Memory monitoring infrastructure of sketching.
-	unlimitedMemAcc mon.BoundAccount
-	unlimitedMemMon *mon.BytesMonitor
 }
 
 var _ execinfra.Processor = &samplerProcessor{}
@@ -121,10 +117,6 @@ func newSamplerProcessor(
 	// The processor will disable histogram collection if this limit is not
 	// enough.
 	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sampler-mem")
-	// We also need an unlimited monitor to track allocations incurred during
-	// sketching (in order to prevent OOMs). The monitor is only limited by
-	// --max-sql-memory argument.
-	unlimitedMemMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "sampler-sketches")
 	s := &samplerProcessor{
 		flowCtx:         flowCtx,
 		input:           input,
@@ -133,8 +125,6 @@ func newSamplerProcessor(
 		maxFractionIdle: spec.MaxFractionIdle,
 		invSr:           make(map[uint32]*stats.SampleReservoir, len(spec.InvertedSketches)),
 		invSketch:       make(map[uint32]*sketchInfo, len(spec.InvertedSketches)),
-		unlimitedMemAcc: unlimitedMemMonitor.MakeBoundAccount(),
-		unlimitedMemMon: unlimitedMemMonitor,
 	}
 
 	inTypes := input.OutputTypes()
@@ -331,7 +321,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 		}
 
 		for i := range s.sketches {
-			if err := s.sketches[i].addRow(ctx, row, s.outTypes, &buf, &da, &s.unlimitedMemAcc); err != nil {
+			if err := s.sketches[i].addRow(ctx, row, s.outTypes, &buf, &da); err != nil {
 				return false, err
 			}
 		}
@@ -361,7 +351,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			}
 			for _, key := range invKeys {
 				invRow[0].Datum = da.NewDBytes(tree.DBytes(key))
-				if err := s.invSketch[col].addRow(ctx, invRow, bytesRowType, &buf, &da, &s.unlimitedMemAcc); err != nil {
+				if err := s.invSketch[col].addRow(ctx, invRow, bytesRowType, &buf, &da); err != nil {
 					return false, err
 				}
 				if earlyExit, err = s.sampleRow(ctx, invSr, invRow, rng); earlyExit || err != nil {
@@ -483,8 +473,6 @@ func (s *samplerProcessor) close() {
 	if s.InternalClose() {
 		s.memAcc.Close(s.Ctx)
 		s.MemMonitor.Stop(s.Ctx)
-		s.unlimitedMemAcc.Close(s.Ctx)
-		s.unlimitedMemMon.Stop(s.Ctx)
 	}
 }
 
@@ -498,12 +486,7 @@ func (s *samplerProcessor) DoesNotUseTxn() bool {
 
 // addRow adds a row to the sketch and updates row counts.
 func (s *sketchInfo) addRow(
-	ctx context.Context,
-	row rowenc.EncDatumRow,
-	typs []*types.T,
-	buf *[]byte,
-	da *rowenc.DatumAlloc,
-	unlimitedMemAcc *mon.BoundAccount,
+	ctx context.Context, row rowenc.EncDatumRow, typs []*types.T, buf *[]byte, da *rowenc.DatumAlloc,
 ) error {
 	var err error
 	s.numRows++
@@ -541,13 +524,10 @@ func (s *sketchInfo) addRow(
 	}
 	isNull := true
 	*buf = (*buf)[:0]
-	// We might allocate tree.Datums when hashing the row, so we'll ask the
-	// fingerprint to account for them. Note that even though we're losing the
-	// references to the row (and to the newly allocated datums) shortly, it'll
-	// likely take some time before GC reclaims that memory, so we choose the
-	// over-accounting route to be safe.
 	for _, col := range s.spec.Columns {
-		*buf, err = row[col].Fingerprint(ctx, typs[col], da, *buf, unlimitedMemAcc)
+		// We choose to not perform the memory accounting for possibly decoded
+		// tree.Datum because we will lose the references to row very soon.
+		*buf, err = row[col].Fingerprint(ctx, typs[col], da, *buf, nil /* acc */)
 		if err != nil {
 			return err
 		}
