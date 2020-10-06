@@ -52,7 +52,7 @@ func (c *Column) Ordinal() int {
 // Virtual columns don't have stable IDs; for these columns ColID() must not be
 // called.
 func (c *Column) ColID() StableID {
-	if c.kind == Virtual {
+	if c.kind.IsVirtual() {
 		panic(errors.AssertionFailedf("virtual columns have no StableID"))
 	}
 	return c.stableID
@@ -134,7 +134,7 @@ func (c *Column) ComputedExprStr() string {
 //
 // Must not be called if this is not a virtual column.
 func (c *Column) InvertedSourceColumnOrdinal() int {
-	if c.kind != Virtual {
+	if c.kind != VirtualInverted {
 		panic(errors.AssertionFailedf("non-virtual columns have no inverted source column ordinal"))
 	}
 	return c.invertedSourceColumnOrdinal
@@ -158,10 +158,19 @@ const (
 	// as part of mutations. They also cannot be part of the lax or key columns
 	// for indexes. System columns are not members of any column family.
 	System
-	// Virtual columns are implicit columns that are used by inverted indexes (and
-	// later, expression-based indexes).
-	Virtual
+	// VirtualInverted columns are implicit columns that are used by inverted
+	// indexes.
+	VirtualInverted
+	// VirtualComputed columns are non-stored computed columns that are used by
+	// expression-based indexes.
+	VirtualComputed
 )
+
+// IsVirtual returns true if the column kind is VirtualInverted or
+// VirtualComputed.
+func (k ColumnKind) IsVirtual() bool {
+	return k == VirtualInverted || k == VirtualComputed
+}
 
 // InitNonVirtual is used by catalog implementations to populate a non-virtual
 // Column. It should not be used anywhere else.
@@ -176,7 +185,7 @@ func (c *Column) InitNonVirtual(
 	defaultExpr *string,
 	computedExpr *string,
 ) {
-	if kind == Virtual {
+	if kind.IsVirtual() {
 		panic(errors.AssertionFailedf("incorrect init method"))
 	}
 	c.ordinal = ordinal
@@ -199,15 +208,15 @@ func (c *Column) InitNonVirtual(
 	c.invertedSourceColumnOrdinal = -1
 }
 
-// InitVirtual is used by catalog implementations to populate a virtual Column.
-// It should not be used anywhere else.
-func (c *Column) InitVirtual(
+// InitVirtualInverted is used by catalog implementations to populate a
+// VirtualInverted Column. It should not be used anywhere else.
+func (c *Column) InitVirtualInverted(
 	ordinal int, name tree.Name, datumType *types.T, nullable bool, invertedSourceColumnOrdinal int,
 ) {
 	c.ordinal = ordinal
 	c.stableID = 0
 	c.name = name
-	c.kind = Virtual
+	c.kind = VirtualInverted
 	c.datumType = datumType
 	c.nullable = nullable
 	c.hidden = true
@@ -215,3 +224,23 @@ func (c *Column) InitVirtual(
 	c.computedExpr = ""
 	c.invertedSourceColumnOrdinal = invertedSourceColumnOrdinal
 }
+
+// InitVirtualComputed is used by catalog implementations to populate a
+// VirtualComputed Column. It should not be used anywhere else.
+func (c *Column) InitVirtualComputed(
+	ordinal int, name tree.Name, datumType *types.T, nullable bool, computedExpr string,
+) {
+	c.ordinal = ordinal
+	c.stableID = 0
+	c.name = name
+	c.kind = VirtualComputed
+	c.datumType = datumType
+	c.nullable = nullable
+	c.hidden = true
+	c.defaultExpr = ""
+	c.computedExpr = computedExpr
+	c.invertedSourceColumnOrdinal = -1
+}
+
+// Quiet the linter until this is used.
+var _ = (*Column).InitVirtualComputed
