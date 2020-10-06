@@ -761,7 +761,7 @@ project
 # Ensure that we do not map filters for types with composite key encoding.
 norm expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT *
-FROM (VALUES (1.0), (2.0)) AS t1(x), (VALUES (1.00), (2.00)) AS t2(y)WHERE x=y AND x::text = '1.0'
+FROM (VALUES (1.0), (2.0)) AS t1(x), (VALUES (1.00), (2.00)) AS t2(y) WHERE x=y AND x::text = '1.0'
 ----
 inner-join (hash)
  ├── columns: x:1!null y:2!null
@@ -784,6 +784,41 @@ inner-join (hash)
  │    ├── cardinality: [2 - 2]
  │    ├── (1.00,)
  │    └── (2.00,)
+ └── filters
+      └── column1:1 = column1:2 [outer=(1,2), immutable, constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+
+# Remap composite variables if filters are not composite sensitive.
+norm expect=PushFilterIntoJoinLeftAndRight
+SELECT *
+FROM (VALUES (1.0), (2.0)) AS t1(x), (VALUES (1.00), (2.00)) AS t2(y) WHERE x=y AND x >= 1
+----
+inner-join (hash)
+ ├── columns: x:1!null y:2!null
+ ├── cardinality: [0 - 4]
+ ├── immutable
+ ├── fd: (1)==(2), (2)==(1)
+ ├── select
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [0 - 2]
+ │    ├── immutable
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1.0,)
+ │    │    └── (2.0,)
+ │    └── filters
+ │         └── column1:1 >= 1 [outer=(1), immutable, constraints=(/1: [/1 - ]; tight)]
+ ├── select
+ │    ├── columns: column1:2!null
+ │    ├── cardinality: [0 - 2]
+ │    ├── immutable
+ │    ├── values
+ │    │    ├── columns: column1:2!null
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1.00,)
+ │    │    └── (2.00,)
+ │    └── filters
+ │         └── column1:2 >= 1 [outer=(2), immutable, constraints=(/2: [/1 - ]; tight)]
  └── filters
       └── column1:1 = column1:2 [outer=(1,2), immutable, constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
 

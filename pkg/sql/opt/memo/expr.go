@@ -17,7 +17,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -755,20 +754,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			// This does not necessarily hold for "composite" types like decimals or
 			// collated strings. For example if d is a decimal, d::TEXT can have
 			// different values for equal values of d, like 1 and 1.0.
-			//
-			// We only add the FD if composite types are not involved.
-			//
-			// TODO(radu): add an allowlist of expressions/operators that are ok, like
-			// arithmetic.
-			composite := false
-			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
-				typ := mem.Metadata().ColumnMeta(i).Type
-				if colinfo.HasCompositeKeyEncoding(typ) {
-					composite = true
-					break
-				}
-			}
-			if !composite {
+			if !CanBeCompositeSensitive(mem.Metadata(), item.Element) {
 				prj.internalFuncDeps.AddSynthesizedCol(from, item.Col)
 			}
 		}

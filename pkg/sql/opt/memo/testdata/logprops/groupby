@@ -29,7 +29,7 @@ project
  │    ├── project
  │    │    ├── columns: column7:7(bool!null) column9:9(string!null) x:1(int!null) y:2(int) z:3(float!null) s:4(string!null)
  │    │    ├── key: (1)
- │    │    ├── fd: ()-->(9), (1)-->(2-4,7), (3,4)-->(1,2)
+ │    │    ├── fd: ()-->(9), (1)-->(2-4,7), (3,4)-->(1,2,7), (3)-->(7)
  │    │    ├── prune: (1-4,7,9)
  │    │    ├── interesting orderings: (+1) (-4,+3,+1)
  │    │    ├── select
