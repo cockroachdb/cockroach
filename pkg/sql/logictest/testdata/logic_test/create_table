@@ -1,5 +1,3 @@
-# LogicTest: !backup-restore
-
 subtest regression_42858
 
 statement ok
