@@ -567,7 +567,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		}
 		// Add the rest of the columns in the table.
 		for i, col := range tt.Columns {
-			if !pkOrdinals.Contains(i) && col.Kind() != cat.Virtual {
+			if !pkOrdinals.Contains(i) && !col.Kind().IsVirtual() {
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
 		}
@@ -686,7 +686,7 @@ func (ti *Index) addColumn(
 		// TODO(radu,mjibson): update this when the corresponding type in the real
 		// catalog is fixed (see sql.newOptTable).
 		typ := tt.Columns[ordinal].DatumType()
-		col.InitVirtual(
+		col.InitVirtualInverted(
 			len(tt.Columns),
 			tree.Name(name+"_inverted_key"),
 			typ,

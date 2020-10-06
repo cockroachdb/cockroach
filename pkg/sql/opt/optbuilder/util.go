@@ -682,8 +682,11 @@ type columnKinds struct {
 	// If true, include system columns.
 	includeSystem bool
 
-	// If true, include virtual columns.
-	includeVirtual bool
+	// If true, include virtual inverted index columns.
+	includeVirtualInverted bool
+
+	// If true, include virtual computed columns.
+	includeVirtualComputed bool
 }
 
 // tableOrdinals returns a slice of ordinals that correspond to table columns of
@@ -691,11 +694,12 @@ type columnKinds struct {
 func tableOrdinals(tab cat.Table, k columnKinds) []int {
 	n := tab.ColumnCount()
 	shouldInclude := [...]bool{
-		cat.Ordinary:   true,
-		cat.WriteOnly:  k.includeMutations,
-		cat.DeleteOnly: k.includeMutations,
-		cat.System:     k.includeSystem,
-		cat.Virtual:    k.includeVirtual,
+		cat.Ordinary:        true,
+		cat.WriteOnly:       k.includeMutations,
+		cat.DeleteOnly:      k.includeMutations,
+		cat.System:          k.includeSystem,
+		cat.VirtualInverted: k.includeVirtualInverted,
+		cat.VirtualComputed: k.includeVirtualComputed,
 	}
 	ordinals := make([]int, 0, n)
 	for i := 0; i < n; i++ {

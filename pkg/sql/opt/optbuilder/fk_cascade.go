@@ -285,9 +285,10 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations: false,
-			includeSystem:    false,
-			includeVirtual:   false,
+			includeMutations:       false,
+			includeSystem:          false,
+			includeVirtualInverted: false,
+			includeVirtualComputed: false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -531,9 +532,10 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations: false,
-			includeSystem:    false,
-			includeVirtual:   false,
+			includeMutations:       false,
+			includeSystem:          false,
+			includeVirtualInverted: false,
+			includeVirtualComputed: false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
