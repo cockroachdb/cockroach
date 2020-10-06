@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/issuelink"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -332,7 +333,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {
-				return pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will remove all data in that column")
+				err := pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
+					"remove all data in that column")
+				if !params.extendedEvalCtx.TxnImplicit {
+					err = errors.WithIssueLink(err, issuelink.IssueLink{
+						IssueURL: "https://github.com/cockroachdb/cockroach/issues/46541",
+						Detail: "when used in an explicit combined with other schema " +
+							"changes to the same table, DROP COLUMN can result in data " +
+							"loss if the other schema change fails or is canceled",
+					})
+				}
+				return err
 			}
 
 			colToDrop, dropped, err := n.tableDesc.FindColumnByName(t.Column)
