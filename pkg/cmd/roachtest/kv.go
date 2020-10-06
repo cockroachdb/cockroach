@@ -328,6 +328,7 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				// other earlier kv invocation's footsteps.
 				run(kv+" --seed 2 {pgurl:1}", true)
 			})
+			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector, even if test fails below
 
 			if minFrac, actFrac := 0.8, qpsOneDown/qpsAllUp; actFrac < minFrac {
 				t.Fatalf(
@@ -336,7 +337,6 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				)
 			}
 			t.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
-			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector
 		},
 	})
 }
