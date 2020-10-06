@@ -29,7 +29,7 @@ const (
 	EventLogCreateDatabase EventLogType = "create_database"
 	// EventLogDropDatabase is recorded when a database is dropped.
 	EventLogDropDatabase EventLogType = "drop_database"
-	// EventLogDropDatabase is recorded when a database is renamed.
+	// EventLogRenameDatabase is recorded when a database is renamed.
 	EventLogRenameDatabase EventLogType = "rename_database"
 
 	// EventLogDropSchema is recorded when a schema is dropped.
@@ -39,6 +39,8 @@ const (
 	EventLogCreateTable EventLogType = "create_table"
 	// EventLogDropTable is recorded when a table is dropped.
 	EventLogDropTable EventLogType = "drop_table"
+	// EventLogRenameTable is recorded when a table is renamed.
+	EventLogRenameTable EventLogType = "rename_table"
 	// EventLogTruncateTable is recorded when a table is truncated.
 	EventLogTruncateTable EventLogType = "truncate_table"
 	// EventLogAlterTable is recorded when a table is altered.

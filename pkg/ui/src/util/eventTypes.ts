@@ -26,6 +26,8 @@ export const RENAME_DATABASE = "rename_database";
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
 export const DROP_TABLE = "drop_table";
+// Recorded when a table is renamed.
+export const RENAME_TABLE = "rename_table";
 // Recorded when a table is truncated.
 export const TRUNCATE_TABLE = "truncate_table";
 // Recorded when a table is altered.

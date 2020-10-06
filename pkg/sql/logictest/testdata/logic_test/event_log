@@ -251,6 +251,27 @@ WHERE "eventType" = 'drop_table'
 ----
 1  test.public.b
 
+# Create + Rename table
+##################
+
+statement ok
+CREATE TABLE toberenamed( id SERIAL PRIMARY KEY );
+
+statement ok
+ALTER TABLE toberenamed RENAME TO renamedtable;
+
+
+# Verify that rename table event is logged
+##################
+
+query ITT
+SELECT "reportingID", info::JSONB->>'TableName', info::JSONB->>'NewTableName'
+FROM system.eventlog
+WHERE "eventType" = 'rename_table'
+  AND info::JSONB->>'Statement' LIKE 'ALTER TABLE toberenamed RENAME TO renamedtable%'
+----
+1  test.public.toberenamed  test.public.renamedtable
+
 
 ##################
 # DATABASE DDL
@@ -350,8 +371,6 @@ ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname
 
 # verify contents of database rename event
 ##################
-
-# verify event is there, and cascading table drops are logged.
 
 query ITT
 SELECT "reportingID", info::JSONB->>'DatabaseName', info::JSONB->>'NewDatabaseName'
