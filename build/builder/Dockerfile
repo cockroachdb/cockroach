@@ -54,11 +54,12 @@ RUN mkdir crosstool-ng \
  && cd .. \
  && rm -rf crosstool-ng
 
-COPY x86_64-unknown-linux-gnu.defconfig x86_64-w64-mingw.defconfig aarch64-unknown-linux-gnueabi.defconfig ./
+COPY x86_64-unknown-linux-gnu.defconfig x86_64-w64-mingw.defconfig aarch64-unknown-linux-gnueabi.defconfig s390x-ibm-linux-gnu.defconfig ./
 RUN mkdir src \
  && mkdir build && (cd build && DEFCONFIG=../x86_64-unknown-linux-gnu.defconfig      /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && mkdir build && (cd build && DEFCONFIG=../x86_64-w64-mingw.defconfig              /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && mkdir build && (cd build && DEFCONFIG=../aarch64-unknown-linux-gnueabi.defconfig /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
+ && mkdir build && (cd build && DEFCONFIG=../s390x-ibm-linux-gnu.defconfig           /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && rm -rf src
 
 RUN mkdir -p /usr/local/lib/ccache \
@@ -67,18 +68,20 @@ RUN mkdir -p /usr/local/lib/ccache \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-cc \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-w64-mingw32-c++ \
  && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-cc \
- && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-c++
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/aarch64-unknown-linux-gnueabi-c++ \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/s390x-ibm-linux-gnu-c++ \
+ && ln -s /usr/bin/ccache /usr/local/lib/ccache/s390x-ibm-linux-gnu-cc
 
-ENV PATH $PATH:/x-tools/x86_64-unknown-linux-gnu/bin:/x-tools/x86_64-w64-mingw32/bin:/x-tools/aarch64-unknown-linux-gnueabi/bin
+ENV PATH $PATH:/x-tools/x86_64-unknown-linux-gnu/bin:/x-tools/x86_64-w64-mingw32/bin:/x-tools/aarch64-unknown-linux-gnueabi/bin:/x-tools/s390x-ibm-linux-gnu/bin
 
-# Build & install the terminfo lib (incl. in ncurses) for the linux targets (x86 and arm).
+# Build & install the terminfo lib (incl. in ncurses) for the linux targets (x86, arm and s390x).
 # (on BSD or BSD-derived like macOS it's already built-in; on windows we don't need it.)
 #
 # The patch is needed to work around a bug in Debian mawk, see
 # http://lists.gnu.org/archive/html/bug-ncurses/2015-08/msg00008.html
 COPY ncurses.patch ./
 #
-# Run the three builds.
+# Run the four builds.
 # As per the Debian rule file for ncurses, the two configure tests for
 # the type of bool and poll(2) are broken when cross-compiling, so we
 # need to feed the test results manually to configure via an environment
@@ -108,6 +111,14 @@ RUN mkdir ncurses \
        CXX=/x-tools/aarch64-unknown-linux-gnueabi/bin/aarch64-unknown-linux-gnueabi-c++ \
        ../configure --prefix=/x-tools/aarch64-unknown-linux-gnueabi/aarch64-unknown-linux-gnueabi/sysroot/usr \
          --host=aarch64-unknown-linux-gnueabi \
+         $(cat /ncurses.conf) \
+    && make install.libs) \
+ && mkdir build-s390x-ibm-linux-gnu \
+ && (cd build-s390x-ibm-linux-gnu \
+    && CC=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-cc \
+       CXX=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-c++ \
+       ../configure --prefix=/x-tools/s390x-ibm-linux-gnu/s390x-ibm-linux-gnu/sysroot/usr \
+         --host=s390x-ibm-linux-gnu \
          $(cat /ncurses.conf) \
     && make install.libs) \
  && cd .. \
