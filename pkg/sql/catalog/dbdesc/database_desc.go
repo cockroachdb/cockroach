@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/redact"
 )
 
 var _ catalog.DatabaseDescriptor = (*Immutable)(nil)
@@ -92,6 +93,24 @@ func NewExistingMutable(desc descpb.DatabaseDescriptor) *Mutable {
 		Immutable:      makeImmutable(*protoutil.Clone(&desc).(*descpb.DatabaseDescriptor)),
 		ClusterVersion: NewImmutable(desc),
 	}
+}
+
+// SafeMessage makes Immutable a SafeMessager.
+func (desc *Immutable) SafeMessage() string {
+	return formatSafeMessage("dbdesc.Immutable", desc)
+}
+
+// SafeMessage makes Mutable a SafeMessager.
+func (desc *Mutable) SafeMessage() string {
+	return formatSafeMessage("dbdesc.Mutable", desc)
+}
+
+func formatSafeMessage(typeName string, desc catalog.DatabaseDescriptor) string {
+	var buf redact.StringBuilder
+	buf.Print(typeName + ": {")
+	catalog.FormatSafeDescriptorProperties(&buf, desc)
+	buf.Print("}")
+	return buf.String()
 }
 
 // TypeName returns the plain type of this descriptor.
