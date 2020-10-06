@@ -306,7 +306,24 @@ func allocateDescriptorRewrites(
 		if err != nil {
 			return nil, err
 		}
+		// Remap all of the descriptor belonging to system tables to the temp system
+		// DB.
 		descriptorRewrites[tempSysDBID] = &jobspb.RestoreDetails_DescriptorRewrite{ID: tempSysDBID}
+		for _, table := range tablesByID {
+			if table.GetParentID() == systemschema.SystemDB.ID {
+				descriptorRewrites[table.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
+			}
+		}
+		for _, sc := range typesByID {
+			if sc.GetParentID() == systemschema.SystemDB.ID {
+				descriptorRewrites[sc.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
+			}
+		}
+		for _, typ := range typesByID {
+			if typ.GetParentID() == systemschema.SystemDB.ID {
+				descriptorRewrites[typ.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
+			}
+		}
 	}
 
 	// Fail fast if the necessary databases don't exist or are otherwise
@@ -323,20 +340,17 @@ func allocateDescriptorRewrites(
 			}
 		}
 
-		// TODO (rohany, pbardea): This method is becoming too large. We should
-		//  split the individual components out into helper methods.
+		// TODO (rohany, pbardea): These checks really need to be refactored.
 		// Construct rewrites for any user defined schemas.
 		for _, sc := range schemasByID {
-			var targetDB string
-			if renaming {
-				targetDB = overrideDB
-			} else {
-				database, ok := databasesByID[sc.ParentID]
-				if !ok {
-					return errors.Errorf("no database with ID %d in backup for schema %q",
-						sc.ParentID, sc.Name)
-				}
-				targetDB = database.Name
+			if _, ok := descriptorRewrites[sc.ID]; ok {
+				continue
+			}
+
+			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, renaming, overrideDB,
+				descriptorCoverage, sc)
+			if err != nil {
+				return err
 			}
 
 			if _, ok := restoreDBNames[targetDB]; ok {
@@ -386,38 +400,15 @@ func allocateDescriptorRewrites(
 		}
 
 		for _, table := range tablesByID {
-			var targetDB string
-			if renaming {
-				targetDB = overrideDB
-			} else if descriptorCoverage == tree.AllDescriptors && table.ParentID < catalogkeys.MaxDefaultDescriptorID {
-				// This is a table that is in a database that already existed at
-				// cluster creation time.
-				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.DefaultDatabaseName)
-				if err != nil {
-					return err
-				}
-				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.PgDatabaseName)
-				if err != nil {
-					return err
-				}
+			// If a descriptor has already been assigned a rewrite, then move on.
+			if _, ok := descriptorRewrites[table.ID]; ok {
+				continue
+			}
 
-				if table.ParentID == systemschema.SystemDB.GetID() {
-					// For full cluster backups, put the system tables in the temporary
-					// system table.
-					targetDB = restoreTempSystemDB
-					descriptorRewrites[table.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
-				} else if table.ParentID == defaultDBID {
-					targetDB = catalogkeys.DefaultDatabaseName
-				} else if table.ParentID == postgresDBID {
-					targetDB = catalogkeys.PgDatabaseName
-				}
-			} else {
-				database, ok := databasesByID[table.ParentID]
-				if !ok {
-					return errors.Errorf("no database with ID %d in backup for table %q",
-						table.ParentID, table.Name)
-				}
-				targetDB = database.GetName()
+			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, renaming, overrideDB,
+				descriptorCoverage, table)
+			if err != nil {
+				return err
 			}
 
 			if _, ok := restoreDBNames[targetDB]; ok {
@@ -472,16 +463,10 @@ func allocateDescriptorRewrites(
 				continue
 			}
 
-			var targetDB string
-			if renaming {
-				targetDB = overrideDB
-			} else {
-				database, ok := databasesByID[typ.ParentID]
-				if !ok {
-					return errors.Errorf("no database with ID %d in backup for type %q",
-						typ.ParentID, typ.Name)
-				}
-				targetDB = database.Name
+			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, renaming, overrideDB,
+				descriptorCoverage, typ)
+			if err != nil {
+				return err
 			}
 
 			if _, ok := restoreDBNames[targetDB]; ok {
@@ -669,6 +654,53 @@ func allocateDescriptorRewrites(
 	}
 
 	return descriptorRewrites, nil
+}
+
+func resolveTargetDB(
+	ctx context.Context,
+	txn *kv.Txn,
+	p sql.PlanHookState,
+	databasesByID map[descpb.ID]*dbdesc.Mutable,
+	renaming bool,
+	overrideDB string,
+	descriptorCoverage tree.DescriptorCoverage,
+	descriptor catalog.Descriptor,
+) (string, error) {
+	if renaming {
+		return overrideDB, nil
+	}
+
+	if descriptorCoverage == tree.AllDescriptors && descriptor.GetParentID() < catalogkeys.MaxDefaultDescriptorID {
+		// This is a table that is in a database that already existed at
+		// cluster creation time.
+		defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.DefaultDatabaseName)
+		if err != nil {
+			return "", err
+		}
+		postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.PgDatabaseName)
+		if err != nil {
+			return "", err
+		}
+
+		var targetDB string
+		if descriptor.GetParentID() == systemschema.SystemDB.GetID() {
+			// For full cluster backups, put the system tables in the temporary
+			// system table.
+			targetDB = restoreTempSystemDB
+		} else if descriptor.GetParentID() == defaultDBID {
+			targetDB = catalogkeys.DefaultDatabaseName
+		} else if descriptor.GetParentID() == postgresDBID {
+			targetDB = catalogkeys.PgDatabaseName
+		}
+		return targetDB, nil
+	}
+
+	database, ok := databasesByID[descriptor.GetParentID()]
+	if !ok {
+		return "", errors.Errorf("no database with ID %d in backup for object %q (%d)",
+			descriptor.GetParentID(), descriptor.GetName(), descriptor.GetID())
+	}
+	return database.Name, nil
 }
 
 // maybeUpgradeTableDescsInBackupManifests updates the backup descriptors'
