@@ -18,20 +18,16 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pmezard/go-difflib/difflib"
 )
 
 // Makes an IndexDescriptor with all columns being ascending.
@@ -1292,6 +1288,7 @@ func TestKeysPerRow(t *testing.T) {
 				t.Fatalf("%+v", err)
 			}
 
+			// nolint:descriptormarshal
 			keys := desc.GetTable().KeysPerRow(test.indexID)
 			if test.expected != keys {
 				t.Errorf("expected %d keys got %d", test.expected, keys)
@@ -2015,6 +2012,7 @@ func TestDefaultExprNil(t *testing.T) {
 		}
 		// Test and verify that the default expressions of the column descriptors
 		// are all nil.
+		// nolint:descriptormarshal
 		for _, col := range desc.GetTable().Columns {
 			if col.DefaultExpr != nil {
 				t.Errorf("expected Column Default Expression to be 'nil', got %s instead.", *col.DefaultExpr)

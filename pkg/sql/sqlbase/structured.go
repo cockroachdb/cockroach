@@ -3293,6 +3293,7 @@ func (desc *Descriptor) GetName() string {
 //
 // A linter should ensure that GetTable() is not called.
 func (desc *Descriptor) Table(ts hlc.Timestamp) *TableDescriptor {
+	// nolint:descriptormarshal
 	t := desc.GetTable()
 	if t != nil {
 		t.maybeSetTimeFromMVCCTimestamp(ts)

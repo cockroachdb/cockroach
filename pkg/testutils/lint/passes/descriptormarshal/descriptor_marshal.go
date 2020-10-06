@@ -71,9 +71,8 @@ var Analyzer = &analysis.Analyzer{
 				return
 			}
 			pass.Report(analysis.Diagnostic{
-				Pos: n.Pos(),
-				Message: fmt.Sprintf("Illegal call to Descriptor.GetTable() in %s, see Descriptor.Table()",
-					containing.Name()),
+				Pos:     n.Pos(),
+				Message: fmt.Sprintf("Illegal call to Descriptor.GetTable(), see sqlbase.TableFromDescriptor()"),
 			})
 		})
 		return nil, nil
