@@ -1736,6 +1736,113 @@ func (a *boolOrAggregate) Size() int64 {
 	return sizeOfBoolOrAggregate
 }
 
+/*
+ * Ported from Postgresql (see https://github.com/postgres/postgres/blob/bc1fbc960bf5efbb692f4d1bf91bf9bc6390425a/src/backend/utils/adt/float.c#L3277).
+ * todo mneverov: write proper comment for this struct.
+ *
+ * As with the preceding aggregates, we use the Youngs-Cramer algorithm to
+ * reduce rounding errors in the aggregate final functions.
+ *
+ * The transition datatype for all these aggregates is a 6-element array of
+ * float8, holding the values N, Sx=sum(X), Sxx=sum((X-Sx/N)^2), Sy=sum(Y),
+ * Syy=sum((Y-Sy/N)^2), Sxy=sum((X-Sx/N)*(Y-Sy/N)) in that order.
+ *
+ * Note that Y is the first argument to all these aggregates!
+ *
+ * It might seem attractive to optimize this by having multiple accumulator
+ * functions that only calculate the sums actually needed.  But on most
+ * modern machines, a couple of extra floating-point multiplies will be
+ * insignificant compared to the other per-tuple overhead, so I've chosen
+ * to minimize code space instead.
+ */
+
+type regressionAccumulate struct {
+	n   float64
+	sx  float64
+	sxx float64
+	sy  float64
+	syy float64
+	sxy float64
+}
+
+func (a *regressionAccumulate) add(y float64, x float64) error {
+	n := a.n
+	sx := a.sx
+	sxx := a.sxx
+	sy := a.sy
+	syy := a.syy
+	sxy := a.sxy
+
+	/*
+	 * Use the Youngs-Cramer algorithm to incorporate the new values into the
+	 * transition values.
+	 */
+	n++
+	sx += x
+	sy += y
+
+	if a.n > 0 {
+		tmpX := x*n - sx
+		tmpY := y*n - sy
+		scale := 1.0 / (n * a.n)
+		sxx += tmpX * tmpX * scale
+		syy += tmpY * tmpY * scale
+		sxy += tmpX * tmpY * scale
+
+		/*
+		 * Overflow check.  We only report an overflow error when finite
+		 * inputs lead to infinite results.  Note also that sxx, syy and Sxy
+		 * should be NaN if any of the relevant inputs are infinite, so we
+		 * intentionally prevent them from becoming infinite.
+		 */
+		if math.IsInf(sx, 0) || math.IsInf(sxx, 0) || math.IsInf(sy, 0) || math.IsInf(syy, 0) || math.IsInf(sxy, 0) {
+			if ((math.IsInf(sx, 0) || math.IsInf(sxx, 0)) &&
+				!math.IsInf(a.sx, 0) && !math.IsInf(x, 0)) ||
+				((math.IsInf(sy, 0) || math.IsInf(syy, 0)) &&
+					!math.IsInf(a.sy, 0) && !math.IsInf(y, 0)) ||
+				(math.IsInf(sxy, 0) &&
+					!math.IsInf(a.sx, 0) && !math.IsInf(x, 0) &&
+					!math.IsInf(a.sy, 0) && !math.IsInf(y, 0)) {
+				return tree.ErrFloatOutOfRange
+			}
+
+			if math.IsInf(sxx, 0) {
+				sxx = math.NaN()
+			}
+			if math.IsInf(syy, 0) {
+				syy = math.NaN()
+			}
+			if math.IsInf(sxy, 0) {
+				sxy = math.NaN()
+			}
+		}
+	} else {
+		/*
+		 * At the first input, we normally can leave Sxx et al as 0.  However,
+		 * if the first input is Inf or NaN, we'd better force the dependent
+		 * sums to NaN; otherwise we will falsely report variance zero when
+		 * there are no more inputs.
+		 */
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			a.sxx = math.NaN()
+			a.sxy = math.NaN()
+		}
+		if math.IsNaN(y) || math.IsInf(y, 0) {
+			a.syy = math.NaN()
+			a.sxy = math.NaN()
+		}
+	}
+
+	a.n = n
+	a.sx = sx
+	a.sy = sy
+	a.sxx = sxx
+	a.syy = syy
+	a.sxy = sxy
+
+	return nil
+}
+
 // corrAggregate represents SQL:2003 correlation coefficient.
 //
 // n   be count of rows.
@@ -1754,12 +1861,7 @@ func (a *boolOrAggregate) Size() int64 {
 //      the implementation-defined exponent range for the result data type, then the result
 //      is the null value.
 type corrAggregate struct {
-	n   int
-	sx  float64
-	sx2 float64
-	sy  float64
-	sy2 float64
-	sxy float64
+	regAcc regressionAccumulate
 }
 
 func newCorrAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
@@ -1787,66 +1889,30 @@ func (a *corrAggregate) Add(_ context.Context, datumY tree.Datum, otherArgs ...t
 		return err
 	}
 
-	a.n++
-	a.sx += x
-	a.sy += y
-	a.sx2 += x * x
-	a.sy2 += y * y
-	a.sxy += x * y
-
-	if math.IsInf(a.sx, 0) ||
-		math.IsInf(a.sx2, 0) ||
-		math.IsInf(a.sy, 0) ||
-		math.IsInf(a.sy2, 0) ||
-		math.IsInf(a.sxy, 0) {
-		return tree.ErrFloatOutOfRange
-	}
-
-	return nil
+	err = a.regAcc.add(y, x)
+	return err
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *corrAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.regAcc.n < 1 {
 		return tree.DNull, nil
 	}
 
-	if a.sx2 == 0 || a.sy2 == 0 {
+	if a.regAcc.sxx == 0 || a.regAcc.syy == 0 {
 		return tree.DNull, nil
 	}
-
-	floatN := float64(a.n)
-
-	numeratorX := floatN*a.sx2 - a.sx*a.sx
-	if math.IsInf(numeratorX, 0) {
-		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	}
-
-	numeratorY := floatN*a.sy2 - a.sy*a.sy
-	if math.IsInf(numeratorY, 0) {
-		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	}
-
-	numeratorXY := floatN*a.sxy - a.sx*a.sy
-	if math.IsInf(numeratorXY, 0) {
-		return tree.DNull, pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	}
-
-	if numeratorX <= 0 || numeratorY <= 0 {
-		return tree.DNull, nil
-	}
-
-	return tree.NewDFloat(tree.DFloat(numeratorXY / math.Sqrt(numeratorX*numeratorY))), nil
+	return tree.NewDFloat(tree.DFloat(a.regAcc.sxy / math.Sqrt(a.regAcc.sxx*a.regAcc.syy))), nil
 }
 
 // Reset implements tree.AggregateFunc interface.
 func (a *corrAggregate) Reset(context.Context) {
-	a.n = 0
-	a.sx = 0
-	a.sx2 = 0
-	a.sy = 0
-	a.sy2 = 0
-	a.sxy = 0
+	a.regAcc.n = 0
+	a.regAcc.sx = 0
+	a.regAcc.sxx = 0
+	a.regAcc.sy = 0
+	a.regAcc.syy = 0
+	a.regAcc.sxy = 0
 }
 
 // Close implements tree.AggregateFunc interface.
