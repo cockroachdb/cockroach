@@ -14,10 +14,50 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
+
+func TestSafeMessage(t *testing.T) {
+	for _, tc := range []struct {
+		desc catalog.DatabaseDescriptor
+		exp  string
+	}{
+		{
+			desc: NewImmutable(descpb.DatabaseDescriptor{
+				ID:            12,
+				Version:       1,
+				State:         descpb.DescriptorState_OFFLINE,
+				OfflineReason: "foo",
+			}),
+			exp: "dbdesc.Immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", State: OFFLINE, OfflineReason: \"foo\"}",
+		},
+		{
+			desc: NewCreatedMutable(descpb.DatabaseDescriptor{
+				ID:            42,
+				Version:       2,
+				State:         descpb.DescriptorState_OFFLINE,
+				OfflineReason: "bar",
+			}),
+			exp: "dbdesc.Mutable: {ID: 42, Version: 2, IsUncommitted: true, ModificationTime: \"0,0\", State: OFFLINE, OfflineReason: \"bar\"}",
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			redacted := string(redact.Sprint(tc.desc).Redact())
+			require.Equal(t, tc.exp, redacted)
+			{
+				var m map[string]interface{}
+				require.NoError(t, yaml.UnmarshalStrict([]byte(redacted), &m))
+			}
+		})
+	}
+}
 
 func TestMakeDatabaseDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
