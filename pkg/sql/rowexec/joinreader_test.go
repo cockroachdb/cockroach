@@ -408,6 +408,8 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(tree.DInt(12)), aFn(5), bFn(5), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(12)), aFn(105), bFn(105), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(23)), tree.DNull, tree.DNull, tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(26)), aFn(110), bFn(110), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(26)), aFn(7), bFn(7), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(34)), aFn(105), bFn(105), tree.DBoolFalse},
 				{tree.NewDInt(tree.DInt(34)), aFn(110), bFn(110), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(34)), aFn(120), bFn(120), tree.DBoolTrue},
@@ -418,7 +420,7 @@ func TestJoinReader(t *testing.T) {
 			outputTypes:    sixIntColsAndStringCol,
 			leftJoinPaired: true,
 			expected: "[[12 0 2 0 2 2 'two'] [12 0 5 0 5 5 'five'] [23 NULL NULL NULL NULL NULL NULL] " +
-				"[34 12 0 NULL NULL NULL NULL]]",
+				"[26 0 7 0 7 7 'seven'] [34 12 0 NULL NULL NULL NULL]]",
 		},
 		{
 			description: "Test paired join with semi join",
@@ -430,6 +432,8 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(tree.DInt(12)), aFn(2), bFn(2), tree.DBoolFalse},
 				{tree.NewDInt(tree.DInt(12)), aFn(5), bFn(5), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(12)), aFn(105), bFn(105), tree.DBoolTrue},
+				{tree.NewDInt(tree.DInt(26)), aFn(110), bFn(110), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(26)), aFn(7), bFn(7), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(34)), aFn(105), bFn(105), tree.DBoolFalse},
 				{tree.NewDInt(tree.DInt(34)), aFn(110), bFn(110), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(34)), aFn(120), bFn(120), tree.DBoolTrue},
@@ -439,7 +443,7 @@ func TestJoinReader(t *testing.T) {
 			inputTypes:     threeIntColsAndBoolCol,
 			outputTypes:    rowenc.ThreeIntCols,
 			leftJoinPaired: true,
-			expected:       "[[12 0 2]]",
+			expected:       "[[12 0 2] [26 0 7]]",
 		},
 		{
 			description: "Test paired join with anti join",
@@ -452,6 +456,8 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(tree.DInt(12)), aFn(5), bFn(5), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(12)), aFn(105), bFn(105), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(23)), tree.DNull, tree.DNull, tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(26)), aFn(110), bFn(110), tree.DBoolFalse},
+				{tree.NewDInt(tree.DInt(26)), aFn(7), bFn(7), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(34)), aFn(105), bFn(105), tree.DBoolFalse},
 				{tree.NewDInt(tree.DInt(34)), aFn(110), bFn(110), tree.DBoolTrue},
 				{tree.NewDInt(tree.DInt(34)), aFn(120), bFn(120), tree.DBoolTrue},
@@ -464,7 +470,7 @@ func TestJoinReader(t *testing.T) {
 			expected:       "[[23 NULL NULL] [34 12 0]]",
 		},
 		{
-			// Group will span batches since we SetBatchSizeBytes to ~2 rows below.
+			// Group will span batches when we SetBatchSizeBytes to ~2 rows below.
 			description: "Test paired join with outer join with group spanning batches",
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
@@ -493,7 +499,7 @@ func TestJoinReader(t *testing.T) {
 			expected:       "[[12 0 2 0 2 2 'two'] [34 0 5 0 5 5 'five'] [43 10 5 NULL NULL NULL NULL]]",
 		},
 		{
-			// Group will span batches since we SetBatchSizeBytes to ~2 rows below.
+			// Group will span batches when we SetBatchSizeBytes to ~2 rows below.
 			description: "Test paired join with semi join with group spanning batches",
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
@@ -571,98 +577,105 @@ func TestJoinReader(t *testing.T) {
 	for i, td := range []*tabledesc.Immutable{tdSecondary, tdFamily, tdInterleaved} {
 		for _, c := range testCases {
 			for _, reqOrdering := range []bool{true, false} {
-				t.Run(fmt.Sprintf("%d/reqOrdering=%t/%s", i, reqOrdering, c.description), func(t *testing.T) {
-					evalCtx := tree.MakeTestingEvalContext(st)
-					defer evalCtx.Stop(ctx)
-					flowCtx := execinfra.FlowCtx{
-						EvalCtx: &evalCtx,
-						Cfg: &execinfra.ServerConfig{
-							Settings:    st,
-							TempStorage: tempEngine,
-							DiskMonitor: diskMonitor,
-						},
-						Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
-					}
-					encRows := make(rowenc.EncDatumRows, len(c.input))
-					for rowIdx, row := range c.input {
-						encRow := make(rowenc.EncDatumRow, len(row))
-						for i, d := range row {
-							encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+				// Small and large batches exercise different paths of interest for
+				// paired joins, so do both.
+				for _, smallBatch := range []bool{true, false} {
+					t.Run(fmt.Sprintf("%d/reqOrdering=%t/%s/smallBatch=%t", i, reqOrdering, c.description, smallBatch), func(t *testing.T) {
+						evalCtx := tree.MakeTestingEvalContext(st)
+						defer evalCtx.Stop(ctx)
+						flowCtx := execinfra.FlowCtx{
+							EvalCtx: &evalCtx,
+							Cfg: &execinfra.ServerConfig{
+								Settings:    st,
+								TempStorage: tempEngine,
+								DiskMonitor: diskMonitor,
+							},
+							Txn: kv.NewTxn(ctx, s.DB(), s.NodeID()),
 						}
-						encRows[rowIdx] = encRow
-					}
-					in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
-
-					out := &distsqlutils.RowBuffer{}
-					jr, err := newJoinReader(
-						&flowCtx,
-						0, /* processorID */
-						&execinfrapb.JoinReaderSpec{
-							Table:                    *td.TableDesc(),
-							IndexIdx:                 c.indexIdx,
-							LookupColumns:            c.lookupCols,
-							OnExpr:                   execinfrapb.Expression{Expr: c.onExpr},
-							Type:                     c.joinType,
-							MaintainOrdering:         reqOrdering,
-							LeftJoinWithPairedJoiner: c.leftJoinPaired,
-						},
-						in,
-						&c.post,
-						out,
-						lookupJoinReaderType,
-					)
-					if err != nil {
-						t.Fatal(err)
-					}
-
-					// Set a lower batch size to force multiple batches.
-					jr.(*joinReader).SetBatchSizeBytes(int64(encRows[0].Size() * 2))
-
-					jr.Run(ctx)
-
-					if !in.Done {
-						t.Fatal("joinReader didn't consume all the rows")
-					}
-					if !out.ProducerClosed() {
-						t.Fatalf("output RowReceiver not closed")
-					}
-
-					var res rowenc.EncDatumRows
-					for {
-						row, meta := out.Next()
-						if meta != nil && meta.Metrics == nil {
-							t.Fatalf("unexpected metadata %+v", meta)
+						encRows := make(rowenc.EncDatumRows, len(c.input))
+						for rowIdx, row := range c.input {
+							encRow := make(rowenc.EncDatumRow, len(row))
+							for i, d := range row {
+								encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+							}
+							encRows[rowIdx] = encRow
 						}
-						if row == nil {
-							break
+						in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
+
+						out := &distsqlutils.RowBuffer{}
+						jr, err := newJoinReader(
+							&flowCtx,
+							0, /* processorID */
+							&execinfrapb.JoinReaderSpec{
+								Table:                    *td.TableDesc(),
+								IndexIdx:                 c.indexIdx,
+								LookupColumns:            c.lookupCols,
+								OnExpr:                   execinfrapb.Expression{Expr: c.onExpr},
+								Type:                     c.joinType,
+								MaintainOrdering:         reqOrdering,
+								LeftJoinWithPairedJoiner: c.leftJoinPaired,
+							},
+							in,
+							&c.post,
+							out,
+							lookupJoinReaderType,
+						)
+						if err != nil {
+							t.Fatal(err)
 						}
-						res = append(res, row)
-					}
 
-					// processOutputRows is a helper function that takes a stringified
-					// EncDatumRows output (e.g. [[1 2] [3 1]]) and returns a slice of
-					// stringified rows without brackets (e.g. []string{"1 2", "3 1"}).
-					processOutputRows := func(output string) []string {
-						// Comma-separate the rows.
-						output = strings.ReplaceAll(output, "] [", ",")
-						// Remove leading and trailing bracket.
-						output = strings.Trim(output, "[]")
-						// Split on the commas that were introduced and return that.
-						return strings.Split(output, ",")
-					}
+						if smallBatch {
+							// Set a lower batch size to force multiple batches.
+							jr.(*joinReader).SetBatchSizeBytes(int64(encRows[0].Size() * 2))
+						}
+						// Else, use the default.
 
-					result := processOutputRows(res.String(c.outputTypes))
-					expected := processOutputRows(c.expected)
+						jr.Run(ctx)
 
-					if !reqOrdering {
-						// An ordering was not required, so sort both the result and
-						// expected slice to reuse equality comparison.
-						sort.Strings(result)
-						sort.Strings(expected)
-					}
+						if !in.Done {
+							t.Fatal("joinReader didn't consume all the rows")
+						}
+						if !out.ProducerClosed() {
+							t.Fatalf("output RowReceiver not closed")
+						}
 
-					require.Equal(t, expected, result)
-				})
+						var res rowenc.EncDatumRows
+						for {
+							row, meta := out.Next()
+							if meta != nil && meta.Metrics == nil {
+								t.Fatalf("unexpected metadata %+v", meta)
+							}
+							if row == nil {
+								break
+							}
+							res = append(res, row)
+						}
+
+						// processOutputRows is a helper function that takes a stringified
+						// EncDatumRows output (e.g. [[1 2] [3 1]]) and returns a slice of
+						// stringified rows without brackets (e.g. []string{"1 2", "3 1"}).
+						processOutputRows := func(output string) []string {
+							// Comma-separate the rows.
+							output = strings.ReplaceAll(output, "] [", ",")
+							// Remove leading and trailing bracket.
+							output = strings.Trim(output, "[]")
+							// Split on the commas that were introduced and return that.
+							return strings.Split(output, ",")
+						}
+
+						result := processOutputRows(res.String(c.outputTypes))
+						expected := processOutputRows(c.expected)
+
+						if !reqOrdering {
+							// An ordering was not required, so sort both the result and
+							// expected slice to reuse equality comparison.
+							sort.Strings(result)
+							sort.Strings(expected)
+						}
+
+						require.Equal(t, expected, result)
+					})
+				}
 			}
 		}
 	}
