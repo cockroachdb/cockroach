@@ -706,7 +706,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"--associate-public-ip-address",
 		"--count", "1",
 		"--instance-type", machineType,
-		"--image-id", withFlagOverride(az.region.Name, &p.opts.ImageAMI),
+		"--image-id", withFlagOverride(az.region.AMI, &p.opts.ImageAMI),
 		"--key-name", keyName,
 		"--region", az.region.Name,
 		"--security-group-ids", az.region.SecurityGroup,
