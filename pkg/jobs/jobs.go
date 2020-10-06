@@ -217,16 +217,6 @@ func (j *Job) taskName() string {
 	return fmt.Sprintf(`job-%d`, *j.ID())
 }
 
-// Created records the creation of a new job in the system.jobs table and
-// remembers the assigned ID of the job in the Job. The job information is read
-// from the Record field at the time Created is called.
-func (j *Job) created(ctx context.Context) error {
-	if j.ID() != nil {
-		return errors.Errorf("job already created with ID %v", *j.ID())
-	}
-	return j.insert(ctx, j.registry.makeJobID(), nil /* lease */)
-}
-
 // Started marks the tracked job as started.
 func (j *Job) started(ctx context.Context) error {
 	return j.Update(ctx, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
@@ -752,65 +742,6 @@ func (j *Job) load(ctx context.Context) error {
 	j.mu.progress = *progress
 	j.createdBy = createdBy
 	return nil
-}
-
-func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
-	if j.id != nil {
-		// Already created - do nothing.
-		return nil
-	}
-
-	j.mu.payload.Lease = lease
-
-	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		// Note: although the following uses ReadTimestamp and
-		// ReadTimestamp can diverge from the value of now() throughout a
-		// transaction, this may be OK -- we merely required ModifiedMicro
-		// to be equal *or greater* than previously inserted timestamps
-		// computed by now(). For now ReadTimestamp can only move forward
-		// and the assertion ReadTimestamp >= now() holds at all times.
-		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
-		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
-		if err != nil {
-			return err
-		}
-		progressBytes, err := protoutil.Marshal(&j.mu.progress)
-		if err != nil {
-			return err
-		}
-
-		if j.createdBy == nil {
-			const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
-			_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusRunning, payloadBytes, progressBytes)
-			return err
-		}
-		const stmt = `
-INSERT INTO system.jobs (id, status, payload, progress, created_by_type, created_by_id) 
-VALUES ($1, $2, $3, $4, $5, $6)`
-		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
-			id, StatusRunning, payloadBytes, progressBytes, j.createdBy.Name, j.createdBy.ID)
-		return err
-
-	}); err != nil {
-		return err
-	}
-	j.id = &id
-	return nil
-}
-
-func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
-	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		if !md.Payload.Lease.Equal(oldLease) {
-			return errors.Errorf("current lease %v did not match expected lease %v",
-				md.Payload.Lease, oldLease)
-		}
-		md.Payload.Lease = j.registry.deprecatedNewLease()
-		if md.Payload.StartedMicros == 0 {
-			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
-		}
-		ju.UpdatePayload(md.Payload)
-		return nil
-	})
 }
 
 // UnmarshalPayload unmarshals and returns the Payload encoded in the input
