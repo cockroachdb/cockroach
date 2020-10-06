@@ -87,12 +87,6 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 
 	runCmd := []string{
 		"./workload run schemachange --verbose=1",
-		// The workload is still in development and occasionally discovers schema
-		// change errors so for now we don't fail on them but only on panics, server
-		// crashes, deadlocks, etc.
-		// TODO(spaskob): remove when https://github.com/cockroachdb/cockroach/issues/47430
-		// is closed.
-		"--tolerate-errors=true",
 		// Save the histograms so that they can be reported to https://roachperf.crdb.dev/.
 		" --histograms=" + perfArtifactsDir + "/stats.json",
 		fmt.Sprintf("--max-ops %d", maxOps),
