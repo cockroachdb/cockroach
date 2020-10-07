@@ -79,6 +79,7 @@ func (p projBitandInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -112,7 +113,7 @@ func (p projBitandInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -175,6 +176,7 @@ func (p projBitandInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -208,7 +210,7 @@ func (p projBitandInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -271,6 +273,7 @@ func (p projBitandInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -304,7 +307,7 @@ func (p projBitandInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -367,6 +370,7 @@ func (p projBitandInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -400,7 +404,7 @@ func (p projBitandInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -463,6 +467,7 @@ func (p projBitandInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -496,7 +501,7 @@ func (p projBitandInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -559,6 +564,7 @@ func (p projBitandInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -592,7 +598,7 @@ func (p projBitandInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -655,6 +661,7 @@ func (p projBitandInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -688,7 +695,7 @@ func (p projBitandInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -751,6 +758,7 @@ func (p projBitandInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -784,7 +792,7 @@ func (p projBitandInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -847,6 +855,7 @@ func (p projBitandInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -880,7 +889,7 @@ func (p projBitandInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -943,6 +952,7 @@ func (p projBitandDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -959,6 +969,9 @@ func (p projBitandDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -979,12 +992,15 @@ func (p projBitandDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -995,6 +1011,9 @@ func (p projBitandDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -1011,6 +1030,9 @@ func (p projBitandDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -1055,6 +1077,7 @@ func (p projBitorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1088,7 +1111,7 @@ func (p projBitorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1151,6 +1174,7 @@ func (p projBitorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1184,7 +1208,7 @@ func (p projBitorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1247,6 +1271,7 @@ func (p projBitorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1280,7 +1305,7 @@ func (p projBitorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1343,6 +1368,7 @@ func (p projBitorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1376,7 +1402,7 @@ func (p projBitorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1439,6 +1465,7 @@ func (p projBitorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1472,7 +1499,7 @@ func (p projBitorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1535,6 +1562,7 @@ func (p projBitorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1568,7 +1596,7 @@ func (p projBitorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1631,6 +1659,7 @@ func (p projBitorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1664,7 +1693,7 @@ func (p projBitorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1727,6 +1756,7 @@ func (p projBitorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1760,7 +1790,7 @@ func (p projBitorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1823,6 +1853,7 @@ func (p projBitorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1856,7 +1887,7 @@ func (p projBitorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1919,6 +1950,7 @@ func (p projBitorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -1935,6 +1967,9 @@ func (p projBitorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -1955,12 +1990,15 @@ func (p projBitorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1971,6 +2009,9 @@ func (p projBitorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -1987,6 +2028,9 @@ func (p projBitorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -2031,6 +2075,7 @@ func (p projBitxorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2064,7 +2109,7 @@ func (p projBitxorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2127,6 +2172,7 @@ func (p projBitxorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2160,7 +2206,7 @@ func (p projBitxorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2223,6 +2269,7 @@ func (p projBitxorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2256,7 +2303,7 @@ func (p projBitxorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2319,6 +2366,7 @@ func (p projBitxorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2352,7 +2400,7 @@ func (p projBitxorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2415,6 +2463,7 @@ func (p projBitxorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2448,7 +2497,7 @@ func (p projBitxorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2511,6 +2560,7 @@ func (p projBitxorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2544,7 +2594,7 @@ func (p projBitxorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2607,6 +2657,7 @@ func (p projBitxorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2640,7 +2691,7 @@ func (p projBitxorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2703,6 +2754,7 @@ func (p projBitxorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2736,7 +2788,7 @@ func (p projBitxorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2799,6 +2851,7 @@ func (p projBitxorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2832,7 +2885,7 @@ func (p projBitxorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2895,6 +2948,7 @@ func (p projBitxorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -2911,6 +2965,9 @@ func (p projBitxorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -2931,12 +2988,15 @@ func (p projBitxorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -2947,6 +3007,9 @@ func (p projBitxorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -2963,6 +3026,9 @@ func (p projBitxorDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -3007,6 +3073,7 @@ func (p projPlusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -3054,7 +3121,7 @@ func (p projPlusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -3131,6 +3198,7 @@ func (p projPlusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -3178,7 +3246,7 @@ func (p projPlusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -3255,6 +3323,7 @@ func (p projPlusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -3302,7 +3371,7 @@ func (p projPlusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -3379,6 +3448,7 @@ func (p projPlusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -3424,7 +3494,7 @@ func (p projPlusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -3499,6 +3569,7 @@ func (p projPlusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -3544,7 +3615,7 @@ func (p projPlusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -3619,6 +3690,7 @@ func (p projPlusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -3664,7 +3736,7 @@ func (p projPlusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -3739,6 +3811,7 @@ func (p projPlusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -3784,7 +3857,7 @@ func (p projPlusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -3859,6 +3932,7 @@ func (p projPlusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -3908,7 +3982,7 @@ func (p projPlusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -3987,6 +4061,7 @@ func (p projPlusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -4009,6 +4084,9 @@ func (p projPlusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -4035,12 +4113,15 @@ func (p projPlusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -4057,6 +4138,9 @@ func (p projPlusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -4079,6 +4163,9 @@ func (p projPlusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -4123,6 +4210,7 @@ func (p projPlusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -4168,7 +4256,7 @@ func (p projPlusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -4243,6 +4331,7 @@ func (p projPlusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -4288,7 +4377,7 @@ func (p projPlusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -4363,6 +4452,7 @@ func (p projPlusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -4408,7 +4498,7 @@ func (p projPlusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -4483,6 +4573,7 @@ func (p projPlusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -4532,7 +4623,7 @@ func (p projPlusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -4611,6 +4702,7 @@ func (p projPlusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -4633,6 +4725,9 @@ func (p projPlusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -4659,12 +4754,15 @@ func (p projPlusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -4681,6 +4779,9 @@ func (p projPlusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -4703,6 +4804,9 @@ func (p projPlusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -4747,6 +4851,7 @@ func (p projPlusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -4792,7 +4897,7 @@ func (p projPlusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -4867,6 +4972,7 @@ func (p projPlusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -4912,7 +5018,7 @@ func (p projPlusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -4987,6 +5093,7 @@ func (p projPlusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -5032,7 +5139,7 @@ func (p projPlusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -5107,6 +5214,7 @@ func (p projPlusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -5156,7 +5264,7 @@ func (p projPlusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -5235,6 +5343,7 @@ func (p projPlusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -5257,6 +5366,9 @@ func (p projPlusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -5283,12 +5395,15 @@ func (p projPlusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -5305,6 +5420,9 @@ func (p projPlusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -5327,6 +5445,9 @@ func (p projPlusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -5371,6 +5492,7 @@ func (p projPlusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -5410,7 +5532,7 @@ func (p projPlusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -5479,6 +5601,7 @@ func (p projPlusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Timestamp()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -5508,7 +5631,7 @@ func (p projPlusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -5567,6 +5690,7 @@ func (p projPlusIntervalTimestampOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Timestamp()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -5596,7 +5720,7 @@ func (p projPlusIntervalTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -5655,6 +5779,7 @@ func (p projPlusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -5684,7 +5809,7 @@ func (p projPlusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -5743,6 +5868,7 @@ func (p projPlusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -5765,6 +5891,9 @@ func (p projPlusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -5791,12 +5920,15 @@ func (p projPlusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -5813,6 +5945,9 @@ func (p projPlusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -5835,6 +5970,9 @@ func (p projPlusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -5879,6 +6017,7 @@ func (p projPlusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -5899,6 +6038,9 @@ func (p projPlusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -5923,12 +6065,15 @@ func (p projPlusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -5943,6 +6088,9 @@ func (p projPlusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -5963,6 +6111,9 @@ func (p projPlusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -6007,6 +6158,7 @@ func (p projPlusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -6027,6 +6179,9 @@ func (p projPlusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -6051,12 +6206,15 @@ func (p projPlusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -6071,6 +6229,9 @@ func (p projPlusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -6091,6 +6252,9 @@ func (p projPlusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -6135,6 +6299,7 @@ func (p projPlusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -6155,6 +6320,9 @@ func (p projPlusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -6179,12 +6347,15 @@ func (p projPlusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -6199,6 +6370,9 @@ func (p projPlusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -6219,6 +6393,9 @@ func (p projPlusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -6263,6 +6440,7 @@ func (p projPlusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -6283,6 +6461,9 @@ func (p projPlusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -6307,12 +6488,15 @@ func (p projPlusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -6327,6 +6511,9 @@ func (p projPlusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -6347,6 +6534,9 @@ func (p projPlusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -6391,6 +6581,7 @@ func (p projMinusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -6438,7 +6629,7 @@ func (p projMinusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -6515,6 +6706,7 @@ func (p projMinusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -6562,7 +6754,7 @@ func (p projMinusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -6639,6 +6831,7 @@ func (p projMinusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -6686,7 +6879,7 @@ func (p projMinusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -6763,6 +6956,7 @@ func (p projMinusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -6808,7 +7002,7 @@ func (p projMinusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -6883,6 +7077,7 @@ func (p projMinusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -6928,7 +7123,7 @@ func (p projMinusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -7003,6 +7198,7 @@ func (p projMinusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -7048,7 +7244,7 @@ func (p projMinusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -7123,6 +7319,7 @@ func (p projMinusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -7168,7 +7365,7 @@ func (p projMinusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -7243,6 +7440,7 @@ func (p projMinusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -7292,7 +7490,7 @@ func (p projMinusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -7371,6 +7569,7 @@ func (p projMinusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -7393,6 +7592,9 @@ func (p projMinusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -7419,12 +7621,15 @@ func (p projMinusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -7441,6 +7646,9 @@ func (p projMinusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -7463,6 +7671,9 @@ func (p projMinusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -7507,6 +7718,7 @@ func (p projMinusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -7552,7 +7764,7 @@ func (p projMinusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -7627,6 +7839,7 @@ func (p projMinusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -7672,7 +7885,7 @@ func (p projMinusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -7747,6 +7960,7 @@ func (p projMinusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -7792,7 +8006,7 @@ func (p projMinusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -7867,6 +8081,7 @@ func (p projMinusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -7916,7 +8131,7 @@ func (p projMinusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -7995,6 +8210,7 @@ func (p projMinusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -8017,6 +8233,9 @@ func (p projMinusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -8043,12 +8262,15 @@ func (p projMinusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -8065,6 +8287,9 @@ func (p projMinusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -8087,6 +8312,9 @@ func (p projMinusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -8131,6 +8359,7 @@ func (p projMinusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -8176,7 +8405,7 @@ func (p projMinusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -8251,6 +8480,7 @@ func (p projMinusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -8296,7 +8526,7 @@ func (p projMinusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -8371,6 +8601,7 @@ func (p projMinusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -8416,7 +8647,7 @@ func (p projMinusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -8491,6 +8722,7 @@ func (p projMinusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -8540,7 +8772,7 @@ func (p projMinusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -8619,6 +8851,7 @@ func (p projMinusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -8641,6 +8874,9 @@ func (p projMinusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -8667,12 +8903,15 @@ func (p projMinusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -8689,6 +8928,9 @@ func (p projMinusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -8711,6 +8953,9 @@ func (p projMinusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -8755,6 +9000,7 @@ func (p projMinusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -8794,7 +9040,7 @@ func (p projMinusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -8863,6 +9109,7 @@ func (p projMinusTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Timestamp()
 	col2 := vec2.Timestamp()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -8898,7 +9145,7 @@ func (p projMinusTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -8963,6 +9210,7 @@ func (p projMinusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Timestamp()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -8992,7 +9240,7 @@ func (p projMinusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -9051,6 +9299,7 @@ func (p projMinusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -9080,7 +9329,7 @@ func (p projMinusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -9139,6 +9388,7 @@ func (p projMinusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -9161,6 +9411,9 @@ func (p projMinusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -9187,12 +9440,15 @@ func (p projMinusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -9209,6 +9465,9 @@ func (p projMinusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9231,6 +9490,9 @@ func (p projMinusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := _nonDatumArgAsColdataExtDatum.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9275,6 +9537,7 @@ func (p projMinusDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -9291,6 +9554,9 @@ func (p projMinusDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -9311,12 +9577,15 @@ func (p projMinusDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -9327,6 +9596,9 @@ func (p projMinusDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9343,6 +9615,9 @@ func (p projMinusDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9387,6 +9662,7 @@ func (p projMinusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -9407,6 +9683,9 @@ func (p projMinusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -9431,12 +9710,15 @@ func (p projMinusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -9451,6 +9733,9 @@ func (p projMinusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9471,6 +9756,9 @@ func (p projMinusDatumIntervalOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9515,6 +9803,7 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Bytes()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -9535,6 +9824,9 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -9559,12 +9851,15 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -9579,6 +9874,9 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9599,6 +9897,9 @@ func (p projMinusDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9643,6 +9944,7 @@ func (p projMinusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -9663,6 +9965,9 @@ func (p projMinusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -9687,12 +9992,15 @@ func (p projMinusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -9707,6 +10015,9 @@ func (p projMinusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9727,6 +10038,9 @@ func (p projMinusDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9771,6 +10085,7 @@ func (p projMinusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -9791,6 +10106,9 @@ func (p projMinusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -9815,12 +10133,15 @@ func (p projMinusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -9835,6 +10156,9 @@ func (p projMinusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9855,6 +10179,9 @@ func (p projMinusDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9899,6 +10226,7 @@ func (p projMinusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -9919,6 +10247,9 @@ func (p projMinusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -9943,12 +10274,15 @@ func (p projMinusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -9963,6 +10297,9 @@ func (p projMinusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -9983,6 +10320,9 @@ func (p projMinusDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -10027,6 +10367,7 @@ func (p projMultDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -10074,7 +10415,7 @@ func (p projMultDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -10151,6 +10492,7 @@ func (p projMultDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -10198,7 +10540,7 @@ func (p projMultDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -10275,6 +10617,7 @@ func (p projMultDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -10322,7 +10665,7 @@ func (p projMultDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -10399,6 +10742,7 @@ func (p projMultDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -10444,7 +10788,7 @@ func (p projMultDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -10519,6 +10863,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -10558,7 +10903,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -10627,6 +10972,7 @@ func (p projMultInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -10688,7 +11034,7 @@ func (p projMultInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -10779,6 +11125,7 @@ func (p projMultInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -10840,7 +11187,7 @@ func (p projMultInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -10931,6 +11278,7 @@ func (p projMultInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -10992,7 +11340,7 @@ func (p projMultInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -11083,6 +11431,7 @@ func (p projMultInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -11132,7 +11481,7 @@ func (p projMultInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -11211,6 +11560,7 @@ func (p projMultInt16IntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -11240,7 +11590,7 @@ func (p projMultInt16IntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -11299,6 +11649,7 @@ func (p projMultInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -11360,7 +11711,7 @@ func (p projMultInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -11451,6 +11802,7 @@ func (p projMultInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -11512,7 +11864,7 @@ func (p projMultInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -11603,6 +11955,7 @@ func (p projMultInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -11664,7 +12017,7 @@ func (p projMultInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -11755,6 +12108,7 @@ func (p projMultInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -11804,7 +12158,7 @@ func (p projMultInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -11883,6 +12237,7 @@ func (p projMultInt32IntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -11912,7 +12267,7 @@ func (p projMultInt32IntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -11971,6 +12326,7 @@ func (p projMultInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -12032,7 +12388,7 @@ func (p projMultInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -12123,6 +12479,7 @@ func (p projMultInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -12184,7 +12541,7 @@ func (p projMultInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -12275,6 +12632,7 @@ func (p projMultInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -12336,7 +12694,7 @@ func (p projMultInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -12427,6 +12785,7 @@ func (p projMultInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -12476,7 +12835,7 @@ func (p projMultInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -12555,6 +12914,7 @@ func (p projMultInt64IntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -12584,7 +12944,7 @@ func (p projMultInt64IntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -12643,6 +13003,7 @@ func (p projMultFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -12682,7 +13043,7 @@ func (p projMultFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -12751,6 +13112,7 @@ func (p projMultFloat64IntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -12780,7 +13142,7 @@ func (p projMultFloat64IntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -12839,6 +13201,7 @@ func (p projMultIntervalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -12868,7 +13231,7 @@ func (p projMultIntervalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -12927,6 +13290,7 @@ func (p projMultIntervalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -12956,7 +13320,7 @@ func (p projMultIntervalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -13015,6 +13379,7 @@ func (p projMultIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -13044,7 +13409,7 @@ func (p projMultIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -13103,6 +13468,7 @@ func (p projMultIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -13132,7 +13498,7 @@ func (p projMultIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -13191,6 +13557,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -13230,7 +13597,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -13299,6 +13666,7 @@ func (p projDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -13354,7 +13722,7 @@ func (p projDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -13439,6 +13807,7 @@ func (p projDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -13494,7 +13863,7 @@ func (p projDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -13579,6 +13948,7 @@ func (p projDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -13634,7 +14004,7 @@ func (p projDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -13719,6 +14089,7 @@ func (p projDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -13772,7 +14143,7 @@ func (p projDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -13855,6 +14226,7 @@ func (p projDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -13908,7 +14280,7 @@ func (p projDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -13991,6 +14363,7 @@ func (p projDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -14044,7 +14417,7 @@ func (p projDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -14127,6 +14500,7 @@ func (p projDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -14180,7 +14554,7 @@ func (p projDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -14263,6 +14637,7 @@ func (p projDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -14320,7 +14695,7 @@ func (p projDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -14407,6 +14782,7 @@ func (p projDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -14460,7 +14836,7 @@ func (p projDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -14543,6 +14919,7 @@ func (p projDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -14596,7 +14973,7 @@ func (p projDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -14679,6 +15056,7 @@ func (p projDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -14732,7 +15110,7 @@ func (p projDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -14815,6 +15193,7 @@ func (p projDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -14872,7 +15251,7 @@ func (p projDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -14959,6 +15338,7 @@ func (p projDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -15012,7 +15392,7 @@ func (p projDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -15095,6 +15475,7 @@ func (p projDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -15148,7 +15529,7 @@ func (p projDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -15231,6 +15612,7 @@ func (p projDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -15284,7 +15666,7 @@ func (p projDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -15367,6 +15749,7 @@ func (p projDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -15424,7 +15807,7 @@ func (p projDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -15511,6 +15894,7 @@ func (p projDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -15558,7 +15942,7 @@ func (p projDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -15635,6 +16019,7 @@ func (p projDivIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -15672,7 +16057,7 @@ func (p projDivIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -15739,6 +16124,7 @@ func (p projDivIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -15776,7 +16162,7 @@ func (p projDivIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -15843,6 +16229,7 @@ func (p projFloorDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -15898,7 +16285,7 @@ func (p projFloorDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -15983,6 +16370,7 @@ func (p projFloorDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -16038,7 +16426,7 @@ func (p projFloorDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -16123,6 +16511,7 @@ func (p projFloorDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -16178,7 +16567,7 @@ func (p projFloorDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -16263,6 +16652,7 @@ func (p projFloorDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -16316,7 +16706,7 @@ func (p projFloorDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -16399,6 +16789,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -16442,7 +16833,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -16515,6 +16906,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -16558,7 +16950,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -16631,6 +17023,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -16674,7 +17067,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -16747,6 +17140,7 @@ func (p projFloorDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -16804,7 +17198,7 @@ func (p projFloorDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -16891,6 +17285,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -16934,7 +17329,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -17007,6 +17402,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -17050,7 +17446,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -17123,6 +17519,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -17166,7 +17563,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -17239,6 +17636,7 @@ func (p projFloorDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -17296,7 +17694,7 @@ func (p projFloorDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -17383,6 +17781,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -17426,7 +17825,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -17499,6 +17898,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -17542,7 +17942,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -17615,6 +18015,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -17658,7 +18059,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -17731,6 +18132,7 @@ func (p projFloorDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -17788,7 +18190,7 @@ func (p projFloorDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -17875,6 +18277,7 @@ func (p projFloorDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -17922,7 +18325,7 @@ func (p projFloorDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -17999,6 +18402,7 @@ func (p projModDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -18054,7 +18458,7 @@ func (p projModDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -18139,6 +18543,7 @@ func (p projModDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -18194,7 +18599,7 @@ func (p projModDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -18279,6 +18684,7 @@ func (p projModDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -18334,7 +18740,7 @@ func (p projModDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -18419,6 +18825,7 @@ func (p projModDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -18472,7 +18879,7 @@ func (p projModDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -18555,6 +18962,7 @@ func (p projModInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -18598,7 +19006,7 @@ func (p projModInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -18671,6 +19079,7 @@ func (p projModInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -18714,7 +19123,7 @@ func (p projModInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -18787,6 +19196,7 @@ func (p projModInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -18830,7 +19240,7 @@ func (p projModInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -18903,6 +19313,7 @@ func (p projModInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -18960,7 +19371,7 @@ func (p projModInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -19047,6 +19458,7 @@ func (p projModInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -19090,7 +19502,7 @@ func (p projModInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -19163,6 +19575,7 @@ func (p projModInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -19206,7 +19619,7 @@ func (p projModInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -19279,6 +19692,7 @@ func (p projModInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -19322,7 +19736,7 @@ func (p projModInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -19395,6 +19809,7 @@ func (p projModInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -19452,7 +19867,7 @@ func (p projModInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -19539,6 +19954,7 @@ func (p projModInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -19582,7 +19998,7 @@ func (p projModInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -19655,6 +20071,7 @@ func (p projModInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -19698,7 +20115,7 @@ func (p projModInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -19771,6 +20188,7 @@ func (p projModInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -19814,7 +20232,7 @@ func (p projModInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -19887,6 +20305,7 @@ func (p projModInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -19944,7 +20363,7 @@ func (p projModInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -20031,6 +20450,7 @@ func (p projModFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -20078,7 +20498,7 @@ func (p projModFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -20155,6 +20575,7 @@ func (p projPowDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -20202,7 +20623,7 @@ func (p projPowDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -20279,6 +20700,7 @@ func (p projPowDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -20326,7 +20748,7 @@ func (p projPowDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -20403,6 +20825,7 @@ func (p projPowDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -20450,7 +20873,7 @@ func (p projPowDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -20527,6 +20950,7 @@ func (p projPowDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -20572,7 +20996,7 @@ func (p projPowDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -20647,6 +21071,7 @@ func (p projPowInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -20704,7 +21129,7 @@ func (p projPowInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -20791,6 +21216,7 @@ func (p projPowInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -20848,7 +21274,7 @@ func (p projPowInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -20935,6 +21361,7 @@ func (p projPowInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -20992,7 +21419,7 @@ func (p projPowInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -21079,6 +21506,7 @@ func (p projPowInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -21128,7 +21556,7 @@ func (p projPowInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -21207,6 +21635,7 @@ func (p projPowInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -21264,7 +21693,7 @@ func (p projPowInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -21351,6 +21780,7 @@ func (p projPowInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -21408,7 +21838,7 @@ func (p projPowInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -21495,6 +21925,7 @@ func (p projPowInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -21552,7 +21983,7 @@ func (p projPowInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -21639,6 +22070,7 @@ func (p projPowInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -21688,7 +22120,7 @@ func (p projPowInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -21767,6 +22199,7 @@ func (p projPowInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -21824,7 +22257,7 @@ func (p projPowInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -21911,6 +22344,7 @@ func (p projPowInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -21968,7 +22402,7 @@ func (p projPowInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -22055,6 +22489,7 @@ func (p projPowInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -22112,7 +22547,7 @@ func (p projPowInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -22199,6 +22634,7 @@ func (p projPowInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -22248,7 +22684,7 @@ func (p projPowInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -22327,6 +22763,7 @@ func (p projPowFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -22366,7 +22803,7 @@ func (p projPowFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -22435,6 +22872,7 @@ func (p projConcatBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bytes()
 	col2 := vec2.Bytes()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -22474,7 +22912,7 @@ func (p projConcatBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -22543,6 +22981,7 @@ func (p projConcatDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -22559,6 +22998,9 @@ func (p projConcatDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -22579,12 +23021,15 @@ func (p projConcatDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -22595,6 +23040,9 @@ func (p projConcatDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -22611,6 +23059,9 @@ func (p projConcatDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, arg2)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -22655,6 +23106,7 @@ func (p projLShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -22700,7 +23152,7 @@ func (p projLShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -22775,6 +23227,7 @@ func (p projLShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -22820,7 +23273,7 @@ func (p projLShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -22895,6 +23348,7 @@ func (p projLShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -22940,7 +23394,7 @@ func (p projLShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -23015,6 +23469,7 @@ func (p projLShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -23060,7 +23515,7 @@ func (p projLShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -23135,6 +23590,7 @@ func (p projLShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -23180,7 +23636,7 @@ func (p projLShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -23255,6 +23711,7 @@ func (p projLShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -23300,7 +23757,7 @@ func (p projLShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -23375,6 +23832,7 @@ func (p projLShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -23420,7 +23878,7 @@ func (p projLShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -23495,6 +23953,7 @@ func (p projLShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -23540,7 +23999,7 @@ func (p projLShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -23615,6 +24074,7 @@ func (p projLShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -23660,7 +24120,7 @@ func (p projLShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -23735,6 +24195,7 @@ func (p projLShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -23755,6 +24216,9 @@ func (p projLShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -23779,12 +24243,15 @@ func (p projLShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -23799,6 +24266,9 @@ func (p projLShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -23819,6 +24289,9 @@ func (p projLShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -23863,6 +24336,7 @@ func (p projLShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -23883,6 +24357,9 @@ func (p projLShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -23907,12 +24384,15 @@ func (p projLShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -23927,6 +24407,9 @@ func (p projLShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -23947,6 +24430,9 @@ func (p projLShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -23991,6 +24477,7 @@ func (p projLShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -24011,6 +24498,9 @@ func (p projLShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -24035,12 +24525,15 @@ func (p projLShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -24055,6 +24548,9 @@ func (p projLShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -24075,6 +24571,9 @@ func (p projLShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -24119,6 +24618,7 @@ func (p projRShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -24164,7 +24664,7 @@ func (p projRShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -24239,6 +24739,7 @@ func (p projRShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -24284,7 +24785,7 @@ func (p projRShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -24359,6 +24860,7 @@ func (p projRShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -24404,7 +24906,7 @@ func (p projRShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -24479,6 +24981,7 @@ func (p projRShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -24524,7 +25027,7 @@ func (p projRShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -24599,6 +25102,7 @@ func (p projRShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -24644,7 +25148,7 @@ func (p projRShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -24719,6 +25223,7 @@ func (p projRShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -24764,7 +25269,7 @@ func (p projRShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -24839,6 +25344,7 @@ func (p projRShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -24884,7 +25390,7 @@ func (p projRShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -24959,6 +25465,7 @@ func (p projRShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -25004,7 +25511,7 @@ func (p projRShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -25079,6 +25586,7 @@ func (p projRShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -25124,7 +25632,7 @@ func (p projRShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -25199,6 +25707,7 @@ func (p projRShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -25219,6 +25728,9 @@ func (p projRShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -25243,12 +25755,15 @@ func (p projRShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -25263,6 +25778,9 @@ func (p projRShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25283,6 +25801,9 @@ func (p projRShiftDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25327,6 +25848,7 @@ func (p projRShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -25347,6 +25869,9 @@ func (p projRShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -25371,12 +25896,15 @@ func (p projRShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -25391,6 +25919,9 @@ func (p projRShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25411,6 +25942,9 @@ func (p projRShiftDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25455,6 +25989,7 @@ func (p projRShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -25475,6 +26010,9 @@ func (p projRShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -25499,12 +26037,15 @@ func (p projRShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -25519,6 +26060,9 @@ func (p projRShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25539,6 +26083,9 @@ func (p projRShiftDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25583,6 +26130,7 @@ func (p projJSONFetchValDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Bytes()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -25603,6 +26151,9 @@ func (p projJSONFetchValDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -25627,12 +26178,15 @@ func (p projJSONFetchValDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -25647,6 +26201,9 @@ func (p projJSONFetchValDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25667,6 +26224,9 @@ func (p projJSONFetchValDatumBytesOp) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25711,6 +26271,7 @@ func (p projJSONFetchValDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -25731,6 +26292,9 @@ func (p projJSONFetchValDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -25755,12 +26319,15 @@ func (p projJSONFetchValDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -25775,6 +26342,9 @@ func (p projJSONFetchValDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25795,6 +26365,9 @@ func (p projJSONFetchValDatumInt16Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25839,6 +26412,7 @@ func (p projJSONFetchValDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -25859,6 +26433,9 @@ func (p projJSONFetchValDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -25883,12 +26460,15 @@ func (p projJSONFetchValDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -25903,6 +26483,9 @@ func (p projJSONFetchValDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25923,6 +26506,9 @@ func (p projJSONFetchValDatumInt32Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -25967,6 +26553,7 @@ func (p projJSONFetchValDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -25987,6 +26574,9 @@ func (p projJSONFetchValDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
@@ -26011,12 +26601,15 @@ func (p projJSONFetchValDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+					if _res == tree.DNull {
+						_outNulls.SetNull(i)
+					}
 					projCol.Set(i, _res)
 
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -26031,6 +26624,9 @@ func (p projJSONFetchValDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -26051,6 +26647,9 @@ func (p projJSONFetchValDatumInt64Op) Next(ctx context.Context) coldata.Batch {
 				_res, err := arg1.(*coldataext.Datum).BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, _nonDatumArgAsDatum)
 				if err != nil {
 					colexecerror.ExpectedError(err)
+				}
+				if _res == tree.DNull {
+					_outNulls.SetNull(i)
 				}
 				projCol.Set(i, _res)
 
@@ -26095,6 +26694,7 @@ func (p projEQBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bool()
 	col2 := vec2.Bool()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -26152,7 +26752,7 @@ func (p projEQBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -26239,6 +26839,7 @@ func (p projEQBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bytes()
 	col2 := vec2.Bytes()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -26276,7 +26877,7 @@ func (p projEQBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -26343,6 +26944,7 @@ func (p projEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -26396,7 +26998,7 @@ func (p projEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -26479,6 +27081,7 @@ func (p projEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -26532,7 +27135,7 @@ func (p projEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -26615,6 +27218,7 @@ func (p projEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -26668,7 +27272,7 @@ func (p projEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -26751,6 +27355,7 @@ func (p projEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -26808,7 +27413,7 @@ func (p projEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -26895,6 +27500,7 @@ func (p projEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -26936,7 +27542,7 @@ func (p projEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -27007,6 +27613,7 @@ func (p projEQInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -27070,7 +27677,7 @@ func (p projEQInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -27163,6 +27770,7 @@ func (p projEQInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -27226,7 +27834,7 @@ func (p projEQInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -27319,6 +27927,7 @@ func (p projEQInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -27382,7 +27991,7 @@ func (p projEQInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -27475,6 +28084,7 @@ func (p projEQInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -27554,7 +28164,7 @@ func (p projEQInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -27663,6 +28273,7 @@ func (p projEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -27716,7 +28327,7 @@ func (p projEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -27799,6 +28410,7 @@ func (p projEQInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -27862,7 +28474,7 @@ func (p projEQInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -27955,6 +28567,7 @@ func (p projEQInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -28018,7 +28631,7 @@ func (p projEQInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -28111,6 +28724,7 @@ func (p projEQInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -28174,7 +28788,7 @@ func (p projEQInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -28267,6 +28881,7 @@ func (p projEQInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -28346,7 +28961,7 @@ func (p projEQInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -28455,6 +29070,7 @@ func (p projEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -28508,7 +29124,7 @@ func (p projEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -28591,6 +29207,7 @@ func (p projEQInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -28654,7 +29271,7 @@ func (p projEQInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -28747,6 +29364,7 @@ func (p projEQInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -28810,7 +29428,7 @@ func (p projEQInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -28903,6 +29521,7 @@ func (p projEQInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -28966,7 +29585,7 @@ func (p projEQInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -29059,6 +29678,7 @@ func (p projEQInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -29138,7 +29758,7 @@ func (p projEQInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -29247,6 +29867,7 @@ func (p projEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -29300,7 +29921,7 @@ func (p projEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -29383,6 +30004,7 @@ func (p projEQFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -29462,7 +30084,7 @@ func (p projEQFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -29571,6 +30193,7 @@ func (p projEQFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -29650,7 +30273,7 @@ func (p projEQFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -29759,6 +30382,7 @@ func (p projEQFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -29838,7 +30462,7 @@ func (p projEQFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -29947,6 +30571,7 @@ func (p projEQFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -30026,7 +30651,7 @@ func (p projEQFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -30135,6 +30760,7 @@ func (p projEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -30192,7 +30818,7 @@ func (p projEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -30279,6 +30905,7 @@ func (p projEQTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Timestamp()
 	col2 := vec2.Timestamp()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -30334,7 +30961,7 @@ func (p projEQTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -30419,6 +31046,7 @@ func (p projEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -30460,7 +31088,7 @@ func (p projEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -30531,6 +31159,7 @@ func (p projEQDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -30576,7 +31205,7 @@ func (p projEQDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -30651,6 +31280,7 @@ func (p projNEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bool()
 	col2 := vec2.Bool()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -30708,7 +31338,7 @@ func (p projNEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -30795,6 +31425,7 @@ func (p projNEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bytes()
 	col2 := vec2.Bytes()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -30832,7 +31463,7 @@ func (p projNEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -30899,6 +31530,7 @@ func (p projNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -30952,7 +31584,7 @@ func (p projNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -31035,6 +31667,7 @@ func (p projNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -31088,7 +31721,7 @@ func (p projNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -31171,6 +31804,7 @@ func (p projNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -31224,7 +31858,7 @@ func (p projNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -31307,6 +31941,7 @@ func (p projNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -31364,7 +31999,7 @@ func (p projNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -31451,6 +32086,7 @@ func (p projNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -31492,7 +32128,7 @@ func (p projNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -31563,6 +32199,7 @@ func (p projNEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -31626,7 +32263,7 @@ func (p projNEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -31719,6 +32356,7 @@ func (p projNEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -31782,7 +32420,7 @@ func (p projNEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -31875,6 +32513,7 @@ func (p projNEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -31938,7 +32577,7 @@ func (p projNEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -32031,6 +32670,7 @@ func (p projNEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -32110,7 +32750,7 @@ func (p projNEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -32219,6 +32859,7 @@ func (p projNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -32272,7 +32913,7 @@ func (p projNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -32355,6 +32996,7 @@ func (p projNEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -32418,7 +33060,7 @@ func (p projNEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -32511,6 +33153,7 @@ func (p projNEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -32574,7 +33217,7 @@ func (p projNEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -32667,6 +33310,7 @@ func (p projNEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -32730,7 +33374,7 @@ func (p projNEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -32823,6 +33467,7 @@ func (p projNEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -32902,7 +33547,7 @@ func (p projNEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -33011,6 +33656,7 @@ func (p projNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -33064,7 +33710,7 @@ func (p projNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -33147,6 +33793,7 @@ func (p projNEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -33210,7 +33857,7 @@ func (p projNEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -33303,6 +33950,7 @@ func (p projNEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -33366,7 +34014,7 @@ func (p projNEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -33459,6 +34107,7 @@ func (p projNEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -33522,7 +34171,7 @@ func (p projNEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -33615,6 +34264,7 @@ func (p projNEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -33694,7 +34344,7 @@ func (p projNEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -33803,6 +34453,7 @@ func (p projNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -33856,7 +34507,7 @@ func (p projNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -33939,6 +34590,7 @@ func (p projNEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -34018,7 +34670,7 @@ func (p projNEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -34127,6 +34779,7 @@ func (p projNEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -34206,7 +34859,7 @@ func (p projNEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -34315,6 +34968,7 @@ func (p projNEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -34394,7 +35048,7 @@ func (p projNEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -34503,6 +35157,7 @@ func (p projNEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -34582,7 +35237,7 @@ func (p projNEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -34691,6 +35346,7 @@ func (p projNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -34748,7 +35404,7 @@ func (p projNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -34835,6 +35491,7 @@ func (p projNETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Timestamp()
 	col2 := vec2.Timestamp()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -34890,7 +35547,7 @@ func (p projNETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -34975,6 +35632,7 @@ func (p projNEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -35016,7 +35674,7 @@ func (p projNEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -35087,6 +35745,7 @@ func (p projNEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -35132,7 +35791,7 @@ func (p projNEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -35207,6 +35866,7 @@ func (p projLTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bool()
 	col2 := vec2.Bool()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -35264,7 +35924,7 @@ func (p projLTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -35351,6 +36011,7 @@ func (p projLTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bytes()
 	col2 := vec2.Bytes()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -35388,7 +36049,7 @@ func (p projLTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -35455,6 +36116,7 @@ func (p projLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -35508,7 +36170,7 @@ func (p projLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -35591,6 +36253,7 @@ func (p projLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -35644,7 +36307,7 @@ func (p projLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -35727,6 +36390,7 @@ func (p projLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -35780,7 +36444,7 @@ func (p projLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -35863,6 +36527,7 @@ func (p projLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -35920,7 +36585,7 @@ func (p projLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -36007,6 +36672,7 @@ func (p projLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -36048,7 +36714,7 @@ func (p projLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -36119,6 +36785,7 @@ func (p projLTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -36182,7 +36849,7 @@ func (p projLTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -36275,6 +36942,7 @@ func (p projLTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -36338,7 +37006,7 @@ func (p projLTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -36431,6 +37099,7 @@ func (p projLTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -36494,7 +37163,7 @@ func (p projLTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -36587,6 +37256,7 @@ func (p projLTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -36666,7 +37336,7 @@ func (p projLTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -36775,6 +37445,7 @@ func (p projLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -36828,7 +37499,7 @@ func (p projLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -36911,6 +37582,7 @@ func (p projLTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -36974,7 +37646,7 @@ func (p projLTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -37067,6 +37739,7 @@ func (p projLTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -37130,7 +37803,7 @@ func (p projLTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -37223,6 +37896,7 @@ func (p projLTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -37286,7 +37960,7 @@ func (p projLTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -37379,6 +38053,7 @@ func (p projLTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -37458,7 +38133,7 @@ func (p projLTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -37567,6 +38242,7 @@ func (p projLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -37620,7 +38296,7 @@ func (p projLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -37703,6 +38379,7 @@ func (p projLTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -37766,7 +38443,7 @@ func (p projLTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -37859,6 +38536,7 @@ func (p projLTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -37922,7 +38600,7 @@ func (p projLTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -38015,6 +38693,7 @@ func (p projLTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -38078,7 +38757,7 @@ func (p projLTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -38171,6 +38850,7 @@ func (p projLTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -38250,7 +38930,7 @@ func (p projLTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -38359,6 +39039,7 @@ func (p projLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -38412,7 +39093,7 @@ func (p projLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -38495,6 +39176,7 @@ func (p projLTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -38574,7 +39256,7 @@ func (p projLTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -38683,6 +39365,7 @@ func (p projLTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -38762,7 +39445,7 @@ func (p projLTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -38871,6 +39554,7 @@ func (p projLTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -38950,7 +39634,7 @@ func (p projLTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -39059,6 +39743,7 @@ func (p projLTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -39138,7 +39823,7 @@ func (p projLTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -39247,6 +39932,7 @@ func (p projLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -39304,7 +39990,7 @@ func (p projLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -39391,6 +40077,7 @@ func (p projLTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Timestamp()
 	col2 := vec2.Timestamp()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -39446,7 +40133,7 @@ func (p projLTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -39531,6 +40218,7 @@ func (p projLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -39572,7 +40260,7 @@ func (p projLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -39643,6 +40331,7 @@ func (p projLTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -39688,7 +40377,7 @@ func (p projLTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -39763,6 +40452,7 @@ func (p projLEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bool()
 	col2 := vec2.Bool()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -39820,7 +40510,7 @@ func (p projLEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -39907,6 +40597,7 @@ func (p projLEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bytes()
 	col2 := vec2.Bytes()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -39944,7 +40635,7 @@ func (p projLEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -40011,6 +40702,7 @@ func (p projLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -40064,7 +40756,7 @@ func (p projLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -40147,6 +40839,7 @@ func (p projLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -40200,7 +40893,7 @@ func (p projLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -40283,6 +40976,7 @@ func (p projLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -40336,7 +41030,7 @@ func (p projLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -40419,6 +41113,7 @@ func (p projLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -40476,7 +41171,7 @@ func (p projLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -40563,6 +41258,7 @@ func (p projLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -40604,7 +41300,7 @@ func (p projLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -40675,6 +41371,7 @@ func (p projLEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -40738,7 +41435,7 @@ func (p projLEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -40831,6 +41528,7 @@ func (p projLEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -40894,7 +41592,7 @@ func (p projLEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -40987,6 +41685,7 @@ func (p projLEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -41050,7 +41749,7 @@ func (p projLEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -41143,6 +41842,7 @@ func (p projLEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -41222,7 +41922,7 @@ func (p projLEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -41331,6 +42031,7 @@ func (p projLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -41384,7 +42085,7 @@ func (p projLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -41467,6 +42168,7 @@ func (p projLEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -41530,7 +42232,7 @@ func (p projLEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -41623,6 +42325,7 @@ func (p projLEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -41686,7 +42389,7 @@ func (p projLEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -41779,6 +42482,7 @@ func (p projLEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -41842,7 +42546,7 @@ func (p projLEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -41935,6 +42639,7 @@ func (p projLEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -42014,7 +42719,7 @@ func (p projLEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -42123,6 +42828,7 @@ func (p projLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -42176,7 +42882,7 @@ func (p projLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -42259,6 +42965,7 @@ func (p projLEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -42322,7 +43029,7 @@ func (p projLEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -42415,6 +43122,7 @@ func (p projLEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -42478,7 +43186,7 @@ func (p projLEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -42571,6 +43279,7 @@ func (p projLEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -42634,7 +43343,7 @@ func (p projLEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -42727,6 +43436,7 @@ func (p projLEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -42806,7 +43516,7 @@ func (p projLEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -42915,6 +43625,7 @@ func (p projLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -42968,7 +43679,7 @@ func (p projLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -43051,6 +43762,7 @@ func (p projLEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -43130,7 +43842,7 @@ func (p projLEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -43239,6 +43951,7 @@ func (p projLEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -43318,7 +44031,7 @@ func (p projLEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -43427,6 +44140,7 @@ func (p projLEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -43506,7 +44220,7 @@ func (p projLEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -43615,6 +44329,7 @@ func (p projLEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -43694,7 +44409,7 @@ func (p projLEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -43803,6 +44518,7 @@ func (p projLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -43860,7 +44576,7 @@ func (p projLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -43947,6 +44663,7 @@ func (p projLETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Timestamp()
 	col2 := vec2.Timestamp()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -44002,7 +44719,7 @@ func (p projLETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -44087,6 +44804,7 @@ func (p projLEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -44128,7 +44846,7 @@ func (p projLEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -44199,6 +44917,7 @@ func (p projLEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -44244,7 +44963,7 @@ func (p projLEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -44319,6 +45038,7 @@ func (p projGTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bool()
 	col2 := vec2.Bool()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -44376,7 +45096,7 @@ func (p projGTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -44463,6 +45183,7 @@ func (p projGTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bytes()
 	col2 := vec2.Bytes()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -44500,7 +45221,7 @@ func (p projGTBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -44567,6 +45288,7 @@ func (p projGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -44620,7 +45342,7 @@ func (p projGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -44703,6 +45425,7 @@ func (p projGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -44756,7 +45479,7 @@ func (p projGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -44839,6 +45562,7 @@ func (p projGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -44892,7 +45616,7 @@ func (p projGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -44975,6 +45699,7 @@ func (p projGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -45032,7 +45757,7 @@ func (p projGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -45119,6 +45844,7 @@ func (p projGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -45160,7 +45886,7 @@ func (p projGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -45231,6 +45957,7 @@ func (p projGTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -45294,7 +46021,7 @@ func (p projGTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -45387,6 +46114,7 @@ func (p projGTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -45450,7 +46178,7 @@ func (p projGTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -45543,6 +46271,7 @@ func (p projGTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -45606,7 +46335,7 @@ func (p projGTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -45699,6 +46428,7 @@ func (p projGTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -45778,7 +46508,7 @@ func (p projGTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -45887,6 +46617,7 @@ func (p projGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -45940,7 +46671,7 @@ func (p projGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -46023,6 +46754,7 @@ func (p projGTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -46086,7 +46818,7 @@ func (p projGTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -46179,6 +46911,7 @@ func (p projGTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -46242,7 +46975,7 @@ func (p projGTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -46335,6 +47068,7 @@ func (p projGTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -46398,7 +47132,7 @@ func (p projGTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -46491,6 +47225,7 @@ func (p projGTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -46570,7 +47305,7 @@ func (p projGTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -46679,6 +47414,7 @@ func (p projGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -46732,7 +47468,7 @@ func (p projGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -46815,6 +47551,7 @@ func (p projGTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -46878,7 +47615,7 @@ func (p projGTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -46971,6 +47708,7 @@ func (p projGTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -47034,7 +47772,7 @@ func (p projGTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -47127,6 +47865,7 @@ func (p projGTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -47190,7 +47929,7 @@ func (p projGTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -47283,6 +48022,7 @@ func (p projGTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -47362,7 +48102,7 @@ func (p projGTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -47471,6 +48211,7 @@ func (p projGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -47524,7 +48265,7 @@ func (p projGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -47607,6 +48348,7 @@ func (p projGTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -47686,7 +48428,7 @@ func (p projGTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -47795,6 +48537,7 @@ func (p projGTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -47874,7 +48617,7 @@ func (p projGTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -47983,6 +48726,7 @@ func (p projGTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -48062,7 +48806,7 @@ func (p projGTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -48171,6 +48915,7 @@ func (p projGTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -48250,7 +48995,7 @@ func (p projGTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -48359,6 +49104,7 @@ func (p projGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -48416,7 +49162,7 @@ func (p projGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -48503,6 +49249,7 @@ func (p projGTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Timestamp()
 	col2 := vec2.Timestamp()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -48558,7 +49305,7 @@ func (p projGTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -48643,6 +49390,7 @@ func (p projGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -48684,7 +49432,7 @@ func (p projGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -48755,6 +49503,7 @@ func (p projGTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -48800,7 +49549,7 @@ func (p projGTDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -48875,6 +49624,7 @@ func (p projGEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bool()
 	col2 := vec2.Bool()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -48932,7 +49682,7 @@ func (p projGEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -49019,6 +49769,7 @@ func (p projGEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Bytes()
 	col2 := vec2.Bytes()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -49056,7 +49807,7 @@ func (p projGEBytesBytesOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -49123,6 +49874,7 @@ func (p projGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -49176,7 +49928,7 @@ func (p projGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -49259,6 +50011,7 @@ func (p projGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -49312,7 +50065,7 @@ func (p projGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -49395,6 +50148,7 @@ func (p projGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -49448,7 +50202,7 @@ func (p projGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -49531,6 +50285,7 @@ func (p projGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -49588,7 +50343,7 @@ func (p projGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -49675,6 +50430,7 @@ func (p projGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Decimal()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -49716,7 +50472,7 @@ func (p projGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -49787,6 +50543,7 @@ func (p projGEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -49850,7 +50607,7 @@ func (p projGEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -49943,6 +50700,7 @@ func (p projGEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -50006,7 +50764,7 @@ func (p projGEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -50099,6 +50857,7 @@ func (p projGEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -50162,7 +50921,7 @@ func (p projGEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -50255,6 +51014,7 @@ func (p projGEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -50334,7 +51094,7 @@ func (p projGEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -50443,6 +51203,7 @@ func (p projGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int16()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -50496,7 +51257,7 @@ func (p projGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -50579,6 +51340,7 @@ func (p projGEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -50642,7 +51404,7 @@ func (p projGEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -50735,6 +51497,7 @@ func (p projGEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -50798,7 +51561,7 @@ func (p projGEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -50891,6 +51654,7 @@ func (p projGEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -50954,7 +51718,7 @@ func (p projGEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -51047,6 +51811,7 @@ func (p projGEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -51126,7 +51891,7 @@ func (p projGEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -51235,6 +52000,7 @@ func (p projGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int32()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -51288,7 +52054,7 @@ func (p projGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -51371,6 +52137,7 @@ func (p projGEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -51434,7 +52201,7 @@ func (p projGEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -51527,6 +52294,7 @@ func (p projGEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -51590,7 +52358,7 @@ func (p projGEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -51683,6 +52451,7 @@ func (p projGEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -51746,7 +52515,7 @@ func (p projGEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -51839,6 +52608,7 @@ func (p projGEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -51918,7 +52688,7 @@ func (p projGEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -52027,6 +52797,7 @@ func (p projGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Int64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -52080,7 +52851,7 @@ func (p projGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -52163,6 +52934,7 @@ func (p projGEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int16()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -52242,7 +53014,7 @@ func (p projGEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -52351,6 +53123,7 @@ func (p projGEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int32()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -52430,7 +53203,7 @@ func (p projGEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -52539,6 +53312,7 @@ func (p projGEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Int64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -52618,7 +53392,7 @@ func (p projGEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -52727,6 +53501,7 @@ func (p projGEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Float64()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -52806,7 +53581,7 @@ func (p projGEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -52915,6 +53690,7 @@ func (p projGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Float64()
 	col2 := vec2.Decimal()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -52972,7 +53748,7 @@ func (p projGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -53059,6 +53835,7 @@ func (p projGETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Timestamp()
 	col2 := vec2.Timestamp()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -53114,7 +53891,7 @@ func (p projGETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -53199,6 +53976,7 @@ func (p projGEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Interval()
 	col2 := vec2.Interval()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -53240,7 +54018,7 @@ func (p projGEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -53311,6 +54089,7 @@ func (p projGEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1.Datum()
 	col2 := vec2.Datum()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		col1Nulls := vec1.Nulls()
 		col2Nulls := vec2.Nulls()
@@ -53356,7 +54135,7 @@ func (p projGEDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		projVec.SetNulls(col1Nulls.Or(col2Nulls))
+		projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
