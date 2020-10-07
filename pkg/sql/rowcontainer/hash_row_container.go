@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/errors"
 )
 
@@ -190,7 +191,8 @@ type HashMemRowContainer struct {
 	buckets map[string][]int
 	// bucketsAcc is the memory account for the buckets. The datums themselves
 	// are all in the MemRowContainer.
-	bucketsAcc mon.BoundAccount
+	bucketsAcc *mon.BoundAccount
+	arena      stringarena.Arena
 
 	// storedEqCols contains the indices of the columns of a row that are
 	// encoded and used as a key into buckets when adding a row.
@@ -204,10 +206,12 @@ var _ HashRowContainer = &HashMemRowContainer{}
 func MakeHashMemRowContainer(
 	rowContainer *MemRowContainer, memMonitor *mon.BytesMonitor,
 ) HashMemRowContainer {
+	bucketsAcc := memMonitor.MakeBoundAccount()
 	return HashMemRowContainer{
 		MemRowContainer: rowContainer,
 		buckets:         make(map[string][]int),
-		bucketsAcc:      memMonitor.MakeBoundAccount(),
+		bucketsAcc:      &bucketsAcc,
+		arena:           stringarena.Make(&bucketsAcc),
 	}
 }
 
@@ -262,11 +266,15 @@ func (h *HashMemRowContainer) addRowToBucket(
 		return err
 	}
 
-	bucket, ok := h.buckets[string(encoded)]
-
+	s := string(encoded)
+	bucket, seenPreviously := h.buckets[s]
 	usage := sizeOfRowIdx
-	if !ok {
-		usage += int64(len(encoded))
+
+	if !seenPreviously {
+		s, err = h.arena.AllocBytes(ctx, encoded)
+		if err != nil {
+			return err
+		}
 		usage += sizeOfBucket
 	}
 
@@ -274,7 +282,7 @@ func (h *HashMemRowContainer) addRowToBucket(
 		return err
 	}
 
-	h.buckets[string(encoded)] = append(bucket, rowIdx)
+	h.buckets[s] = append(bucket, rowIdx)
 	return nil
 }
 
