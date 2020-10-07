@@ -136,6 +136,9 @@ func findLibrary(libraryName string) (string, error) {
 	if local {
 		switch runtime.GOOS {
 		case "linux":
+		case "freebsd":
+		case "openbsd":
+		case "dragonfly":
 		case "windows":
 			suffix = ".dll"
 		case "darwin":
