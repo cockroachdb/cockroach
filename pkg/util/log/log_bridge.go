@@ -15,14 +15,21 @@ import (
 	"context"
 	"fmt"
 	stdLog "log"
+	"regexp"
 	"strconv"
+	"strings"
 )
 
 // NewStdLogger creates a *stdLog.Logger that forwards messages to the
 // CockroachDB logs with the specified severity.
 //
-// The prefix appears at the beginning of each generated log line.
+// The prefix should be the path of the package for which this logger
+// is used. The prefix will be concatenated directly with the name
+// of the file that triggered the logging.
 func NewStdLogger(severity Severity, prefix string) *stdLog.Logger {
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
 	return stdLog.New(logBridge(severity), prefix, stdLog.Lshortfile)
 }
 
@@ -52,9 +59,19 @@ func init() {
 	copyStandardLogTo("INFO")
 }
 
+var ignoredLogMessagesRe = regexp.MustCompile(
+	// The HTTP package complains when a client opens a TCP connection
+	// and immediately closes it. We don't care.
+	`^net/http.*:\d+\: http: TLS handshake error from .*: EOF\s*$`,
+)
+
 // Write parses the standard logging line and passes its components to the
 // logger for Severity(lb).
 func (lb logBridge) Write(b []byte) (n int, err error) {
+	if ignoredLogMessagesRe.Match(b) {
+		return len(b), nil
+	}
+
 	entry := MakeEntry(context.Background(),
 		Severity(lb), &mainLog.logCounter, 0, /* depth */
 		// Note: because the caller is using the stdLog interface, they are
@@ -67,7 +84,9 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 	if parts := bytes.SplitN(b, []byte{':'}, 3); len(parts) != 3 || len(parts[0]) < 1 || len(parts[2]) < 1 {
 		entry.Message = fmt.Sprintf("bad log format: %s", b)
 	} else {
-		entry.File = string(parts[0])
+		// We use a "(gostd)" prefix so that these log lines correctly point
+		// to the go standard library instead of our own source directory.
+		entry.File = "(gostd) " + string(parts[0])
 		entry.Message = string(parts[2][1 : len(parts[2])-1]) // skip leading space and trailing newline
 		entry.Line, err = strconv.ParseInt(string(parts[1]), 10, 64)
 		if err != nil {
