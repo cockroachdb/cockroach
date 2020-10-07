@@ -82,6 +82,10 @@ type Tracker struct {
 		leftMLAI, rightMLAI   map[roachpb.RangeID]ctpb.LAI
 		leftRef, rightRef     int
 		leftEpoch, rightEpoch ctpb.Epoch
+		// failedCloseAttempts keeps track of the number of attempts by the tracker
+		// that failed to close a timestamp due to an epoch mismatch or pending
+		// evaluations.
+		failedCloseAttempts int64
 	}
 }
 
@@ -191,6 +195,12 @@ func (t *Tracker) Close(
 ) (ts hlc.Timestamp, mlai map[roachpb.RangeID]ctpb.LAI, ok bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	defer func() {
+		if mlai == nil {
+			// Record if our attempt to close a timestamp fails.
+			t.mu.failedCloseAttempts++
+		}
+	}()
 
 	if log.V(3) {
 		log.Infof(context.TODO(),
@@ -291,6 +301,14 @@ func (t *Tracker) Track(ctx context.Context) (hlc.Timestamp, closedts.ReleaseFun
 	}
 
 	return minProp, release
+}
+
+// FailedCloseAttempts returns the numbers of attempts by the tracker that failed to
+// close a timestamp due to an epoch mismatch or pending evaluations.
+func (t *Tracker) FailedCloseAttempts() int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.mu.failedCloseAttempts
 }
 
 // release is the business logic to release properly account for the release of
