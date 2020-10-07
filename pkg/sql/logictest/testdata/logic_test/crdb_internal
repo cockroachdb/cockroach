@@ -682,9 +682,9 @@ SELECT * FROM t_53504
 query ITTTI colnames
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
 ----
-node_id  application_name     key                               statement_ids                                                                                         count
-1        test_txn_statistics  02c92b698a5cb4c59708e7de50bdbf53  {7d5470c38539309ff3b933fec35fefad,7d5470c38539309ff3b933fec35fefad,7d5470c38539309ff3b933fec35fefad}  1
-1        test_txn_statistics  5a29a80adae483c4cfa89f5b228682fb  {94a482186de515de23eca3d1b443e033}                                                                    1
-1        test_txn_statistics  8199fcfefafda1121b286c08b21559c3  {7d5470c38539309ff3b933fec35fefad}                                                                    1
-1        test_txn_statistics  cb83bd7423a1016e148d2d9a6d89427d  {7d5470c38539309ff3b933fec35fefad,7d5470c38539309ff3b933fec35fefad}                                   2
-1        test_txn_statistics  cd8858558756fb4a4917ccfface8c12b  {ca672b3b015c5f7ca3b4d8488eb2f528}                                                                    1
+node_id  application_name     key                   statement_ids                                                     count
+1        test_txn_statistics  4572719807723346491   {14727561584397653505,14727561584397653505}                       2
+1        test_txn_statistics  6826443595058283584   {14727561584397653505,14727561584397653505,14727561584397653505}  1
+1        test_txn_statistics  7134109142904971730   {14727561584397653517}                                            1
+1        test_txn_statistics  7134109142904971742   {14727561584397653505}                                            1
+1        test_txn_statistics  10166963080898232577  {2484845987516053214}                                             1

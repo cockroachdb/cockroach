@@ -158,7 +158,7 @@ message CollectedStatementStatistics {
   // ID is a hash of the statement key (query fingerprint, failure status,
   // implicit txn or not) which can be used to identify the statement
   // for instance in transaction statistics.
-  optional string id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "StmtID"];
+  optional uint64 id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "StmtID"];
   optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
   optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
 }
@@ -169,7 +169,7 @@ message CollectedStatementStatistics {
 message CollectedTransactionStatistics {
   // StatementIDs is the IDs of the statements which this transaction comprises,
   // in order.
-  repeated string statement_ids = 1 [(gogoproto.customname) = "StatementIDs", (gogoproto.casttype) = "StmtID"] ;
+  repeated uint64 statement_ids = 1 [(gogoproto.customname) = "StatementIDs", (gogoproto.casttype) = "StmtID"] ;
   // App is the name of the app which executed the transaction.
   optional string app = 2 [(gogoproto.nullable) = false];
   optional TransactionStatistics stats = 3[(gogoproto.nullable) = false];

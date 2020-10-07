@@ -1813,7 +1813,7 @@ information about the resources on a node used by that table.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | key | [StatementsResponse.ExtendedStatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey) |  |  |
-| id | [string](#cockroach.server.serverpb.StatementsResponse-string) |  |  |
+| id | [uint64](#cockroach.server.serverpb.StatementsResponse-uint64) |  |  |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.StatementStatistics) |  |  |
 
 

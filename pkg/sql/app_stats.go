@@ -44,14 +44,16 @@ type stmtKey struct {
 	implicitTxn    bool
 }
 
-const invalidStmtID = ""
+const invalidStmtID = 0
 
 // txnKey is the hashed string constructed using the individual statement IDs
 // that comprise the transaction.
-type txnKey string
+type txnKey uint64
 
 // appStats holds per-application statistics.
 type appStats struct {
+	// TODO(arul): This can be refactored to have a RWLock instead, and have all
+	// usages acquire a read lock whenever appropriate. See #55285.
 	syncutil.Mutex
 
 	st        *cluster.Settings
@@ -155,7 +157,10 @@ func (s stmtKey) String() string {
 
 // recordStatement saves per-statement statistics.
 //
-// samplePlanDescription can be nil, as these are only sampled periodically per unique fingerprint.
+// samplePlanDescription can be nil, as these are only sampled periodically
+// per unique fingerprint.
+// recordStatement always returns a valid stmtID corresponding to the given
+// stmt regardless of whether the statement is actually recorded or not.
 func (a *appStats) recordStatement(
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
@@ -168,28 +173,27 @@ func (a *appStats) recordStatement(
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
 ) roachpb.StmtID {
-	if !stmtStatsEnable.Get(&a.st.SV) {
-		return invalidStmtID
-	}
-
 	createIfNonExistent := true
-	// If the statement is below the latency threshold, we don't need to create
-	// an entry in the stmts map for it.
-	if t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV); t > 0 && t.Seconds() >= svcLat {
+	// If the statement is below the latency threshold, or stats aren't being
+	// recorded we don't need to create an entry in the stmts map for it. We do
+	// still need stmtID for transaction level metrics tracking.
+	t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV)
+	if !stmtStatsEnable.Get(&a.st.SV) || (t > 0 && t.Seconds() >= svcLat) {
 		createIfNonExistent = false
 	}
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(
+	s, stmtID := a.getStatsForStmt(
 		stmt, implicitTxn,
 		err, createIfNonExistent,
 	)
 
-	// This statement was below the latency threshold, and therefore shouldn't
-	// be recorded. We still need to return the statement ID though, for
-	// transaction level metrics tracking.
+	// This statement was below the latency threshold or sql stats aren't being
+	// recorded. Either way, we don't need to record anything in the stats object
+	// for this statement, though we do need to return the statement ID for
+	// transaction level metrics collection.
 	if !createIfNonExistent {
-		return s.ID
+		return stmtID
 	}
 
 	// Collect the per-statement statistics.
@@ -223,10 +227,12 @@ func (a *appStats) recordStatement(
 	return s.ID
 }
 
-// getStatsForStmt retrieves the per-stmt stat object.
+// getStatsForStmt retrieves the per-stmt stat object. Regardless of if a valid
+// stat object is returned or not, we always return the correct stmtID
+// for the given stmt.
 func (a *appStats) getStatsForStmt(
 	stmt *Statement, implicitTxn bool, err error, createIfNonexistent bool,
-) *stmtStats {
+) (*stmtStats, roachpb.StmtID) {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
 	key := stmtKey{
@@ -240,13 +246,19 @@ func (a *appStats) getStatsForStmt(
 		key.anonymizedStmt = anonymizeStmt(stmt.AST)
 	}
 
-	stmtID := constructStatementIDFromStmtKey(key)
-
-	return a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent)
+	// We first try and see if we can get by without creating a new entry for this
+	// key, as this allows us to not construct the statementID from scratch (which
+	// is an expensive operation)
+	s := a.getStatsForStmtWithKey(key, invalidStmtID, false /* createIfNonexistent */)
+	if s == nil {
+		stmtID := constructStatementIDFromStmtKey(key)
+		return a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent), stmtID
+	}
+	return s, s.ID
 }
 
 func (a *appStats) getStatsForStmtWithKey(
-	key stmtKey, ID roachpb.StmtID, createIfNonexistent bool,
+	key stmtKey, stmtID roachpb.StmtID, createIfNonexistent bool,
 ) *stmtStats {
 	a.Lock()
 	// Retrieve the per-statement statistic object, and create it if it
@@ -254,7 +266,7 @@ func (a *appStats) getStatsForStmtWithKey(
 	s, ok := a.stmts[key]
 	if !ok && createIfNonexistent {
 		s = &stmtStats{}
-		s.ID = ID
+		s.ID = stmtID
 		a.stmts[key] = s
 	}
 	a.Unlock()
@@ -299,7 +311,7 @@ func (a *appStats) Add(other *appStats) {
 
 	// Merge the statement stats.
 	for k, v := range statMap {
-		s := a.getStatsForStmtWithKey(k, v.ID, true)
+		s := a.getStatsForStmtWithKey(k, v.ID, true /* createIfNonexistent */)
 		s.mu.Lock()
 		// Note that we don't need to take a lock on v because
 		// no other thread knows about v yet.
@@ -436,7 +448,7 @@ func (a *appStats) shouldSaveLogicalPlanDescription(stmt *Statement, implicitTxn
 	// We don't know yet if we will hit an error, so we assume we don't. The worst
 	// that can happen is that for statements that always error out, we will
 	// always save the tree plan.
-	stats := a.getStatsForStmt(stmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
+	stats, _ := a.getStatsForStmt(stmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
