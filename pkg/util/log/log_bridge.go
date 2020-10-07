@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	stdLog "log"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -58,9 +59,19 @@ func init() {
 	copyStandardLogTo("INFO")
 }
 
+var ignoredLogMessagesRe = regexp.MustCompile(
+	// The HTTP package complains when a client opens a TCP connection
+	// and immediately closes it. We don't care.
+	`^net/http.*:\d+\: http: TLS handshake error from .*: EOF\s*$`,
+)
+
 // Write parses the standard logging line and passes its components to the
 // logger for Severity(lb).
 func (lb logBridge) Write(b []byte) (n int, err error) {
+	if ignoredLogMessagesRe.Match(b) {
+		return len(b), nil
+	}
+
 	entry := MakeEntry(context.Background(),
 		Severity(lb), &mainLog.logCounter, 0, /* depth */
 		// Note: because the caller is using the stdLog interface, they are
