@@ -76,6 +76,12 @@ type txnKVFetcher struct {
 	remainingBatches [][]byte
 	mon              *mon.BytesMonitor
 	acc              mon.BoundAccount
+	// bytesRead is the number of bytes read from disk of the responses that have
+	// been returned to the caller of txnKVFetcher.fetch so far.
+	bytesRead int64
+	// batchesRead is the number of kv batches (roundtrips) done by this fetcher
+	// so far.
+	batchesRead int64
 }
 
 var _ kvBatchFetcher = &txnKVFetcher{}
@@ -425,6 +431,7 @@ func (f *txnKVFetcher) nextBatch(
 	if len(f.remainingBatches) > 0 {
 		batch := f.remainingBatches[0]
 		f.remainingBatches = f.remainingBatches[1:]
+		f.bytesRead += int64(len(batch))
 		return true, nil, batch, f.origSpan, nil
 	}
 	if len(f.responses) > 0 {
@@ -439,12 +446,14 @@ func (f *txnKVFetcher) nextBatch(
 				batchResp = t.BatchResponses[0]
 				f.remainingBatches = t.BatchResponses[1:]
 			}
+			f.bytesRead += int64(len(batchResp))
 			return true, t.Rows, batchResp, origSpan, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
 				batchResp = t.BatchResponses[0]
 				f.remainingBatches = t.BatchResponses[1:]
 			}
+			f.bytesRead += int64(len(batchResp))
 			return true, t.Rows, batchResp, origSpan, nil
 		}
 	}
@@ -454,7 +463,40 @@ func (f *txnKVFetcher) nextBatch(
 	if err := f.fetch(ctx); err != nil {
 		return false, nil, nil, roachpb.Span{}, err
 	}
+	f.batchesRead++
 	return f.nextBatch(ctx)
+}
+
+// getBatches returns the total number of batches (kv roundtrips) we've had so
+// far.
+func (f *txnKVFetcher) getBatchesRead() int64 {
+	return f.batchesRead
+}
+
+// getBytesRead returns the total number of bytes we've read from disk so far.
+func (f *txnKVFetcher) getBytesRead() int64 {
+	// Note that, to get an accurate tally of the total number of bytes read by
+	// KV, which is the metric we really want to be exporting here, we need to add
+	// the number of bytes we've returned via fetch() so far to the sum of the
+	// sizes of the batches we've received from KV and buffered but have not yet
+	// returned via fetch().
+	ret := f.bytesRead
+	for i := range f.remainingBatches {
+		ret += int64(len(f.remainingBatches[i]))
+	}
+	for _, r := range f.responses {
+		switch t := r.GetInner().(type) {
+		case *roachpb.ScanResponse:
+			for _, r := range t.BatchResponses {
+				ret += int64(len(r))
+			}
+		case *roachpb.ReverseScanResponse:
+			for _, r := range t.BatchResponses {
+				ret += int64(len(r))
+			}
+		}
+	}
+	return ret
 }
 
 // close releases the resources of this txnKVFetcher.

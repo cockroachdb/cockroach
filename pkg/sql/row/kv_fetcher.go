@@ -29,7 +29,6 @@ type KVFetcher struct {
 	kvs []roachpb.KeyValue
 
 	batchResponse []byte
-	bytesRead     int64
 	Span          roachpb.Span
 	newSpan       bool
 }
@@ -61,7 +60,7 @@ func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
 
 // GetBytesRead returns the number of bytes read by this fetcher.
 func (f *KVFetcher) GetBytesRead() int64 {
-	return f.bytesRead
+	return f.kvBatchFetcher.getBytesRead()
 }
 
 // MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
@@ -120,7 +119,6 @@ func (f *KVFetcher) NextKV(
 			return false, kv, false, nil
 		}
 		f.newSpan = true
-		f.bytesRead += int64(len(f.batchResponse))
 	}
 }
 
@@ -146,6 +144,14 @@ func (f *SpanKVFetcher) nextBatch(
 	res := f.KVs
 	f.KVs = nil
 	return true, res, nil, roachpb.Span{}, nil
+}
+
+func (f *SpanKVFetcher) getBatchesRead() int64 {
+	return 0
+}
+
+func (f *SpanKVFetcher) getBytesRead() int64 {
+	return 0
 }
 
 func (f *SpanKVFetcher) close(context.Context) {}

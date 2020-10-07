@@ -80,6 +80,8 @@ const (
 	MaxDiskTagSuffix = "disk.max"
 	// bytesReadTagSuffix is the tag suffix for the bytes read stat.
 	bytesReadTagSuffix = "bytes.read"
+	// batchesReadTagSuffix is the tag suffix for the batches read stat.
+	batchesReadTagSuffix = "kvbatches.read"
 )
 
 // Stats is a utility method that returns a map of the InputStats` stats to
@@ -100,6 +102,8 @@ const (
 	MaxDiskQueryPlanSuffix = "max disk used"
 	// bytesReadQueryPlanSuffix is the tag suffix for the bytes read.
 	bytesReadQueryPlanSuffix = "bytes read"
+	// batchesReadQueryPlanSuffix is the tag suffix for the bytes read.
+	batchesReadQueryPlanSuffix = "kv batches read"
 )
 
 // StatsForQueryPlan is a utility method that returns a list of the InputStats'

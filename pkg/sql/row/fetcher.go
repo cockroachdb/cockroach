@@ -53,6 +53,12 @@ type kvBatchFetcher interface {
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
 		batchResponse []byte, origSpan roachpb.Span, err error)
 
+	// getBatchesRead returns the number of batches read by this fetcher so far.
+	getBatchesRead() int64
+	// getBytesRead returns the number of bytes read by this fetcher so far.
+	getBytesRead() int64
+	// close release the resources held by this fetcher. It must be called when the
+	// fetcher is no longer used.
 	close(ctx context.Context)
 }
 
@@ -1586,7 +1592,17 @@ func (rf *Fetcher) GetBytesRead() int64 {
 		// Not yet initialized.
 		return 0
 	}
-	return f.bytesRead
+	return f.kvBatchFetcher.getBytesRead()
+}
+
+// GetBatchesRead returns total number of batches read by the underlying KVFetcher.
+func (rf *Fetcher) GetBatchesRead() int64 {
+	f := rf.kvFetcher
+	if f == nil {
+		// Not yet initialized.
+		return 0
+	}
+	return f.kvBatchFetcher.getBatchesRead()
 }
 
 // Only unique secondary indexes have extra columns to decode (namely the

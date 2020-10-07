@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -281,6 +282,7 @@ const tableReaderTagPrefix = "tablereader."
 func (trs *TableReaderStats) Stats() map[string]string {
 	inputStatsMap := trs.InputStats.Stats(tableReaderTagPrefix)
 	inputStatsMap[tableReaderTagPrefix+bytesReadTagSuffix] = humanizeutil.IBytes(trs.BytesRead)
+	inputStatsMap[tableReaderTagPrefix+batchesReadTagSuffix] = strconv.Itoa(int(trs.BatchesRead))
 	return inputStatsMap
 }
 
@@ -289,6 +291,7 @@ func (trs *TableReaderStats) StatsForQueryPlan() []string {
 	return append(
 		trs.InputStats.StatsForQueryPlan("" /* prefix */),
 		fmt.Sprintf("%s: %s", bytesReadQueryPlanSuffix, humanizeutil.IBytes(trs.BytesRead)),
+		fmt.Sprintf("%s: %d", batchesReadQueryPlanSuffix, trs.BatchesRead),
 	)
 }
 
@@ -301,8 +304,9 @@ func (tr *tableReader) outputStatsToTrace() {
 	}
 	if sp := opentracing.SpanFromContext(tr.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, &TableReaderStats{
-			InputStats: is,
-			BytesRead:  tr.GetBytesRead(),
+			InputStats:  is,
+			BytesRead:   tr.GetBytesRead(),
+			BatchesRead: tr.fetcher.GetBatchesRead(),
 		})
 	}
 }

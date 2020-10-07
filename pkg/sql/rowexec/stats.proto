@@ -28,13 +28,17 @@ message InputStats {
 message TableReaderStats {
   InputStats input_stats = 1 [(gogoproto.nullable) = false];
   int64 bytes_read = 2;
+  int64 batches_read = 3;
 }
 
 // JoinReaderStats are the stats collected during a JoinReader run.
 message JoinReaderStats {
   InputStats input_stats = 1 [(gogoproto.nullable) = false];
-  InputStats index_lookup_stats = 2 [(gogoproto.nullable) = false];
+  reserved 2;
   reserved 3;
+  InputStats index_lookup_stats = 4 [(gogoproto.nullable) = false];
+  int64 index_bytes_read = 5;
+  int64 index_batches_read = 6;
 }
 
 // HashJoinerStats are the stats collected during a hashJoiner run.

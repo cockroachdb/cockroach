@@ -51,7 +51,11 @@ type rowFetcher interface {
 	// PartialKey is not stat-related but needs to be supported.
 	PartialKey(int) (roachpb.Key, error)
 	Reset()
+	// GetBytesRead returns the total number of bytes read by this fetcher.
 	GetBytesRead() int64
+	// GetBatchesRead returns the total number of batches read by this fetcher,
+	// aka the number of times this fetcher has invoked its underlying sender.
+	GetBatchesRead() int64
 	NextRowWithErrors(context.Context) (rowenc.EncDatumRow, error)
 	// Close releases any resources held by this fetcher.
 	Close(ctx context.Context)
