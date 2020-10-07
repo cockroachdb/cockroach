@@ -279,7 +279,7 @@ name ::=
 	| col_name_keyword
 
 privileges ::=
-	'ALL'
+	'ALL' opt_privileges_clause
 	| privilege_list
 
 targets ::=
@@ -963,6 +963,7 @@ unreserved_keyword ::=
 	| 'PREPARE'
 	| 'PRESERVE'
 	| 'PRIORITY'
+	| 'PRIVILEGES'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -1129,6 +1130,10 @@ col_name_keyword ::=
 	| 'VARCHAR'
 	| 'VIRTUAL'
 	| 'WORK'
+
+opt_privileges_clause ::=
+	'PRIVILEGES'
+	| 
 
 complex_table_pattern ::=
 	complex_db_object_name
