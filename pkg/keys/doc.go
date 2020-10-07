@@ -215,6 +215,7 @@ var _ = [...]interface{}{
 	StoreHLCUpperBoundKey,       // "hlcu"
 	StoreIdentKey,               // "iden"
 	StoreLastUpKey,              // "uptm"
+	StoreCachedSettingsKey,      // "stng"
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
 	// keys, and non-system tenant SQL keys.
