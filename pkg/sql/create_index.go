@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -253,6 +254,9 @@ func MakeIndexDescriptor(
 // in the table and are not being dropped prior to attempting to add the index.
 func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemList) error {
 	for _, column := range columns {
+		if column.Expr != nil {
+			return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+		}
 		_, dropping, err := desc.FindColumnByName(column.Column)
 		if err != nil {
 			return err

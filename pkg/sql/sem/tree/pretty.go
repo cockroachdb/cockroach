@@ -1600,28 +1600,6 @@ func (node *LikeTableDef) doc(p *PrettyCfg) pretty.Doc {
 	return d
 }
 
-func (node *IndexElem) doc(p *PrettyCfg) pretty.Doc {
-	d := p.Doc(&node.Column)
-	if node.Direction != DefaultDirection {
-		d = pretty.ConcatSpace(d, pretty.Keyword(node.Direction.String()))
-	}
-	if node.NullsOrder != DefaultNullsOrder {
-		d = pretty.ConcatSpace(d, pretty.Keyword(node.NullsOrder.String()))
-	}
-	return d
-}
-
-func (node *IndexElemList) doc(p *PrettyCfg) pretty.Doc {
-	if node == nil || len(*node) == 0 {
-		return pretty.Nil
-	}
-	d := make([]pretty.Doc, len(*node))
-	for i := range *node {
-		d[i] = p.Doc(&(*node)[i])
-	}
-	return p.commaSeparated(d...)
-}
-
 func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// [INVERTED] INDEX [name] (columns...)
