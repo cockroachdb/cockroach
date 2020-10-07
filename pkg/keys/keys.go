@@ -105,6 +105,32 @@ func StoreSuggestedCompactionKeyPrefix() roachpb.Key {
 	return MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
 }
 
+// StoreCachedSettingsKey returns a store-local key for store's cached settings.
+func StoreCachedSettingsKey(settingKey roachpb.Key) roachpb.Key {
+	return MakeStoreKey(localStoreCachedSettingsSuffix, encoding.EncodeBytesAscending(nil, settingKey))
+}
+
+// DecodeStoreCachedSettingsKey returns the setting's key of the cached settings kvs.
+func DecodeStoreCachedSettingsKey(key roachpb.Key) (settingKey roachpb.Key, err error) {
+	var suffix, detail roachpb.RKey
+	suffix, detail, err = DecodeStoreKey(key)
+	if err != nil {
+		return nil, err
+	}
+	if !suffix.Equal(localStoreCachedSettingsSuffix) {
+		return nil, errors.Errorf(
+			"key with suffix %q != %q",
+			suffix,
+			localStoreCachedSettingsSuffix,
+		)
+	}
+	detail, settingKey, err = encoding.DecodeBytesAscending(detail, nil)
+	if len(detail) != 0 {
+		return nil, errors.Errorf("invalid key has trailing garbage: %q", detail)
+	}
+	return
+}
+
 // NodeLivenessKey returns the key for the node liveness record.
 func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
 	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)

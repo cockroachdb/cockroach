@@ -50,6 +50,14 @@ func TestStoreKeyEncodeDecode(t *testing.T) {
 	}
 }
 
+func TestStoreCachedSettingsKeyDecode(t *testing.T) {
+	origSettingKey := roachpb.Key("testSettingKey")
+	actualKey := StoreCachedSettingsKey(origSettingKey)
+	settingKey, err := DecodeStoreCachedSettingsKey(actualKey)
+	require.NoError(t, err)
+	require.True(t, settingKey.Equal(origSettingKey))
+}
+
 // TestLocalKeySorting is a sanity check to make sure that
 // the non-replicated part of a store sorts before the meta.
 func TestKeySorting(t *testing.T) {
