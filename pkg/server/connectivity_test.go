@@ -20,7 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -29,7 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 // TestClusterConnectivity sets up an uninitialized cluster with custom join
@@ -331,4 +336,57 @@ func TestJoinVersionGate(t *testing.T) {
 	if err := serv.Start(); !errors.Is(errors.Cause(err), server.ErrIncompatibleBinaryVersion) {
 		t.Fatalf("expected error %s, got %v", server.ErrIncompatibleBinaryVersion.Error(), err.Error())
 	}
+}
+
+func TestDecommissionedNodeCannotConnect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	numNodes := 3
+	tcArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	for _, status := range []kvserverpb.MembershipStatus{
+		kvserverpb.MembershipStatus_DECOMMISSIONING, kvserverpb.MembershipStatus_DECOMMISSIONED,
+	} {
+		require.NoError(t, tc.Servers[0].Decommission(ctx, status, []roachpb.NodeID{3}))
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		for _, idx := range []int{0, 1} {
+			clusterSrv := tc.Server(idx)
+			decomSrv := tc.Server(2)
+
+			// Within a short period of time, the cluster (n1, n2) will refuse to reach out to n3.
+			{
+				_, err := clusterSrv.RPCContext().GRPCDialNode(
+					decomSrv.RPCAddr(), decomSrv.NodeID(), rpc.DefaultClass,
+				).Connect(ctx)
+				cause := errors.UnwrapAll(err)
+				s, ok := grpcstatus.FromError(cause)
+				if !ok || s.Code() != codes.PermissionDenied {
+					return errors.Errorf("expected permission denied for n%d->n%d, got %v", clusterSrv.NodeID(), decomSrv.NodeID(), err)
+				}
+			}
+
+			// And similarly, n3 will be refused by n1, n2.
+			{
+				_, err := decomSrv.RPCContext().GRPCDialNode(
+					clusterSrv.RPCAddr(), decomSrv.NodeID(), rpc.DefaultClass,
+				).Connect(ctx)
+				cause := errors.UnwrapAll(err)
+				s, ok := grpcstatus.FromError(cause)
+				if !ok || s.Code() != codes.PermissionDenied {
+					return errors.Errorf("expected permission denied for n%d->n%d, got %v", decomSrv.NodeID(), clusterSrv.NodeID(), err)
+				}
+			}
+		}
+		return nil
+	})
 }
