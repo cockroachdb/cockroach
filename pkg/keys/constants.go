@@ -199,6 +199,12 @@ var (
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
+	// localStoreCachedSettingsSuffix stores the cached settings for node.
+	localStoreCachedSettingsSuffix = []byte("stng")
+	// LocalStoreCachedSettingsKeyMin is the start of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMin = MakeStoreKey(localStoreCachedSettingsSuffix, nil)
+	// LocalStoreCachedSettingsKeyMax is the end of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
 	// keys, and non-system tenant SQL keys.
