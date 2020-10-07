@@ -387,6 +387,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RenewalDuration:         nlRenewal,
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		OnNodeDecommissioned: func(liveness kvserverpb.Liveness) {
+			if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
+				knobs.OnDecommissionedCallback(liveness)
+			}
+		},
 	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
@@ -1590,11 +1595,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 				return s.WriteLastUpTimestamp(ctx, now)
 			}); err != nil {
 				log.Warningf(ctx, "writing last up timestamp: %v", err)
-			}
-		},
-		OnNodeDecommissioned: func(liveness kvserverpb.Liveness) {
-			if knobs, ok := s.cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
-				knobs.OnDecommissionedCallback(liveness)
 			}
 		},
 	})
