@@ -54,13 +54,19 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema)
 	case catalog.SchemaUserDefined:
 		desc := schema.Desc.(*schemadesc.Mutable)
-		// The user must be the owner of the schema to modify it.
-		hasOwnership, err := p.HasOwnership(ctx, desc)
+		// The user must be a superuser or the owner of the schema to modify it.
+		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if !hasOwnership {
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "must be owner of schema %q", desc.Name)
+		if !hasAdmin {
+			hasOwnership, err := p.HasOwnership(ctx, desc)
+			if err != nil {
+				return nil, err
+			}
+			if !hasOwnership {
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "must be owner of schema %q", desc.Name)
+			}
 		}
 		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaAlter)
 		return &alterSchemaNode{n: n, db: db, desc: desc}, nil
@@ -89,17 +95,12 @@ func (p *planner) alterSchemaOwner(
 ) error {
 	privs := scDesc.GetPrivileges()
 
-	hasOwnership, err := p.HasOwnership(ctx, scDesc)
-	if err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, scDesc, newOwner); err != nil {
 		return err
 	}
 
-	if err := p.checkCanAlterToNewOwner(ctx, scDesc, privs, newOwner, hasOwnership); err != nil {
-		return err
-	}
-
-	// The new owner must also have CREATE privilege on the schema's database.
-	if err := p.CheckPrivilegeForUser(ctx, db, privilege.CREATE, newOwner); err != nil {
+	// The user must also have CREATE privilege on the schema's database.
+	if err := p.CheckPrivilege(ctx, db, privilege.CREATE); err != nil {
 		return err
 	}
 
