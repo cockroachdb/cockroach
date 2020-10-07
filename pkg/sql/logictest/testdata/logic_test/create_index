@@ -23,6 +23,24 @@ CREATE INDEX bar ON t (c)
 statement error index \"bar\" contains duplicate column \"b\"
 CREATE INDEX bar ON t (b, b);
 
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE INDEX bar ON t ((a+b))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE INDEX bar ON t (abs(b))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE UNIQUE INDEX bar ON t (abs(b))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE INVERTED INDEX bar ON t ((ARRAY[a,b]))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE TABLE t2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
+
+statement error pgcode 0A000 only simple columns are supported as index elements
+CREATE TABLE t2 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
+
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----

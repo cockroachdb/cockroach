@@ -6801,13 +6801,15 @@ index_params:
 index_elem:
   func_expr_windowless index_elem_options
   {
-    /* FORCE DOC */
-    return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", $1))
+    e := $2.idxElem()
+    e.Expr = $1.expr()
+    $$.val = e
   }
 | '(' a_expr ')' index_elem_options
   {
-    /* FORCE DOC */
-    return unimplementedWithIssueDetail(sqllex, 9682, fmt.Sprintf("%T", $2))
+    e := $4.idxElem()
+    e.Expr = $2.expr()
+    $$.val = e
   }
 | name index_elem_options
   {

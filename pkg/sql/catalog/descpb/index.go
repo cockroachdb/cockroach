@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // RunOverAllColumns applies its argument fn to each of the column IDs in desc.
@@ -89,6 +90,9 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	desc.ColumnNames = make([]string, 0, len(elems))
 	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
+		if c.Expr != nil {
+			return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+		}
 		desc.ColumnNames = append(desc.ColumnNames, string(c.Column))
 		switch c.Direction {
 		case tree.Ascending, tree.DefaultDirection:
