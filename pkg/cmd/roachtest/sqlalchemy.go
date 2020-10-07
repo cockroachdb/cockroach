@@ -83,7 +83,7 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 	}
 
 	if err := repeatRunE(ctx, c, node, "install pytest", `
-		sudo pip3 install --upgrade --force-reinstall setuptools pytest pytest-xdist psycopg2
+		sudo pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2
 	`); err != nil {
 		t.Fatal(err)
 	}
