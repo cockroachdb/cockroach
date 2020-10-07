@@ -169,7 +169,9 @@ var djangoBlocklists = blocklistsForVersion{
 // Maintain that this list is alphabetized.
 var djangoBlocklist20_2 = blocklist{}
 
-var djangoBlocklist20_1 = blocklist{}
+var djangoBlocklist20_1 = blocklist{
+	"inspectdb.tests.InspectDBTestCase.test_json_field": "unknown",
+}
 
 var djangoIgnoreList20_2 = djangoIgnoreList20_1
 
