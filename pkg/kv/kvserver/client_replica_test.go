@@ -1850,15 +1850,15 @@ func TestSystemZoneConfigs(t *testing.T) {
 	waitForReplicas := func() error {
 		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
 		for _, s := range tc.Servers {
-			if err := kvserver.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) (bool, error) {
+			if err := kvserver.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
 				if len(desc.Replicas().Learners()) > 0 {
-					return false, fmt.Errorf("descriptor contains learners: %v", desc)
+					return fmt.Errorf("descriptor contains learners: %v", desc)
 				}
 				if existing, ok := replicas[desc.RangeID]; ok && !existing.Equal(&desc) {
-					return false, fmt.Errorf("mismatch between\n%s\n%s", &existing, &desc)
+					return fmt.Errorf("mismatch between\n%s\n%s", &existing, &desc)
 				}
 				replicas[desc.RangeID] = desc
-				return false, nil
+				return nil
 			}); err != nil {
 				return err
 			}

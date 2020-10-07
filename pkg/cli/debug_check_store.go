@@ -166,9 +166,9 @@ func checkStoreRangeStats(
 
 	go func() {
 		if err := kvserver.IterateRangeDescriptors(ctx, eng,
-			func(desc roachpb.RangeDescriptor) (bool, error) {
+			func(desc roachpb.RangeDescriptor) error {
 				inCh <- checkInput{eng: eng, desc: &desc, sl: stateloader.Make(desc.RangeID)}
-				return false, nil
+				return nil
 			}); err != nil {
 			outCh <- checkResult{err: err}
 		}
@@ -238,41 +238,41 @@ func checkStoreRaftState(
 	}
 
 	if _, err := storage.MVCCIterate(ctx, db, start, end, hlc.MaxTimestamp,
-		storage.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) (bool, error) {
+		storage.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) error {
 			rangeID, _, suffix, detail, err := keys.DecodeRangeIDKey(kv.Key)
 			if err != nil {
-				return false, err
+				return err
 			}
 
 			switch {
 			case bytes.Equal(suffix, keys.LocalRaftHardStateSuffix):
 				var hs raftpb.HardState
 				if err := kv.Value.GetProto(&hs); err != nil {
-					return false, err
+					return err
 				}
 				getReplicaInfo(rangeID).committedIndex = hs.Commit
 			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateLegacySuffix):
 				var trunc roachpb.RaftTruncatedState
 				if err := kv.Value.GetProto(&trunc); err != nil {
-					return false, err
+					return err
 				}
 				getReplicaInfo(rangeID).truncatedIndex = trunc.Index
 			case bytes.Equal(suffix, keys.LocalRangeAppliedStateSuffix):
 				var state enginepb.RangeAppliedState
 				if err := kv.Value.GetProto(&state); err != nil {
-					return false, err
+					return err
 				}
 				getReplicaInfo(rangeID).appliedIndex = state.RaftAppliedIndex
 			case bytes.Equal(suffix, keys.LocalRaftAppliedIndexLegacySuffix):
 				idx, err := kv.Value.GetInt()
 				if err != nil {
-					return false, err
+					return err
 				}
 				getReplicaInfo(rangeID).appliedIndex = uint64(idx)
 			case bytes.Equal(suffix, keys.LocalRaftLogSuffix):
 				_, index, err := encoding.DecodeUint64Ascending(detail)
 				if err != nil {
-					return false, err
+					return err
 				}
 				ri := getReplicaInfo(rangeID)
 				if ri.firstIndex == 0 {
@@ -287,7 +287,7 @@ func checkStoreRaftState(
 				}
 			}
 
-			return false, nil
+			return nil
 		}); err != nil {
 		return err
 	}

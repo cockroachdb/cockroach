@@ -104,15 +104,15 @@ func (sc *AbortSpan) Iterate(
 	ctx context.Context, reader storage.Reader, f func(roachpb.Key, roachpb.AbortSpanEntry) error,
 ) error {
 	_, err := storage.MVCCIterate(ctx, reader, sc.min(), sc.max(), hlc.Timestamp{}, storage.MVCCScanOptions{},
-		func(kv roachpb.KeyValue) (bool, error) {
+		func(kv roachpb.KeyValue) error {
 			var entry roachpb.AbortSpanEntry
 			if _, err := keys.DecodeAbortSpanKey(kv.Key, nil); err != nil {
-				return false, err
+				return err
 			}
 			if err := kv.Value.GetProto(&entry); err != nil {
-				return false, err
+				return err
 			}
-			return false, f(kv.Key, entry)
+			return f(kv.Key, entry)
 		})
 	return err
 }

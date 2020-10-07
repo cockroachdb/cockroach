@@ -377,13 +377,13 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	logEntries := make([][]byte, 0, preallocSize)
 
 	var raftLogBytes int64
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+	scanFunc := func(kv roachpb.KeyValue) error {
 		bytes, err := kv.Value.GetBytes()
 		if err == nil {
 			logEntries = append(logEntries, bytes)
 			raftLogBytes += int64(len(bytes))
 		}
-		return false, err
+		return err
 	}
 
 	rangeID := header.State.Desc.RangeID
