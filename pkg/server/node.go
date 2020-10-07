@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1175,4 +1176,123 @@ func (n *Node) Join(
 		StoreID:       int32(storeID),
 		ActiveVersion: &activeVersion.Version,
 	}, nil
+}
+
+func (n *Node) UnsafeHealRange(
+	ctx context.Context, req *roachpb.UnsafeHealRangeRequest,
+) (_ *roachpb.UnsafeHealRangeResponse, rErr error) {
+	// TODO(tbg): handle the (more complicated) case in which the range to be
+	// recovered is a meta range.
+	var exp []byte
+	var desc roachpb.RangeDescriptor
+	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+			// TODO(tbg): paginate.
+			Key:    roachpb.KeyMin,
+			EndKey: roachpb.KeyMax,
+		})
+		if err != nil {
+			return err
+		}
+
+		for i := range kvs {
+			if err := kvs[i].Value.GetProto(&desc); err != nil {
+				return err
+			}
+			if desc.RangeID == req.RangeID {
+				exp = kvs[i].Value.TagAndDataBytes()
+				return nil
+			}
+		}
+		return errors.Newf("r%d not found", req.RangeID)
+	}); err != nil {
+		return nil, err
+	}
+
+	var s *kvserver.Store
+	if err := n.stores.VisitStores(func(inner *kvserver.Store) error {
+		if s == nil {
+			s = inner
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	storeID, nodeID := s.Ident.StoreID, s.Ident.NodeID
+
+	prevReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().All()...)
+	to, found := desc.GetReplicaDescriptor(storeID)
+	if !found {
+		to = desc.AddReplica(nodeID, storeID, roachpb.VOTER_FULL)
+	}
+	var from roachpb.ReplicaDescriptor
+	for _, rd := range prevReplicas {
+		if rd.ReplicaID == to.ReplicaID {
+			continue
+		}
+		from, _ = desc.RemoveReplica(rd.NodeID, rd.StoreID)
+	}
+	if from.ReplicaID == 0 {
+		// HACK: if we run this method multiple times, after the first time we won't
+		// populate `from` at all and it will lead to the snapshot catching a ReplicaTooOld.
+		//
+		// NB: we can't use `from = to` because of quota pool assertions - if we did
+		// we'd set r.mu.leaderID to self on the first recovery, and the second recovery
+		// looks (to the quota pool) like the applied index moves without releasing
+		// quota. This can probably be avoided somehow, by making raft not think it
+		// itself is the leader unless it wins an election. (I think it gets put in
+		// some weird state by forging the message).
+		// Actually this hack will still put the quota pool in the weird state, so
+		// the third recovery will explode.
+		//
+		// NB: if raft is in stateLeader it will drop MsgSnap, so recovery will
+		// always "succeed" but not do anything.
+		from.ReplicaID = to.ReplicaID
+	}
+
+	// When the range is recovered, it will need to be able to route requests to
+	// itself to upreplicate, which it won't be able to do if the meta2 records
+	// do not contain it in the descriptor.
+	//
+	// TODO(tbg): only do this when minting new replica. If existing replica is
+	// in there, we don't have to touch it (or can touch it last, as a cleanup).
+	if err := n.storeCfg.DB.CPut(
+		ctx, keys.RangeMetaKey(desc.EndKey).AsRawKey(), &desc, exp,
+	); err != nil {
+		return nil, err
+	}
+
+	// Set up connection to self.
+	conn, err := n.storeCfg.NodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
+	if err != nil {
+		return nil, err
+	}
+
+	wipe := false
+
+	var eng storage.Engine
+	if wipe {
+		eng = storage.NewDefaultInMem()
+		defer eng.Close()
+	} else {
+		// TODO(tbg): properly synchronize this and the batch we will take from it.
+		eng = s.Engine()
+	}
+
+	// TODO(tbg): why am I getting a new KV pair here every time I run this?
+	if err := kvserver.HackSendSnapshot(
+		ctx,
+		eng,
+		n.storeCfg.Settings,
+		conn,
+		n.storeCfg.Clock.Now(),
+		desc,
+		from,
+		to,
+		wipe,
+	); err != nil {
+		return nil, err
+	}
+
+	return &roachpb.UnsafeHealRangeResponse{}, nil
 }

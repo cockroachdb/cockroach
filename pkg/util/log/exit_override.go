@@ -68,7 +68,7 @@ func (l *loggerT) exitLocked(err error) {
 		// Avoid double unlock on l.mu.
 		l.mu.Lock()
 	} else {
-		os.Exit(2)
+		os.Exit(20)
 	}
 }
 

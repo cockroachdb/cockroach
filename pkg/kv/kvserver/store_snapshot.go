@@ -16,13 +16,16 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -32,6 +35,7 @@ import (
 	crdberrors "github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -91,8 +95,7 @@ func assertStrategy(
 // kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
 // batches of KV pairs in the BatchRepr format.
 type kvBatchSnapshotStrategy struct {
-	raftCfg *base.RaftConfig
-	status  string
+	status string
 
 	// The size of the batches of PUT operations to send to the receiver of the
 	// snapshot. Only used on the sender side.
@@ -113,10 +116,11 @@ type kvBatchSnapshotStrategy struct {
 // SSTSnapshotStorageScratch that handles chunking SSTs and persisting them to
 // disk.
 type multiSSTWriter struct {
-	scratch   *SSTSnapshotStorageScratch
-	currSST   storage.SSTWriter
-	keyRanges []rditer.KeyRange
-	currRange int
+	scratch    *SSTSnapshotStorageScratch
+	currSST    storage.SSTWriter
+	keyRanges  []rditer.KeyRange
+	clearRange bool // if true, initialize each sst with range deletion tombstone
+	currRange  int
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
@@ -127,11 +131,13 @@ func newMultiSSTWriter(
 	scratch *SSTSnapshotStorageScratch,
 	keyRanges []rditer.KeyRange,
 	sstChunkSize int64,
+	clearRange bool,
 ) (multiSSTWriter, error) {
 	msstw := multiSSTWriter{
 		scratch:      scratch,
 		keyRanges:    keyRanges,
 		sstChunkSize: sstChunkSize,
+		clearRange:   clearRange,
 	}
 	if err := msstw.initSST(ctx); err != nil {
 		return msstw, err
@@ -146,9 +152,11 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	}
 	newSST := storage.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
-	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
-		msstw.currSST.Close()
-		return errors.Wrap(err, "failed to clear range on sst file writer")
+	if msstw.clearRange {
+		if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
+			msstw.currSST.Close()
+			return errors.Wrap(err, "failed to clear range on sst file writer")
+		}
 	}
 	return nil
 }
@@ -220,7 +228,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// At the moment we'll write at most three SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
-	msstw, err := newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize, !header.OmitClear)
 	if err != nil {
 		return noSnap, err
 	}
@@ -364,6 +372,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// together.
 	firstIndex := header.State.TruncatedState.Index + 1
 	endIndex := snap.RaftSnap.Metadata.Index + 1
+	log.Infof(ctx, "%+v \n %+v", header, snap)
 	preallocSize := endIndex - firstIndex
 	const maxPreallocSize = 1000
 	if preallocSize > maxPreallocSize {
@@ -388,15 +397,19 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	rangeID := header.State.Desc.RangeID
 
-	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
-		return 0, err
+	// TODO(tbg): had to add this check to avoid opening second iter when the
+	// `EngineSnap` is really a *pebbleBatch. Check in w/ storage.
+	if firstIndex < endIndex {
+		if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+			return 0, err
+		}
 	}
 
 	// The difference between the snapshot index (applied index at the time of
 	// snapshot) and the truncated index should equal the number of log entries
 	// shipped over.
 	expLen := endIndex - firstIndex
-	if expLen != uint64(len(logEntries)) {
+	if false && expLen != uint64(len(logEntries)) { // HACK
 		// We've generated a botched snapshot. We could fatal right here but opt
 		// to warn loudly instead, and fatal at the caller to capture a checkpoint
 		// of the underlying storage engine.
@@ -781,7 +794,6 @@ func (s *Store) receiveSnapshot(
 		}
 
 		ss = &kvBatchSnapshotStrategy{
-			raftCfg:      &s.cfg.RaftConfig,
 			scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
 			sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
 		}
@@ -898,10 +910,143 @@ func (e *errMustRetrySnapshotDueToTruncation) Error() string {
 	)
 }
 
+func HackSendSnapshot(
+	ctx context.Context,
+	eng storage.Engine,
+	st *cluster.Settings,
+	cc *grpc.ClientConn,
+	now hlc.Timestamp,
+	desc roachpb.RangeDescriptor,
+	from, to roachpb.ReplicaDescriptor,
+	wipe bool,
+) error {
+
+	// TODO(tbg): push this stuff to the replica itself, get the proper locks, etc.
+	sl := stateloader.Make(desc.RangeID)
+	ms, err := sl.LoadMVCCStats(ctx, eng)
+	if err != nil {
+		return err
+	}
+	if err := storage.MVCCPutProto(
+		ctx, eng, &ms, keys.RangeDescriptorKey(desc.StartKey), now, nil /* txn */, &desc,
+	); err != nil {
+		return err
+	}
+
+	log.Infof(ctx, "TBG wipe=%t", wipe)
+	if wipe {
+		var err error
+		ms, err = stateloader.WriteInitialReplicaState(
+			ctx,
+			eng,
+			ms,
+			desc,
+			roachpb.Lease{},
+			hlc.Timestamp{}, // gcThreshold
+			stateloader.TruncatedStateUnreplicated,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	hs, err := sl.LoadHardState(ctx, eng)
+	if err != nil {
+		return err
+	}
+
+	snapUUID, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+
+	snap := eng.NewBatch()
+	{
+		// Make sure recipient sees this snapshot as ahead.
+
+		ras, err := sl.LoadRangeAppliedState(ctx, snap)
+		if err != nil {
+			return err
+		}
+		if err := sl.SetRangeAppliedState(
+			ctx, snap, ras.RaftAppliedIndex+1, ras.LeaseAppliedIndex, &ms,
+		); err != nil {
+			return err
+		}
+		// Avoid sending any log entries (which is a legacy path we want to avoid
+		// hitting).
+		sl.SetRaftTruncatedState(ctx, snap, &roachpb.RaftTruncatedState{
+			Index: ras.RaftAppliedIndex + 1,
+			Term:  hs.Term,
+		})
+	}
+	outgoingSnap, err := snapshot(
+		ctx,
+		snapUUID,
+		sl,
+		SnapshotRequest_RAFT,
+		snap,
+		desc.RangeID,
+		raftentry.NewCache(1),
+		func(func(SideloadStorage) error) error { return nil },
+		desc.StartKey,
+	)
+	if err != nil {
+		return err
+	}
+	defer outgoingSnap.Close()
+
+	req := RaftMessageRequest{
+		RangeID:     desc.RangeID,
+		FromReplica: from,
+		ToReplica:   to,
+		Message: raftpb.Message{
+			Type:     raftpb.MsgSnap,
+			To:       uint64(to.ReplicaID),
+			From:     uint64(from.ReplicaID),
+			Term:     hs.Term,
+			Snapshot: outgoingSnap.RaftSnap,
+		},
+	}
+
+	header := SnapshotRequest_Header{
+		State:                      outgoingSnap.State,
+		RaftMessageRequest:         req,
+		RangeSize:                  ms.Total(),
+		CanDecline:                 false,
+		Priority:                   SnapshotRequest_RECOVERY,
+		Strategy:                   SnapshotRequest_KV_BATCH,
+		Type:                       SnapshotRequest_RAFT,
+		UnreplicatedTruncatedState: true,
+		OmitClear:                  !wipe,
+	}
+
+	stream, err := NewMultiRaftClient(cc).RaftSnapshot(ctx)
+	if err != nil {
+		return err
+	}
+
+	throwawayEng := storage.NewDefaultInMem()
+	defer throwawayEng.Close()
+	return initAndSendSnapshot(
+		ctx,
+		stream,
+		st,
+		noopStorePool{},
+		header,
+		&outgoingSnap,
+		throwawayEng.NewBatch,
+		func() {},
+	)
+}
+
+type noopStorePool struct{}
+
+func (n noopStorePool) throttle(throttleReason, string, roachpb.StoreID) {}
+
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
-	raftCfg *base.RaftConfig,
 	st *cluster.Settings,
 	stream outgoingSnapshotStream,
 	storePool SnapshotStorePool,
@@ -976,7 +1121,6 @@ func sendSnapshot(
 	switch header.Strategy {
 	case SnapshotRequest_KV_BATCH:
 		ss = &kvBatchSnapshotStrategy{
-			raftCfg:   raftCfg,
 			batchSize: batchSize,
 			limiter:   limiter,
 			newBatch:  newBatch,

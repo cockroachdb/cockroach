@@ -1874,6 +1874,9 @@ func (r *Replica) sendSnapshot(
 
 	canAvoidSendingLog := !usesReplicatedTruncatedState &&
 		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex
+	if !canAvoidSendingLog {
+		panic("nooo")
+	}
 
 	if canAvoidSendingLog {
 		// If we're not using a legacy (replicated) truncated state, we avoid
@@ -1928,7 +1931,6 @@ func (r *Replica) sendSnapshot(
 	}
 	if err := r.store.cfg.Transport.SendSnapshot(
 		ctx,
-		&r.store.cfg.RaftConfig,
 		r.store.allocator.storePool,
 		req,
 		snap,

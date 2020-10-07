@@ -20,7 +20,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -649,35 +648,45 @@ func (t *RaftTransport) startProcessNewQueue(
 	return true
 }
 
-// SendSnapshot streams the given outgoing snapshot. The caller is responsible
-// for closing the OutgoingSnapshot.
-func (t *RaftTransport) SendSnapshot(
+func initAndSendSnapshot(
 	ctx context.Context,
-	raftCfg *base.RaftConfig,
-	storePool *StorePool,
+	stream MultiRaft_RaftSnapshotClient,
+	st *cluster.Settings,
+	storePool SnapshotStorePool,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
 	newBatch func() storage.Batch,
 	sent func(),
 ) error {
-	var stream MultiRaft_RaftSnapshotClient
-	nodeID := header.RaftMessageRequest.ToReplica.NodeID
-
-	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
-	if err != nil {
-		return err
-	}
-
-	client := NewMultiRaftClient(conn)
-	stream, err = client.RaftSnapshot(ctx)
-	if err != nil {
-		return err
-	}
 
 	defer func() {
 		if err := stream.CloseSend(); err != nil {
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
-	return sendSnapshot(ctx, raftCfg, t.st, stream, storePool, header, snap, newBatch, sent)
+	return sendSnapshot(ctx, st, stream, storePool, header, snap, newBatch, sent)
+}
+
+// SendSnapshot streams the given outgoing snapshot. The caller is responsible
+// for closing the OutgoingSnapshot.
+func (t *RaftTransport) SendSnapshot(
+	ctx context.Context,
+	storePool *StorePool,
+	header SnapshotRequest_Header,
+	snap *OutgoingSnapshot,
+	newBatch func() storage.Batch,
+	sent func(),
+) error {
+	nodeID := header.RaftMessageRequest.ToReplica.NodeID
+
+	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+	if err != nil {
+		return err
+	}
+	client := NewMultiRaftClient(conn)
+	stream, err := client.RaftSnapshot(ctx)
+	if err != nil {
+		return err
+	}
+	return initAndSendSnapshot(ctx, stream, t.st, storePool, header, snap, newBatch, sent)
 }

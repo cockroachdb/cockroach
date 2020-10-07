@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"runtime/debug"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -121,7 +122,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	// During merges, the context might have the subsuming range, so we explicitly
 	// log the replica to be removed.
-	log.Infof(ctx, "removing replica r%d/%d", rep.RangeID, replicaID)
+	log.Infof(ctx, "removing replica r%d/%d\n%s", rep.RangeID, replicaID, debug.Stack())
 
 	s.mu.Lock()
 	if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != rep {
