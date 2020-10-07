@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -419,42 +418,25 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return true, nil
 	}
 
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return false, err
+	}
+	if hasAdmin {
+		// Superusers have all role privileges.
+		return true, nil
+	}
+
 	normalizedName, err := NormalizeAndValidateUsername(user)
 	if err != nil {
 		return false, err
 	}
-
-	// Create list of roles for sql WHERE IN clause.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, normalizedName)
-	if err != nil {
-		return false, err
-	}
-
-	var roles = tree.NewDArray(types.String)
-	err = roles.Append(tree.NewDString(normalizedName))
-	if err != nil {
-		return false, err
-	}
-	for role := range memberOf {
-		if role == security.AdminRole {
-			// Superusers have all role privileges.
-			return true, nil
-		}
-		err := roles.Append(tree.NewDString(role))
-		if err != nil {
-			return false, err
-		}
-	}
-
 	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryEx(
 		ctx, "has-role-option", p.Txn(),
 		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		fmt.Sprintf(
-			`SELECT 1 from %s WHERE option = '%s' AND username = ANY($1) LIMIT 1`,
-			RoleOptionsTableName,
-			roleOption.String()),
-		roles)
-
+			`SELECT 1 from %s WHERE option = '%s' AND username = $1 LIMIT 1`,
+			RoleOptionsTableName, roleOption.String()), normalizedName)
 	if err != nil {
 		return false, err
 	}
