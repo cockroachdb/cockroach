@@ -299,17 +299,13 @@ func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner
 	typeDesc := n.desc
 	privs := typeDesc.GetPrivileges()
 
-	hasOwnership, err := p.HasOwnership(ctx, typeDesc)
-	if err != nil {
-		return err
-	}
-
-	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, privs, newOwner, hasOwnership); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, newOwner); err != nil {
 		return err
 	}
 
 	// Ensure the new owner has CREATE privilege on the type's schema.
-	if err := p.canCreateOnSchema(ctx, typeDesc.GetParentSchemaID(), newOwner); err != nil {
+	if err := p.canCreateOnSchema(
+		ctx, typeDesc.GetParentSchemaID(), typeDesc.ParentID, newOwner, checkPublicSchema); err != nil {
 		return err
 	}
 
@@ -345,15 +341,21 @@ func (n *alterTypeNode) Close(ctx context.Context)           {}
 func (n *alterTypeNode) ReadingOwnWrites()                   {}
 
 func (p *planner) canModifyType(ctx context.Context, desc *typedesc.Mutable) error {
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
+	}
+
 	hasOwnership, err := p.HasOwnership(ctx, desc)
 	if err != nil {
 		return err
 	}
-
 	if !hasOwnership {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"must be owner of type %s", tree.Name(desc.GetName()))
 	}
-
 	return nil
 }

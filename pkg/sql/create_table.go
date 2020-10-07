@@ -203,7 +203,8 @@ func getTableCreateParams(
 	}
 
 	// Check permissions on the schema.
-	if err := params.p.canCreateOnSchema(params.ctx, schemaID, params.p.User()); err != nil {
+	if err := params.p.canCreateOnSchema(
+		params.ctx, schemaID, dbID, params.p.User(), skipCheckPublicSchema); err != nil {
 		return nil, 0, err
 	}
 

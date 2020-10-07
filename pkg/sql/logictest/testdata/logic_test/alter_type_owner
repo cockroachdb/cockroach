@@ -1,104 +1,67 @@
 statement ok
-CREATE TYPE typ AS ENUM ()
+CREATE SCHEMA s;
+CREATE TYPE s.typ AS ENUM ();
+CREATE USER testuser2
 
 # Ensure user must exist for set owner.
 statement error pq: role/user "fake_user" does not exist
-ALTER TYPE typ OWNER TO fake_user
+ALTER TYPE s.typ OWNER TO fake_user
 
-# Ensure the current user is a member of the role we're setting to.
-statement error pq: must be member of role "testuser"
-ALTER TYPE typ OWNER TO testuser
-
-user testuser
-
-# Ensure the user has to be an owner to alter the owner.
-statement error pq: must be owner of type t
-ALTER TYPE typ OWNER TO testuser
-
-user root
+# Superusers can alter owner to any user which has CREATE privileges on the
+# parent schema.
+statement error pq: user testuser does not have CREATE privilege on schema s
+ALTER TYPE s.typ OWNER TO testuser
 
 statement ok
-GRANT testuser TO root
+GRANT CREATE, USAGE ON SCHEMA s TO testuser, testuser2
 
-# Test set owner for a type in the public schema.
-statement ok
-ALTER TYPE typ OWNER TO testuser
-
-statement ok
-GRANT CREATE ON DATABASE test TO testuser
-
-user testuser
-
-statement ok
-CREATE SCHEMA s
-
-user root
-
-# testuser2 does not have owner/create privilege on schema s.
-statement ok
-CREATE USER testuser2
-
-statement ok
-CREATE TYPE s.typ AS ENUM ()
-
-statement ok
-GRANT testuser2 TO root
-
-# Ensure the new owner has create privilege on the schema.
-statement error pq: user testuser2 does not have CREATE privilege on schema s
-ALTER TYPE s.typ OWNER TO testuser2
-
-statement ok
-GRANT testuser TO root
-
-# testuser satisfies all the conditions to become the new owner.
 statement ok
 ALTER TYPE s.typ OWNER TO testuser
 
-# setup to allow testuser2 as a member of testuser to alter the owner.
-statement ok
-REVOKE testuser, testuser2 FROM root
-
-statement ok
-GRANT testuser TO testuser2
-
-statement ok
-GRANT root TO testuser
-
-user testuser2
-
-# testuser2 should be able to alter the owner since it is a member of testuser.
 statement ok
 ALTER TYPE s.typ OWNER TO root
 
-# set the owner back to testuser.
+# Other users must be owner to alter the owner.
+user testuser
 
+statement error must be owner of type typ
+ALTER TYPE s.typ OWNER TO testuser
+
+# Non-superusers also must be a member of the new owning role.
 user root
-
-statement ok
-REVOKE root FROM testuser
-
-statement ok
-GRANT testuser TO root
 
 statement ok
 ALTER TYPE s.typ OWNER TO testuser
 
 user testuser
 
-# Ensure testuser is owner by dropping the type.
-statement ok
-DROP TYPE s.typ
+statement error must be member of role "testuser2"
+ALTER TYPE s.typ OWNER TO testuser2
 
 user root
 
+statement ok
+GRANT testuser2 TO testuser
+
+user testuser
+
+statement ok
+ALTER TYPE s.typ OWNER TO testuser2
+
+# Ensure testuser2 is owner.
+user root
+
+query T
+SELECT pg_get_userbyid(typowner) FROM pg_type WHERE typname = 'typ';
+----
+testuser2
+
 # Ensure admins who don't have explicit CREATE privilege on a schema can
 # still become the owner.
+user root
 
-# Ensure root does not have CREATE privilege on schema by being a member
-# of testuser.
 statement ok
-REVOKE testuser FROM root
+GRANT CREATE ON DATABASE test TO testuser
 
 user testuser
 
