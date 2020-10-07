@@ -76,6 +76,27 @@ func StoreHLCUpperBoundKey() roachpb.Key {
 	return MakeStoreKey(localStoreHLCUpperBoundSuffix, nil)
 }
 
+// StoreNodeTombstoneKey returns the key for storing a node tombstone for nodeID.
+func StoreNodeTombstoneKey(nodeID roachpb.NodeID) roachpb.Key {
+	return MakeStoreKey(localStoreNodeTombstoneSuffix, encoding.EncodeUint32Ascending(nil, uint32(nodeID)))
+}
+
+// DecodeNodeTombstoneKey returns the NodeID for the node tombstone.
+func DecodeNodeTombstoneKey(key roachpb.Key) (roachpb.NodeID, error) {
+	suffix, detail, err := DecodeStoreKey(key)
+	if err != nil {
+		return 0, err
+	}
+	if !suffix.Equal(localStoreNodeTombstoneSuffix) {
+		return 0, errors.Errorf("key with suffix %q != %q", suffix, localStoreNodeTombstoneSuffix)
+	}
+	detail, nodeID, err := encoding.DecodeUint32Ascending(detail)
+	if len(detail) != 0 {
+		return 0, errors.Errorf("invalid key has trailing garbage: %q", detail)
+	}
+	return roachpb.NodeID(nodeID), err
+}
+
 // StoreSuggestedCompactionKey returns a store-local key for a
 // suggested compaction. It combines the specified start and end keys.
 func StoreSuggestedCompactionKey(start, end roachpb.Key) roachpb.Key {
