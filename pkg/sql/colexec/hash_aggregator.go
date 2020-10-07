@@ -213,9 +213,11 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 		switch op.state {
 		case hashAggregatorBuffering:
 			if op.bufferingState.pendingBatch != nil && op.bufferingState.unprocessedIdx < op.bufferingState.pendingBatch.Length() {
-				op.bufferingState.tuples.append(
-					op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx, op.bufferingState.pendingBatch.Length(),
-				)
+				op.allocator.PerformOperation(op.bufferingState.tuples.ColVecs(), func() {
+					op.bufferingState.tuples.append(
+						op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx, op.bufferingState.pendingBatch.Length(),
+					)
+				})
 			}
 			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.input.Next(ctx), 0
 			n := op.bufferingState.pendingBatch.Length()
@@ -228,7 +230,9 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 				toBuffer = op.maxBuffered - op.bufferingState.tuples.Length()
 			}
 			if toBuffer > 0 {
-				op.bufferingState.tuples.append(op.bufferingState.pendingBatch, 0 /* startIdx */, toBuffer)
+				op.allocator.PerformOperation(op.bufferingState.tuples.ColVecs(), func() {
+					op.bufferingState.tuples.append(op.bufferingState.pendingBatch, 0 /* startIdx */, toBuffer)
+				})
 				op.bufferingState.unprocessedIdx = toBuffer
 			}
 			if op.bufferingState.tuples.Length() == op.maxBuffered {

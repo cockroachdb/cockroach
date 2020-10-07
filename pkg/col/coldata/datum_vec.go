@@ -47,4 +47,7 @@ type DatumVec interface {
 	// UnmarshalTo unmarshals the byte representation of a datum and sets it at
 	// index i.
 	UnmarshalTo(i int, b []byte) error
+	// Size returns the total memory footprint of the vector (including the
+	// internal memory used by tree.Datums) in bytes.
+	Size() uintptr
 }
