@@ -484,6 +484,20 @@ func TestRollbackOfAddingTable(t *testing.T) {
 	_, err = sqlDB.Exec(`CREATE MATERIALIZED VIEW d.v AS SELECT 1`)
 	require.EqualError(t, err, "pq: boom")
 
+	// Get the view descriptor we just created and verify that it's in the
+	// dropping state. We're unable to access the descriptor via the usual means
+	// because catalog.FilterDescriptorState filters out tables in the ADD state,
+	// and once we move the table to the DROP state we also remove the namespace
+	// entry. So we just get the most recent descriptor.
+	var descBytes []byte
+	row := sqlDB.QueryRow(`SELECT descriptor FROM system.descriptor ORDER BY id DESC LIMIT 1`)
+	require.NoError(t, row.Scan(&descBytes))
+	var desc descpb.Descriptor
+	require.NoError(t, protoutil.Unmarshal(descBytes, &desc))
+	viewDesc := desc.GetTable() //nolint:descriptormarshal
+	require.Equal(t, "v", viewDesc.GetName(), "read a different descriptor than expected")
+	require.Equal(t, descpb.DescriptorState_DROP, viewDesc.GetState())
+
 	// The view should be cleaned up after the failure, so we should be able
 	// to create a new view with the same name.
 	_, err = sqlDB.Exec(`CREATE MATERIALIZED VIEW d.v AS SELECT 1`)
