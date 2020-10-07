@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -24,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -71,15 +71,22 @@ const (
 	// over many ranges.
 	indexTxnBackfillChunkSize = 100
 
+	// indexBackfillBatchSize is the maximum number of index entries we attempt to
+	// fill in a single index batch before queueing it up for ingestion and
+	// progress reporting in the index backfiller processor.
+	//
+	// TODO(adityamaru): This should live with the index backfiller processor
+	// logic once the column backfiller is reworked. The only reason this variable
+	// is initialized here is to maintain a single testing knob
+	// `BackfillChunkSize` to control both the index and column backfill chunking
+	// behavior, and minimize test complexity. Should this be a cluster setting? I
+	// would hope we can do a dynamic memory based adjustment of this number in
+	// the processor.
+	indexBackfillBatchSize = 5000
+
 	// checkpointInterval is the interval after which a checkpoint of the
 	// schema change is posted.
 	checkpointInterval = 2 * time.Minute
-)
-
-var indexBulkBackfillChunkSize = settings.RegisterIntSetting(
-	"schemachanger.bulk_index_backfill.batch_size",
-	"number of rows to process at a time during bulk index backfill",
-	50000,
 )
 
 var _ sort.Interface = columnsByID{}
@@ -886,6 +893,275 @@ func (sc *SchemaChanger) nRanges(
 	return len(rangeIds), nil
 }
 
+// TODO(adityamaru): Consider moving this to sql/backfill. It has a lot of
+// schema changer dependencies which will need to be passed around.
+func (sc *SchemaChanger) distIndexBackfill(
+	ctx context.Context,
+	version descpb.DescriptorVersion,
+	targetSpans []roachpb.Span,
+	filter backfill.MutationFilter,
+	indexBackfillBatchSize int64,
+) error {
+	inMemoryStatusEnabled := sc.execCfg.Settings.Version.IsActive(
+		ctx, clusterversion.VersionAtomicChangeReplicasTrigger)
+	readAsOf := sc.clock.Now()
+
+	// Variables to track progress of the index backfill.
+	origNRanges := -1
+	origFractionCompleted := sc.job.FractionCompleted()
+	fractionLeft := 1 - origFractionCompleted
+
+	// Index backfilling ingests SSTs that don't play nicely with running txns
+	// since they just add their keys blindly. Running a Scan of the target
+	// spans at the time the SSTs' keys will be written will calcify history up
+	// to then since the scan will resolve intents and populate tscache to keep
+	// anything else from sneaking under us. Since these are new indexes, these
+	// spans should be essentially empty, so this should be a pretty quick and
+	// cheap scan.
+	const pageSize = 10000
+	noop := func(_ []kv.KeyValue) error { return nil }
+	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
+		for _, span := range targetSpans {
+			// TODO(dt): a Count() request would be nice here if the target isn't
+			// empty, since we don't need to drag all the results back just to
+			// then ignore them -- we just need the iteration on the far end.
+			if err := txn.Iterate(ctx, span.Key, span.EndKey, pageSize, noop); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Gather the initial resume spans for the table.
+	var todoSpans []roachpb.Span
+	var mutationIdx int
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
+			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, sc.descID, sc.mutationID, filter)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	log.VEventf(ctx, 2, "indexbackfill: initial resume spans %+v", todoSpans)
+
+	var p PhysicalPlan
+	var evalCtx extendedEvalContext
+	var planCtx *PlanningCtx
+	// TODO(adityamaru): Is it okay to run the DistSQL flow and progress update
+	// logic outside of this txn? The old implementation of the index backfiller
+	// in distBackfill ran the flow in the txn closure as well.
+	// The txn is only used to fetch a tableDesc, partition the spans and set the
+	// evalCtx ts all of which is during planning of the DistSQL flow.
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+		// Use a leased table descriptor for the index backfill.
+		defer tc.ReleaseAll(ctx)
+		tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
+		if err != nil {
+			return err
+		}
+		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory)
+		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
+			true /* distribute */)
+		chunkSize := sc.getChunkSize(indexBackfillBatchSize)
+		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), readAsOf, chunkSize)
+		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, todoSpans)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	// Processors stream back the completed spans via metadata.
+	//
+	// mu synchronizes reads and writes to updatedTodoSpans between the processor
+	// streaming back progress and the updates to the job details/progress
+	// fraction.
+	var mu sync.Mutex
+	var updatedTodoSpans []roachpb.Span
+	var updateJobProgress func() error
+	var updateJobDetails func() error
+	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+		if meta.BulkProcessorProgress != nil {
+			todoSpans = roachpb.SubtractSpans(todoSpans,
+				meta.BulkProcessorProgress.CompletedSpans)
+			mu.Lock()
+			updatedTodoSpans = make([]roachpb.Span, len(todoSpans))
+			copy(updatedTodoSpans, todoSpans)
+			mu.Unlock()
+
+			if sc.testingKnobs.AlwaysUpdateIndexBackfillDetails {
+				if err := updateJobDetails(); err != nil {
+					return err
+				}
+			}
+
+			if sc.testingKnobs.AlwaysUpdateIndexBackfillProgress {
+				if err := updateJobProgress(); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
+	recv := MakeDistSQLReceiver(
+		ctx,
+		&cbw,
+		tree.Rows, /* stmtType - doesn't matter here since no result are produced */
+		sc.rangeDescriptorCache,
+		nil, /* txn - the flow does not run wholly in a txn */
+		func(ts hlc.Timestamp) {
+			sc.clock.Update(ts)
+		},
+		evalCtx.Tracing,
+	)
+	defer recv.Release()
+
+	updateJobProgress = func() error {
+		// Report schema change progress. We define progress at this point as the
+		// the fraction of fully-backfilled ranges of the primary index of the
+		// table being scanned. Since we may have already modified the fraction
+		// completed of our job from the 10% allocated to completing the schema
+		// change state machine or from a previous backfill attempt, we scale that
+		// fraction of ranges completed by the remaining fraction of the job's
+		// progress bar.
+		err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			mu.Lock()
+			// No processor has returned completed spans yet.
+			if updatedTodoSpans == nil {
+				return nil
+			}
+			nRanges, err := sc.nRanges(ctx, txn, updatedTodoSpans)
+			mu.Unlock()
+			if err != nil {
+				return err
+			}
+			if origNRanges == -1 {
+				origNRanges = nRanges
+			}
+
+			if nRanges < origNRanges {
+				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
+				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
+				if err := sc.job.WithTxn(txn).FractionProgressed(ctx,
+					jobs.FractionUpdater(fractionCompleted)); err != nil {
+					return jobs.SimplifyInvalidStatusError(err)
+				}
+			}
+			return nil
+		})
+		return err
+	}
+
+	updateJobDetails = func() error {
+		err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			mu.Lock()
+			defer mu.Unlock()
+			// No processor has returned completed spans yet.
+			if updatedTodoSpans == nil {
+				return nil
+			}
+			// TODO(adityamaru): Think about how the progress will be reported in the
+			// case of an older cluster version.
+			if !inMemoryStatusEnabled {
+				// There is a worker node of older version that will communicate
+				// its done work by writing to the jobs table.
+				// In this case we update the updatedTodoSpans with what the old node(s)
+				// have set in the jobs table not to overwrite their done work.
+				resumeSpans, _, _, err := rowexec.GetResumeSpans(
+					ctx, sc.jobRegistry, txn, sc.execCfg.Codec, sc.descID, sc.mutationID, filter)
+				if err != nil {
+					return err
+				}
+				// A \intersect B = A - (A - B)
+				updatedTodoSpans = roachpb.SubtractSpans(updatedTodoSpans,
+					roachpb.SubtractSpans(updatedTodoSpans, resumeSpans))
+			}
+			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", updatedTodoSpans)
+			return rowexec.SetResumeSpansInJob(ctx, updatedTodoSpans, mutationIdx, txn, sc.job)
+		})
+		return err
+	}
+
+	// Setup periodic progress update.
+	stopProgress := make(chan struct{})
+	duration := 10 * time.Second
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		tick := time.NewTicker(duration)
+		defer tick.Stop()
+		done := ctx.Done()
+		for {
+			select {
+			case <-stopProgress:
+				return nil
+			case <-done:
+				return ctx.Err()
+			case <-tick.C:
+				if err := updateJobProgress(); err != nil {
+					return err
+				}
+			}
+		}
+	})
+
+	// Setup periodic job details update.
+	// TODO(adityamaru): Is this the frequency we want to update the job details
+	// at?
+	stopJobDetailsUpdate := make(chan struct{})
+	detailsDuration := 10 * time.Second
+	g.GoCtx(func(ctx context.Context) error {
+		tick := time.NewTicker(detailsDuration)
+		defer tick.Stop()
+		done := ctx.Done()
+		for {
+			select {
+			case <-stopJobDetailsUpdate:
+				return nil
+			case <-done:
+				return ctx.Err()
+			case <-tick.C:
+				if err := updateJobDetails(); err != nil {
+					return err
+				}
+			}
+		}
+	})
+
+	// Run index backfill physical plan.
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(stopProgress)
+		defer close(stopJobDetailsUpdate)
+		// Copy the evalCtx, as dsp.Run() might change it.
+		evalCtxCopy := evalCtx
+		sc.distSQLPlanner.Run(
+			planCtx,
+			nil, /* txn - the processors manage their own transactions */
+			&p, recv, &evalCtxCopy,
+			nil, /* finishedSetupFn */
+		)()
+		return cbw.Err()
+	})
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	// Update progress and details to mark a completed job.
+	if err := updateJobDetails(); err != nil {
+		return err
+	}
+	if err := updateJobProgress(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // distBackfill runs (or continues) a backfill for the first mutation
 // enqueued on the SchemaChanger's table descriptor that passes the input
 // MutationFilter.
@@ -912,31 +1188,6 @@ func (sc *SchemaChanger) distBackfill(
 	origFractionCompleted := sc.job.FractionCompleted()
 	fractionLeft := 1 - origFractionCompleted
 	readAsOf := sc.clock.Now()
-	// Index backfilling ingests SSTs that don't play nicely with running txns
-	// since they just add their keys blindly. Running a Scan of the target
-	// spans at the time the SSTs' keys will be written will calcify history up
-	// to then since the scan will resolve intents and populate tscache to keep
-	// anything else from sneaking under us. Since these are new indexes, these
-	// spans should be essentially empty, so this should be a pretty quick and
-	// cheap scan.
-	if backfillType == indexBackfill {
-		const pageSize = 10000
-		noop := func(_ []kv.KeyValue) error { return nil }
-		if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
-			for _, span := range targetSpans {
-				// TODO(dt): a Count() request would be nice here if the target isn't
-				// empty, since we don't need to drag all the results back just to
-				// then ignore them -- we just need the iteration on the far end.
-				if err := txn.Iterate(ctx, span.Key, span.EndKey, pageSize, noop); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
 	var mutationIdx int
@@ -1010,9 +1261,11 @@ func (sc *SchemaChanger) distBackfill(
 			defer recv.Release()
 
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn, true /* distribute */)
-			plan, err := sc.distSQLPlanner.createBackfiller(
-				planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, todoSpans, readAsOf,
-			)
+			spec, err := initColumnBackfillerSpec(*tableDesc.TableDesc(), duration, chunkSize, readAsOf)
+			if err != nil {
+				return err
+			}
+			plan, err := sc.distSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, todoSpans)
 			if err != nil {
 				return err
 			}
@@ -1495,10 +1748,8 @@ func (sc *SchemaChanger) backfillIndexes(
 		}
 	}
 
-	chunkSize := indexBulkBackfillChunkSize.Get(&sc.settings.SV)
-	if err := sc.distBackfill(
-		ctx, version, indexBackfill, chunkSize,
-		backfill.IndexMutationFilter, addingSpans); err != nil {
+	if err := sc.distIndexBackfill(
+		ctx, version, addingSpans, backfill.IndexMutationFilter, indexBackfillBatchSize); err != nil {
 		return err
 	}
 

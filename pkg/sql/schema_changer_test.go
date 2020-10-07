@@ -864,8 +864,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	if _, err := sqlDB.Exec(`
-CREATE UNIQUE INDEX vidx ON t.test (v);
-`); !testutils.IsError(err, `violates unique constraint "vidx"`) {
+	CREATE UNIQUE INDEX vidx ON t.test (v);
+	`); !testutils.IsError(err, `violates unique constraint "vidx"`) {
 		t.Fatalf("got err=%s", err)
 	}
 
@@ -880,8 +880,8 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 
 	if _, err := sqlDB.Exec(`
-	   ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3');
-	   `); !testutils.IsError(err, `could not parse "1-3" as type decimal`) {
+	  ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3');
+	  `); !testutils.IsError(err, `could not parse "1-3" as type decimal`) {
 		t.Fatalf("got err=%s", err)
 	}
 
@@ -954,6 +954,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 				// to commit and will abort.
 				<-commandsDone
 			},
+			BulkAdderFlushesEveryBatch: true,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
@@ -1283,11 +1284,18 @@ func TestSchemaChangeRetry(t *testing.T) {
 		return nil
 	}
 
+	const maxValue = 2000
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			WriteCheckpointInterval: time.Nanosecond,
+			WriteCheckpointInterval:          time.Nanosecond,
+			AlwaysUpdateIndexBackfillDetails: true,
+			BackfillChunkSize:                maxValue / 5,
 		},
-		DistSQL: &execinfra.TestingKnobs{RunBeforeBackfillChunk: checkSpan},
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk:                     checkSpan,
+			BulkAdderFlushesEveryBatch:                 true,
+			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
+		},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
@@ -1304,7 +1312,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Bulk insert.
-	const maxValue = 2000
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
 	}
@@ -1346,8 +1353,9 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 				atomic.AddUint32(&numBackfills, 1)
 				return nil
 			},
-			WriteCheckpointInterval: time.Nanosecond,
-			BackfillChunkSize:       maxValue / 10,
+			WriteCheckpointInterval:          time.Nanosecond,
+			BackfillChunkSize:                maxValue / 10,
+			AlwaysUpdateIndexBackfillDetails: true,
 		},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -1356,6 +1364,15 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 				if currChunk == 3 {
 					// Publish a new version of the table.
 					upTableVersion()
+
+					// TODO(adityamaru): Previously, the index backfiller would
+					// periodically redo the DistSQL flow setup after checkpointing its
+					// progress. This would mean that it would notice a changed descriptor
+					// version and retry the backfill. Since, the new index backfiller
+					// does not repeat this DistSQL setup step unless retried, we must
+					// force a retry.
+					errAmbiguous := &roachpb.AmbiguousResultError{}
+					return roachpb.NewError(errAmbiguous).GoError()
 				}
 				if seenSpan.Key != nil {
 					if !seenSpan.EndKey.Equal(sp.EndKey) {
@@ -1365,6 +1382,8 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 				seenSpan = sp
 				return nil
 			},
+			BulkAdderFlushesEveryBatch:                 true,
+			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
@@ -1470,10 +1489,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				}
 				return nil
 			},
-			// the backfiller flushes after every batch if RunAfterBackfillChunk is
-			// non-nil so this noop fn means we can observe the partial-backfill that
-			// would otherwise just be buffered.
-			RunAfterBackfillChunk: func() {},
+			BulkAdderFlushesEveryBatch: true,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
@@ -4767,7 +4783,7 @@ func TestCancelSchemaChange(t *testing.T) {
 
 // This test checks that when a transaction containing schema changes
 // needs to be retried it gets retried internal to cockroach. This test
-// currently fails because a schema changeg transaction is not retried.
+// currently fails because a schema change transaction is not retried.
 func TestSchemaChangeRetryError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5058,6 +5074,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 					}
 				}
 			},
+			BulkAdderFlushesEveryBatch: true,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
@@ -5128,6 +5145,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 					}
 				}
 			},
+			BulkAdderFlushesEveryBatch: true,
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
@@ -5609,6 +5627,7 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 					close(backfillProgressing)
 				}
 			},
+			BulkAdderFlushesEveryBatch: true,
 		},
 	}
 
@@ -6035,7 +6054,7 @@ INSERT INTO t.test VALUES (1, 2), (2, 2);
 		_, err = sqlDB.Exec(`
 CREATE UNIQUE INDEX i ON t.test(v);
 `)
-		require.Regexp(t, "violates unique constraint", err.Error())
+		require.Regexp(t, `violates unique constraint "i"`, err.Error())
 		// Verify that the index was cleaned up.
 		testutils.SucceedsSoon(t, func() error {
 			return checkTableKeyCountExact(ctx, kvDB, 2)
@@ -6117,7 +6136,7 @@ INSERT INTO t.test VALUES (1, 2), (2, 2);
 		_, err = sqlDB.Exec(`
 CREATE UNIQUE INDEX i ON t.test(v);
 `)
-		require.Regexp(t, "violates unique constraint", err.Error())
+		require.Regexp(t, `violates unique constraint "i"`, err.Error())
 
 		var jobErr string
 		row := sqlDB.QueryRow("SELECT error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
