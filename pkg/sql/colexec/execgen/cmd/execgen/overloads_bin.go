@@ -761,8 +761,11 @@ func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumEl
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
+			if _res == tree.DNull {
+				_outNulls.SetNull(%s)
+			}
 			%s
-		`, prelude, leftColdataExtDatum, rightDatumElem,
+		`, prelude, leftColdataExtDatum, rightDatumElem, idxVariable,
 		set(typeconv.DatumVecCanonicalTypeFamily, vecVariable, idxVariable, "_res"),
 	)
 }
