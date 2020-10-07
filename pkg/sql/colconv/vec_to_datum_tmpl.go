@@ -60,7 +60,9 @@ func NewVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *VecToDatumC
 }
 
 // ConvertBatchAndDeselect converts the selected vectors from the batch while
-// performing a deselection step.
+// performing a deselection step. It doesn't account for the memory used by the
+// newly created tree.Datums, so it is up to the caller to do the memory
+// accounting.
 // NOTE: converted columns are "dense" in regards to the selection vector - if
 // there was a selection vector on the batch, only elements that were selected
 // are converted, so in order to access the tuple at position tupleIdx, use
@@ -98,7 +100,9 @@ func (c *VecToDatumConverter) ConvertBatchAndDeselect(batch coldata.Batch) {
 }
 
 // ConvertBatch converts the selected vectors from the batch *without*
-// performing a deselection step.
+// performing a deselection step. It doesn't account for the memory used by the
+// newly created tree.Datums, so it is up to the caller to do the memory
+// accounting.
 // NOTE: converted columns are "sparse" in regards to the selection vector - if
 // there was a selection vector, only elements that were selected are
 // converted, but the results are put at position sel[tupleIdx], so use
@@ -109,7 +113,8 @@ func (c *VecToDatumConverter) ConvertBatch(batch coldata.Batch) {
 }
 
 // ConvertVecs converts the selected vectors from vecs *without* performing a
-// deselection step.
+// deselection step. It doesn't account for the memory used by the newly
+// created tree.Datums, so it is up to the caller to do the memory accounting.
 // Note that this method is equivalent to ConvertBatch with the only difference
 // being the fact that it takes in a "disassembled" batch and not coldata.Batch.
 // Consider whether you should be using ConvertBatch instead.
@@ -159,7 +164,8 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 // ColVecToDatumAndDeselect converts a vector of coldata-represented values in
 // col into tree.Datum representation while performing a deselection step.
 // length specifies the number of values to be converted and sel is an optional
-// selection vector.
+// selection vector. It doesn't account for the memory used by the newly
+// created tree.Datums, so it is up to the caller to do the memory accounting.
 func ColVecToDatumAndDeselect(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
@@ -176,7 +182,9 @@ func ColVecToDatumAndDeselect(
 }
 
 // ColVecToDatum converts a vector of coldata-represented values in col into
-// tree.Datum representation *without* performing a deselection step.
+// tree.Datum representation *without* performing a deselection step. It
+// doesn't account for the memory used by the newly created tree.Datums, so it
+// is up to the caller to do the memory accounting.
 func ColVecToDatum(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
