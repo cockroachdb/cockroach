@@ -22,35 +22,34 @@ WHERE
 ORDER BY
     name, boroname
 ----
-project
+sort
  ├── columns: name:3 boroname:2
  ├── immutable
  ├── ordering: +3,+2
- └── select
-      ├── columns: boroname:2 name:3 geom:4!null
+ └── project
+      ├── columns: boroname:2 name:3
       ├── immutable
-      ├── ordering: +3,+2
-      ├── sort
-      │    ├── columns: boroname:2 name:3 geom:4
-      │    ├── ordering: +3,+2
-      │    └── index-join nyc_neighborhoods
-      │         ├── columns: boroname:2 name:3 geom:4
-      │         └── inverted-filter
-      │              ├── columns: gid:1!null
-      │              ├── inverted expression: /6
-      │              │    ├── tight: false
-      │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │              ├── pre-filterer expression
-      │              │    └── st_intersects('0101000020266900000000000026CF21410000008016315141', geom:4)
-      │              ├── key: (1)
-      │              └── scan nyc_neighborhoods@nyc_neighborhoods_geom_idx
-      │                   ├── columns: gid:1!null geom_inverted_key:6!null
-      │                   ├── inverted constraint: /6/1
-      │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │                   ├── key: (1)
-      │                   └── fd: (1)-->(6)
-      └── filters
-           └── st_intersects(geom:4, '0101000020266900000000000026CF21410000008016315141') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+      └── select
+           ├── columns: boroname:2 name:3 geom:4!null
+           ├── immutable
+           ├── index-join nyc_neighborhoods
+           │    ├── columns: boroname:2 name:3 geom:4
+           │    └── inverted-filter
+           │         ├── columns: gid:1!null
+           │         ├── inverted expression: /6
+           │         │    ├── tight: false
+           │         │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+           │         ├── pre-filterer expression
+           │         │    └── st_intersects('0101000020266900000000000026CF21410000008016315141', geom:4)
+           │         ├── key: (1)
+           │         └── scan nyc_neighborhoods@nyc_neighborhoods_geom_idx
+           │              ├── columns: gid:1!null geom_inverted_key:6!null
+           │              ├── inverted constraint: /6/1
+           │              │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+           │              ├── key: (1)
+           │              └── fd: (1)-->(6)
+           └── filters
+                └── st_intersects(geom:4, '0101000020266900000000000026CF21410000008016315141') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # 11.6
 opt
@@ -67,35 +66,34 @@ WHERE
 ORDER BY
     name ASC
 ----
-project
+sort
  ├── columns: name:3
  ├── immutable
  ├── ordering: +3
- └── select
-      ├── columns: name:3 geom:6!null
+ └── project
+      ├── columns: name:3
       ├── immutable
-      ├── ordering: +3
-      ├── sort
-      │    ├── columns: name:3 geom:6
-      │    ├── ordering: +3
-      │    └── index-join nyc_streets
-      │         ├── columns: name:3 geom:6
-      │         └── inverted-filter
-      │              ├── columns: gid:1!null
-      │              ├── inverted expression: /8
-      │              │    ├── tight: false
-      │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │              ├── pre-filterer expression
-      │              │    └── st_dwithin('0101000020266900000000000026CF21410000008016315141', geom:6, 10.0)
-      │              ├── key: (1)
-      │              └── scan nyc_streets@nyc_streets_geom_idx
-      │                   ├── columns: gid:1!null geom_inverted_key:8!null
-      │                   ├── inverted constraint: /8/1
-      │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │                   ├── key: (1)
-      │                   └── fd: (1)-->(8)
-      └── filters
-           └── st_dwithin(geom:6, '0101000020266900000000000026CF21410000008016315141', 10.0) [outer=(6), immutable, constraints=(/6: (/NULL - ])]
+      └── select
+           ├── columns: name:3 geom:6!null
+           ├── immutable
+           ├── index-join nyc_streets
+           │    ├── columns: name:3 geom:6
+           │    └── inverted-filter
+           │         ├── columns: gid:1!null
+           │         ├── inverted expression: /8
+           │         │    ├── tight: false
+           │         │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+           │         ├── pre-filterer expression
+           │         │    └── st_dwithin('0101000020266900000000000026CF21410000008016315141', geom:6, 10.0)
+           │         ├── key: (1)
+           │         └── scan nyc_streets@nyc_streets_geom_idx
+           │              ├── columns: gid:1!null geom_inverted_key:8!null
+           │              ├── inverted constraint: /8/1
+           │              │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+           │              ├── key: (1)
+           │              └── fd: (1)-->(8)
+           └── filters
+                └── st_dwithin(geom:6, '0101000020266900000000000026CF21410000008016315141', 10.0) [outer=(6), immutable, constraints=(/6: (/NULL - ])]
 
 # 12.1.2
 opt
@@ -114,35 +112,34 @@ WHERE
 ORDER BY
     name, boroname
 ----
-project
+sort
  ├── columns: name:3 boroname:2
  ├── immutable
  ├── ordering: +3,+2
- └── select
-      ├── columns: boroname:2 name:3 geom:4!null
+ └── project
+      ├── columns: boroname:2 name:3
       ├── immutable
-      ├── ordering: +3,+2
-      ├── sort
-      │    ├── columns: boroname:2 name:3 geom:4
-      │    ├── ordering: +3,+2
-      │    └── index-join nyc_neighborhoods
-      │         ├── columns: boroname:2 name:3 geom:4
-      │         └── inverted-filter
-      │              ├── columns: gid:1!null
-      │              ├── inverted expression: /6
-      │              │    ├── tight: false
-      │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │              ├── pre-filterer expression
-      │              │    └── st_intersects('01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', geom:4)
-      │              ├── key: (1)
-      │              └── scan nyc_neighborhoods@nyc_neighborhoods_geom_idx
-      │                   ├── columns: gid:1!null geom_inverted_key:6!null
-      │                   ├── inverted constraint: /6/1
-      │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │                   ├── key: (1)
-      │                   └── fd: (1)-->(6)
-      └── filters
-           └── st_intersects(geom:4, '01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+      └── select
+           ├── columns: boroname:2 name:3 geom:4!null
+           ├── immutable
+           ├── index-join nyc_neighborhoods
+           │    ├── columns: boroname:2 name:3 geom:4
+           │    └── inverted-filter
+           │         ├── columns: gid:1!null
+           │         ├── inverted expression: /6
+           │         │    ├── tight: false
+           │         │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+           │         ├── pre-filterer expression
+           │         │    └── st_intersects('01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', geom:4)
+           │         ├── key: (1)
+           │         └── scan nyc_neighborhoods@nyc_neighborhoods_geom_idx
+           │              ├── columns: gid:1!null geom_inverted_key:6!null
+           │              ├── inverted constraint: /6/1
+           │              │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+           │              ├── key: (1)
+           │              └── fd: (1)-->(6)
+           └── filters
+                └── st_intersects(geom:4, '01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # 12.2.3
 opt
@@ -162,35 +159,34 @@ WHERE
 ORDER BY
     name
 ----
-project
+sort
  ├── columns: name:3
  ├── immutable
  ├── ordering: +3
- └── select
-      ├── columns: name:3 geom:6!null
+ └── project
+      ├── columns: name:3
       ├── immutable
-      ├── ordering: +3
-      ├── sort
-      │    ├── columns: name:3 geom:6
-      │    ├── ordering: +3
-      │    └── index-join nyc_streets
-      │         ├── columns: name:3 geom:6
-      │         └── inverted-filter
-      │              ├── columns: gid:1!null
-      │              ├── inverted expression: /8
-      │              │    ├── tight: false
-      │              │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │              ├── pre-filterer expression
-      │              │    └── st_dwithin('01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', geom:6, 0.1)
-      │              ├── key: (1)
-      │              └── scan nyc_streets@nyc_streets_geom_idx
-      │                   ├── columns: gid:1!null geom_inverted_key:8!null
-      │                   ├── inverted constraint: /8/1
-      │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
-      │                   ├── key: (1)
-      │                   └── fd: (1)-->(8)
-      └── filters
-           └── st_dwithin(geom:6, '01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', 0.1) [outer=(6), immutable, constraints=(/6: (/NULL - ])]
+      └── select
+           ├── columns: name:3 geom:6!null
+           ├── immutable
+           ├── index-join nyc_streets
+           │    ├── columns: name:3 geom:6
+           │    └── inverted-filter
+           │         ├── columns: gid:1!null
+           │         ├── inverted expression: /8
+           │         │    ├── tight: false
+           │         │    └── union spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+           │         ├── pre-filterer expression
+           │         │    └── st_dwithin('01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', geom:6, 0.1)
+           │         ├── key: (1)
+           │         └── scan nyc_streets@nyc_streets_geom_idx
+           │              ├── columns: gid:1!null geom_inverted_key:8!null
+           │              ├── inverted constraint: /8/1
+           │              │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+           │              ├── key: (1)
+           │              └── fd: (1)-->(8)
+           └── filters
+                └── st_dwithin(geom:6, '01020000202669000002000000000000003CE8214100000080A22E514100000000E0E8214100000000A62E5141', 0.1) [outer=(6), immutable, constraints=(/6: (/NULL - ])]
 
 # 12.2.4
 opt
