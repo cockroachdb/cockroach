@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -2689,7 +2690,7 @@ func MVCCIterate(
 	key, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
-	f func(roachpb.KeyValue) (bool, error),
+	f func(roachpb.KeyValue) error,
 ) ([]roachpb.Intent, error) {
 	iter := reader.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
@@ -2714,12 +2715,11 @@ func MVCCIterate(
 		}
 
 		for i := range res.KVs {
-			done, err := f(res.KVs[i])
-			if err != nil {
+			if err := f(res.KVs[i]); err != nil {
+				if iterutil.Done(err) {
+					return intents, nil
+				}
 				return nil, err
-			}
-			if done {
-				return intents, nil
 			}
 		}
 

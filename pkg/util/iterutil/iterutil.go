@@ -10,68 +10,33 @@
 
 package iterutil
 
-// Cur is the current element of the iteration.
-type Cur struct {
-	Elem  interface{}
-	Index int
-	done  *bool
-}
+import "github.com/cockroachdb/errors"
 
-// Stop halts the iteration, i.e., sets the `done` flag to true.
-func (c *Cur) Stop() error {
-	*c.done = true
-	return nil
-}
+var errStopIteration = errors.New("stop iteration")
 
-// State iterates over the values.
+// StopIteration returns a sentinel error that indicates stopping the iteration.
 //
-// This can be used to create iterators that use closures, like:
+// This error should not be propagated further, i.e., if a closure returns
+// this error, the loop should break returning nil error. For example:
 //
-// 	s := iterutil.NewState()
-//	s.Elem = new(my.Thing)
-// 	for _, thing := range myThings {
-// 		*s.Elem.(*my.Thing) = thing // set the current element
-// 		if err := f(s.Current()); err != nil {
-// 			return err
-// 		}
-// 		if s.Done() {
-// 			break
-// 		}
-// 	}
-//
-// where `f` is something like:
-//
-// 	f := func(c iterutil.Cur) error {
-// 		repl := c.Elem.(*my.Thing)
-// 		if something(repl) {
-// 			return errors.New("something is not good!")
-// 		} else if somethingElse(repl) {
-// 			return c.Stop() // that's it, won't be called again, even if Stop returns non-nil error
+// 	f := func(i int) error {
+// 		if i == 10 {
+// 			return iterutil.StopIteration()
 // 		}
 // 		return nil
 // 	}
 //
-type State struct {
-	Cur
-	done bool
-}
-
-// NewState creates a new iterator state.
-func NewState() *State {
-	s := State{}
-	s.Cur.done = &s.done
-	s.Cur.Index = -1 // will become 0 when Current is called the first time
-	return &s
-}
-
-// Current returns the current element of the iteration state.
+// 	for i := range slice {
+// 		if err := f(i); err != nil {
+// 			if iterutil.Done() {
+// 				return nil
+// 			}
+// 			return err
+// 		}
+// 		// continue when nil error
+// 	}
 //
-// Once the closure returns, it must not retain or access Elem any more.
-// It is preferred to be used over accessing Cur since it increments the index.
-func (s *State) Current() Cur {
-	s.Cur.Index++
-	return s.Cur
-}
+func StopIteration() error { return errStopIteration }
 
-// Done tells if the iteration is complete or not.
-func (s *State) Done() bool { return s.done }
+// Done tells if the error is ErrStopIteration, i.e., should the iteration stop.
+func Done(err error) bool { return errors.Is(err, errStopIteration) }
