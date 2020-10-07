@@ -28,10 +28,14 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.DROP_DATABASE:
       const tableDropText = getDroppedObjectsText(info);
       return `Database Dropped: User ${info.User} dropped database ${info.DatabaseName}. ${tableDropText}`;
+    case eventTypes.RENAME_DATABASE:
+      return `Database Renamed: User ${info.User} renamed database ${info.DatabaseName} to ${info.NewDatabaseName}`;
     case eventTypes.CREATE_TABLE:
       return `Table Created: User ${info.User} created table ${info.TableName}`;
     case eventTypes.DROP_TABLE:
       return `Table Dropped: User ${info.User} dropped table ${info.TableName}`;
+    case eventTypes.RENAME_TABLE:
+      return `Table Renamed: User ${info.User} renamed table ${info.TableName} to ${info.NewTableName}`;
     case eventTypes.TRUNCATE_TABLE:
       return `Table Truncated: User ${info.User} truncated table ${info.TableName}`;
     case eventTypes.ALTER_TABLE:
@@ -89,7 +93,9 @@ export function getEventDescription(e: Event$Properties): string {
 export interface EventInfo {
   User: string;
   DatabaseName?: string;
+  NewDatabaseName?: string;
   TableName?: string;
+  NewTableName?: string;
   IndexName?: string;
   MutationID?: string;
   ViewName?: string;
