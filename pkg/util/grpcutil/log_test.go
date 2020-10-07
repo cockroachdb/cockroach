@@ -11,7 +11,6 @@
 package grpcutil
 
 import (
-	"regexp"
 	"testing"
 	"time"
 
@@ -20,38 +19,31 @@ import (
 )
 
 func TestShouldPrint(t *testing.T) {
-	const duration = 100 * time.Millisecond
-
-	argRe, err := regexp.Compile("[a-z][0-9]")
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	testutils.RunTrueAndFalse(t, "argsMatch", func(t *testing.T, argsMatch bool) {
-		msg := "baz"
+		msg := "blablabla"
 		if argsMatch {
-			msg = "a1"
+			msg = "grpc: addrConn.createTransport failed to connect to 127.0.0.1:1234 (connection refused)"
 		}
 
 		args := []interface{}{msg}
 		curriedShouldPrint := func() bool {
-			return shouldPrint(argRe, duration, args...)
+			return shouldPrintWarning(args...)
 		}
 
 		// First call should always print.
 		if !curriedShouldPrint() {
-			t.Error("expected first call to print")
+			t.Error("1st call: should print expected true, got false")
 		}
 
 		// Should print if non-matching.
 		alwaysPrint := !argsMatch
 		if alwaysPrint {
 			if !curriedShouldPrint() {
-				t.Error("expected second call to print")
+				t.Error("2nd call: should print expected true, got false")
 			}
 		} else {
 			if curriedShouldPrint() {
-				t.Error("unexpected second call to print")
+				t.Error("2nd call: should print expected false, got true")
 			}
 		}
 
@@ -63,7 +55,7 @@ func TestShouldPrint(t *testing.T) {
 			spamMu.Unlock()
 		}
 		if !curriedShouldPrint() {
-			t.Error("expected third call to print")
+			t.Error("3rd call (after reset): should print expected true, got false")
 		}
 	})
 }
