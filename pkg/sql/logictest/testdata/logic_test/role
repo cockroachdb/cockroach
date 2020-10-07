@@ -891,7 +891,7 @@ ALTER ROLE rolewithcreate WITH NOCREATEROLE
 user root
 
 statement ok
-GRANT rolewithcreate TO testuser
+ALTER USER testuser CREATEROLE
 
 user testuser
 
@@ -926,17 +926,10 @@ statement ok
 ALTER ROLE rolewithcreate WITH NOCREATEROLE
 
 statement ok
-ALTER ROLE rolewithcreate NOCREATEROLE
+ALTER USER testuser NOCREATEROLE
 
 statement error pq: cannot edit admin role
 ALTER ROLE admin with NOCREATEROLE
-
-query TTB colnames
-SELECT * FROM system.role_members
-----
-role      member    isAdmin
-admin     root      true
-rolewithcreate  testuser  false
 
 # testuser should no longer have CREATEROLE privileges
 
@@ -971,44 +964,21 @@ ALTER ROLE IF EXISTS rolek CREATEROLE
 statement ok
 ALTER USER IF EXISTS rolek NOCREATEROLE
 
-statement ok
-ALTER USER rolewithcreate WITH NOCREATEROLE
-
-statement ok
-ALTER ROLE rolewithcreate CREATEROLE
-
-user testuser
-
-statement ok
-CREATE ROLE IF NOT EXISTS rolei WITH NOCREATEROLE
-
-statement ok
-DROP ROLE rolewithcreate
-
-statement error pq: user testuser does not have CREATEROLE privilege
-CREATE ROLE rolewithcreate
-
-statement error pq: user testuser does not have CREATEROLE privilege
-CREATE ROLE IF NOT EXISTS roleh WITH CREATEROLE
-
-# Testing nested role privilege
+# Role options should not be inherited.
 user root
-
-statement ok
-CREATE USER childrole WITH NOCREATEROLE
 
 statement ok
 CREATE ROLE parentrole WITH CREATEROLE
 
 statement ok
-GRANT parentrole TO childrole
+ALTER USER testuser WITH NOCREATEROLE
 
 statement ok
-GRANT childrole to testuser
+GRANT parentrole TO testuser
 
 user testuser
 
-statement ok
+statement error pq: user testuser does not have CREATEROLE privilege
 CREATE ROLE rolej
 
 # Testing LOGIN and VALID UNTIL role privilege
@@ -1063,9 +1033,6 @@ CREATE ROLE thisshouldntwork LOGIN NOLOGIN
 
 statement error pq: redundant role options
 CREATE ROLE thisshouldntwork LOGIN LOGIN
-
-statement ok
-DROP ROLE childrole
 
 statement ok
 DROP ROLE parentrole
@@ -1216,12 +1183,9 @@ subtest createlogin_privilege
 user root
 
 statement ok
-CREATE ROLE pseudo_admin;
-  ALTER ROLE pseudo_admin CREATEROLE;
+ALTER USER testuser CREATEROLE;
   DROP USER testuser2;
   DROP USER testuser3;
-  ALTER USER testuser NOCREATEROLE;
-  GRANT pseudo_admin TO testuser
 
 user testuser
 
@@ -1288,7 +1252,7 @@ CREATE ROLE otherrole2 LOGIN
 user root
 
 statement ok
-ALTER ROLE pseudo_admin CREATELOGIN
+ALTER ROLE testuser CREATELOGIN
 
 user testuser
 
@@ -1340,12 +1304,12 @@ CREATE ROLE otherrole4 LOGIN
 user root
 
 statement ok
-ALTER ROLE pseudo_admin NOCREATELOGIN
+ALTER USER testuser NOCREATELOGIN
 
 user testuser
 
 statement error user testuser does not have CREATELOGIN privilege
-CREATE USER testuser4 WITH PASSWORD 'abc'
+CREATE USER testuser5 WITH PASSWORD 'abc'
 
 statement error user testuser does not have CREATELOGIN privilege
 ALTER USER testuser2 WITH PASSWORD 'abc'

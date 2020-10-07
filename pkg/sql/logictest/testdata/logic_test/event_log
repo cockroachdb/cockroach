@@ -251,6 +251,27 @@ WHERE "eventType" = 'drop_table'
 ----
 1  test.public.b
 
+# Create + Rename table
+##################
+
+statement ok
+CREATE TABLE toberenamed( id SERIAL PRIMARY KEY );
+
+statement ok
+ALTER TABLE toberenamed RENAME TO renamedtable;
+
+
+# Verify that rename table event is logged
+##################
+
+query ITT
+SELECT "reportingID", info::JSONB->>'TableName', info::JSONB->>'NewTableName'
+FROM system.eventlog
+WHERE "eventType" = 'rename_table'
+  AND info::JSONB->>'Statement' LIKE 'ALTER TABLE toberenamed RENAME TO renamedtable%'
+----
+1  test.public.toberenamed  test.public.renamedtable
+
 
 ##################
 # DATABASE DDL
@@ -332,6 +353,32 @@ WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE IF EXISTS othereventlogtest%'
 ----
 1  []
+
+statement ok
+SET DATABASE = test
+
+# Add a database.
+##################
+
+statement ok
+CREATE DATABASE eventlogtorename
+
+# rename database.
+##################
+
+statement ok
+ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname
+
+# verify contents of database rename event
+##################
+
+query ITT
+SELECT "reportingID", info::JSONB->>'DatabaseName', info::JSONB->>'NewDatabaseName'
+FROM system.eventlog
+WHERE "eventType" = 'rename_database'
+  AND info::JSONB->>'Statement' LIKE 'ALTER DATABASE eventlogtorename RENAME TO eventlogtonewname%'
+----
+1  eventlogtorename  eventlogtonewname
 
 statement ok
 SET DATABASE = test
