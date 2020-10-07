@@ -190,6 +190,12 @@ var (
 	// LocalStoreSuggestedCompactionsMax is the end of the span of
 	// possible suggested compaction keys for a store.
 	LocalStoreSuggestedCompactionsMax = LocalStoreSuggestedCompactionsMin.PrefixEnd()
+	// localStoreCachedSettingsSuffix stores the cached settings for node.
+	localStoreCachedSettingsSuffix = []byte("stng")
+	// LocalStoreCachedSettingsKeyMin is the start of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMin = MakeStoreKey(localStoreCachedSettingsSuffix, nil)
+	// LocalStoreCachedSettingsKeyMin is the end of span of possible cached settings keys.
+	LocalStoreCachedSettingsKeyMax = LocalStoreCachedSettingsKeyMin.PrefixEnd()
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
 	// keys, and non-system tenant SQL keys.

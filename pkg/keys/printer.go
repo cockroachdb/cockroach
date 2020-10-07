@@ -190,6 +190,7 @@ var constSubKeyDict = []struct {
 	{"/gossipBootstrap", localStoreGossipSuffix},
 	{"/clusterVersion", localStoreClusterVersionSuffix},
 	{"/suggestedCompaction", localStoreSuggestedCompactionSuffix},
+	{"/cachedSettings", localStoreCachedSettingsSuffix},
 }
 
 func suggestedCompactionKeyPrint(key roachpb.Key) string {
@@ -200,11 +201,23 @@ func suggestedCompactionKeyPrint(key roachpb.Key) string {
 	return fmt.Sprintf("{%s-%s}", start, end)
 }
 
+func cachedSettingsKeyPrint(key roachpb.Key) string {
+	settingKey, err := DecodeStoreCachedSettingsKey(key)
+	if err != nil {
+		return fmt.Sprintf("<invalid: %s>", err)
+	}
+	return settingKey.String()
+}
+
 func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 	for _, v := range constSubKeyDict {
 		if bytes.HasPrefix(key, v.key) {
 			if v.key.Equal(localStoreSuggestedCompactionSuffix) {
 				return v.name + "/" + suggestedCompactionKeyPrint(
+					append(roachpb.Key(nil), append(localStorePrefix, key...)...),
+				)
+			} else if v.key.Equal(localStoreCachedSettingsSuffix) {
+				return v.name + "/" + cachedSettingsKeyPrint(
 					append(roachpb.Key(nil), append(localStorePrefix, key...)...),
 				)
 			}
@@ -218,8 +231,8 @@ func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 	for _, s := range constSubKeyDict {
 		if strings.HasPrefix(input, s.name) {
-			if s.key.Equal(localStoreSuggestedCompactionSuffix) {
-				panic(&ErrUglifyUnsupported{errors.New("cannot parse suggested compaction key")})
+			if s.key.Equal(localStoreSuggestedCompactionSuffix) || s.key.Equal(localStoreCachedSettingsSuffix) {
+				panic(&ErrUglifyUnsupported{errors.Errorf("cannot parse local store key with suffix %s", s.key)})
 			}
 			output = MakeStoreKey(s.key, nil)
 			return
