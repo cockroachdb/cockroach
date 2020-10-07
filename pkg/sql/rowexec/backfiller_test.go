@@ -100,7 +100,6 @@ func TestWriteResumeSpan(t *testing.T) {
 		{ResumeSpans: resumeSpans}}}
 
 	job, err := registry.LoadJob(ctx, jobID)
-
 	if err != nil {
 		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
 	}
