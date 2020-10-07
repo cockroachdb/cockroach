@@ -626,6 +626,9 @@ func (j *Job) succeeded(ctx context.Context, fn func(context.Context, *kv.Txn) e
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if err := md.CheckRunningOrReverting(); err != nil {
+			return err
+		}
 		md.Payload.Details = jobspb.WrapPayloadDetails(details)
 		ju.UpdatePayload(md.Payload)
 		return nil
@@ -635,6 +638,9 @@ func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
 // SetProgress sets the details field of the currently running tracked job.
 func (j *Job) SetProgress(ctx context.Context, details interface{}) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if err := md.CheckRunningOrReverting(); err != nil {
+			return err
+		}
 		md.Progress.Details = jobspb.WrapProgressDetails(details)
 		ju.UpdateProgress(md.Progress)
 		return nil

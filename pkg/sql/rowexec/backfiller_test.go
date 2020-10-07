@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWriteResumeSpan(t *testing.T) {
@@ -100,10 +101,15 @@ func TestWriteResumeSpan(t *testing.T) {
 		{ResumeSpans: resumeSpans}}}
 
 	job, err := registry.LoadJob(ctx, jobID)
-
 	if err != nil {
 		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
 	}
+
+	require.NoError(t, job.Update(ctx,
+		func(_ *kv.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			ju.UpdateStatus(jobs.StatusRunning)
+			return nil
+		}))
 
 	err = job.SetDetails(ctx, details)
 	if err != nil {
