@@ -123,6 +123,7 @@ type Server struct {
 	mux             http.ServeMux
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
+	engines         Engines
 	// The gRPC server on which the different RPC handlers will be registered.
 	grpc         *grpcServer
 	gossip       *gossip.Gossip
@@ -158,9 +159,7 @@ type Server struct {
 	externalStorageBuilder *externalStorageBuilder
 
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
-
 	startTime time.Time
-	engines   Engines
 }
 
 // externalStorageBuilder is a wrapper around the ExternalStorage factory
@@ -597,12 +596,19 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn())
 	node.InitLogger(sqlServer.execCfg)
 
+	engines, err := cfg.CreateEngines(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create engines")
+	}
+	stopper.AddCloser(&engines)
+
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
 		cfg:                    cfg,
 		st:                     st,
 		clock:                  clock,
 		rpcContext:             rpcContext,
+		engines:                engines,
 		grpc:                   grpcServer,
 		gossip:                 g,
 		nodeDialer:             nodeDialer,
@@ -1047,12 +1053,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := s.startServeUI(ctx, workersCtx, connManager, uiTLSConfig); err != nil {
 		return err
 	}
-
-	s.engines, err = s.cfg.CreateEngines(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to create engines")
-	}
-	s.stopper.AddCloser(&s.engines)
 
 	// Initialize the external storage builders configuration params now that the
 	// engines have been created. The object can be used to create ExternalStorage
