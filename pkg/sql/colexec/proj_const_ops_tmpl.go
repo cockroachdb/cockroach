@@ -98,6 +98,7 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 		projVec.Nulls().UnsetNulls()
 	}
 	projCol := projVec._RET_TYP()
+	_outNulls := projVec.Nulls()
 	if vec.Nulls().MaybeHasNulls() {
 		_SET_PROJECTION(true)
 	} else {
@@ -137,8 +138,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 		}
 	}
 	// {{if _HAS_NULLS}}
-	colNullsCopy := colNulls.Copy()
-	projVec.SetNulls(&colNullsCopy)
+	projVec.SetNulls(_outNulls.Or(colNulls))
 	// {{end}}
 	// {{end}}
 	// {{end}}

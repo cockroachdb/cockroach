@@ -109,6 +109,7 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	vec2 := batch.ColVec(p.col2Idx)
 	col1 := vec1._L_TYP()
 	col2 := vec2._R_TYP()
+	_outNulls := projVec.Nulls()
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		_SET_PROJECTION(true)
 	} else {
@@ -157,7 +158,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 		}
 	}
 	// {{if _HAS_NULLS}}
-	projVec.SetNulls(col1Nulls.Or(col2Nulls))
+	projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
 	// {{end}}
 	// {{end}}
 	// {{end}}
