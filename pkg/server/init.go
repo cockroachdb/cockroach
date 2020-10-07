@@ -484,7 +484,11 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 // attemptJoinTo attempts to join to the node running at the given address. If
 // successful, an initState is returned.
 func (s *initServer) attemptJoinTo(ctx context.Context, addr string) (*initState, error) {
-	conn, err := grpc.DialContext(ctx, addr, s.config.dialOpts...)
+	// XXX: Ben, is this what you mean? What should be the added comment/commit
+	// message here?
+	dialOpts := s.config.dialOpts
+	dialOpts = append(dialOpts, grpc.WithNoProxy())
+	conn, err := grpc.DialContext(ctx, addr, dialOpts...)
 	if err != nil {
 		return nil, err
 	}
