@@ -193,11 +193,13 @@ var _ HashRowContainer = &HashMemRowContainer{}
 
 // MakeHashMemRowContainer creates a HashMemRowContainer from the given
 // rowContainer. This rowContainer must still be Close()d by the caller.
-func MakeHashMemRowContainer(rowContainer *MemRowContainer) HashMemRowContainer {
+func MakeHashMemRowContainer(
+	rowContainer *MemRowContainer, memMonitor *mon.BytesMonitor,
+) HashMemRowContainer {
 	return HashMemRowContainer{
 		MemRowContainer: rowContainer,
 		buckets:         make(map[string][]int),
-		bucketsAcc:      rowContainer.evalCtx.Mon.MakeBoundAccount(),
+		bucketsAcc:      memMonitor.MakeBoundAccount(),
 	}
 }
 
@@ -225,10 +227,15 @@ func (h *HashMemRowContainer) Init(
 // AddRow adds a row to the HashMemRowContainer. This row is unmarked by default.
 func (h *HashMemRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	rowIdx := h.Len()
-	if err := h.MemRowContainer.AddRow(ctx, row); err != nil {
+	// Note that it is important that we add the row to a bucket first before
+	// adding it to the row container because we want to make sure that if an
+	// error is encountered in addRowToBucket, the row hasn't been added to the
+	// container - this will allow us to fall back to disk if necessary without
+	// erroneously adding the same row twice.
+	if err := h.addRowToBucket(ctx, row, rowIdx); err != nil {
 		return err
 	}
-	return h.addRowToBucket(ctx, row, rowIdx)
+	return h.MemRowContainer.AddRow(ctx, row)
 }
 
 // Close implements the HashRowContainer interface.
@@ -812,7 +819,7 @@ func (h *HashDiskBackedRowContainer) Init(
 		h.mrc = &MemRowContainer{}
 		h.mrc.InitWithMon(ordering, types, h.evalCtx, h.memoryMonitor, 0 /* rowCapacity */)
 	}
-	hmrc := MakeHashMemRowContainer(h.mrc)
+	hmrc := MakeHashMemRowContainer(h.mrc, h.memoryMonitor)
 	h.hmrc = &hmrc
 	h.src = h.hmrc
 	if err := h.hmrc.Init(ctx, shouldMark, types, storedEqCols, encodeNull); err != nil {
@@ -947,19 +954,6 @@ func (h *HashDiskBackedRowContainer) NewBucketIterator(
 // NewUnmarkedIterator implements the hashRowContainer interface.
 func (h *HashDiskBackedRowContainer) NewUnmarkedIterator(ctx context.Context) RowIterator {
 	return h.src.NewUnmarkedIterator(ctx)
-}
-
-// UnsafeReset resets the container for reuse. The HashDiskBackedRowContainer
-// will reset to using memory if it is using disk.
-func (h *HashDiskBackedRowContainer) UnsafeReset(ctx context.Context) error {
-	h.allRowsIterators = h.allRowsIterators[:0]
-	if h.hdrc != nil {
-		h.hdrc.Close(ctx)
-		h.src = h.hmrc
-		h.hdrc = nil
-		return nil
-	}
-	return h.hmrc.UnsafeReset(ctx)
 }
 
 // Sort sorts the underlying row container based on stored equality columns

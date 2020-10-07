@@ -68,18 +68,20 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	types := sqlbase.OneIntCol
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	rc := NewHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
-	err = rc.Init(
-		ctx,
-		false, /* shouldMark */
-		types,
-		storedEqColumns,
-		true, /*encodeNull */
-	)
-	if err != nil {
-		t.Fatalf("unexpected error while initializing hashDiskBackedRowContainer: %s", err.Error())
+	getRowContainer := func() *HashDiskBackedRowContainer {
+		rc := NewHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
+		err = rc.Init(
+			ctx,
+			false, /* shouldMark */
+			types,
+			storedEqColumns,
+			true, /*encodeNull */
+		)
+		if err != nil {
+			t.Fatalf("unexpected error while initializing hashDiskBackedRowContainer: %s", err.Error())
+		}
+		return rc
 	}
-	defer rc.Close(ctx)
 
 	// NormalRun adds rows to a hashDiskBackedRowContainer, makes it spill to
 	// disk halfway through, keeps on adding rows, and then verifies that all
@@ -89,13 +91,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
+		rc := getRowContainer()
+		defer rc.Close(ctx)
 		mid := len(rows) / 2
 		for i := 0; i < mid; i++ {
 			if err := rc.AddRow(ctx, rows[i]); err != nil {
@@ -139,12 +136,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		rc := getRowContainer()
+		defer rc.Close(ctx)
 
 		if err := rc.AddRow(ctx, rows[0]); err != nil {
 			t.Fatal(err)
@@ -164,12 +157,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(1))
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		rc := getRowContainer()
+		defer rc.Close(ctx)
 
 		err := rc.AddRow(ctx, rows[0])
 		if code := pgerror.GetPGCode(err); code != pgcode.DiskFull {
@@ -197,12 +186,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		rc := getRowContainer()
+		defer rc.Close(ctx)
 
 		for i := 0; i < len(rows); i++ {
 			if err := rc.AddRow(ctx, rows[i]); err != nil {
@@ -276,12 +261,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		rc := getRowContainer()
+		defer rc.Close(ctx)
 
 		for i := 0; i < len(rows); i++ {
 			if err := rc.AddRow(ctx, rows[i]); err != nil {
@@ -373,18 +354,20 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	types := []types.T{*types.Int, *types.Int}
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	rc := NewHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
-	err = rc.Init(
-		ctx,
-		true, /* shouldMark */
-		types,
-		storedEqColumns,
-		true, /*encodeNull */
-	)
-	if err != nil {
-		t.Fatalf("unexpected error while initializing hashDiskBackedRowContainer: %s", err.Error())
+	getRowContainer := func() *HashDiskBackedRowContainer {
+		rc := NewHashDiskBackedRowContainer(nil, &evalCtx, &memoryMonitor, &diskMonitor, tempEngine)
+		err = rc.Init(
+			ctx,
+			true, /* shouldMark */
+			types,
+			storedEqColumns,
+			true, /*encodeNull */
+		)
+		if err != nil {
+			t.Fatalf("unexpected error while initializing hashDiskBackedRowContainer: %s", err.Error())
+		}
+		return rc
 	}
-	defer rc.Close(ctx)
 
 	// PreservingMatches adds rows from three different buckets to a
 	// hashDiskBackedRowContainer, makes it spill to disk, keeps on adding rows
@@ -395,12 +378,8 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		rc := getRowContainer()
+		defer rc.Close(ctx)
 
 		mid := len(rows) / 2
 		for i := 0; i < mid; i++ {
@@ -448,12 +427,8 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		rc := getRowContainer()
+		defer rc.Close(ctx)
 
 		for i := 0; i < len(rows); i++ {
 			if err := rc.AddRow(ctx, rows[i]); err != nil {

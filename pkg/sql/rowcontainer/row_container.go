@@ -30,6 +30,8 @@ import (
 // these.
 type SortableRowContainer interface {
 	Len() int
+	// AddRow adds a row to the container. If an error is returned, then the
+	// row wasn't actually added.
 	AddRow(context.Context, sqlbase.EncDatumRow) error
 	// Sort sorts the rows according to the current ordering (the one set either
 	// at initialization or by the last call of Reorder() - if the container is
