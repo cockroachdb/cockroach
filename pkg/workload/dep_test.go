@@ -27,6 +27,7 @@ func TestDepAllowlist(t *testing.T) {
 			`github.com/cockroachdb/cockroach/pkg/build`,
 			`github.com/cockroachdb/cockroach/pkg/col/coldata`,
 			`github.com/cockroachdb/cockroach/pkg/col/typeconv`,
+			`github.com/cockroachdb/cockroach/pkg/docs`,
 			`github.com/cockroachdb/cockroach/pkg/geo/geopb`,
 			`github.com/cockroachdb/cockroach/pkg/sql/lex`,
 			`github.com/cockroachdb/cockroach/pkg/sql/oidext`,
