@@ -822,45 +822,64 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	// Check if the target table needs to be cleaned up at all. If the target
 	// table was in the ADD state and the schema change failed, then we need to
 	// clean up the descriptor.
-	desc, err := sc.getTargetDescriptor(ctx)
-	if err != nil {
-		return err
-	}
-	if tblDesc, ok := desc.(catalog.TableDescriptor); ok && tblDesc.GetState() == descpb.DescriptorState_ADD {
-		// Delete the names in use by this descriptor.
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return catalogkv.RemoveObjectNamespaceEntry(
-				ctx,
-				txn,
-				sc.execCfg.Codec,
-				tblDesc.GetParentID(),
-				tblDesc.GetParentSchemaID(),
-				tblDesc.GetName(),
-				false, /* kvTrace */
-			)
-		}); err != nil {
+	var cleanupJob *jobs.StartableJob
+	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		if err != nil {
 			return err
 		}
-		// Now start a GC job for the table.
-		if err := startGCJob(
+		if !scTable.Adding() {
+			return nil
+		}
+
+		b := txn.NewBatch()
+		scTable.SetDropped()
+		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, scTable, b); err != nil {
+			return err
+		}
+		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
 			ctx,
-			sc.db,
-			sc.jobRegistry,
-			sc.job.Payload().Username,
-			"ROLLBACK OF"+sc.job.Payload().Description,
+			b,
+			sc.execCfg.Codec,
+			scTable.GetParentID(),
+			scTable.GetParentSchemaID(),
+			scTable.GetName(),
+			false, /* kvTrace */
+		)
+
+		// Queue a GC job.
+		jobRecord := CreateGCJobRecord(
+			"ROLLBACK OF "+sc.job.Payload().Description,
+			sc.job.Payload().Description,
 			jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
 					{
-						ID:       tblDesc.GetID(),
+						ID:       scTable.GetID(),
 						DropTime: timeutil.Now().UnixNano(),
 					},
 				},
 			},
-		); err != nil {
+		)
+		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultsCh */)
+		if err != nil {
 			return err
 		}
+		cleanupJob = job
+		return txn.Run(ctx, b)
+	}); err != nil {
+		if cleanupJob != nil {
+			if rollbackErr := cleanupJob.CleanupOnRollback(ctx); rollbackErr != nil {
+				log.Warningf(ctx, "failed to clean up job: %v", rollbackErr)
+			}
+		}
+		return err
 	}
-
+	if cleanupJob != nil {
+		if _, err := cleanupJob.Start(ctx); err != nil {
+			log.Warningf(ctx, "starting job %d failed with error: %v", *cleanupJob.ID(), err)
+		}
+		log.VEventf(ctx, 2, "started job %d", *cleanupJob.ID())
+	}
 	return nil
 }
 
