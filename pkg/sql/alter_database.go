@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -32,17 +33,14 @@ func (p *planner) AlterDatabaseOwner(
 	}
 	privs := dbDesc.GetPrivileges()
 
-	hasOwnership, err := p.HasOwnership(ctx, dbDesc)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := p.checkCanAlterToNewOwner(ctx, dbDesc, privs, n.Owner, hasOwnership); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, dbDesc, n.Owner); err != nil {
 		return nil, err
 	}
 
 	// To alter the owner, the user also has to have CREATEDB privilege.
-	// TODO(richardjcai): Add this check once #52576 is implemented.
+	if err := p.CheckRoleOption(ctx, roleoption.CREATEDB); err != nil {
+		return nil, err
+	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
 	if n.Owner == privs.Owner {

@@ -46,8 +46,7 @@ type alterTableNode struct {
 	// statsData is populated with data for "alter table inject statistics"
 	// commands - the JSON stats expressions.
 	// It is parallel with n.Cmds (for the inject stats commands).
-	statsData    map[int]tree.TypedExpr
-	hasOwnership bool
+	statsData map[int]tree.TypedExpr
 }
 
 // AlterTable applies a schema change on a table.
@@ -73,18 +72,11 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		return newZeroNode(nil /* columns */), nil
 	}
 
-	hasOwnership, err := p.HasOwnership(ctx, tableDesc)
-	if err != nil {
-		return nil, err
-	}
-
-	if !hasOwnership {
-		// This check for CREATE privilege is kept for backwards compatibility.
-		if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"must be owner of table %s or have CREATE privilege on table %s",
-				tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
-		}
+	// This check for CREATE privilege is kept for backwards compatibility.
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of table %s or have CREATE privilege on table %s",
+			tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
 	}
 
 	n.HoistAddColumnConstraints()
@@ -110,10 +102,9 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 	}
 
 	return &alterTableNode{
-		n:            n,
-		tableDesc:    tableDesc,
-		statsData:    statsData,
-		hasOwnership: hasOwnership,
+		n:         n,
+		tableDesc: tableDesc,
+		statsData: statsData,
 	}, nil
 }
 
@@ -1198,12 +1189,13 @@ func (p *planner) alterTableOwner(
 	desc := n.tableDesc
 	privs := desc.GetPrivileges()
 
-	if err := p.checkCanAlterToNewOwner(ctx, desc, privs, newOwner, n.hasOwnership); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
 		return false, err
 	}
 
 	// Ensure the new owner has CREATE privilege on the table's schema.
-	if err := p.canCreateOnSchema(ctx, desc.GetParentSchemaID(), newOwner); err != nil {
+	if err := p.canCreateOnSchema(
+		ctx, desc.GetParentSchemaID(), desc.ParentID, newOwner, checkPublicSchema); err != nil {
 		return false, err
 	}
 
