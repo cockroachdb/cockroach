@@ -4361,7 +4361,7 @@ func (m *AddPrimaryIndex) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -4581,7 +4581,7 @@ func (m *DropPrimaryIndex) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
