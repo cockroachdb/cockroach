@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -284,6 +285,8 @@ func backup(
 			return progressLogger.Loop(ctx, requestFinishedCh)
 		})
 	}
+
+	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&settings.SV)
 	g.GoCtx(func(ctx context.Context) error {
 		for i := range allSpans {
 			{
@@ -310,6 +313,7 @@ func backup(
 					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
 					MVCCFilter:                          roachpb.MVCCFilter(backupManifest.MVCCFilter),
 					Encryption:                          encryption,
+					TargetFileSize:                      targetFileSize,
 				}
 				rawRes, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 				if pErr != nil {
