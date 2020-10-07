@@ -129,6 +129,11 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		projVec.Nulls().UnsetNulls()
 	}
 	projCol := projVec.Bool()
+	// Some operators can result in NULL with non-NULL inputs, like the JSON
+	// fetch value operator, ->. Therefore, _outNulls is defined to allow
+	// updating the output Nulls from within _ASSIGN functions when the result
+	// of a projection is Null.
+	_outNulls := projVec.Nulls()
 	if vec.Nulls().MaybeHasNulls() {
 		colNulls := vec.Nulls()
 		if sel := batch.Selection(); sel != nil {
@@ -153,8 +158,12 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		projVec.SetNulls(_outNulls.Or(colNulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -172,6 +181,11 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				projCol[i] = bytes.HasPrefix(arg, p.constArg)
 			}
 		}
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	}
 	// Although we didn't change the length of the batch, it is necessary to set
 	// the length anyway (this helps maintaining the invariant of flat bytes).
@@ -302,6 +316,11 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		projVec.Nulls().UnsetNulls()
 	}
 	projCol := projVec.Bool()
+	// Some operators can result in NULL with non-NULL inputs, like the JSON
+	// fetch value operator, ->. Therefore, _outNulls is defined to allow
+	// updating the output Nulls from within _ASSIGN functions when the result
+	// of a projection is Null.
+	_outNulls := projVec.Nulls()
 	if vec.Nulls().MaybeHasNulls() {
 		colNulls := vec.Nulls()
 		if sel := batch.Selection(); sel != nil {
@@ -326,8 +345,12 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		projVec.SetNulls(_outNulls.Or(colNulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -345,6 +368,11 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				projCol[i] = bytes.HasSuffix(arg, p.constArg)
 			}
 		}
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	}
 	// Although we didn't change the length of the batch, it is necessary to set
 	// the length anyway (this helps maintaining the invariant of flat bytes).
@@ -475,6 +503,11 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		projVec.Nulls().UnsetNulls()
 	}
 	projCol := projVec.Bool()
+	// Some operators can result in NULL with non-NULL inputs, like the JSON
+	// fetch value operator, ->. Therefore, _outNulls is defined to allow
+	// updating the output Nulls from within _ASSIGN functions when the result
+	// of a projection is Null.
+	_outNulls := projVec.Nulls()
 	if vec.Nulls().MaybeHasNulls() {
 		colNulls := vec.Nulls()
 		if sel := batch.Selection(); sel != nil {
@@ -499,8 +532,12 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		projVec.SetNulls(_outNulls.Or(colNulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -518,6 +555,11 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				projCol[i] = bytes.Contains(arg, p.constArg)
 			}
 		}
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	}
 	// Although we didn't change the length of the batch, it is necessary to set
 	// the length anyway (this helps maintaining the invariant of flat bytes).
@@ -648,6 +690,11 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		projVec.Nulls().UnsetNulls()
 	}
 	projCol := projVec.Bool()
+	// Some operators can result in NULL with non-NULL inputs, like the JSON
+	// fetch value operator, ->. Therefore, _outNulls is defined to allow
+	// updating the output Nulls from within _ASSIGN functions when the result
+	// of a projection is Null.
+	_outNulls := projVec.Nulls()
 	if vec.Nulls().MaybeHasNulls() {
 		colNulls := vec.Nulls()
 		if sel := batch.Selection(); sel != nil {
@@ -672,8 +719,12 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		projVec.SetNulls(_outNulls.Or(colNulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -691,6 +742,11 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				projCol[i] = p.constArg.Match(arg)
 			}
 		}
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	}
 	// Although we didn't change the length of the batch, it is necessary to set
 	// the length anyway (this helps maintaining the invariant of flat bytes).
@@ -821,6 +877,11 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 		projVec.Nulls().UnsetNulls()
 	}
 	projCol := projVec.Bool()
+	// Some operators can result in NULL with non-NULL inputs, like the JSON
+	// fetch value operator, ->. Therefore, _outNulls is defined to allow
+	// updating the output Nulls from within _ASSIGN functions when the result
+	// of a projection is Null.
+	_outNulls := projVec.Nulls()
 	if vec.Nulls().MaybeHasNulls() {
 		colNulls := vec.Nulls()
 		if sel := batch.Selection(); sel != nil {
@@ -845,8 +906,12 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		projVec.SetNulls(_outNulls.Or(colNulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -864,6 +929,11 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				projCol[i] = !bytes.HasPrefix(arg, p.constArg)
 			}
 		}
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	}
 	// Although we didn't change the length of the batch, it is necessary to set
 	// the length anyway (this helps maintaining the invariant of flat bytes).
@@ -994,6 +1064,11 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 		projVec.Nulls().UnsetNulls()
 	}
 	projCol := projVec.Bool()
+	// Some operators can result in NULL with non-NULL inputs, like the JSON
+	// fetch value operator, ->. Therefore, _outNulls is defined to allow
+	// updating the output Nulls from within _ASSIGN functions when the result
+	// of a projection is Null.
+	_outNulls := projVec.Nulls()
 	if vec.Nulls().MaybeHasNulls() {
 		colNulls := vec.Nulls()
 		if sel := batch.Selection(); sel != nil {
@@ -1018,8 +1093,12 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		projVec.SetNulls(_outNulls.Or(colNulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1037,6 +1116,11 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				projCol[i] = !bytes.HasSuffix(arg, p.constArg)
 			}
 		}
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	}
 	// Although we didn't change the length of the batch, it is necessary to set
 	// the length anyway (this helps maintaining the invariant of flat bytes).
@@ -1167,6 +1251,11 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 		projVec.Nulls().UnsetNulls()
 	}
 	projCol := projVec.Bool()
+	// Some operators can result in NULL with non-NULL inputs, like the JSON
+	// fetch value operator, ->. Therefore, _outNulls is defined to allow
+	// updating the output Nulls from within _ASSIGN functions when the result
+	// of a projection is Null.
+	_outNulls := projVec.Nulls()
 	if vec.Nulls().MaybeHasNulls() {
 		colNulls := vec.Nulls()
 		if sel := batch.Selection(); sel != nil {
@@ -1191,8 +1280,12 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		projVec.SetNulls(_outNulls.Or(colNulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1210,6 +1303,11 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 				projCol[i] = !bytes.Contains(arg, p.constArg)
 			}
 		}
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	}
 	// Although we didn't change the length of the batch, it is necessary to set
 	// the length anyway (this helps maintaining the invariant of flat bytes).
@@ -1340,6 +1438,11 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 		projVec.Nulls().UnsetNulls()
 	}
 	projCol := projVec.Bool()
+	// Some operators can result in NULL with non-NULL inputs, like the JSON
+	// fetch value operator, ->. Therefore, _outNulls is defined to allow
+	// updating the output Nulls from within _ASSIGN functions when the result
+	// of a projection is Null.
+	_outNulls := projVec.Nulls()
 	if vec.Nulls().MaybeHasNulls() {
 		colNulls := vec.Nulls()
 		if sel := batch.Selection(); sel != nil {
@@ -1364,8 +1467,12 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		projVec.SetNulls(_outNulls.Or(colNulls))
 	} else {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -1383,6 +1490,11 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				projCol[i] = !p.constArg.Match(arg)
 			}
 		}
+		// _outNulls has been updated from within the _ASSIGN function to include
+		// any NULLs that resulted from the projection.
+		// If $hasNulls is true, union _outNulls with the set of input Nulls.
+		// If $hasNulls is false, then there are no input Nulls. _outNulls is
+		// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	}
 	// Although we didn't change the length of the batch, it is necessary to set
 	// the length anyway (this helps maintaining the invariant of flat bytes).
