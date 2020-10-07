@@ -36,7 +36,7 @@ statement ok
 INSERT INTO system.users VALUES('test-user','');
 
 statement ok
-GRANT ALL ON DATABASE a TO readwrite, "test-user"
+GRANT ALL PRIVILEGES ON DATABASE a TO readwrite, "test-user"
 
 statement error syntax error
 GRANT SELECT,ALL ON DATABASE a TO readwrite
@@ -194,7 +194,7 @@ a  public              test-user  CREATE
 a  public              test-user  GRANT
 
 statement ok
-REVOKE ALL ON DATABASE a FROM "test-user"
+REVOKE ALL PRIVILEGES ON DATABASE a FROM "test-user"
 
 query TTTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
