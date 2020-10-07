@@ -35,6 +35,7 @@ func NewTupleProjOp(
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	return &tupleProjOp{
 		OneInputNode:      NewOneInputNode(input),
+		allocator:         allocator,
 		converter:         colconv.NewVecToDatumConverter(len(inputTypes), tupleContentsIdxs),
 		tupleContentsIdxs: tupleContentsIdxs,
 		outputType:        outputType,
@@ -45,6 +46,7 @@ func NewTupleProjOp(
 type tupleProjOp struct {
 	OneInputNode
 
+	allocator         *colmem.Allocator
 	converter         *colconv.VecToDatumConverter
 	tupleContentsIdxs []int
 	outputType        *types.T
@@ -70,16 +72,18 @@ func (t *tupleProjOp) Next(ctx context.Context) coldata.Batch {
 		// output vector.
 		projVec.Nulls().UnsetNulls()
 	}
-	projCol := projVec.Datum()
-	if sel := batch.Selection(); sel != nil {
-		for convertedIdx, i := range sel[:n] {
-			projCol.Set(i, t.createTuple(convertedIdx))
+	t.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		projCol := projVec.Datum()
+		if sel := batch.Selection(); sel != nil {
+			for convertedIdx, i := range sel[:n] {
+				projCol.Set(i, t.createTuple(convertedIdx))
+			}
+		} else {
+			for i := 0; i < n; i++ {
+				projCol.Set(i, t.createTuple(i))
+			}
 		}
-	} else {
-		for i := 0; i < n; i++ {
-			projCol.Set(i, t.createTuple(i))
-		}
-	}
+	})
 	return batch
 }
 

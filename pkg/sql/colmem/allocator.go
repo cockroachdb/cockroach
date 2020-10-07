@@ -41,8 +41,11 @@ func selVectorSize(capacity int) int64 {
 }
 
 func getVecMemoryFootprint(vec coldata.Vec) int64 {
-	if vec.CanonicalTypeFamily() == types.BytesFamily {
+	switch vec.CanonicalTypeFamily() {
+	case types.BytesFamily:
 		return int64(vec.Bytes().Size())
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return int64(vec.Datum().Size())
 	}
 	return int64(EstimateBatchSizeBytes([]*types.T{vec.Type()}, vec.Capacity()))
 }
@@ -377,7 +380,10 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			// In datum vec we need to account for memory underlying the struct
 			// that is the implementation of tree.Datum interface (for example,
 			// tree.DBoolFalse) as well as for the overhead of storing that
-			// implementation in the slice of tree.Datums.
+			// implementation in the slice of tree.Datums. Note that if t is of
+			// variable size, the memory will be properly accounted in
+			// getVecMemoryFootprint.
+			// Note: keep the calculation here in line with datumVec.Size.
 			implementationSize, _ := tree.DatumTypeSize(t)
 			acc += int(implementationSize) + sizeOfDatum
 		default:
