@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"hash"
 	"io"
 	"math"
 	"strings"
@@ -1058,7 +1057,7 @@ type connExecutor struct {
 		// transactionStatementIDs are capped to prevent unbound expansion, but we
 		// still need the statementID hash to disambiguate beyond the capped
 		// statements.
-		transactionStatementsHash hash.Hash
+		transactionStatementsHash util.FNV64
 	}
 
 	// sessionData contains the user-configurable connection variables.
