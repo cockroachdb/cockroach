@@ -19,50 +19,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
 )
 
-func initBackfillerSpec(
-	backfillType backfillType,
-	desc descpb.TableDescriptor,
-	duration time.Duration,
-	chunkSize int64,
-	readAsOf hlc.Timestamp,
+func initColumnBackfillerSpec(
+	desc descpb.TableDescriptor, duration time.Duration, chunkSize int64, readAsOf hlc.Timestamp,
 ) (execinfrapb.BackfillerSpec, error) {
-	ret := execinfrapb.BackfillerSpec{
+	return execinfrapb.BackfillerSpec{
 		Table:     desc,
 		Duration:  duration,
 		ChunkSize: chunkSize,
 		ReadAsOf:  readAsOf,
-	}
-	switch backfillType {
-	case indexBackfill:
-		ret.Type = execinfrapb.BackfillerSpec_Index
-	case columnBackfill:
-		ret.Type = execinfrapb.BackfillerSpec_Column
-	default:
-		return execinfrapb.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
-	}
-	return ret, nil
+		Type:      execinfrapb.BackfillerSpec_Column,
+	}, nil
+}
+
+func initIndexBackfillerSpec(
+	desc descpb.TableDescriptor, readAsOf hlc.Timestamp, chunkSize int64,
+) (execinfrapb.BackfillerSpec, error) {
+	return execinfrapb.BackfillerSpec{
+		Table:     desc,
+		ReadAsOf:  readAsOf,
+		Type:      execinfrapb.BackfillerSpec_Index,
+		ChunkSize: chunkSize,
+	}, nil
 }
 
 // createBackfiller generates a plan consisting of index/column backfiller
 // processors, one for each node that has spans that we are reading. The plan is
 // finalized.
-func (dsp *DistSQLPlanner) createBackfiller(
-	planCtx *PlanningCtx,
-	backfillType backfillType,
-	desc descpb.TableDescriptor,
-	duration time.Duration,
-	chunkSize int64,
-	spans []roachpb.Span,
-	readAsOf hlc.Timestamp,
+func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
+	planCtx *PlanningCtx, spec execinfrapb.BackfillerSpec, spans []roachpb.Span,
 ) (*PhysicalPlan, error) {
-	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, readAsOf)
-	if err != nil {
-		return nil, err
-	}
-
 	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
 	if err != nil {
 		return nil, err
