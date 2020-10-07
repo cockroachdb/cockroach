@@ -27,7 +27,9 @@ import (
 // ErrCannotReuseClientConn is returned when a failed connection is
 // being reused. We require that new connections be created with
 // pkg/rpc.GRPCDial instead.
-var ErrCannotReuseClientConn = errors.New("cannot reuse client connection")
+var ErrCannotReuseClientConn = errors.New(errCannotReuseClientConnMsg)
+
+const errCannotReuseClientConnMsg = "cannot reuse client connection"
 
 type localRequestKey struct{}
 
