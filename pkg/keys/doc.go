@@ -229,6 +229,7 @@ var _ = [...]interface{}{
 	StoreIdentKey,          // "iden"
 	StoreNodeTombstoneKey,  // "ntmb"
 	StoreLastUpKey,         // "uptm"
+	StoreCachedSettingsKey, // "stng"
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
 	// keys, and non-system tenant SQL keys.
