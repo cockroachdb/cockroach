@@ -138,6 +138,8 @@ const (
 	setColumnType    // ALTER TABLE <table> ALTER [COLUMN] <column> [SET DATA] TYPE <type>
 
 	insertRow // INSERT INTO <table> (<cols>) VALUES (<values>)
+
+	validate // validate all table descriptors
 )
 
 var opWeights = []int{
@@ -167,6 +169,7 @@ var opWeights = []int{
 	setColumnNotNull:  1,
 	setColumnType:     1,
 	insertRow:         1,
+	validate:          2, // validate twice more often
 }
 
 // Meta implements the workload.Generator interface.
@@ -456,6 +459,9 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 
 		case insertRow:
 			stmt, err = w.insertRow(tx)
+
+		case validate:
+			stmt, err = w.validate(tx)
 		}
 
 		// TODO(spaskob): use more fine-grained error reporting.
@@ -856,6 +862,37 @@ func (w *schemaChangeWorker) insertRow(tx *pgx.Tx) (string, error) {
 		strings.Join(colNames, ","),
 		strings.Join(rows, ","),
 	), nil
+}
+
+func (w *schemaChangeWorker) validate(tx *pgx.Tx) (string, error) {
+	validateStmt := "SELECT 'validating all objects'"
+	rows, err := tx.Query(`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
+	if err != nil {
+		return validateStmt, err
+	}
+	defer rows.Close()
+
+	var errs []string
+	for rows.Next() {
+		var id int64
+		var dbName, schemaName, objName, errStr string
+		if err := rows.Scan(&id, &dbName, &schemaName, &objName, &errStr); err != nil {
+			return validateStmt, err
+		}
+		errs = append(
+			errs,
+			fmt.Sprintf("id %d, db %s, schema %s, name %s: %s", id, dbName, schemaName, objName, errStr),
+		)
+	}
+
+	if rows.Err() != nil {
+		return "", errors.Wrap(rows.Err(), "querying for validation erors failed")
+	}
+
+	if len(errs) == 0 {
+		return validateStmt, nil
+	}
+	return validateStmt, errors.Errorf("Validation FAIL:\n%s", strings.Join(errs, "\n"))
 }
 
 type column struct {

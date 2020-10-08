@@ -34,11 +34,12 @@ func _() {
 	_ = x[setColumnNotNull-23]
 	_ = x[setColumnType-24]
 	_ = x[insertRow-25]
+	_ = x[validate-26]
 }
 
-const _opType_name = "addColumnaddConstraintcreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumdropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewrenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypeinsertRow"
+const _opType_name = "addColumnaddConstraintcreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumdropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewrenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypeinsertRowvalidate"
 
-var _opType_index = [...]uint16{0, 9, 22, 33, 47, 58, 71, 81, 91, 101, 118, 135, 151, 165, 174, 186, 195, 203, 215, 226, 240, 251, 261, 277, 293, 306, 315}
+var _opType_index = [...]uint16{0, 9, 22, 33, 47, 58, 71, 81, 91, 101, 118, 135, 151, 165, 174, 186, 195, 203, 215, 226, 240, 251, 261, 277, 293, 306, 315, 323}
 
 func (i opType) String() string {
 	if i < 0 || i >= opType(len(_opType_index)-1) {
