@@ -83,38 +83,26 @@ func (cb *onDeleteCascadeBuilder) Build(
 	bindingProps *props.Relational,
 	oldValues, newValues opt.ColList,
 ) (_ memo.RelExpr, err error) {
-	factory := factoryI.(*norm.Factory)
-	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-	// Enact panic handling similar to Builder.Build().
-	defer func() {
-		if r := recover(); r != nil {
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
-		}
-	}()
+		dep := opt.DepByID(fk.OriginTableID())
+		b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
+		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
 
-	fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
+		var mb mutationBuilder
+		mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
 
-	dep := opt.DepByID(fk.OriginTableID())
-	b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
-	b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+		// Build a semi join of the table with the mutation input.
+		mb.outScope = b.buildDeleteCascadeMutationInput(
+			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
+		)
 
-	var mb mutationBuilder
-	mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
-
-	// Build a semi join of the table with the mutation input.
-	mb.outScope = b.buildDeleteCascadeMutationInput(
-		cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
-	)
-
-	// Set list of columns that will be fetched by the input expression.
-	mb.setFetchColIDs(mb.outScope.cols)
-	mb.buildDelete(nil /* returning */)
-	return mb.outScope.expr, nil
+		// Set list of columns that will be fetched by the input expression.
+		mb.setFetchColIDs(mb.outScope.cols)
+		mb.buildDelete(nil /* returning */)
+		return mb.outScope.expr
+	})
 }
 
 // onDeleteSetBuilder is a memo.CascadeBuilder implementation for
@@ -191,61 +179,49 @@ func (cb *onDeleteSetBuilder) Build(
 	bindingProps *props.Relational,
 	oldValues, newValues opt.ColList,
 ) (_ memo.RelExpr, err error) {
-	factory := factoryI.(*norm.Factory)
-	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-	// Enact panic handling similar to Builder.Build().
-	defer func() {
-		if r := recover(); r != nil {
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
+		dep := opt.DepByID(fk.OriginTableID())
+		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
+		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+
+		var mb mutationBuilder
+		mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+
+		// Build a semi join of the table with the mutation input.
+		mb.outScope = b.buildDeleteCascadeMutationInput(
+			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
+		)
+
+		// Set list of columns that will be fetched by the input expression.
+		mb.setFetchColIDs(mb.outScope.cols)
+		// Add target columns.
+		numFKCols := fk.ColumnCount()
+		for i := 0; i < numFKCols; i++ {
+			tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
+			mb.addTargetCol(tabOrd)
+		}
+
+		// Add the SET expressions.
+		updateExprs := make(tree.UpdateExprs, numFKCols)
+		for i := range updateExprs {
+			updateExprs[i] = &tree.UpdateExpr{}
+			if cb.action == tree.SetNull {
+				updateExprs[i].Expr = tree.DNull
 			} else {
-				panic(r)
+				updateExprs[i].Expr = tree.DefaultVal{}
 			}
 		}
-	}()
+		mb.addUpdateCols(updateExprs)
 
-	fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
-
-	dep := opt.DepByID(fk.OriginTableID())
-	b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
-	b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
-
-	var mb mutationBuilder
-	mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
-
-	// Build a semi join of the table with the mutation input.
-	mb.outScope = b.buildDeleteCascadeMutationInput(
-		cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
-	)
-
-	// Set list of columns that will be fetched by the input expression.
-	mb.setFetchColIDs(mb.outScope.cols)
-	// Add target columns.
-	numFKCols := fk.ColumnCount()
-	for i := 0; i < numFKCols; i++ {
-		tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
-		mb.addTargetCol(tabOrd)
-	}
-
-	// Add the SET expressions.
-	updateExprs := make(tree.UpdateExprs, numFKCols)
-	for i := range updateExprs {
-		updateExprs[i] = &tree.UpdateExpr{}
-		if cb.action == tree.SetNull {
-			updateExprs[i].Expr = tree.DNull
-		} else {
-			updateExprs[i].Expr = tree.DefaultVal{}
-		}
-	}
-	mb.addUpdateCols(updateExprs)
-
-	// TODO(radu): consider plumbing a flag to prevent building the FK check
-	// against the parent we are cascading from. Need to investigate in which
-	// cases this is safe (e.g. other cascades could have messed with the parent
-	// table in the meantime).
-	mb.buildUpdate(nil /* returning */)
-	return mb.outScope.expr, nil
+		// TODO(radu): consider plumbing a flag to prevent building the FK check
+		// against the parent we are cascading from. Need to investigate in which
+		// cases this is safe (e.g. other cascades could have messed with the parent
+		// table in the meantime).
+		mb.buildUpdate(nil /* returning */)
+		return mb.outScope.expr
+	})
 }
 
 // buildDeleteCascadeMutationInput constructs a semi-join between the child
@@ -413,67 +389,55 @@ func (cb *onUpdateCascadeBuilder) Build(
 	bindingProps *props.Relational,
 	oldValues, newValues opt.ColList,
 ) (_ memo.RelExpr, err error) {
-	factory := factoryI.(*norm.Factory)
-	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
+	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
+		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-	// Enact panic handling similar to Builder.Build().
-	defer func() {
-		if r := recover(); r != nil {
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
+		dep := opt.DepByID(fk.OriginTableID())
+		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
+		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+
+		var mb mutationBuilder
+		mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+
+		// Build a join of the table with the mutation input.
+		mb.outScope = b.buildUpdateCascadeMutationInput(
+			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues, newValues,
+		)
+
+		// The scope created by b.buildUpdateCascadeMutationInput has the table
+		// columns, followed by the old FK values, followed by the new FK values.
+		numFKCols := fk.ColumnCount()
+		tableScopeCols := mb.outScope.cols[:len(mb.outScope.cols)-2*numFKCols]
+		newValScopeCols := mb.outScope.cols[len(mb.outScope.cols)-numFKCols:]
+
+		// Set list of columns that will be fetched by the input expression.
+		mb.setFetchColIDs(tableScopeCols)
+		// Add target columns.
+		for i := 0; i < numFKCols; i++ {
+			tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
+			mb.addTargetCol(tabOrd)
+		}
+
+		// Add the SET expressions.
+		updateExprs := make(tree.UpdateExprs, numFKCols)
+		for i := range updateExprs {
+			updateExprs[i] = &tree.UpdateExpr{}
+			switch cb.action {
+			case tree.Cascade:
+				updateExprs[i].Expr = &newValScopeCols[i]
+			case tree.SetNull:
+				updateExprs[i].Expr = tree.DNull
+			case tree.SetDefault:
+				updateExprs[i].Expr = tree.DefaultVal{}
+			default:
+				panic(errors.AssertionFailedf("unsupported action"))
 			}
 		}
-	}()
+		mb.addUpdateCols(updateExprs)
 
-	fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
-
-	dep := opt.DepByID(fk.OriginTableID())
-	b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
-	b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
-
-	var mb mutationBuilder
-	mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
-
-	// Build a join of the table with the mutation input.
-	mb.outScope = b.buildUpdateCascadeMutationInput(
-		cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues, newValues,
-	)
-
-	// The scope created by b.buildUpdateCascadeMutationInput has the table
-	// columns, followed by the old FK values, followed by the new FK values.
-	numFKCols := fk.ColumnCount()
-	tableScopeCols := mb.outScope.cols[:len(mb.outScope.cols)-2*numFKCols]
-	newValScopeCols := mb.outScope.cols[len(mb.outScope.cols)-numFKCols:]
-
-	// Set list of columns that will be fetched by the input expression.
-	mb.setFetchColIDs(tableScopeCols)
-	// Add target columns.
-	for i := 0; i < numFKCols; i++ {
-		tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
-		mb.addTargetCol(tabOrd)
-	}
-
-	// Add the SET expressions.
-	updateExprs := make(tree.UpdateExprs, numFKCols)
-	for i := range updateExprs {
-		updateExprs[i] = &tree.UpdateExpr{}
-		switch cb.action {
-		case tree.Cascade:
-			updateExprs[i].Expr = &newValScopeCols[i]
-		case tree.SetNull:
-			updateExprs[i].Expr = tree.DNull
-		case tree.SetDefault:
-			updateExprs[i].Expr = tree.DefaultVal{}
-		default:
-			panic(errors.AssertionFailedf("unsupported action"))
-		}
-	}
-	mb.addUpdateCols(updateExprs)
-
-	mb.buildUpdate(nil /* returning */)
-	return mb.outScope.expr, nil
+		mb.buildUpdate(nil /* returning */)
+		return mb.outScope.expr
+	})
 }
 
 // buildUpdateCascadeMutationInput constructs an inner-join between the child
@@ -656,4 +620,32 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		})
 	}
 	return outScope
+}
+
+// buildCascadeHelper contains boilerplate for CascadeBuilder.Build
+// implementations. It creates a Builder, sets up panic-to-error conversion,
+// and executes the given function.
+func buildCascadeHelper(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	catalog cat.Catalog,
+	factoryI interface{},
+	fn func(b *Builder) memo.RelExpr,
+) (_ memo.RelExpr, err error) {
+	factory := factoryI.(*norm.Factory)
+	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
+
+	// Enact panic handling similar to Builder.Build().
+	defer func() {
+		if r := recover(); r != nil {
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
+	return fn(b), nil
 }
