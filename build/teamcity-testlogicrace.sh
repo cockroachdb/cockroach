@@ -8,7 +8,7 @@ maybe_ccache
 
 mkdir -p artifacts
 
-TESTTIMEOUT=8h
+TESTTIMEOUT=24h
 
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
