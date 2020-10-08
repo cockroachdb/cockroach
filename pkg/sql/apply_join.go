@@ -249,7 +249,6 @@ func runPlanInsidePlan(
 		params.extendedEvalCtx.copy,
 		plan.subqueryPlans,
 		recv,
-		false, /* maybeDistribute */
 	) {
 		if err := rowResultWriter.Err(); err != nil {
 			return err
@@ -260,8 +259,11 @@ func runPlanInsidePlan(
 	// Make a copy of the EvalContext so it can be safely modified.
 	evalCtx := params.p.ExtendedEvalContextCopy()
 	plannerCopy := *params.p
+	distributePlan := getPlanDistribution(
+		params.ctx, &plannerCopy, plannerCopy.execCfg.NodeID, plannerCopy.SessionData().DistSQLMode, plan.main,
+	)
 	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(
-		params.ctx, evalCtx, &plannerCopy, params.p.txn, false, /* distribute */
+		params.ctx, evalCtx, &plannerCopy, params.p.txn, distributePlan.WillDistribute(),
 	)
 	planCtx.planner.curPlan.planComponents = *plan
 	planCtx.ExtendedEvalCtx.Planner = &plannerCopy

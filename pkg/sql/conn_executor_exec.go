@@ -991,7 +991,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
-			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute,
+			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv,
 		) {
 			return recv.stats, recv.commErr
 		}
@@ -1010,7 +1010,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	}
 
 	ex.server.cfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
-		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv, distribute,
+		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv,
 	)
 
 	return recv.stats, recv.commErr
