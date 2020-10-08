@@ -123,59 +123,61 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.HasPrefix(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.HasPrefix(arg, p.constArg)
+					}
+				}
+			}
+			colNullsCopy := colNulls.Copy()
+			projVec.SetNulls(&colNullsCopy)
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
 					arg := col.Get(i)
 					projCol[i] = bytes.HasPrefix(arg, p.constArg)
 				}
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = bytes.HasPrefix(arg, p.constArg)
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = bytes.HasPrefix(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = bytes.HasPrefix(arg, p.constArg)
-			}
-		}
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -296,59 +298,61 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.HasSuffix(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.HasSuffix(arg, p.constArg)
+					}
+				}
+			}
+			colNullsCopy := colNulls.Copy()
+			projVec.SetNulls(&colNullsCopy)
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
 					arg := col.Get(i)
 					projCol[i] = bytes.HasSuffix(arg, p.constArg)
 				}
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = bytes.HasSuffix(arg, p.constArg)
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = bytes.HasSuffix(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = bytes.HasSuffix(arg, p.constArg)
-			}
-		}
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -469,59 +473,61 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.Contains(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = bytes.Contains(arg, p.constArg)
+					}
+				}
+			}
+			colNullsCopy := colNulls.Copy()
+			projVec.SetNulls(&colNullsCopy)
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
 					arg := col.Get(i)
 					projCol[i] = bytes.Contains(arg, p.constArg)
 				}
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = bytes.Contains(arg, p.constArg)
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = bytes.Contains(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = bytes.Contains(arg, p.constArg)
-			}
-		}
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -642,59 +648,61 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = p.constArg.Match(arg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = p.constArg.Match(arg)
+					}
+				}
+			}
+			colNullsCopy := colNulls.Copy()
+			projVec.SetNulls(&colNullsCopy)
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Match(arg)
 				}
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Match(arg)
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = p.constArg.Match(arg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = p.constArg.Match(arg)
-			}
-		}
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -815,59 +823,61 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.HasPrefix(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.HasPrefix(arg, p.constArg)
+					}
+				}
+			}
+			colNullsCopy := colNulls.Copy()
+			projVec.SetNulls(&colNullsCopy)
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
 					arg := col.Get(i)
 					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
 				}
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = !bytes.HasPrefix(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = !bytes.HasPrefix(arg, p.constArg)
-			}
-		}
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -988,59 +998,61 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.HasSuffix(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.HasSuffix(arg, p.constArg)
+					}
+				}
+			}
+			colNullsCopy := colNulls.Copy()
+			projVec.SetNulls(&colNullsCopy)
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
 					arg := col.Get(i)
 					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
 				}
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = !bytes.HasSuffix(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = !bytes.HasSuffix(arg, p.constArg)
-			}
-		}
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -1161,59 +1173,61 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.Contains(arg, p.constArg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !bytes.Contains(arg, p.constArg)
+					}
+				}
+			}
+			colNullsCopy := colNulls.Copy()
+			projVec.SetNulls(&colNullsCopy)
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
 					arg := col.Get(i)
 					projCol[i] = !bytes.Contains(arg, p.constArg)
 				}
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !bytes.Contains(arg, p.constArg)
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = !bytes.Contains(arg, p.constArg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = !bytes.Contains(arg, p.constArg)
-			}
-		}
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
@@ -1334,59 +1348,61 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	var col *coldata.Bytes
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec.Bool()
-	if vec.Nulls().MaybeHasNulls() {
-		colNulls := vec.Nulls()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bool()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !p.constArg.Match(arg)
+					}
+				}
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+						projCol[i] = !p.constArg.Match(arg)
+					}
+				}
+			}
+			colNullsCopy := colNulls.Copy()
+			projVec.SetNulls(&colNullsCopy)
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
 					arg := col.Get(i)
 					projCol[i] = !p.constArg.Match(arg)
 				}
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				if !colNulls.NullAt(i) {
-					// We only want to perform the projection operation if the value is not null.
+			} else {
+				col = col
+				_ = 0
+				_ = n
+				_ = projCol.Get(n - 1)
+				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !p.constArg.Match(arg)
 				}
 			}
 		}
-		colNullsCopy := colNulls.Copy()
-		projVec.SetNulls(&colNullsCopy)
-	} else {
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				arg := col.Get(i)
-				projCol[i] = !p.constArg.Match(arg)
-			}
-		} else {
-			col = col
-			_ = 0
-			_ = n
-			_ = projCol.Get(n - 1)
-			for i := 0; i < n; i++ {
-				arg := col.Get(i)
-				projCol[i] = !p.constArg.Match(arg)
-			}
-		}
-	}
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 

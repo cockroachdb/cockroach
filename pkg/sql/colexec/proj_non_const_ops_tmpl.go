@@ -99,25 +99,27 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	projVec := batch.ColVec(p.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
-	projCol := projVec._RET_TYP()
-	vec1 := batch.ColVec(p.col1Idx)
-	vec2 := batch.ColVec(p.col2Idx)
-	col1 := vec1._L_TYP()
-	col2 := vec2._R_TYP()
-	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
-		_SET_PROJECTION(true)
-	} else {
-		_SET_PROJECTION(false)
-	}
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec._RET_TYP()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1._L_TYP()
+		col2 := vec2._R_TYP()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			_SET_PROJECTION(true)
+		} else {
+			_SET_PROJECTION(false)
+		}
 
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
 	return batch
 }
 
