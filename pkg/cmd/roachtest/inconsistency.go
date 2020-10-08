@@ -88,6 +88,8 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 		return nil
 	})
 
+	time.Sleep(10 * time.Second) // wait for n1-n3 to all be known as live to each other
+
 	// set an aggressive consistency check interval, but only now (that we're
 	// reasonably sure all nodes are live, etc). This makes sure that the consistency
 	// check runs against all three nodes. If it targeted only two nodes, a random
