@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -387,6 +388,100 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 				}
 			}
 		}
+		return nil
+	})
+}
+
+// TestAddNewStoresToExistingNodes starts a cluster with three nodes,
+// shuts down all nodes and adds a store to each node, and ensures
+// nodes start back up successfully.
+func TestAddNewStoresToExistingNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	n1s1, n1cleanup1 := testutils.TempDir(t)
+	defer n1cleanup1()
+	n2s1, n2cleanup1 := testutils.TempDir(t)
+	defer n2cleanup1()
+	n3s1, n3cleanup1 := testutils.TempDir(t)
+	defer n3cleanup1()
+
+	numNodes := 3
+	tcArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			1: base.TestServerArgs{
+				StoreSpecs: []base.StoreSpec{base.StoreSpec{Path: n1s1}},
+			},
+			2: base.TestServerArgs{
+				StoreSpecs: []base.StoreSpec{base.StoreSpec{Path: n2s1}},
+			},
+			3: base.TestServerArgs{
+				StoreSpecs: []base.StoreSpec{base.StoreSpec{Path: n3s1}},
+			},
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
+	tc.Stopper().Stop(ctx)
+
+	// Add an additional store to each node.
+	n1s2, n1cleanup2 := testutils.TempDir(t)
+	defer n1cleanup2()
+	n2s2, n2cleanup2 := testutils.TempDir(t)
+	defer n2cleanup2()
+	n3s2, n3cleanup2 := testutils.TempDir(t)
+	defer n3cleanup2()
+	tcArgs = base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			1: base.TestServerArgs{
+				StoreSpecs: []base.StoreSpec{
+					base.StoreSpec{Path: n1s1},
+					base.StoreSpec{Path: n1s2},
+				},
+			},
+			2: base.TestServerArgs{
+				StoreSpecs: []base.StoreSpec{
+					base.StoreSpec{Path: n2s1},
+					base.StoreSpec{Path: n2s2},
+				},
+			},
+			3: base.TestServerArgs{
+				StoreSpecs: []base.StoreSpec{
+					base.StoreSpec{Path: n3s1},
+					base.StoreSpec{Path: n3s2},
+				},
+			},
+		},
+	}
+
+	// Start all nodes with additional stores.
+	tc = testcluster.StartTestCluster(t, numNodes, tcArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	// Ensure all nodes have 2 stores available.
+	testutils.SucceedsSoon(t, func() error {
+		for _, server := range tc.Servers {
+			var storeCount = 0
+
+			err := server.GetStores().(*kvserver.Stores).VisitStores(
+				func(s *kvserver.Store) error {
+					storeCount++
+					return nil
+				},
+			)
+			if err != nil {
+				return errors.Errorf("failed to visit all nodes, got %v", err)
+			}
+
+			if storeCount != 2 {
+				return errors.Errorf("expected two stores to be available on node %v, got %v stores instead", server.NodeID(), storeCount)
+			}
+		}
+
 		return nil
 	})
 }
