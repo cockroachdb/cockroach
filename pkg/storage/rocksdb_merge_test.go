@@ -543,36 +543,25 @@ func TestGoMergeTimeSeries(t *testing.T) {
 		}
 
 		t.Run("", func(t *testing.T) {
-			// Test merging the operands under several conditions:
-			// + With and without using the partial merge operator (which combines
-			// operands quickly with the expectation that they will be properly merged
-			// eventually).
-			// + With and without merging into an initial nil value. Note that some
-			// tests have only one operand and are only run when merging into nil.
+			// Test merging the operands with and without using the partial merge
+			// operator (which combines operands quickly with the expectation that
+			// they will be properly merged eventually).
 			for _, partialMerge := range []bool{true, false} {
-				for _, mergeIntoNil := range []bool{true, false} {
-					if !mergeIntoNil && len(operands) == 1 {
-						continue
-					}
-
-					resultTS, err := MergeInternalTimeSeriesData(mergeIntoNil, partialMerge, operands...)
-					if err != nil {
-						t.Errorf(
-							"MergeInternalTimeSeriesData mergeIntoNil=%t partial=%t error: %s",
-							mergeIntoNil,
-							partialMerge,
-							err.Error(),
-						)
-					}
-					if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
-						t.Errorf(
-							"MergeInternalTimeSeriesData  mergeIntoNil=%t partial=%t returned wrong result got %v, wanted %v",
-							mergeIntoNil,
-							partialMerge,
-							a,
-							e,
-						)
-					}
+				resultTS, err := MergeInternalTimeSeriesData(partialMerge, operands...)
+				if err != nil {
+					t.Errorf(
+						"MergeInternalTimeSeriesData partial=%t error: %s",
+						partialMerge,
+						err.Error(),
+					)
+				}
+				if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
+					t.Errorf(
+						"MergeInternalTimeSeriesData partial=%t returned wrong result got %v, wanted %v",
+						partialMerge,
+						a,
+						e,
+					)
 				}
 			}
 			resultTS, err := mergeInternalTimeSeriesDataPebble(false /* reverse */, operands...)
