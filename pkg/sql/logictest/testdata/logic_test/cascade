@@ -4245,3 +4245,80 @@ INSERT INTO parent VALUES (100, 1) ON CONFLICT(p) DO UPDATE SET p = 50
 
 statement ok
 DROP TABLE child, parent
+
+# Test that cascades don't incorrectly remove child rows with NULLs.
+subtest DeleteCascadeNulls
+
+statement ok
+CREATE TABLE parent (p INT, q INT, PRIMARY KEY(p,q));
+CREATE TABLE child (
+  p INT, q INT,
+  FOREIGN KEY (p,q) REFERENCES parent(p,q) ON DELETE CASCADE
+);
+INSERT INTO parent VALUES (1,1), (1,2), (2,2), (3,3);
+INSERT INTO child VALUES
+  (NULL, NULL),
+  (NULL, 1),
+  (NULL, 2),
+  (NULL, 3),
+  (1,    NULL),
+  (2,    NULL),
+  (3,    NULL),
+  (1,    1),
+  (1,    1),
+  (1,    2),
+  (2,    2),
+  (2,    2),
+  (3,    3),
+  (3,    3);
+
+statement ok
+DELETE FROM parent WHERE p = 1
+
+query II rowsort
+SELECT * FROM child
+----
+NULL  NULL
+NULL  1
+NULL  2
+NULL  3
+1     NULL
+2     NULL
+3     NULL
+2     2
+2     2
+3     3
+3     3
+
+statement ok
+DELETE FROM parent WHERE q = 2
+
+query II rowsort
+SELECT * FROM child
+----
+NULL  NULL
+NULL  1
+NULL  2
+NULL  3
+1     NULL
+2     NULL
+3     NULL
+3     3
+3     3
+
+statement ok
+DELETE FROM parent WHERE true
+
+query II rowsort
+SELECT * FROM child
+----
+NULL  NULL
+NULL  1
+NULL  2
+NULL  3
+1     NULL
+2     NULL
+3     NULL
+
+statement ok
+DROP TABLE child, parent

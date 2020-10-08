@@ -125,15 +125,19 @@ type cascadeBuilder struct {
 const cascadeInputWithID opt.WithID = 1000000
 
 func makeCascadeBuilder(b *Builder, mutationWithID opt.WithID) (*cascadeBuilder, error) {
+	cb := &cascadeBuilder{b: b}
+	if mutationWithID == 0 {
+		// Cascade does not require the buffered input.
+		return cb, nil
+	}
+
 	withExpr := b.findBuiltWithExpr(mutationWithID)
 	if withExpr == nil {
 		return nil, errors.AssertionFailedf("cannot find mutation input withExpr")
 	}
-	cb := &cascadeBuilder{
-		b:                  b,
-		mutationBuffer:     withExpr.bufferNode,
-		mutationBufferCols: withExpr.outputCols,
-	}
+
+	cb.mutationBuffer = withExpr.bufferNode
+	cb.mutationBufferCols = withExpr.outputCols
 
 	// Remember the column metadata, as we will need to recreate it in the new
 	// memo.
@@ -190,62 +194,82 @@ func (cb *cascadeBuilder) planCascade(
 	factory := o.Factory()
 	md := factory.Metadata()
 
-	// Set up metadata for the buffer columns.
-
-	// withColRemap is the mapping between the With column IDs in the original
-	// memo and the corresponding column IDs in the new memo.
-	var withColRemap opt.ColMap
+	// 2. Invoke the memo.CascadeBuilder to build the cascade.
+	var relExpr memo.RelExpr
 	// bufferColMap is the mapping between the column IDs in the new memo and
 	// the column ordinal in the buffer node.
 	var bufferColMap opt.ColMap
-	var withCols opt.ColSet
-	for i := range cb.colMeta {
-		id := md.AddColumn(cb.colMeta[i].Alias, cb.colMeta[i].Type)
-		withCols.Add(id)
-		ordinal, _ := cb.mutationBufferCols.Get(int(cb.colMeta[i].MetaID))
-		bufferColMap.Set(int(id), ordinal)
-		withColRemap.Set(int(cb.colMeta[i].MetaID), int(id))
-	}
+	if bufferRef == nil {
+		// No input buffering.
+		var err error
+		relExpr, err = cascade.Builder.Build(
+			ctx,
+			semaCtx,
+			evalCtx,
+			cb.b.catalog,
+			factory,
+			0,   /* binding */
+			nil, /* bindingProps */
+			nil, /* oldValues */
+			nil, /* newValues */
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "while building cascade expression")
+		}
+	} else {
+		// Set up metadata for the buffer columns.
 
-	// Create relational properties for the special WithID input.
-	// TODO(radu): save some more information from the original binding props
-	// (like not-null columns, FDs) and remap them to the new columns.
-	var bindingProps props.Relational
-	bindingProps.Populated = true
-	bindingProps.OutputCols = withCols
-	bindingProps.Cardinality = props.Cardinality{
-		Min: uint32(numBufferedRows),
-		Max: uint32(numBufferedRows),
-	}
-	bindingProps.Stats = props.Statistics{
-		Available: true,
-		RowCount:  float64(numBufferedRows),
-	}
+		// withColRemap is the mapping between the With column IDs in the original
+		// memo and the corresponding column IDs in the new memo.
+		var withColRemap opt.ColMap
+		var withCols opt.ColSet
+		for i := range cb.colMeta {
+			id := md.AddColumn(cb.colMeta[i].Alias, cb.colMeta[i].Type)
+			withCols.Add(id)
+			ordinal, _ := cb.mutationBufferCols.Get(int(cb.colMeta[i].MetaID))
+			bufferColMap.Set(int(id), ordinal)
+			withColRemap.Set(int(cb.colMeta[i].MetaID), int(id))
+		}
 
-	// Remap the cascade columns.
-	oldVals, err := remapColumns(cascade.OldValues, withColRemap)
-	if err != nil {
-		return nil, err
-	}
-	newVals, err := remapColumns(cascade.NewValues, withColRemap)
-	if err != nil {
-		return nil, err
-	}
+		// Create relational properties for the special WithID input.
+		// TODO(radu): save some more information from the original binding props
+		// (like not-null columns, FDs) and remap them to the new columns.
+		var bindingProps props.Relational
+		bindingProps.Populated = true
+		bindingProps.OutputCols = withCols
+		bindingProps.Cardinality = props.Cardinality{
+			Min: uint32(numBufferedRows),
+			Max: uint32(numBufferedRows),
+		}
+		bindingProps.Stats = props.Statistics{
+			Available: true,
+			RowCount:  float64(numBufferedRows),
+		}
 
-	// 2. Invoke the memo.CascadeBuilder to build the cascade.
-	relExpr, err := cascade.Builder.Build(
-		ctx,
-		semaCtx,
-		evalCtx,
-		cb.b.catalog,
-		factory,
-		cascadeInputWithID,
-		&bindingProps,
-		oldVals,
-		newVals,
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "while building cascade expression")
+		// Remap the cascade columns.
+		oldVals, err := remapColumns(cascade.OldValues, withColRemap)
+		if err != nil {
+			return nil, err
+		}
+		newVals, err := remapColumns(cascade.NewValues, withColRemap)
+		if err != nil {
+			return nil, err
+		}
+
+		relExpr, err = cascade.Builder.Build(
+			ctx,
+			semaCtx,
+			evalCtx,
+			cb.b.catalog,
+			factory,
+			cascadeInputWithID,
+			&bindingProps,
+			oldVals,
+			newVals,
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "while building cascade expression")
+		}
 	}
 
 	o.Memo().SetRoot(relExpr, &physical.Required{})
@@ -258,8 +282,10 @@ func (cb *cascadeBuilder) planCascade(
 
 	// 4. Execbuild the optimized expression.
 	eb := New(execFactory, factory.Memo(), cb.b.catalog, optimizedExpr, evalCtx, allowAutoCommit)
-	// Set up the With binding.
-	eb.addBuiltWithExpr(cascadeInputWithID, bufferColMap, bufferRef)
+	if bufferRef != nil {
+		// Set up the With binding.
+		eb.addBuiltWithExpr(cascadeInputWithID, bufferColMap, bufferRef)
+	}
 	plan, err := eb.Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "while building cascade plan")
