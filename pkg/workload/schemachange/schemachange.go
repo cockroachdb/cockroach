@@ -882,7 +882,7 @@ type column struct {
 func (w *schemaChangeWorker) getTableColumns(tx *pgx.Tx, tableName string) ([]column, error) {
 	q := fmt.Sprintf(`
   SELECT column_name, data_type, is_nullable
-    FROM [SHOW COLUMNS FROM "%s"]
+    FROM [SHOW COLUMNS FROM %s]
 `, tableName)
 	rows, err := tx.Query(q)
 	if err != nil {
@@ -934,7 +934,7 @@ func (w *schemaChangeWorker) randColumn(
 	}
 	q := fmt.Sprintf(`
   SELECT column_name
-    FROM [SHOW COLUMNS FROM "%s"]
+    FROM [SHOW COLUMNS FROM %s]
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -948,7 +948,7 @@ ORDER BY random()
 func (w *schemaChangeWorker) randConstraint(tx *pgx.Tx, tableName string) (string, error) {
 	q := fmt.Sprintf(`
   SELECT constraint_name
-    FROM [SHOW CONSTRAINTS FROM "%s"]
+    FROM [SHOW CONSTRAINTS FROM %s]
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -971,7 +971,7 @@ func (w *schemaChangeWorker) randIndex(
 	}
 	q := fmt.Sprintf(`
   SELECT index_name
-    FROM [SHOW INDEXES FROM "%s"]
+    FROM [SHOW INDEXES FROM %s]
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -1087,7 +1087,7 @@ ORDER BY random()
 func (w *schemaChangeWorker) tableColumnsShuffled(tx *pgx.Tx, tableName string) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
-FROM [SHOW COLUMNS FROM "%s"];
+FROM [SHOW COLUMNS FROM %s];
 `, tableName)
 
 	rows, err := tx.Query(q)
