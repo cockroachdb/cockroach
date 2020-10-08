@@ -1,0 +1,120 @@
+# LogicTest: !3node-tenant
+
+# skip this test in the multi-tenant setting because the timeout seems to get
+# triggered.
+
+# This tests ensures that transactions to perform grants on entities created
+# inside of a transaction do not get blocked and take a very long time.
+
+statement ok
+SET statement_timeout = '10s';
+
+statement ok
+CREATE DATABASE IF NOT EXISTS db1;
+CREATE DATABASE IF NOT EXISTS db2;
+BEGIN;
+CREATE TABLE IF NOT EXISTS db1.t ();
+CREATE TABLE IF NOT EXISTS db2.t ();
+CREATE USER user1;
+CREATE USER user2;
+CREATE USER user3;
+CREATE USER user4;
+CREATE USER user5;
+CREATE USER user6;
+CREATE USER user7;
+CREATE ROLE role1;
+CREATE ROLE role2;
+CREATE ROLE role3;
+CREATE ROLE role4;
+CREATE ROLE role5;
+CREATE ROLE role6;
+CREATE ROLE role7;
+CREATE ROLE role8;
+GRANT select, insert, delete, update ON DATABASE db1 TO role1;
+GRANT select, insert, delete, update ON TABLE db1.* TO role1;
+GRANT select, insert, delete, update ON DATABASE db2 TO role1;
+GRANT select, insert, delete, update ON TABLE db2.* TO role1;
+GRANT role1 TO user5;
+GRANT role2 TO user7;
+GRANT SELECT, INSERT, DELETE, UPDATE ON DATABASE db1 TO role3;
+GRANT SELECT, INSERT, DELETE, UPDATE ON TABLE db1.* TO role3;
+GRANT ALL ON DATABASE db1 TO role4;
+GRANT ALL ON TABLE db1.* TO role4;
+GRANT ALL ON DATABASE db1 TO role5;
+GRANT ALL ON TABLE db1.* TO role5;
+GRANT role5 TO user1;
+GRANT SELECT, INSERT, DELETE, UPDATE ON DATABASE db2 TO role6;
+GRANT SELECT, INSERT, DELETE, UPDATE ON TABLE db2.* TO role6;
+GRANT ALL ON DATABASE db2 TO role7;
+GRANT ALL ON TABLE db2.* TO role7;
+GRANT ALL ON DATABASE db2 TO role8;
+GRANT ALL ON TABLE db2.* TO role8;
+GRANT admin TO user2;
+GRANT admin TO user4;
+GRANT admin TO role2;
+CREATE ROLE role9;
+GRANT role3 TO role9;
+GRANT role6 TO role9;
+GRANT role9 TO user1;
+CREATE ROLE role10;
+GRANT role4 TO role10;
+GRANT role7 TO role10;
+CREATE ROLE role11;
+GRANT role5 TO role11;
+GRANT role8 TO role11;
+GRANT role11 TO user6;
+DROP TABLE db1.t;
+DROP TABLE db2.t;
+COMMIT;
+
+# Ensure that we can inspect information_schema.applicable_roles inside of a
+# transaction. Prior to the change which introduces this
+
+statement ok;
+CREATE ROLE role_foo;
+
+statement ok;
+CREATE ROLE role_bar;
+
+statement ok
+GRANT role_bar TO role_foo WITH ADMIN OPTION;
+
+statement ok;
+GRANT role_foo TO testuser WITH ADMIN OPTION;
+
+# switch to testuser
+
+user testuser
+
+statement ok
+BEGIN;
+
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles ORDER BY role_name;
+----
+grantee   role_name  is_grantable
+testuser  role_bar   YES
+testuser  role_foo   YES
+
+statement ok
+REVOKE role_foo FROM testuser;
+
+statement ok
+SAVEPOINT before_invalid_grant
+
+# This grant should fail as testuser no longer has right to this grant
+# via role_foo.
+
+statement error testuser is not a superuser or role admin for role role_bar
+GRANT role_bar TO testuser;
+
+statement ok
+ROLLBACK TO SAVEPOINT before_invalid_grant
+
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles;
+----
+grantee  role_name  is_grantable
+
+statement ok
+COMMIT
