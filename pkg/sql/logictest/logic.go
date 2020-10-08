@@ -2692,6 +2692,61 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 	if err := t.processTestFile(path, config); err != nil {
 		t.Fatal(err)
 	}
+
+	t.setUser("root")
+	// Some cleanup to make sure the following validation queries can run
+	// successfully. First we rollback in case the logic test had an uncommitted
+	// txn and second we reset vectorize mode in case it was switched to
+	// `experimental_always`.
+	_, _ = t.db.Exec("ROLLBACK")
+	_, err := t.db.Exec("RESET vectorize")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	validate := func() string {
+		rows, err := t.db.Query(`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+
+		var id int64
+		var db, schema, objName, errStr string
+		invalidObjects := make([]string, 0)
+		for rows.Next() {
+			if err := rows.Scan(&id, &db, &schema, &objName, &errStr); err != nil {
+				t.Fatal(err)
+			}
+			invalidObjects = append(
+				invalidObjects,
+				fmt.Sprintf("id %d, db %s, schema %s, name %s: %s", id, db, schema, objName, errStr),
+			)
+		}
+		if rows.Err() != nil {
+			t.Fatal(rows.Err())
+		}
+		return strings.Join(invalidObjects, "\n")
+	}
+
+	if invalidObjects := validate(); invalidObjects != "" {
+		t.Fatal(errors.Errorf("descriptor validation failed:\n%s", invalidObjects))
+	}
+
+	if _, err := t.db.Exec("SET sql_safe_updates=false;"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := t.db.Exec("DROP DATABASE test CASCADE"); err != nil {
+		if !strings.Contains(err.Error(), `database "test" does not exist`) {
+			t.Fatal(err)
+		}
+	}
+
+	if invalidObjects := validate(); invalidObjects != "" {
+		t.Fatal(errors.Errorf(
+			"descriptor validation failed after 'DROP DATABASE test CASCADE':\n%s", invalidObjects),
+		)
+	}
 }
 
 var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", false)
