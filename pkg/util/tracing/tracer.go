@@ -113,7 +113,7 @@ var _ opentracing.Tracer = &Tracer{}
 // backends.
 func NewTracer() *Tracer {
 	t := &Tracer{}
-	t.noopSpan = &span{crdbSpan: crdbSpan{tracer: t}}
+	t.noopSpan = &span{tracer: t}
 	return t
 }
 
@@ -269,8 +269,8 @@ func (t *Tracer) StartSpan(
 	}
 
 	s := &span{
+		tracer: t,
 		crdbSpan: crdbSpan{
-			tracer:    t,
 			operation: operationName,
 			startTime: sso.StartTime,
 			logTags:   logTags,
@@ -366,12 +366,12 @@ func (t *Tracer) StartRootSpan(
 	}
 
 	s := &span{
+		tracer: t,
 		crdbSpan: crdbSpan{
 			spanMeta: spanMeta{
 				TraceID: uint64(rand.Int63()),
 				SpanID:  uint64(rand.Int63()),
 			},
-			tracer:    t,
 			operation: opName,
 			startTime: time.Now(),
 			logTags:   logTags,
@@ -430,8 +430,8 @@ func StartChildSpan(
 	pSpan := parentSpan.(*span)
 
 	s := &span{
+		tracer: tr,
 		crdbSpan: crdbSpan{
-			tracer:       tr,
 			operation:    opName,
 			startTime:    time.Now(),
 			parentSpanID: pSpan.SpanID,
