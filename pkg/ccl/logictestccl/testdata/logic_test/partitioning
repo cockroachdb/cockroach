@@ -85,7 +85,7 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     )
 )
 
-statement error PARTITION p1: cannot subpartition a range partition
+statement error pgcode 42601 PARTITION p1: cannot subpartition a range partition
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM (0) TO (1) PARTITION BY LIST (b) (
         PARTITION p2 VALUES IN (2)
@@ -105,12 +105,12 @@ CREATE TABLE t (a INT PRIMARY KEY) INTERLEAVE IN PARENT interleave_root (a) PART
     PARTITION p0 VALUES IN (0)
 )
 
-statement error PARTITION p1: partition has 1 columns but 2 values were supplied
+statement error pgcode 42601 PARTITION p1: partition has 1 columns but 2 values were supplied
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN ((0, 1))
 )
 
-statement error PARTITION p1: partition has 2 columns but 1 values were supplied
+statement error pgcode 42601 PARTITION p1: partition has 2 columns but 1 values were supplied
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
     PARTITION p1 VALUES IN (0)
 )
@@ -302,52 +302,52 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     )
 )
 
-statement error PARTITION p1: MINVALUE cannot be used with PARTITION BY LIST
+statement error pgcode 42601 PARTITION p1: MINVALUE cannot be used with PARTITION BY LIST
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (MINVALUE)
 )
 
-statement error PARTITION p1: MINVALUE cannot be used with PARTITION BY LIST
+statement error pgcode 42601 PARTITION p1: MINVALUE cannot be used with PARTITION BY LIST
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
     PARTITION p1 VALUES IN ((1, 1), (1, (MINVALUE)))
 )
 
-statement error PARTITION p1: MAXVALUE cannot be used with PARTITION BY LIST
+statement error pgcode 42601 PARTITION p1: MAXVALUE cannot be used with PARTITION BY LIST
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (MAXVALUE)
 )
 
-statement error PARTITION p1: MAXVALUE cannot be used with PARTITION BY LIST
+statement error pgcode 42601 PARTITION p1: MAXVALUE cannot be used with PARTITION BY LIST
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
     PARTITION p1 VALUES IN ((1, 1), (1, (MAXVALUE)))
 )
 
-statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+statement error pgcode 42601 PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM (DEFAULT) TO (0)
 )
 
-statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+statement error pgcode 42601 PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM (0) TO (DEFAULT)
 )
 
-statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+statement error pgcode 42601 PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM ((DEFAULT)) TO (0)
 )
 
-statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+statement error pgcode 42601 PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM (0) TO ((DEFAULT))
 )
 
-statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+statement error pgcode 42601 PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
     PARTITION p1 VALUES FROM (0, (DEFAULT)) TO (0, 0)
 )
 
-statement error PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
+statement error pgcode 42601 PARTITION p1: DEFAULT cannot be used with PARTITION BY RANGE
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
     PARTITION p1 VALUES FROM (0, 0) TO (0, (DEFAULT))
 )
