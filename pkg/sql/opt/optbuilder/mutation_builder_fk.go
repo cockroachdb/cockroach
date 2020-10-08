@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -510,17 +512,12 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 	}
 
 	refID := h.fk.ReferencedTableID()
-	ref, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, refID)
-	if err != nil {
-		if isAdding {
-			// The other table is in the process of being added; ignore the FK relation.
-			return false
-		}
-		panic(err)
+	h.otherTab = resolveTable(mb.b.ctx, mb.b.catalog, refID)
+	if h.otherTab == nil {
+		return false
 	}
 	// We need SELECT privileges on the referenced table.
-	mb.b.checkPrivilege(opt.DepByID(refID), ref, privilege.SELECT)
-	h.otherTab = ref.(cat.Table)
+	mb.b.checkPrivilege(opt.DepByID(refID), h.otherTab, privilege.SELECT)
 
 	numCols := h.fk.ColumnCount()
 	h.allocOrdinals(numCols)
@@ -564,17 +561,12 @@ func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (o
 	}
 
 	originID := h.fk.OriginTableID()
-	ref, isAdding, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, cat.Flags{}, originID)
-	if err != nil {
-		if isAdding {
-			// The other table is in the process of being added; ignore the FK relation.
-			return false
-		}
-		panic(err)
+	h.otherTab = resolveTable(mb.b.ctx, mb.b.catalog, originID)
+	if h.otherTab == nil {
+		return false
 	}
 	// We need SELECT privileges on the origin table.
-	mb.b.checkPrivilege(opt.DepByID(originID), ref, privilege.SELECT)
-	h.otherTab = ref.(cat.Table)
+	mb.b.checkPrivilege(opt.DepByID(originID), h.otherTab, privilege.SELECT)
 
 	numCols := h.fk.ColumnCount()
 	h.allocOrdinals(numCols)
@@ -584,6 +576,21 @@ func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (o
 	}
 
 	return true
+}
+
+// resolveTable resolves a table StableID. Returns nil if the other table is in
+// the process of being added, in which case it is safe to ignore the FK
+// relation.
+func resolveTable(ctx context.Context, catalog cat.Catalog, id cat.StableID) cat.Table {
+	ref, isAdding, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, id)
+	if err != nil {
+		if isAdding {
+			// The other table is in the process of being added.
+			return nil
+		}
+		panic(err)
+	}
+	return ref.(cat.Table)
 }
 
 type fkInputScanType uint8
