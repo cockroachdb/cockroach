@@ -22,20 +22,20 @@ func TestTracerRecording(t *testing.T) {
 	tr := NewTracer()
 
 	noop1 := tr.StartSpan("noop")
-	if _, noop := noop1.(*noopSpan); !noop {
+	if !noop1.(*span).isNoop() {
 		t.Error("expected noop span")
 	}
 	noop1.LogKV("hello", "void")
 
 	noop2 := tr.StartSpan("noop2", opentracing.ChildOf(noop1.Context()))
-	if _, noop := noop2.(*noopSpan); !noop {
+	if !noop2.(*span).isNoop() {
 		t.Error("expected noop child span")
 	}
 	noop2.Finish()
 	noop1.Finish()
 
 	s1 := tr.StartSpan("a", Recordable)
-	if _, noop := s1.(*noopSpan); noop {
+	if s1.(*span).isNoop() {
 		t.Error("Recordable (but not recording) span should not be noop")
 	}
 	if !IsBlackHoleSpan(s1) {
@@ -44,7 +44,7 @@ func TestTracerRecording(t *testing.T) {
 
 	// Unless recording is actually started, child spans are still noop.
 	noop3 := tr.StartSpan("noop3", opentracing.ChildOf(s1.Context()))
-	if _, noop := noop3.(*noopSpan); !noop {
+	if !noop3.(*span).isNoop() {
 		t.Error("expected noop child span")
 	}
 	noop3.Finish()
@@ -180,7 +180,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// Verify that noop spans become noop spans on the remote side.
 
 	noop1 := tr.StartSpan("noop")
-	if _, noop := noop1.(*noopSpan); !noop {
+	if !noop1.(*span).isNoop() {
 		t.Fatalf("expected noop span: %+v", noop1)
 	}
 	carrier := make(opentracing.HTTPHeadersCarrier)
@@ -195,11 +195,11 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, noopCtx := wireContext.(noopSpanContext); !noopCtx {
+	if !wireContext.(*spanContext).isNoop() {
 		t.Errorf("expected noop context: %v", wireContext)
 	}
 	noop2 := tr2.StartSpan("remote op", opentracing.FollowsFrom(wireContext))
-	if _, noop := noop2.(*noopSpan); !noop {
+	if !noop2.(*span).isNoop() {
 		t.Fatalf("expected noop span: %+v", noop2)
 	}
 	noop1.Finish()

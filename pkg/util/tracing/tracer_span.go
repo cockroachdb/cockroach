@@ -89,6 +89,10 @@ func (sc *spanContext) ForeachBaggageItem(handler func(k, v string) bool) {
 	}
 }
 
+func (sc *spanContext) isNoop() bool {
+	return sc.spanMeta == spanMeta{}
+}
+
 // RecordingType is the type of recording that a span might be performing.
 type RecordingType int
 
@@ -182,20 +186,14 @@ func (s *span) isBlackHole() bool {
 	return !s.crdbSpan.isRecording() && s.netTr == nil && s.otSpan == (otSpan{})
 }
 
-/*
-TODO(tbg): replace noopSpan with this concept:
 func (s *span) isNoop() bool {
 	// Special case: trace id zero implies that everything else,
 	// with the exception of the tracer, is also zero.
 	return s.isBlackHole() && s.crdbSpan.TraceID == 0
 }
-*/
 
 // IsRecording returns true if the span is recording its events.
 func IsRecording(s opentracing.Span) bool {
-	if _, noop := s.(*noopSpan); noop {
-		return false
-	}
 	return s.(*span).isRecording()
 }
 
@@ -238,13 +236,14 @@ func StartRecording(os opentracing.Span, recType RecordingType) {
 	if recType == NoRecording {
 		panic("StartRecording called with NoRecording")
 	}
-	if _, noop := os.(*noopSpan); noop {
+	sp := os.(*span)
+	if sp.isNoop() {
 		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
 	}
 
 	// If we're already recording (perhaps because the parent was recording when
 	// this span was created), there's nothing to do.
-	if sp := os.(*span); !sp.isRecording() {
+	if !sp.isRecording() {
 		sp.enableRecording(nil /* parent */, recType, false /* separateRecording */)
 	}
 }
@@ -292,9 +291,6 @@ type Recording []RecordedSpan
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
 func GetRecording(os opentracing.Span) Recording {
-	if _, noop := os.(*noopSpan); noop {
-		return nil
-	}
 	s := os.(*span)
 	if !s.isRecording() {
 		return nil
@@ -680,11 +676,6 @@ func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
 // can use this method to figure out if they can short-circuit some
 // tracing-related work that would be discarded anyway.
 func IsBlackHoleSpan(s opentracing.Span) bool {
-	// There are two types of black holes: instances of noopSpan and, when tracing
-	// is disabled, real spans that are not recording.
-	if _, noop := s.(*noopSpan); noop {
-		return true
-	}
 	sp := s.(*span)
 	return sp.isBlackHole()
 }
@@ -692,8 +683,8 @@ func IsBlackHoleSpan(s opentracing.Span) bool {
 // IsNoopContext returns true if the span context is from a "no-op" span. If
 // this is true, any span derived from this context will be a "black hole span".
 func IsNoopContext(spanCtx opentracing.SpanContext) bool {
-	_, noop := spanCtx.(noopSpanContext)
-	return noop
+	// TODO(tbg): remove this.
+	return spanCtx.(*spanContext).isNoop()
 }
 
 // SetSpanStats sets the stats on a span. stats.Stats() will also be added to
@@ -964,36 +955,4 @@ func (s *span) addChild(child *span) {
 	s.mu.Lock()
 	s.mu.recording.children = append(s.mu.recording.children, child)
 	s.mu.Unlock()
-}
-
-type noopSpanContext struct{}
-
-var _ opentracing.SpanContext = noopSpanContext{}
-
-func (n noopSpanContext) ForeachBaggageItem(handler func(k, v string) bool) {}
-
-type noopSpan struct {
-	tracer *Tracer
-}
-
-var _ opentracing.Span = &noopSpan{}
-
-func (n *noopSpan) Context() opentracing.SpanContext                       { return noopSpanContext{} }
-func (n *noopSpan) BaggageItem(key string) string                          { return "" }
-func (n *noopSpan) SetTag(key string, value interface{}) opentracing.Span  { return n }
-func (n *noopSpan) Finish()                                                {}
-func (n *noopSpan) FinishWithOptions(opts opentracing.FinishOptions)       {}
-func (n *noopSpan) SetOperationName(operationName string) opentracing.Span { return n }
-func (n *noopSpan) Tracer() opentracing.Tracer                             { return n.tracer }
-func (n *noopSpan) LogFields(fields ...otlog.Field)                        {}
-func (n *noopSpan) LogKV(keyVals ...interface{})                           {}
-func (n *noopSpan) LogEvent(event string)                                  {}
-func (n *noopSpan) LogEventWithPayload(event string, payload interface{})  {}
-func (n *noopSpan) Log(data opentracing.LogData)                           {}
-
-func (n *noopSpan) SetBaggageItem(key, val string) opentracing.Span {
-	if key == Snowball {
-		panic("attempting to set Snowball on a noop span; use the Recordable option to StartSpan")
-	}
-	return n
 }
