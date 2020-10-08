@@ -111,8 +111,6 @@ type crdbSpan struct {
 
 	parentSpanID uint64
 
-	tracer *Tracer
-
 	operation string
 	startTime time.Time
 
@@ -171,8 +169,39 @@ type otSpan struct {
 	shadowSpan opentracing.Span
 }
 
+// span is the tracing span that we use in CockroachDB. Depending on the tracing configuration,
+// it can hold anywhere between zero and three destinations for trace information.
+//
+// The net/trace and opentracing spans are straightforward. If they are
+// set, we forward information to them; and depending on whether they are
+// set, spans descending from a parent will have these created as well.
+//
+// The CockroachDB-internal span (crdbSpan) is more complex as it has multiple features:
+//
+// 1. recording: crdbSpan supports "recordings", meaning that it provides a way to extract
+//    the data logged into a trace span.
+// 2. optimizations for the non-tracing case. If tracing is off and the span is not required
+//    to support recording (NoRecording), we still want to be able to have a cheap span
+//    to give to the caller. This is a) because it frees the caller from
+//    distinguishing the tracing and non-tracing cases, and b) because the span
+//    has the dual purpose of propagating the *Tracer around, which is needed
+//    in case at some point down the line there is a need to create an actual
+//    span (for example, because a "recordable" child span is requested).
+//
+//    In these cases, we return a singleton span that is empty save for the tracer.
+// 3. snowball recording. As a special case of 1), we support a recording mode
+//    (SnowballRecording) which propagates to child spans across RPC boundaries.
+// 4. parent span recording. To make matters even more complex, there is a single-node
+//    recording option (SingleNodeRecording) in which the parent span keeps track of
+//    its local children and returns their recording in its own.
+//
+// TODO(tbg): investigate whether the tracer in 2) is really needed.
+// TODO(tbg): simplify the functionality of crdbSpan, which seems overly complex.
 type span struct {
-	crdbSpan // can be zero
+	tracer *Tracer // never nil
+
+	// Internal trace span. Can be zero.
+	crdbSpan
 	// x/net/trace.Trace instance; nil if not tracing to x/net/trace.
 	netTr trace.Trace
 	// Shadow tracer and span; zero if not using a shadow tracer.
